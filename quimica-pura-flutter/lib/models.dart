@@ -1,0 +1,91 @@
+// Modelos de datos de Química Pura.
+
+class ChemicalElement {
+  const ChemicalElement({
+    required this.atomicNumber,
+    required this.symbol,
+    required this.name,
+    required this.mass,
+    required this.column,
+    required this.row,
+    required this.category,
+  });
+
+  final int atomicNumber;
+  final String symbol;
+  final String name;
+  final String mass; // Masa atómica estándar; entre corchetes si es sintético.
+  final int column; // 1-18 en la rejilla principal.
+  final int row; // 1-7 principal; 9 = lantánidos, 10 = actínidos.
+  final int category; // Índice en categoryNames.
+
+  double get numericMass {
+    final cleaned = mass.replaceAll('[', '').replaceAll(']', '');
+    return double.tryParse(cleaned) ?? 0;
+  }
+
+  int get period => row <= 7 ? row : (row == 9 ? 6 : 7);
+
+  String get block {
+    if (category == 8) return 'f (lantánidos)';
+    if (category == 9) return 'f (actínidos)';
+    if (column <= 2) return 's';
+    if (column >= 13) return 'p';
+    return 'd';
+  }
+}
+
+class StudyTopic {
+  const StudyTopic({
+    required this.slug,
+    required this.title,
+    required this.level,
+    required this.summary,
+    required this.formulas,
+    required this.exampleTitle,
+    required this.exampleSteps,
+    required this.exampleAnswer,
+    required this.errors,
+    required this.tip,
+  });
+
+  final String slug;
+  final String title;
+  final String level;
+  final List<String> summary;
+  final List<Formula> formulas;
+  final String exampleTitle;
+  final List<String> exampleSteps;
+  final String exampleAnswer;
+  final List<String> errors;
+  final String tip;
+}
+
+class Formula {
+  const Formula({required this.name, required this.expr, required this.note});
+  final String name;
+  final String expr;
+  final String note;
+}
+
+class QuizQuestion {
+  const QuizQuestion({
+    required this.topic,
+    required this.question,
+    required this.options,
+    required this.answer,
+    required this.explanation,
+  });
+
+  final String topic; // slug del tema, o "tabla" / "enlace" / "atomos"
+  final String question;
+  final List<String> options; // 4 opciones
+  final int answer; // índice de la correcta en options
+  final String explanation;
+}
+
+class ExamTip {
+  const ExamTip({required this.title, required this.body});
+  final String title;
+  final String body;
+}

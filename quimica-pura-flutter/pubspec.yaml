@@ -1,0 +1,22 @@
+name: quimica_pura
+description: "Química Pura — Universidad: solucionadores paso a paso, tabla periódica interactiva, temas de estudio, tests con explicación y tips de examen."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.5.0
+  flutter: ">=3.24.0"
+
+# Sin dependencias externas: la app funciona y se compila sin conexión.
+# El progreso (temas dominados y mejor puntuación) se guarda en memoria
+# durante la sesión. Esto evita depender de pub.dev en el Codespace.
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
