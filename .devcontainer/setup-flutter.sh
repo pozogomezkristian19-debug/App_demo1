@@ -51,9 +51,9 @@ export PATH="$FLUTTER_DIR/bin:$FLUTTER_DIR/bin/cache/dart-sdk/bin:$ANDROID_SDK_D
 export ANDROID_HOME="$ANDROID_SDK_DIR"
 export ANDROID_SDK_ROOT="$ANDROID_SDK_DIR"
 
-echo "==> Aceptando licencias de Android e instalando platform-tools y Android 34..."
+echo "==> Aceptando licencias de Android e instalando platform-tools y Android 36..."
 yes | sdkmanager --licenses || true
-sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0" "build-tools;28.0.3"
 
 echo "==> Configurando Flutter con el Android SDK..."
 flutter config --android-sdk "$ANDROID_SDK_DIR" || true
