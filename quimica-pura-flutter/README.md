@@ -1,7 +1,11 @@
-# Química Pura — Universidad (Flutter)
+# Melli-Qui (Química Pura — Universidad, Flutter)
 
 App de química pura para universidad, basada en la app web
 «Aplicación de Química Pura Instalable» de Kristian Pozo Gómez.
+La app se llama **Melli-Qui** (regalo para su novia, melliza).
+Logo circular en `assets/logo-circular.png`: dice «Química Pura»
+con dos muñequitas gemelas detrás. El logo se ve en la barra
+superior de todas las secciones y en la pantalla Resolver.
 
 ## Secciones (barra inferior, sin menú hamburguesa)
 
@@ -42,8 +46,8 @@ basta con `flutter run` o `flutter build apk --release`.
   visitas, ahí es donde se conectaría `shared_preferences`, sin
   tocar las pantallas.
 - Tema oscuro azul/teal, diseño mobile-first, texto grande y legible.
-- No se ha subido a GitHub: los archivos están solo en local,
-  en `~/workspace/quimica-pura-flutter/`.
+- El proyecto está en GitHub, en el repo App_demo1
+  (pozogomezkristian19-debug/App_demo1), en `quimica-pura-flutter/`.
 
 ## Archivos
 

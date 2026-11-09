@@ -1,5 +1,13 @@
 # Sin flutter_lints a propósito: el proyecto no depende de pub.dev
 # para poder compilarse sin conexión en el Codespace.
 analyzer:
+  exclude:
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**
   language:
     strict-casts: true

@@ -6,18 +6,18 @@ import 'screens/practicar_screen.dart';
 import 'screens/tips_screen.dart';
 
 void main() {
-  runApp(const QuimicaPuraApp());
+  runApp(const MelliQuiApp());
 }
 
-class QuimicaPuraApp extends StatelessWidget {
-  const QuimicaPuraApp({super.key});
+class MelliQuiApp extends StatelessWidget {
+  const MelliQuiApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     const teal = Color(0xFF14B8A6);
     const deep = Color(0xFF0C1A17);
     return MaterialApp(
-      title: 'Química Pura — Universidad',
+      title: 'Melli-Qui',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
@@ -82,6 +82,13 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: const Padding(
+          padding: EdgeInsets.all(8),
+          child: CircleAvatar(
+            backgroundImage: AssetImage('assets/logo-circular.png'),
+            backgroundColor: Colors.transparent,
+          ),
+        ),
         title: Text(_titles[_index]),
         backgroundColor: const Color(0xFF0C1A17),
         centerTitle: false,

@@ -10,6 +10,8 @@ class ResolverScreen extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: const [
+        _LogoHeader(),
+        SizedBox(height: 8),
         _IntroCard(),
         SizedBox(height: 8),
         MolarMassSolver(),
@@ -20,6 +22,31 @@ class ResolverScreen extends StatelessWidget {
         GasSolver(),
         LimitingSolver(),
         SizedBox(height: 16),
+      ],
+    );
+  }
+}
+
+class _LogoHeader extends StatelessWidget {
+  const _LogoHeader();
+  @override
+  Widget build(BuildContext context) {
+    return const Column(
+      children: [
+        ClipOval(
+          child: Image(
+            image: AssetImage('assets/logo-circular.png'),
+            width: 140,
+            height: 140,
+            fit: BoxFit.cover,
+          ),
+        ),
+        SizedBox(height: 8),
+        Text(
+          'Melli-Qui',
+          style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+        ),
+        Text('Química Pura — Universidad'),
       ],
     );
   }
@@ -361,11 +388,11 @@ class _DilutionSolverState extends State<DilutionSolver> {
         _result = 'V₁ = ${_fmt(r)} mL';
         _steps = ['C₁V₁ = C₂V₂', 'V₁ = C₂V₂ / C₁ = ${_fmt(c2)} × ${_fmt(v2)} ÷ ${_fmt(c1)}', 'V₁ = ${_fmt(r)} mL'];
       } else if (c2 == null) {
-        final r = c1 * v1! / v2!;
+        final r = c1 * v1 / v2!;
         _result = 'C₂ = ${_fmt(r)} mol/L';
         _steps = ['C₁V₁ = C₂V₂', 'C₂ = C₁V₁ / V₂ = ${_fmt(c1)} × ${_fmt(v1)} ÷ ${_fmt(v2)}', 'C₂ = ${_fmt(r)} mol/L'];
       } else {
-        final r = c1 * v1! / c2;
+        final r = c1 * v1 / c2;
         _result = 'V₂ = ${_fmt(r)} mL';
         _steps = ['C₁V₁ = C₂V₂', 'V₂ = C₁V₁ / C₂ = ${_fmt(c1)} × ${_fmt(v1)} ÷ ${_fmt(c2)}', 'V₂ = ${_fmt(r)} mL'];
       }
