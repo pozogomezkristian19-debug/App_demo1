@@ -41,5 +41,17 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- Sin esto, en Android 11+ el sistema no deja ver si WhatsApp
+             puede abrir un enlace, y el botón de WhatsApp falla aunque
+             WhatsApp esté instalado. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="whatsapp"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <category android:name="android.intent.category.BROWSABLE"/>
+            <data android:scheme="https" android:host="wa.me"/>
+        </intent>
     </queries>
 </manifest>

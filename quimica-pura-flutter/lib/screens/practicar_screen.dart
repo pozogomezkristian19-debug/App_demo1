@@ -27,6 +27,41 @@ const int _extraGeneratedLevels = 2; // niveles extra solo con preguntas nuevas
 const int _mixedSize = 24;
 const int _reviewMax = 20;
 
+// ---- Camino de niveles (estilo Duolingo / Candy Crush) ----
+
+// Alturas fijas del camino: el pintor del sendero y las filas usan las
+// mismas, así la línea pasa justo por el centro de cada nodo.
+const double _headerH = 76.0;
+const double _rowH = 100.0;
+const double _nodeSize = 64.0;
+const double _nodeCenterY = 36.0; // centro del nodo dentro de su fila
+
+// Desplazamiento horizontal de cada nodo (px desde el centro): el camino
+// serpentea izquierda-centro-derecha, como en Duolingo.
+const List<double> _pathOffsets = [0, -52, -78, -52, 0, 52, 78, 52];
+
+const Map<String, IconData> _topicIcons = {
+  'estequiometria': Icons.functions,
+  'gases': Icons.air,
+  'disoluciones': Icons.water_drop,
+  'acido-base': Icons.science,
+  'equilibrio': Icons.balance,
+  'termo-cinetica': Icons.thermostat,
+  'tabla': Icons.grid_view,
+  'enlace': Icons.link,
+};
+
+const Map<String, Color> _topicColors = {
+  'estequiometria': Color(0xFF14B8A6),
+  'gases': Color(0xFF38BDF8),
+  'disoluciones': Color(0xFF22D3EE),
+  'acido-base': Color(0xFFA78BFA),
+  'equilibrio': Color(0xFFF59E0B),
+  'termo-cinetica': Color(0xFFEF4444),
+  'tabla': Color(0xFF22C55E),
+  'enlace': Color(0xFFEC4899),
+};
+
 String bankId(QuizQuestion q) => 'bank:${q.topic}:${q.question}';
 
 class _QuizItem {
@@ -51,6 +86,55 @@ class PracticarScreen extends StatefulWidget {
 class _PracticarScreenState extends State<PracticarScreen> {
   _QuizState? _quiz;
   _QuizSpec? _spec;
+
+  // Para volver al punto donde va el usuario al abrir el camino.
+  final _currentKey = GlobalKey();
+  var _scrolledToCurrent = false;
+
+  /// Primer nivel sin pasar (tema y nivel), o null si ya pasó todo.
+  ({int topicIndex, int level})? _firstUnpassed() {
+    final topics = _byTopic.keys.toList();
+    for (var i = 0; i < topics.length; i++) {
+      final unlocked = ProgressService.instance.unlockedLevel(topics[i]);
+      if (unlocked <= _levelCount(topics[i])) {
+        return (topicIndex: i, level: unlocked);
+      }
+    }
+    return null;
+  }
+
+  int _totalLevelCount() {
+    var total = 0;
+    for (final topic in _byTopic.keys) {
+      total += _levelCount(topic);
+    }
+    return total;
+  }
+
+  int _passedLevelCount() {
+    final progress = ProgressService.instance;
+    var passed = 0;
+    for (final topic in _byTopic.keys) {
+      for (var level = 1; level <= _levelCount(topic); level++) {
+        if (progress.bestScore('level:$topic:$level') >= _passPercent) {
+          passed++;
+        }
+      }
+    }
+    return passed;
+  }
+
+  /// Desplaza el camino hasta el nodo actual (o al trofeo final si ya
+  /// pasó todo), solo cuando ese nodo queda fuera de la primera pantalla.
+  void _scrollToCurrent() {
+    final ctx = _currentKey.currentContext;
+    if (ctx == null) return;
+    final current = _firstUnpassed();
+    final needsScroll =
+        current == null || current.topicIndex > 0 || current.level > 2;
+    if (!needsScroll) return;
+    Scrollable.ensureVisible(ctx, alignment: 0.45, duration: const Duration(milliseconds: 400));
+  }
 
   Map<String, List<QuizQuestion>> get _byTopic {
     final byTopic = <String, List<QuizQuestion>>{};
@@ -175,6 +259,7 @@ class _PracticarScreenState extends State<PracticarScreen> {
   void _start(_QuizSpec spec) {
     final questions = _buildQuestions(spec);
     if (questions.isEmpty) return;
+    _scrolledToCurrent = false;
     setState(() {
       _spec = spec;
       _quiz = _QuizState(
@@ -218,52 +303,85 @@ class _PracticarScreenState extends State<PracticarScreen> {
     }
     final progress = ProgressService.instance;
     final byTopic = _byTopic;
+    final topics = byTopic.keys.toList();
     final mixedUnlocked = _mixedUnlocked();
-    final level1Done = byTopic.keys.length - _missingLevel1Topics().length;
+    final level1Done = topics.length - _missingLevel1Topics().length;
+    final current = _firstUnpassed();
+    final passedCount = _passedLevelCount();
+    final totalCount = _totalLevelCount();
+    if (!_scrolledToCurrent) {
+      _scrolledToCurrent = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToCurrent());
+    }
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        const Text('Practicar',
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 6),
-        const Text(
-          'Avanza por niveles como en Duolingo: 5 preguntas por nivel, y para pasar necesitas 4 de 5. Tus errores se guardan y se repasan hasta que los aciertes. Todo se guarda en el teléfono.',
-        ),
-        const SizedBox(height: 12),
-        // Repaso de errores, solo si hay algo que repasar.
-        if (progress.failedCount > 0)
-          Card(
-            color: Theme.of(context)
-                .colorScheme
-                .primary
-                .withValues(alpha: 0.15),
-            child: ListTile(
-              leading: const Icon(Icons.replay_circle_filled, size: 32),
-              title: const Text('Repasar mis errores',
-                  style: TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text(
-                  '${progress.failedCount} ${progress.failedCount == 1 ? 'pregunta' : 'preguntas'} por corregir'),
-              trailing: Chip(label: Text('${progress.failedCount}')),
-              onTap: () => _start(const _QuizSpec(kind: 'review')),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text('Niveles',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          const Text(
+            'Avanza por el camino: 5 preguntas por nivel, y para pasar necesitas 4 de 5. Tus errores se guardan y se repasan hasta que los aciertes. Todo se guarda en el teléfono.',
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Has superado $passedCount de $totalCount niveles.',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).colorScheme.primary,
             ),
           ),
-        if (progress.failedCount > 0) const SizedBox(height: 8),
-        // Examen mixto: reto final, bloqueado hasta pasar el Nivel 1 de todo.
-        Card(
-          child: ListTile(
-            leading: Icon(
-              mixedUnlocked ? Icons.assignment : Icons.lock,
-              size: 32,
+          const SizedBox(height: 12),
+          // Repaso de errores, solo si hay algo que repasar.
+          if (progress.failedCount > 0)
+            Card(
+              color: Theme.of(context)
+                  .colorScheme
+                  .primary
+                  .withValues(alpha: 0.15),
+              child: ListTile(
+                leading: const Icon(Icons.replay_circle_filled, size: 32),
+                title: const Text('Repasar mis errores',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text(
+                    '${progress.failedCount} ${progress.failedCount == 1 ? 'pregunta' : 'preguntas'} por corregir'),
+                trailing: Chip(label: Text('${progress.failedCount}')),
+                onTap: () => _start(const _QuizSpec(kind: 'review')),
+              ),
             ),
-            title: const Text('Examen mixto',
-                style: TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Text(mixedUnlocked
-                ? '24 preguntas mezcladas de todos los temas, con más peso en tus temas débiles.'
-                : 'Pasa el Nivel 1 de los 8 temas para desbloquearlo ($level1Done/8).'),
-            trailing: mixedUnlocked
-                ? Text('Mejor: ${progress.bestScore('mixto')}%')
-                : Text('$level1Done/8'),
+          if (progress.failedCount > 0) const SizedBox(height: 8),
+          for (var i = 0; i < topics.length; i++)
+            _TopicPathSection(
+              topic: topics[i],
+              bankCount: byTopic[topics[i]]!.length,
+              levelCount: _levelCount(topics[i]),
+              currentLevel:
+                  current != null && current.topicIndex == i ? current.level : 0,
+              currentKey:
+                  current != null && current.topicIndex == i ? _currentKey : null,
+              onLevelTap: (level, unlocked) {
+                if (unlocked) {
+                  _start(_QuizSpec(
+                      kind: 'level', topic: topics[i], level: level));
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                          'Primero pasa el Nivel ${level - 1} con 4 de 5.'),
+                    ),
+                  );
+                }
+              },
+            ),
+          // Examen mixto: trofeo final del camino, bloqueado hasta pasar
+          // el Nivel 1 de los 8 temas.
+          _FinalExamSection(
+            unlocked: mixedUnlocked,
+            level1Done: level1Done,
+            isCurrent: current == null,
+            currentKey: current == null ? _currentKey : null,
             onTap: () {
               if (mixedUnlocked) {
                 _start(const _QuizSpec(kind: 'mixto'));
@@ -280,44 +398,88 @@ class _PracticarScreenState extends State<PracticarScreen> {
               }
             },
           ),
-        ),
-        const SizedBox(height: 16),
-        const Text('Niveles por tema',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 8),
-        for (final entry in byTopic.entries)
-          _TopicLevelsCard(
-            topic: entry.key,
-            bankCount: entry.value.length,
-            levelCount: _levelCount(entry.key),
-            onLevelTap: (level) => _start(
-              _QuizSpec(kind: 'level', topic: entry.key, level: level),
+          const SizedBox(height: 16),
+          Text(
+            'Banco total: ${allQuestions.length} preguntas únicas, más preguntas nuevas generadas con números distintos cada vez.',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
             ),
           ),
-        const SizedBox(height: 12),
-        Text(
-          'Banco total: ${allQuestions.length} preguntas únicas, más preguntas nuevas generadas con números distintos cada vez.',
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
 
-class _TopicLevelsCard extends StatelessWidget {
-  const _TopicLevelsCard({
+/// Pinta el sendero que une los nodos de una sección: una línea curva
+/// punteada que pasa por el centro de cada nivel.
+class _PathPainter extends CustomPainter {
+  const _PathPainter({required this.levelCount, required this.color});
+  final int levelCount;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (levelCount < 2) return;
+    final centers = <Offset>[
+      for (var i = 0; i < levelCount; i++)
+        Offset(size.width / 2 + _pathOffsets[i % _pathOffsets.length],
+            _headerH + i * _rowH + _nodeCenterY),
+    ];
+    // Curva suave que pasa por los centros: cada tramo va del punto
+    // anterior al punto medio con el siguiente.
+    final path = Path()..moveTo(centers.first.dx, centers.first.dy);
+    for (var i = 1; i < centers.length; i++) {
+      final prev = centers[i - 1];
+      final curr = centers[i];
+      final mid = Offset((prev.dx + curr.dx) / 2, (prev.dy + curr.dy) / 2);
+      path.quadraticBezierTo(prev.dx, prev.dy, mid.dx, mid.dy);
+    }
+    path.lineTo(centers.last.dx, centers.last.dy);
+    // Línea punteada a partir del camino.
+    final dashed = Path();
+    for (final metric in path.computeMetrics()) {
+      var distance = 0.0;
+      while (distance < metric.length) {
+        final len = min(12.0, metric.length - distance);
+        dashed.addPath(
+            metric.extractPath(distance, distance + len), Offset.zero);
+        distance += 20.0;
+      }
+    }
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 5
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    canvas.drawPath(dashed, paint);
+  }
+
+  @override
+  bool shouldRepaint(_PathPainter old) =>
+      old.levelCount != levelCount || old.color != color;
+}
+
+/// Una sección del camino: un tema con su cabecera y sus niveles en
+/// camino serpenteante, como una unidad de Duolingo.
+class _TopicPathSection extends StatelessWidget {
+  const _TopicPathSection({
     required this.topic,
     required this.bankCount,
     required this.levelCount,
+    required this.currentLevel,
+    required this.currentKey,
     required this.onLevelTap,
   });
 
   final String topic;
   final int bankCount;
   final int levelCount;
-  final ValueChanged<int> onLevelTap;
+
+  /// Nivel actual del tema (0 si ninguno es el actual).
+  final int currentLevel;
+  final GlobalKey? currentKey;
+  final void Function(int level, bool unlocked) onLevelTap;
 
   @override
   Widget build(BuildContext context) {
@@ -328,45 +490,94 @@ class _TopicLevelsCard extends StatelessWidget {
       final s = progress.bestScore('level:$topic:$i');
       if (s > best) best = s;
     }
-    return Card(
-      child: ExpansionTile(
-        leading: const Icon(Icons.quiz_outlined),
-        title: Text(topicNames[topic] ?? topic,
-            style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text(
-            'Nivel ${unlocked > levelCount ? levelCount : unlocked} de $levelCount · Mejor: $best%'),
+    final color =
+        _topicColors[topic] ?? Theme.of(context).colorScheme.primary;
+    final scheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      height: _headerH + levelCount * _rowH,
+      child: Stack(
         children: [
-          for (var level = 1; level <= levelCount; level++)
-            _LevelRow(
-              topic: topic,
-              level: level,
-              levelCount: levelCount,
-              bankCount: bankCount,
-              unlocked: level <= unlocked,
-              onTap: () => onLevelTap(level),
+          Positioned.fill(
+            child: CustomPaint(
+              painter: _PathPainter(
+                levelCount: levelCount,
+                color: scheme.primary.withValues(alpha: 0.35),
+              ),
             ),
+          ),
+          Column(
+            children: [
+              SizedBox(
+                height: _headerH,
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 22,
+                      backgroundColor: color.withValues(alpha: 0.18),
+                      child: Icon(
+                          _topicIcons[topic] ?? Icons.quiz_outlined,
+                          color: color),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(topicNames[topic] ?? topic,
+                              style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold)),
+                          Text(
+                            'Nivel ${unlocked > levelCount ? levelCount : unlocked} de $levelCount · Mejor: $best%',
+                            style: TextStyle(
+                              color:
+                                  scheme.onSurface.withValues(alpha: 0.7),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              for (var level = 1; level <= levelCount; level++)
+                _LevelNodeRow(
+                  key: level == currentLevel ? currentKey : null,
+                  topic: topic,
+                  level: level,
+                  bankCount: bankCount,
+                  unlocked: level <= unlocked,
+                  isCurrent: level == currentLevel,
+                  onLevelTap: onLevelTap,
+                ),
+            ],
+          ),
         ],
       ),
     );
   }
 }
 
-class _LevelRow extends StatelessWidget {
-  const _LevelRow({
+/// Una fila del camino: un nodo de nivel, desplazado a izquierda, centro
+/// o derecha para que el camino serpentee.
+class _LevelNodeRow extends StatelessWidget {
+  const _LevelNodeRow({
+    super.key,
     required this.topic,
     required this.level,
-    required this.levelCount,
     required this.bankCount,
     required this.unlocked,
-    required this.onTap,
+    required this.isCurrent,
+    required this.onLevelTap,
   });
 
   final String topic;
   final int level;
-  final int levelCount;
   final int bankCount;
   final bool unlocked;
-  final VoidCallback onTap;
+  final bool isCurrent;
+  final void Function(int level, bool unlocked) onLevelTap;
 
   @override
   Widget build(BuildContext context) {
@@ -375,37 +586,192 @@ class _LevelRow extends StatelessWidget {
     final passed = best >= _passPercent;
     // Niveles sin preguntas del banco: solo preguntas nuevas generadas.
     final generatedOnly = (level - 1) * _levelSize >= bankCount;
-    return ListTile(
-      leading: Icon(
-        passed
-            ? Icons.check_circle
-            : unlocked
-                ? Icons.play_circle_outline
-                : Icons.lock_outline,
-        color: passed
-            ? Colors.teal
-            : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-      ),
-      title: Text('Nivel $level',
-          style: const TextStyle(fontWeight: FontWeight.bold)),
-      subtitle: Text(unlocked
-          ? generatedOnly
-              ? 'Preguntas nuevas · Mejor: $best%'
-              : 'Mejor: $best%'
-          : 'Completa el Nivel ${level - 1} para desbloquearlo'),
-      trailing: unlocked
-          ? const Icon(Icons.chevron_right)
-          : null,
-      onTap: unlocked
-          ? onTap
-          : () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                      'Primero pasa el Nivel ${level - 1} con 4 de 5.'),
+    final scheme = Theme.of(context).colorScheme;
+    final offset = _pathOffsets[(level - 1) % _pathOffsets.length];
+    final Color bg;
+    final Widget inner;
+    if (passed) {
+      bg = const Color(0xFFFFB300);
+      inner = const Icon(Icons.check, color: Color(0xFF5D4037), size: 34);
+    } else if (unlocked) {
+      bg = scheme.primary;
+      inner = Text('$level',
+          style: const TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.bold,
+              color: Colors.white));
+    } else {
+      bg = scheme.onSurface.withValues(alpha: 0.12);
+      inner = Icon(Icons.lock,
+          color: scheme.onSurface.withValues(alpha: 0.5), size: 28);
+    }
+    return SizedBox(
+      height: _rowH,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final cx = constraints.maxWidth / 2 + offset;
+          return Stack(
+            children: [
+              if (isCurrent)
+                Positioned(
+                  left: cx - 38,
+                  top: _nodeCenterY - 38,
+                  child: Container(
+                    width: 76,
+                    height: 76,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: scheme.primary.withValues(alpha: 0.18),
+                    ),
+                  ),
                 ),
-              );
-            },
+              Positioned(
+                left: cx - _nodeSize / 2,
+                top: _nodeCenterY - _nodeSize / 2,
+                child: GestureDetector(
+                  onTap: () => onLevelTap(level, unlocked),
+                  child: Container(
+                    width: _nodeSize,
+                    height: _nodeSize,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: bg,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.25),
+                          blurRadius: 4,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    alignment: Alignment.center,
+                    child: inner,
+                  ),
+                ),
+              ),
+              Positioned(
+                left: cx - 50,
+                top: _nodeCenterY + _nodeSize / 2 + 4,
+                width: 100,
+                child: Text(
+                  passed
+                      ? 'Nivel $level · $best%'
+                      : generatedOnly && unlocked
+                          ? 'Nivel $level · Nuevas'
+                          : 'Nivel $level',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight:
+                        isCurrent ? FontWeight.bold : FontWeight.normal,
+                    color: isCurrent
+                        ? scheme.primary
+                        : scheme.onSurface.withValues(alpha: 0.7),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// El trofeo final del camino: el examen mixto de 24 preguntas.
+class _FinalExamSection extends StatelessWidget {
+  const _FinalExamSection({
+    required this.unlocked,
+    required this.level1Done,
+    required this.isCurrent,
+    required this.currentKey,
+    required this.onTap,
+  });
+
+  final bool unlocked;
+  final int level1Done;
+  final bool isCurrent;
+  final GlobalKey? currentKey;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = ProgressService.instance;
+    final best = progress.bestScore('mixto');
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      children: [
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            CircleAvatar(
+              radius: 22,
+              backgroundColor: Colors.amber.withValues(alpha: 0.18),
+              child: const Icon(Icons.emoji_events, color: Colors.amber),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Examen final',
+                      style:
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text('El reto final del camino'),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        GestureDetector(
+          key: isCurrent ? currentKey : null,
+          onTap: onTap,
+          child: Container(
+            width: 84,
+            height: 84,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: unlocked
+                  ? const Color(0xFFFFB300)
+                  : scheme.onSurface.withValues(alpha: 0.12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.25),
+                  blurRadius: 4,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            alignment: Alignment.center,
+            child: Icon(
+              unlocked ? Icons.emoji_events : Icons.lock,
+              size: 44,
+              color: unlocked
+                  ? const Color(0xFF5D4037)
+                  : scheme.onSurface.withValues(alpha: 0.5),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          unlocked
+              ? (best > 0
+                  ? 'Examen mixto · Mejor: $best%'
+                  : 'Examen mixto · 24 preguntas')
+              : 'Examen mixto · $level1Done/8',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+          textAlign: TextAlign.center,
+        ),
+        if (!unlocked)
+          Text(
+            'Pasa el Nivel 1 de los 8 temas para desbloquearlo.',
+            style: TextStyle(
+                color: scheme.onSurface.withValues(alpha: 0.7)),
+            textAlign: TextAlign.center,
+          ),
+      ],
     );
   }
 }

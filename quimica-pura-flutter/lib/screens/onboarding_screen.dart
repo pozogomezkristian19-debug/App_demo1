@@ -53,7 +53,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // resizeToAvoidBottomInset: false para que, al abrirse el teclado, la
+    // fila de puntos se quede fija abajo y no suba a tapar los botones.
+    // El contenido de cada página ya es desplazable, y la página del
+    // perfil reserva abajo el alto del teclado para que nada quede tapado.
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       body: SafeArea(
         child: Column(
           children: [
@@ -262,8 +267,15 @@ class _ProfilePage extends StatelessWidget {
     // Todo centrado, y la caja del nombre es lo más grande y visible
     // de la pantalla: texto grande, borde grueso en teal y centrada.
     const teal = Color(0xFF14B8A6);
+    // El relleno de abajo crece con el teclado abierto, así el botón
+    // Finalizar se puede subir por encima del teclado desplazando.
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(32),
+      padding: EdgeInsets.fromLTRB(
+        32,
+        32,
+        32,
+        32 + MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [

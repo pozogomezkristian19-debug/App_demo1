@@ -155,28 +155,55 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _index = 0;
 
+  // La primera pantalla es el camino de niveles (Niveles), como en
+  // Duolingo; Resolver queda como una opción más.
   static const List<Widget> _pages = [
+    PracticarScreen(),
     ResolverScreen(),
     AprenderScreen(),
     TablaScreen(),
-    PracticarScreen(),
     TipsScreen(),
   ];
 
   static const List<String> _titles = [
+    'Niveles',
     'Resolver',
     'Aprender',
     'Tabla periódica',
-    'Practicar',
     'Tips',
   ];
 
-  /// Abre el chat de WhatsApp del creador en la aplicación externa.
+  /// Abre el chat de WhatsApp del creador.
+  ///
+  /// Secuencia robusta para un teléfono Android real:
+  /// 1) El enlace wa.me con el manejo por defecto de la plataforma: en
+  ///    Android, WhatsApp registra wa.me como enlace de la app, así que
+  ///    el sistema lo abre directo en WhatsApp si está instalada.
+  /// 2) Si eso falla, el esquema propio de WhatsApp
+  ///    (whatsapp://send?phone=...).
+  /// El aviso de error solo sale si fallan las dos.
   Future<void> _openWhatsApp(BuildContext context) async {
-    final uri = Uri.parse('https://wa.me/5356519431');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else if (context.mounted) {
+    final waMe = Uri.parse('https://wa.me/5356519431');
+    final appScheme = Uri.parse('whatsapp://send?phone=5356519431');
+    var opened = false;
+    try {
+      if (await canLaunchUrl(waMe)) {
+        opened = await launchUrl(waMe, mode: LaunchMode.platformDefault);
+      }
+    } catch (_) {
+      opened = false;
+    }
+    if (!opened) {
+      try {
+        if (await canLaunchUrl(appScheme)) {
+          opened = await launchUrl(appScheme,
+              mode: LaunchMode.externalApplication);
+        }
+      } catch (_) {
+        opened = false;
+      }
+    }
+    if (!opened && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No se pudo abrir WhatsApp')),
       );
@@ -317,6 +344,11 @@ class _HomeScreenState extends State<HomeScreen> {
         indicatorColor: const Color(0xFF14B8A6).withValues(alpha: 0.25),
         destinations: const [
           NavigationDestination(
+            icon: Icon(Icons.route_outlined),
+            selectedIcon: Icon(Icons.route),
+            label: 'Niveles',
+          ),
+          NavigationDestination(
             icon: Icon(Icons.calculate_outlined),
             selectedIcon: Icon(Icons.calculate),
             label: 'Resolver',
@@ -330,11 +362,6 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icon(Icons.grid_view_outlined),
             selectedIcon: Icon(Icons.grid_view),
             label: 'Tabla',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.quiz_outlined),
-            selectedIcon: Icon(Icons.quiz),
-            label: 'Practicar',
           ),
           NavigationDestination(
             icon: Icon(Icons.lightbulb_outlined),
