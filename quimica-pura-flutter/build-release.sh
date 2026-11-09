@@ -29,6 +29,14 @@ if [ ! -f assets/logo.png ] && [ -f assets/logo.png.b64 ]; then
   echo "Logo reconstruido desde assets/logo.png.b64"
 fi
 
+# Igual con el logo de WhatsApp (assets/whatsapp.png): viaja como
+# assets/whatsapp.png.b64 y se reconstruye aquí antes del build,
+# porque pubspec.yaml lo declara como asset y sin el PNG el build falla.
+if [ ! -f assets/whatsapp.png ] && [ -f assets/whatsapp.png.b64 ]; then
+  base64 -d assets/whatsapp.png.b64 > assets/whatsapp.png
+  echo "Logo de WhatsApp reconstruido desde assets/whatsapp.png.b64"
+fi
+
 flutter build apk --release
 
 APK=build/app/outputs/flutter-apk/app-release.apk
