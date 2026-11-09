@@ -1,0 +1,70 @@
+name: Build Melli-Qui APK
+
+on:
+  push:
+    paths:
+      - 'quimica-pura-flutter/**'
+      - '.github/workflows/build-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Flutter 3.47.9
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.9'
+
+      - name: Restore binary assets from base64
+        run: |
+          cd quimica-pura-flutter
+          if [ ! -f assets/logo.png ] && [ -f assets/logo.png.b64 ]; then
+            base64 -d assets/logo.png.b64 > assets/logo.png
+          fi
+          if [ ! -f assets/whatsapp.png ] && [ -f assets/whatsapp.png.b64 ]; then
+            base64 -d assets/whatsapp.png.b64 > assets/whatsapp.png
+          fi
+
+      - name: Install dependencies
+        run: flutter pub get
+        working-directory: quimica-pura-flutter
+
+      - name: Build release APK
+        run: flutter build apk --release
+        working-directory: quimica-pura-flutter
+
+      - name: Prepare APK asset
+        run: cp quimica-pura-flutter/build/app/outputs/flutter-apk/app-release.apk quimica-pura-flutter/melli-qui-release.apk
+
+      - name: Publish APK as GitHub Release
+        id: release
+        continue-on-error: true
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: melli-qui-v2
+          name: Melli-Qui v2
+          files: quimica-pura-flutter/melli-qui-release.apk
+          fail_on_unmatched_files: true
+
+      - name: Fallback - commit APK to docs/ for GitHub Pages
+        if: steps.release.outcome == 'failure'
+        run: |
+          cp quimica-pura-flutter/melli-qui-release.apk docs/melli-qui-release.apk
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/melli-qui-release.apk
+          git commit -m "Melli-Qui: APK v2 para descarga por la pagina"
+          git push
