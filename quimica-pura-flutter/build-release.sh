@@ -52,6 +52,19 @@ if [ ! -f assets/whatsapp.png ] && [ -f assets/whatsapp.png.b64 ]; then
   echo "Logo de WhatsApp reconstruido desde assets/whatsapp.png.b64"
 fi
 
+# El conector de GitHub sube los binarios como texto base64, asi que el
+# jar de Gradle y los iconos de la app llegaron al repo como texto y hay
+# que convertirlos a binarios antes de compilar. Si un archivo ya es
+# binario de verdad, se deja como esta.
+for f in android/gradle/wrapper/gradle-wrapper.jar android/app/src/main/res/mipmap-*/ic_launcher.png; do
+  if file "$f" | grep -qE "Zip archive|PNG image"; then
+    echo "OK binario: $f"
+  else
+    base64 -d "$f" > /tmp/restore.bin && mv /tmp/restore.bin "$f"
+    echo "Restaurado: $f"
+  fi
+done
+
 flutter build apk --release
 
 APK=build/app/outputs/flutter-apk/app-release.apk
