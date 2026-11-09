@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'screens/resolver_screen.dart';
 import 'screens/aprender_screen.dart';
 import 'screens/tabla_screen.dart';
 import 'screens/practicar_screen.dart';
 import 'screens/tips_screen.dart';
 import 'screens/onboarding_screen.dart';
+import 'services/progress.dart';
 import 'services/user_prefs.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await UserPrefs.load();
+  await ProgressService.load();
   runApp(const MelliQuiApp());
 }
 
@@ -167,11 +171,104 @@ class _HomeScreenState extends State<HomeScreen> {
     'Tips',
   ];
 
+  /// Abre el chat de WhatsApp del creador en la aplicación externa.
+  Future<void> _openWhatsApp(BuildContext context) async {
+    final uri = Uri.parse('https://wa.me/5356519431');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo abrir WhatsApp')),
+      );
+    }
+  }
+
+  /// Hoja "Acerca de Melli-Qui" con los datos de soporte.
+  void _showAbout(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const ClipRRect(
+                  borderRadius: BorderRadius.all(Radius.circular(10)),
+                  child: Image(
+                    image: AssetImage('assets/logo.png'),
+                    width: 48,
+                    height: 48,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Melli-Qui',
+                          style: TextStyle(
+                              fontSize: 22, fontWeight: FontWeight.bold)),
+                      Text('Química Pura — Universidad'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Tu app de Química Pura para la universidad: resolver problemas paso a paso, estudiar, practicar por niveles y llegar con tips al examen.',
+              style: TextStyle(fontSize: 16, height: 1.5),
+            ),
+            const SizedBox(height: 16),
+            const Text('Creador: CraigKamer',
+                style: TextStyle(fontSize: 16)),
+            const Text('Teléfono (Cuba): +53 56519431',
+                style: TextStyle(fontSize: 16)),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  await Clipboard.setData(
+                      const ClipboardData(text: '+5356519431'));
+                  if (!context.mounted) return;
+                  Navigator.of(sheetContext).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text('Teléfono copiado al portapapeles')),
+                  );
+                },
+                icon: const Icon(Icons.copy),
+                label: const Text('Copiar teléfono'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final greeting = UserPrefs.greeting;
     return Scaffold(
+      // Botón flotante de WhatsApp, visible en las 5 secciones:
+      // lleva directo al chat del creador.
+      floatingActionButton: FloatingActionButton(
+        tooltip: 'Escribir por WhatsApp',
+        backgroundColor: const Color(0xFF25D366),
+        onPressed: () => _openWhatsApp(context),
+        child: const Image(
+          image: AssetImage('assets/whatsapp.png'),
+          width: 32,
+          height: 32,
+        ),
+      ),
       appBar: AppBar(
         leading: const Padding(
           padding: EdgeInsets.all(8),
@@ -199,6 +296,11 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            tooltip: 'Acerca de Melli-Qui',
+            onPressed: () => _showAbout(context),
+            icon: const Icon(Icons.info_outline),
+          ),
           IconButton(
             tooltip: widget.isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro',
             onPressed: widget.onToggleTheme,

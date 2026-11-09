@@ -8,13 +8,13 @@ environment:
   flutter: ">=3.24.0"
 
 # La app funciona sin internet: el nombre, el género, el tema claro/oscuro
-# y el progreso se guardan en el teléfono con SharedPreferences.
-# El progreso (temas dominados y mejor puntuación) se guarda en memoria
-# durante la sesión.
+# y el progreso (mejor puntuación, niveles, aciertos por tema y errores
+# para repasar) se guardan en el teléfono con SharedPreferences.
 dependencies:
   flutter:
     sdk: flutter
   shared_preferences: ^2.5.6
+  url_launcher: ^6.3.1
 
 dev_dependencies:
   flutter_test:
@@ -24,3 +24,4 @@ flutter:
   uses-material-design: true
   assets:
     - assets/logo.png
+    - assets/whatsapp.png

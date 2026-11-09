@@ -259,34 +259,66 @@ class _ProfilePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Todo centrado, y la caja del nombre es lo más grande y visible
+    // de la pantalla: texto grande, borde grueso en teal y centrada.
+    const teal = Color(0xFF14B8A6);
     return SingleChildScrollView(
       padding: const EdgeInsets.all(32),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           const SizedBox(height: 24),
           const Text(
             'Un último paso',
-            style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
           const Text(
             'Dinos cómo te llamas para saludarte cada vez que entres. Todo se guarda en tu teléfono, sin internet.',
+            textAlign: TextAlign.center,
             style: TextStyle(fontSize: 17, height: 1.5),
           ),
-          const SizedBox(height: 28),
+          const SizedBox(height: 32),
+          const Text(
+            'Nombre de usuario',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: teal),
+          ),
+          const SizedBox(height: 12),
           TextField(
             controller: nameController,
             textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(
-              labelText: 'Nombre de usuario',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            decoration: InputDecoration(
               hintText: 'Por ejemplo: Ana',
+              hintStyle: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.normal,
+                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.45),
+              ),
+              contentPadding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+              filled: true,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: const BorderSide(color: teal, width: 2.5),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: const BorderSide(color: teal, width: 2.5),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: const BorderSide(color: teal, width: 3),
+              ),
             ),
           ),
-          const SizedBox(height: 24),
-          const Text('Género', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 28),
+          const Text('Género', textAlign: TextAlign.center, style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
           Wrap(
+            alignment: WrapAlignment.center,
             spacing: 12,
             children: [
               ChoiceChip(
