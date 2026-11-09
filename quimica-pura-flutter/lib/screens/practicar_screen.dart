@@ -71,7 +71,9 @@ class _PracticarScreenState extends State<PracticarScreen> {
         const SizedBox(height: 12),
         Text(
           'Banco total: ${allQuestions.length} preguntas únicas.',
-          style: const TextStyle(color: Colors.white70),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+          ),
         ),
       ],
     );
@@ -208,10 +210,12 @@ class _QuizRunnerState extends State<_QuizRunner> {
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: _selected == null
-                    ? const Color(0xFF1B3A34)
+                    ? Theme.of(context).colorScheme.surfaceContainerHighest
                     : (_order[i] == _q.answer
                         ? Colors.teal
-                        : (_selected == i ? Colors.redAccent : const Color(0xFF1B3A34))),
+                        : (_selected == i
+                            ? Colors.redAccent
+                            : Theme.of(context).colorScheme.surfaceContainerHighest)),
                 alignment: Alignment.centerLeft,
                 padding: const EdgeInsets.all(14),
               ),

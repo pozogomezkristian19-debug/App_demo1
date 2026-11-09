@@ -13,16 +13,83 @@ class ResolverScreen extends StatelessWidget {
         _LogoHeader(),
         SizedBox(height: 8),
         _IntroCard(),
-        SizedBox(height: 8),
+        SizedBox(height: 16),
+        // Grupo 1: cantidad de sustancia.
+        _SectionHeader(
+          icon: Icons.science_outlined,
+          title: 'Cantidad de sustancia',
+          subtitle: 'De la fórmula a los moles, y de los moles a la masa.',
+        ),
         MolarMassSolver(),
         MassMolesSolver(),
+        SizedBox(height: 12),
+        // Grupo 2: disoluciones.
+        _SectionHeader(
+          icon: Icons.water_drop_outlined,
+          title: 'Disoluciones',
+          subtitle: 'Concentración y cómo preparar una disolución más diluida.',
+        ),
         MolaritySolver(),
         DilutionSolver(),
+        SizedBox(height: 12),
+        // Grupo 3: ácidos y bases.
+        _SectionHeader(
+          icon: Icons.opacity_outlined,
+          title: 'Ácidos y bases',
+          subtitle: 'Acidez, basicidad y la escala de pH.',
+        ),
         PhSolver(),
+        SizedBox(height: 12),
+        // Grupo 4: gases y reacciones.
+        _SectionHeader(
+          icon: Icons.air_outlined,
+          title: 'Gases y reacciones',
+          subtitle: 'El gas ideal y quién se agota primero en la reacción.',
+        ),
         GasSolver(),
         LimitingSolver(),
         SizedBox(height: 16),
       ],
+    );
+  }
+}
+
+/// Título de un grupo de solucionadores, con su icono y su descripción.
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.icon, required this.title, required this.subtitle});
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: 22,
+            backgroundColor: scheme.primary.withValues(alpha: 0.15),
+            child: Icon(icon, color: scheme.primary),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: TextStyle(color: scheme.onSurface.withValues(alpha: 0.7)),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -33,9 +100,10 @@ class _LogoHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Column(
       children: [
-        ClipOval(
+        ClipRRect(
+          borderRadius: const BorderRadius.all(Radius.circular(28)),
           child: Image(
-            image: AssetImage('assets/logo-circular.png'),
+            image: AssetImage('assets/logo.png'),
             width: 140,
             height: 140,
             fit: BoxFit.cover,
@@ -93,7 +161,12 @@ class _SolverCard extends StatelessWidget {
           children: [
             Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 4),
-            Text(subtitle, style: const TextStyle(color: Colors.white70)),
+            Text(
+              subtitle,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+              ),
+            ),
             const SizedBox(height: 12),
             child,
           ],

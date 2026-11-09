@@ -69,9 +69,11 @@ class _TablaScreenState extends State<TablaScreen> {
             Text('Periodo: ${e.period} · Grupo: ${e.column} · Bloque: ${e.block}'),
             Text('Categoría: ${categoryNames[e.category]}'),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Los lantánidos (57–71) y actínidos (89–103) se muestran en las dos filas separadas de abajo, como en la tabla clásica.',
-              style: TextStyle(color: Colors.white70),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+              ),
             ),
           ],
         ),
@@ -79,7 +81,7 @@ class _TablaScreenState extends State<TablaScreen> {
     );
   }
 
-  Widget _cell(ChemicalElement? e) {
+  Widget _cell(BuildContext context, ChemicalElement? e) {
     if (e == null) return const SizedBox.shrink();
     final dimmed = _filterCategory != null && e.category != _filterCategory;
     return GestureDetector(
@@ -87,7 +89,9 @@ class _TablaScreenState extends State<TablaScreen> {
       child: Container(
         margin: const EdgeInsets.all(1),
         decoration: BoxDecoration(
-          color: dimmed ? Colors.white10 : _catColors[e.category],
+          color: dimmed
+              ? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.08)
+              : _catColors[e.category],
           borderRadius: BorderRadius.circular(4),
         ),
         child: Column(
@@ -155,7 +159,12 @@ class _TablaScreenState extends State<TablaScreen> {
                   padding: const EdgeInsets.all(12),
                   children: [
                     Text('${_visible.length} elementos',
-                        style: const TextStyle(color: Colors.white70)),
+                        style: TextStyle(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withValues(alpha: 0.7),
+                        )),
                     for (final e in _visible)
                       ListTile(
                         leading: CircleAvatar(
@@ -205,16 +214,18 @@ class _TablaScreenState extends State<TablaScreen> {
                           ),
                         );
                       }
-                      return _cell(grid[i]);
+                      return _cell(context, grid[i]);
                     },
                   ),
                 ),
         ),
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 4, 16, 12),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
           child: Text(
             '118 elementos. Toca cualquier elemento para ver su ficha: masa atómica, grupo, periodo, bloque y categoría.',
-            style: TextStyle(color: Colors.white70),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+            ),
             textAlign: TextAlign.center,
           ),
         ),

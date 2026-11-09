@@ -7,12 +7,14 @@ environment:
   sdk: ^3.5.0
   flutter: ">=3.24.0"
 
-# Sin dependencias externas: la app funciona y se compila sin conexión.
+# La app funciona sin internet: el nombre, el género, el tema claro/oscuro
+# y el progreso se guardan en el teléfono con SharedPreferences.
 # El progreso (temas dominados y mejor puntuación) se guarda en memoria
-# durante la sesión. Esto evita depender de pub.dev en el Codespace.
+# durante la sesión.
 dependencies:
   flutter:
     sdk: flutter
+  shared_preferences: ^2.5.6
 
 dev_dependencies:
   flutter_test:
@@ -21,4 +23,4 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/logo-circular.png
+    - assets/logo.png

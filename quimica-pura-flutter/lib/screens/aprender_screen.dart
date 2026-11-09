@@ -66,7 +66,9 @@ class _AprenderScreenState extends State<AprenderScreen> {
                 progress.isMastered(topic.slug)
                     ? Icons.check_circle
                     : Icons.check_circle_outline,
-                color: progress.isMastered(topic.slug) ? Colors.tealAccent : Colors.white54,
+                color: progress.isMastered(topic.slug)
+                    ? Theme.of(context).colorScheme.primary
+                    : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.35),
               ),
               childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               children: [
@@ -93,7 +95,9 @@ class _AprenderScreenState extends State<AprenderScreen> {
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(topic.exampleAnswer,
-                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.tealAccent)),
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).colorScheme.primary)),
                 ),
                 const SizedBox(height: 12),
                 const Text('Errores que cuestan puntos', style: TextStyle(fontWeight: FontWeight.bold)),
