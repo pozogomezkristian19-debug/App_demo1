@@ -7,13 +7,18 @@ import 'screens/tabla_screen.dart';
 import 'screens/practicar_screen.dart';
 import 'screens/tips_screen.dart';
 import 'screens/onboarding_screen.dart';
+import 'services/localization.dart';
 import 'services/progress.dart';
 import 'services/user_prefs.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await UserPrefs.load();
+  // La pista guardada (Bachillerato o Universidad) se carga antes del
+  // progreso, porque las claves de guardado dependen de la pista.
+  ProgressService.track = UserPrefs.track;
   await ProgressService.load();
+  await AppLang.load();
   runApp(const MelliQuiApp());
 }
 
@@ -102,17 +107,22 @@ class _MelliQuiAppState extends State<MelliQuiApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Melli-Qui',
-      debugShowCheckedModeBanner: false,
-      theme: _lightTheme(),
-      darkTheme: _darkTheme(),
-      themeMode: _isDark ? ThemeMode.dark : ThemeMode.light,
-      home: _onboardingDone
-          ? HomeScreen(isDark: _isDark, onToggleTheme: _toggleTheme)
-          : OnboardingScreen(
-              onFinished: () => setState(() => _onboardingDone = true),
-            ),
+    // Al cambiar el idioma, AppLang.notifier avisa y se reconstruye toda
+    // la app con los textos nuevos, sin reiniciar.
+    return ValueListenableBuilder<String>(
+      valueListenable: AppLang.notifier,
+      builder: (context, lang, _) => MaterialApp(
+        title: 'Melli-Qui',
+        debugShowCheckedModeBanner: false,
+        theme: _lightTheme(),
+        darkTheme: _darkTheme(),
+        themeMode: _isDark ? ThemeMode.dark : ThemeMode.light,
+        home: _onboardingDone
+            ? HomeScreen(isDark: _isDark, onToggleTheme: _toggleTheme)
+            : OnboardingScreen(
+                onFinished: () => setState(() => _onboardingDone = true),
+              ),
+      ),
     );
   }
 }
@@ -165,13 +175,14 @@ class _HomeScreenState extends State<HomeScreen> {
     TipsScreen(),
   ];
 
-  static const List<String> _titles = [
-    'Niveles',
-    'Resolver',
-    'Aprender',
-    'Tabla periódica',
-    'Tips',
-  ];
+  /// Títulos de las 5 secciones, en el idioma actual.
+  List<String> get _titles => [
+        tr('tabLevels'),
+        tr('tabResolver'),
+        tr('tabLearn'),
+        tr('tableTitle'),
+        tr('tipsTitle'),
+      ];
 
   /// Abre el chat de WhatsApp del creador.
   ///
@@ -205,7 +216,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     if (!opened && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No se pudo abrir WhatsApp')),
+        SnackBar(content: Text(tr('whatsappFail'))),
       );
     }
   }
@@ -232,29 +243,29 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
                 const SizedBox(width: 12),
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Melli-Qui',
+                      const Text('Melli-Qui',
                           style: TextStyle(
                               fontSize: 22, fontWeight: FontWeight.bold)),
-                      Text('Química Pura — Universidad'),
+                      Text(tr('appSubtitle')),
                     ],
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 16),
-            const Text(
-              'Tu app de Química Pura para la universidad: resolver problemas paso a paso, estudiar, practicar por niveles y llegar con tips al examen.',
-              style: TextStyle(fontSize: 16, height: 1.5),
+            Text(
+              tr('aboutBody'),
+              style: const TextStyle(fontSize: 16, height: 1.5),
             ),
             const SizedBox(height: 16),
-            const Text('Creador: CraigKamer',
-                style: TextStyle(fontSize: 16)),
-            const Text('Teléfono (Cuba): +53 56519431',
-                style: TextStyle(fontSize: 16)),
+            Text('${tr('creatorWord')}: CraigKamer',
+                style: const TextStyle(fontSize: 16)),
+            Text('${tr('phoneWord')}: +53 56519431',
+                style: const TextStyle(fontSize: 16)),
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
@@ -265,12 +276,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (!context.mounted) return;
                   Navigator.of(sheetContext).pop();
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                        content: Text('Teléfono copiado al portapapeles')),
+                    SnackBar(content: Text(tr('phoneCopied'))),
                   );
                 },
                 icon: const Icon(Icons.copy),
-                label: const Text('Copiar teléfono'),
+                label: Text(tr('copyPhone')),
               ),
             ),
           ],
@@ -282,12 +292,12 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final greeting = UserPrefs.greeting;
+    final greeting = AppLang.greeting();
     return Scaffold(
       // Botón flotante de WhatsApp, visible en las 5 secciones:
       // lleva directo al chat del creador.
       floatingActionButton: FloatingActionButton(
-        tooltip: 'Escribir por WhatsApp',
+        tooltip: tr('writeWhatsApp'),
         backgroundColor: const Color(0xFF25D366),
         onPressed: () => _openWhatsApp(context),
         child: const Image(
@@ -296,40 +306,119 @@ class _HomeScreenState extends State<HomeScreen> {
           height: 32,
         ),
       ),
-      appBar: AppBar(
-        leading: const Padding(
-          padding: EdgeInsets.all(8),
-          child: ClipRRect(
-            borderRadius: BorderRadius.all(Radius.circular(10)),
-            child: Image(
-              image: AssetImage('assets/logo.png'),
-              fit: BoxFit.cover,
+      // Menú hamburguesa: idioma, Acerca de y tema claro/oscuro.
+      // La navegación principal sigue siendo la barra inferior.
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            DrawerHeader(
+              decoration: BoxDecoration(
+                color: scheme.primary.withValues(alpha: 0.15),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const ClipRRect(
+                    borderRadius: BorderRadius.all(Radius.circular(12)),
+                    child: Image(
+                      image: AssetImage('assets/logo.png'),
+                      width: 56,
+                      height: 56,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text('Melli-Qui',
+                      style:
+                          TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                  Text(tr('appSubtitle')),
+                ],
+              ),
             ),
+            ListTile(
+              leading: const Icon(Icons.language),
+              title: Text(tr('languageWord'),
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
+            ),
+            for (final (code, name) in AppLang.supported)
+              ListTile(
+                title: Text(name),
+                trailing: AppLang.code == code
+                    ? Icon(Icons.check, color: scheme.primary)
+                    : null,
+                onTap: () async {
+                  await AppLang.setLang(code);
+                  if (context.mounted) Navigator.of(context).pop();
+                },
+              ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.info_outline),
+              title: Text(tr('aboutWord')),
+              onTap: () {
+                Navigator.of(context).pop();
+                _showAbout(context);
+              },
+            ),
+            SwitchListTile(
+              secondary: _ThemeToggleIcon(isDark: widget.isDark),
+              title: Text(tr('themeWord')),
+              subtitle:
+                  Text(widget.isDark ? tr('darkWord') : tr('lightWord')),
+              value: widget.isDark,
+              onChanged: (_) => widget.onToggleTheme(),
+            ),
+          ],
+        ),
+      ),
+      appBar: AppBar(
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu),
+            tooltip: tr('menuWord'),
+            onPressed: () => Scaffold.of(context).openDrawer(),
           ),
         ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        title: Row(
           children: [
-            Text(_titles[_index]),
-            if (UserPrefs.userName.isNotEmpty)
-              Text(
-                greeting,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.normal,
-                  color: scheme.onSurface.withValues(alpha: 0.7),
-                ),
+            const ClipRRect(
+              borderRadius: BorderRadius.all(Radius.circular(10)),
+              child: Image(
+                image: AssetImage('assets/logo.png'),
+                width: 36,
+                height: 36,
+                fit: BoxFit.cover,
               ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(_titles[_index]),
+                  if (UserPrefs.userName.isNotEmpty)
+                    Text(
+                      greeting,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.normal,
+                        color: scheme.onSurface.withValues(alpha: 0.7),
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ],
         ),
         actions: [
           IconButton(
-            tooltip: 'Acerca de Melli-Qui',
+            tooltip: tr('aboutTitle'),
             onPressed: () => _showAbout(context),
             icon: const Icon(Icons.info_outline),
           ),
           IconButton(
-            tooltip: widget.isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro',
+            tooltip: widget.isDark ? tr('lightWord') : tr('darkWord'),
             onPressed: widget.onToggleTheme,
             icon: _ThemeToggleIcon(isDark: widget.isDark),
           ),
@@ -337,36 +426,35 @@ class _HomeScreenState extends State<HomeScreen> {
         centerTitle: false,
       ),
       body: SafeArea(child: _pages[_index]),
-      // Solo barra inferior, sin menú hamburguesa ni barra superior con menú.
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
         indicatorColor: const Color(0xFF14B8A6).withValues(alpha: 0.25),
-        destinations: const [
+        destinations: [
           NavigationDestination(
-            icon: Icon(Icons.route_outlined),
-            selectedIcon: Icon(Icons.route),
-            label: 'Niveles',
+            icon: const Icon(Icons.route_outlined),
+            selectedIcon: const Icon(Icons.route),
+            label: tr('tabLevels'),
           ),
           NavigationDestination(
-            icon: Icon(Icons.calculate_outlined),
-            selectedIcon: Icon(Icons.calculate),
-            label: 'Resolver',
+            icon: const Icon(Icons.calculate_outlined),
+            selectedIcon: const Icon(Icons.calculate),
+            label: tr('tabResolver'),
           ),
           NavigationDestination(
-            icon: Icon(Icons.menu_book_outlined),
-            selectedIcon: Icon(Icons.menu_book),
-            label: 'Aprender',
+            icon: const Icon(Icons.menu_book_outlined),
+            selectedIcon: const Icon(Icons.menu_book),
+            label: tr('tabLearn'),
           ),
           NavigationDestination(
-            icon: Icon(Icons.grid_view_outlined),
-            selectedIcon: Icon(Icons.grid_view),
-            label: 'Tabla',
+            icon: const Icon(Icons.grid_view_outlined),
+            selectedIcon: const Icon(Icons.grid_view),
+            label: tr('tabTable'),
           ),
           NavigationDestination(
-            icon: Icon(Icons.lightbulb_outlined),
-            selectedIcon: Icon(Icons.lightbulb),
-            label: 'Tips',
+            icon: const Icon(Icons.lightbulb_outlined),
+            selectedIcon: const Icon(Icons.lightbulb),
+            label: tr('tabTips'),
           ),
         ],
       ),

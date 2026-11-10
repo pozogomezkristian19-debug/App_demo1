@@ -1,95 +1,196 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../services/chemistry.dart';
+import '../services/localization.dart';
+import '../widgets/solver_widgets.dart';
+import 'resolver_extra.dart';
 
-class ResolverScreen extends StatelessWidget {
-  const ResolverScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: const [
-        _LogoHeader(),
-        SizedBox(height: 8),
-        _IntroCard(),
-        SizedBox(height: 16),
-        // Grupo 1: cantidad de sustancia.
-        _SectionHeader(
-          icon: Icons.science_outlined,
-          title: 'Cantidad de sustancia',
-          subtitle: 'De la fórmula a los moles, y de los moles a la masa.',
-        ),
-        MolarMassSolver(),
-        MassMolesSolver(),
-        SizedBox(height: 12),
-        // Grupo 2: disoluciones.
-        _SectionHeader(
-          icon: Icons.water_drop_outlined,
-          title: 'Disoluciones',
-          subtitle: 'Concentración y cómo preparar una disolución más diluida.',
-        ),
-        MolaritySolver(),
-        DilutionSolver(),
-        SizedBox(height: 12),
-        // Grupo 3: ácidos y bases.
-        _SectionHeader(
-          icon: Icons.opacity_outlined,
-          title: 'Ácidos y bases',
-          subtitle: 'Acidez, basicidad y la escala de pH.',
-        ),
-        PhSolver(),
-        SizedBox(height: 12),
-        // Grupo 4: gases y reacciones.
-        _SectionHeader(
-          icon: Icons.air_outlined,
-          title: 'Gases y reacciones',
-          subtitle: 'El gas ideal y quién se agota primero en la reacción.',
-        ),
-        GasSolver(),
-        LimitingSolver(),
-        SizedBox(height: 16),
-      ],
-    );
-  }
-}
-
-/// Título de un grupo de solucionadores, con su icono y su descripción.
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.icon, required this.title, required this.subtitle});
-  final IconData icon;
+/// Un solucionador de la lista: su grupo, su título, su descripción,
+/// su icono y su pantalla.
+class _SolverEntry {
+  const _SolverEntry({
+    required this.group,
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.page,
+  });
+  final String group;
   final String title;
   final String subtitle;
+  final IconData icon;
+  final Widget page;
+}
+
+/// Los 14 solucionadores, agrupados. Solo se abre uno a la vez: la lista
+/// es limpia y el solucionador abierto tiene todo el espacio.
+const List<_SolverEntry> _solverEntries = [
+  _SolverEntry(
+    group: 'Cantidad de sustancia',
+    title: 'Masa molar de un compuesto',
+    subtitle: 'Escribe la fórmula (acepta paréntesis): H2SO4, Ca(OH)2, Al2(SO4)3…',
+    icon: Icons.science_outlined,
+    page: MolarMassSolver(),
+  ),
+  _SolverEntry(
+    group: 'Cantidad de sustancia',
+    title: 'Masa ⇄ moles ⇄ partículas',
+    subtitle: 'n = m / M · N = n · 6.022×10²³',
+    icon: Icons.functions,
+    page: MassMolesSolver(),
+  ),
+  _SolverEntry(
+    group: 'Disoluciones',
+    title: 'Molaridad',
+    subtitle: 'Concentración: M = n / V',
+    icon: Icons.water_drop_outlined,
+    page: MolaritySolver(),
+  ),
+  _SolverEntry(
+    group: 'Disoluciones',
+    title: 'Dilución',
+    subtitle: 'M₁V₁ = M₂V₂: cómo preparar una disolución más diluida',
+    icon: Icons.water_drop,
+    page: DilutionSolver(),
+  ),
+  _SolverEntry(
+    group: 'Ácidos y bases',
+    title: 'pH y pOH',
+    subtitle: 'Acidez y basicidad de disoluciones fuertes',
+    icon: Icons.opacity_outlined,
+    page: PhSolver(),
+  ),
+  _SolverEntry(
+    group: 'Ácidos y bases',
+    title: 'pH de ácidos polipróticos',
+    subtitle: 'Dipróticos y tripróticos, por etapas (H₂CO₃, H₂SO₄, H₃PO₄)',
+    icon: Icons.looks_two_outlined,
+    page: PolyproticPhSolver(),
+  ),
+  _SolverEntry(
+    group: 'Ácidos y bases',
+    title: 'pH de mezclas que no reaccionan',
+    subtitle: 'Dos ácidos o dos bases, fuertes o débiles',
+    icon: Icons.merge_outlined,
+    page: MixturePhSolver(),
+  ),
+  _SolverEntry(
+    group: 'Ácidos y bases',
+    title: 'pH de disoluciones de sales',
+    subtitle: 'Con o sin hidrólisis, según de dónde venga la sal',
+    icon: Icons.grain_outlined,
+    page: SaltPhSolver(),
+  ),
+  _SolverEntry(
+    group: 'Equilibrio',
+    title: 'Solubilidad y Ksp',
+    subtitle: 'De Ksp a solubilidad, o de solubilidad a Ksp (AₐB_b)',
+    icon: Icons.balance,
+    page: SolubilitySolver(),
+  ),
+  _SolverEntry(
+    group: 'Redox',
+    title: 'Balanceo redox (ion-electrón)',
+    subtitle: 'Reacciones frecuentes, por semirreacciones',
+    icon: Icons.swap_horiz,
+    page: RedoxSolver(),
+  ),
+  _SolverEntry(
+    group: 'Gases y reacciones',
+    title: 'Gas ideal',
+    subtitle: 'PV = nRT: presión, volumen, moles y temperatura',
+    icon: Icons.air_outlined,
+    page: GasSolver(),
+  ),
+  _SolverEntry(
+    group: 'Gases y reacciones',
+    title: 'Reactivo limitante',
+    subtitle: 'Quién se agota primero en la reacción',
+    icon: Icons.hourglass_bottom_outlined,
+    page: LimitingSolver(),
+  ),
+  _SolverEntry(
+    group: 'Valoraciones',
+    title: 'Valoraciones',
+    subtitle: 'Ácido-base, redox y por retroceso',
+    icon: Icons.colorize_outlined,
+    page: TitrationSolver(),
+  ),
+  _SolverEntry(
+    group: 'Valoraciones',
+    title: 'Valoración potenciométrica',
+    subtitle: 'El punto de equivalencia por el salto de pH',
+    icon: Icons.show_chart,
+    page: PotentiometricSolver(),
+  ),
+];
+
+class ResolverScreen extends StatefulWidget {
+  const ResolverScreen({super.key});
+  @override
+  State<ResolverScreen> createState() => _ResolverScreenState();
+}
+
+class _ResolverScreenState extends State<ResolverScreen> {
+  int? _open; // índice del solucionador abierto (null = lista)
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    // Un solucionador abierto: botón para volver y el solucionador a
+    // pantalla completa, con sus campos grandes y su tarjeta de resultado.
+    if (_open != null) {
+      return ListView(
+        padding: const EdgeInsets.all(16),
         children: [
-          CircleAvatar(
-            radius: 22,
-            backgroundColor: scheme.primary.withValues(alpha: 0.15),
-            child: Icon(icon, color: scheme.primary),
+          TextButton.icon(
+            onPressed: () => setState(() => _open = null),
+            icon: const Icon(Icons.arrow_back),
+            label: Text(tr('allSolvers')),
+            style: TextButton.styleFrom(
+              alignment: Alignment.centerLeft,
+            ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: TextStyle(color: scheme.onSurface.withValues(alpha: 0.7)),
-                ),
-              ],
+          _solverEntries[_open!].page,
+          const SizedBox(height: 16),
+        ],
+      );
+    }
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const _LogoHeader(),
+        const SizedBox(height: 8),
+        const _IntroCard(),
+        const SizedBox(height: 8),
+        for (var i = 0; i < _solverEntries.length; i++) ...[
+          if (i == 0 || _solverEntries[i].group != _solverEntries[i - 1].group)
+            Padding(
+              padding: const EdgeInsets.only(top: 14, bottom: 6),
+              child: Text(_solverEntries[i].group,
+                  style: const TextStyle(
+                      fontSize: 19, fontWeight: FontWeight.bold)),
+            ),
+          Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: ListTile(
+              leading: CircleAvatar(
+                backgroundColor: Theme.of(context)
+                    .colorScheme
+                    .primary
+                    .withValues(alpha: 0.15),
+                child: Icon(_solverEntries[i].icon,
+                    color: Theme.of(context).colorScheme.primary),
+              ),
+              title: Text(_solverEntries[i].title,
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: Text(_solverEntries[i].subtitle),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => setState(() => _open = i),
             ),
           ),
         ],
-      ),
+        const SizedBox(height: 16),
+      ],
     );
   }
 }
@@ -124,106 +225,31 @@ class _IntroCard extends StatelessWidget {
   const _IntroCard();
   @override
   Widget build(BuildContext context) {
-    return const Card(
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Resolver problemas, paso a paso',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            SizedBox(height: 6),
-            Text(
-              'Siete solucionadores que no solo dan el resultado: muestran el procedimiento completo, como lo escribirías en un examen.',
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ---------- Utilidades compartidas ----------
-
-class _SolverCard extends StatelessWidget {
-  const _SolverCard({required this.title, required this.subtitle, required this.child});
-  final String title;
-  final String subtitle;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 4),
+            Text(tr('resolverTitle'),
+                style:
+                    const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 6),
+            Text(tr('resolverIntro')),
+            const SizedBox(height: 6),
             Text(
-              subtitle,
+              '14 solucionadores que no solo dan el resultado: muestran el procedimiento completo, como lo escribirías en un examen.',
               style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
-              ),
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(alpha: 0.7)),
             ),
-            const SizedBox(height: 12),
-            child,
           ],
         ),
       ),
     );
   }
-}
-
-class _NumField extends StatelessWidget {
-  const _NumField({required this.controller, required this.label});
-  final TextEditingController controller;
-  final String label;
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: TextField(
-        controller: controller,
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        decoration: InputDecoration(labelText: label),
-      ),
-    );
-  }
-}
-
-class _Steps extends StatelessWidget {
-  const _Steps({required this.steps});
-  final List<String> steps;
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 10),
-        const Text('Procedimiento:', style: TextStyle(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 4),
-        for (var i = 0; i < steps.length; i++)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Text('${i + 1}. ${steps[i]}'),
-          ),
-      ],
-    );
-  }
-}
-
-double? _parse(TextEditingController c) {
-  final v = double.tryParse(c.text.replaceAll(',', '.').trim());
-  return v;
-}
-
-String _fmt(double v) {
-  if (v == v.roundToDouble() && v.abs() < 1000) return v.toStringAsFixed(0);
-  if (v.abs() >= 1000) return v.toStringAsExponential(2);
-  if (v.abs() < 0.001 && v != 0) return v.toStringAsExponential(2);
-  return v.toStringAsFixed(3);
 }
 
 // ---------- 1. Masa molar ----------
@@ -259,7 +285,7 @@ class _MolarMassSolverState extends State<MolarMassSolver> {
 
   @override
   Widget build(BuildContext context) {
-    return _SolverCard(
+    return SolverCard(
       title: 'Masa molar de un compuesto',
       subtitle: 'Escribe la fórmula (acepta paréntesis): H2SO4, Ca(OH)2, Al2(SO4)3…',
       child: Column(
@@ -276,7 +302,7 @@ class _MolarMassSolverState extends State<MolarMassSolver> {
               padding: const EdgeInsets.only(top: 10),
               child: Text(_error, style: const TextStyle(color: Colors.redAccent)),
             ),
-          if (_steps.isNotEmpty) _Steps(steps: _steps),
+          if (_steps.isNotEmpty) Steps(steps: _steps),
         ],
       ),
     );
@@ -299,8 +325,8 @@ class _MassMolesSolverState extends State<MassMolesSolver> {
   List<String> _steps = [];
 
   void _calc() {
-    final m = _parse(_mass);
-    final mm = _parse(_molar);
+    final m = parseNum(_mass);
+    final mm = parseNum(_molar);
     if (mm == null || mm <= 0) {
       setState(() => _result = 'Introduce una masa molar válida (g/mol).');
       return;
@@ -312,11 +338,11 @@ class _MassMolesSolverState extends State<MassMolesSolver> {
       }
       final n = m / mm;
       setState(() {
-        _result = 'n = ${_fmt(n)} mol';
+        _result = 'n = ${fmtResult(n)} mol';
         _steps = [
           'Fórmula: n = m / M',
-          'Sustitución: n = ${_fmt(m)} g ÷ ${_fmt(mm)} g/mol',
-          'Resultado: n = ${_fmt(n)} mol',
+          'Sustitución: n = ${fmtResult(m)} g ÷ ${fmtResult(mm)} g/mol',
+          'Resultado: n = ${fmtResult(n)} mol',
         ];
       });
     } else {
@@ -327,11 +353,11 @@ class _MassMolesSolverState extends State<MassMolesSolver> {
       }
       final mass = m * mm;
       setState(() {
-        _result = 'm = ${_fmt(mass)} g';
+        _result = 'm = ${fmtResult(mass)} g';
         _steps = [
           'Fórmula: m = n × M',
-          'Sustitución: m = ${_fmt(m)} mol × ${_fmt(mm)} g/mol',
-          'Resultado: m = ${_fmt(mass)} g',
+          'Sustitución: m = ${fmtResult(m)} mol × ${fmtResult(mm)} g/mol',
+          'Resultado: m = ${fmtResult(mass)} g',
         ];
       });
     }
@@ -339,7 +365,7 @@ class _MassMolesSolverState extends State<MassMolesSolver> {
 
   @override
   Widget build(BuildContext context) {
-    return _SolverCard(
+    return SolverCard(
       title: 'Masa ⇄ moles ⇄ partículas',
       subtitle: 'n = m / M · N = n · 6.022×10²³',
       child: Column(
@@ -354,15 +380,15 @@ class _MassMolesSolverState extends State<MassMolesSolver> {
             ],
             onChanged: (v) => setState(() => _mode = v ?? 'moles'),
           ),
-          _NumField(controller: _mass, label: _mode == 'moles' ? 'Masa (g)' : 'Moles (mol)'),
-          _NumField(controller: _molar, label: 'Masa molar M (g/mol)'),
+          NumField(controller: _mass, label: _mode == 'moles' ? 'Masa (g)' : 'Moles (mol)'),
+          NumField(controller: _molar, label: 'Masa molar M (g/mol)'),
           ElevatedButton(onPressed: _calc, child: const Text('Calcular')),
           if (_result.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 10),
               child: Text(_result, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
             ),
-          if (_steps.isNotEmpty) _Steps(steps: _steps),
+          if (_steps.isNotEmpty) Steps(steps: _steps),
         ],
       ),
     );
@@ -384,19 +410,19 @@ class _MolaritySolverState extends State<MolaritySolver> {
   List<String> _steps = [];
 
   void _calc() {
-    final n = _parse(_moles);
-    final v = _parse(_vol);
+    final n = parseNum(_moles);
+    final v = parseNum(_vol);
     if (n == null || v == null || v <= 0) {
       setState(() => _result = 'Introduce moles y volumen en litros (mayor que 0).');
       return;
     }
     final m = n / v;
     setState(() {
-      _result = 'M = ${_fmt(m)} mol/L';
+      _result = 'M = ${fmtResult(m)} mol/L';
       _steps = [
         'Fórmula: M = n / V(L)',
-        'Sustitución: M = ${_fmt(n)} mol ÷ ${_fmt(v)} L',
-        'Resultado: M = ${_fmt(m)} mol/L',
+        'Sustitución: M = ${fmtResult(n)} mol ÷ ${fmtResult(v)} L',
+        'Resultado: M = ${fmtResult(m)} mol/L',
         'Recuerda: V es el volumen de la disolución final, no del disolvente.',
       ];
     });
@@ -404,21 +430,21 @@ class _MolaritySolverState extends State<MolaritySolver> {
 
   @override
   Widget build(BuildContext context) {
-    return _SolverCard(
+    return SolverCard(
       title: 'Molaridad de una disolución',
       subtitle: 'M = n / V(L)',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _NumField(controller: _moles, label: 'Moles de soluto (mol)'),
-          _NumField(controller: _vol, label: 'Volumen (L)'),
+          NumField(controller: _moles, label: 'Moles de soluto (mol)'),
+          NumField(controller: _vol, label: 'Volumen (L)'),
           ElevatedButton(onPressed: _calc, child: const Text('Calcular')),
           if (_result.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 10),
               child: Text(_result, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
             ),
-          if (_steps.isNotEmpty) _Steps(steps: _steps),
+          if (_steps.isNotEmpty) Steps(steps: _steps),
         ],
       ),
     );
@@ -442,10 +468,10 @@ class _DilutionSolverState extends State<DilutionSolver> {
   List<String> _steps = [];
 
   void _calc() {
-    final c1 = _parse(_c1);
-    final v1 = _parse(_v1);
-    final c2 = _parse(_c2);
-    final v2 = _parse(_v2);
+    final c1 = parseNum(_c1);
+    final v1 = parseNum(_v1);
+    final c2 = parseNum(_c2);
+    final v2 = parseNum(_v2);
     final missing = [c1, v1, c2, v2].where((e) => e == null).length;
     if (missing != 1) {
       setState(() => _result = 'Deja vacío SOLO el dato que quieres calcular y rellena los otros tres.');
@@ -454,43 +480,43 @@ class _DilutionSolverState extends State<DilutionSolver> {
     setState(() {
       if (c1 == null) {
         final r = c2! * v2! / v1!;
-        _result = 'C₁ = ${_fmt(r)} mol/L';
-        _steps = ['C₁V₁ = C₂V₂', 'C₁ = C₂V₂ / V₁ = ${_fmt(c2)} × ${_fmt(v2)} ÷ ${_fmt(v1)}', 'C₁ = ${_fmt(r)} mol/L'];
+        _result = 'C₁ = ${fmtResult(r)} mol/L';
+        _steps = ['C₁V₁ = C₂V₂', 'C₁ = C₂V₂ / V₁ = ${fmtResult(c2)} × ${fmtResult(v2)} ÷ ${fmtResult(v1)}', 'C₁ = ${fmtResult(r)} mol/L'];
       } else if (v1 == null) {
         final r = c2! * v2! / c1;
-        _result = 'V₁ = ${_fmt(r)} mL';
-        _steps = ['C₁V₁ = C₂V₂', 'V₁ = C₂V₂ / C₁ = ${_fmt(c2)} × ${_fmt(v2)} ÷ ${_fmt(c1)}', 'V₁ = ${_fmt(r)} mL'];
+        _result = 'V₁ = ${fmtResult(r)} mL';
+        _steps = ['C₁V₁ = C₂V₂', 'V₁ = C₂V₂ / C₁ = ${fmtResult(c2)} × ${fmtResult(v2)} ÷ ${fmtResult(c1)}', 'V₁ = ${fmtResult(r)} mL'];
       } else if (c2 == null) {
         final r = c1 * v1 / v2!;
-        _result = 'C₂ = ${_fmt(r)} mol/L';
-        _steps = ['C₁V₁ = C₂V₂', 'C₂ = C₁V₁ / V₂ = ${_fmt(c1)} × ${_fmt(v1)} ÷ ${_fmt(v2)}', 'C₂ = ${_fmt(r)} mol/L'];
+        _result = 'C₂ = ${fmtResult(r)} mol/L';
+        _steps = ['C₁V₁ = C₂V₂', 'C₂ = C₁V₁ / V₂ = ${fmtResult(c1)} × ${fmtResult(v1)} ÷ ${fmtResult(v2)}', 'C₂ = ${fmtResult(r)} mol/L'];
       } else {
         final r = c1 * v1 / c2;
-        _result = 'V₂ = ${_fmt(r)} mL';
-        _steps = ['C₁V₁ = C₂V₂', 'V₂ = C₁V₁ / C₂ = ${_fmt(c1)} × ${_fmt(v1)} ÷ ${_fmt(c2)}', 'V₂ = ${_fmt(r)} mL'];
+        _result = 'V₂ = ${fmtResult(r)} mL';
+        _steps = ['C₁V₁ = C₂V₂', 'V₂ = C₁V₁ / C₂ = ${fmtResult(c1)} × ${fmtResult(v1)} ÷ ${fmtResult(c2)}', 'V₂ = ${fmtResult(r)} mL'];
       }
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return _SolverCard(
+    return SolverCard(
       title: 'Dilución · C₁V₁ = C₂V₂',
       subtitle: 'Deja vacío el dato que quieres calcular y rellena los otros tres.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _NumField(controller: _c1, label: 'C₁ inicial (mol/L)'),
-          _NumField(controller: _v1, label: 'V₁ inicial (mL)'),
-          _NumField(controller: _c2, label: 'C₂ final (mol/L)'),
-          _NumField(controller: _v2, label: 'V₂ final (mL)'),
+          NumField(controller: _c1, label: 'C₁ inicial (mol/L)'),
+          NumField(controller: _v1, label: 'V₁ inicial (mL)'),
+          NumField(controller: _c2, label: 'C₂ final (mol/L)'),
+          NumField(controller: _v2, label: 'V₂ final (mL)'),
           ElevatedButton(onPressed: _calc, child: const Text('Calcular el dato que falta')),
           if (_result.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 10),
               child: Text(_result, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
             ),
-          if (_steps.isNotEmpty) _Steps(steps: _steps),
+          if (_steps.isNotEmpty) Steps(steps: _steps),
         ],
       ),
     );
@@ -512,7 +538,7 @@ class _PhSolverState extends State<PhSolver> {
   List<String> _steps = [];
 
   void _calc() {
-    final v = _parse(_value);
+    final v = parseNum(_value);
     if (v == null || v <= 0) {
       setState(() => _result = 'Introduce un valor mayor que 0.');
       return;
@@ -523,17 +549,17 @@ class _PhSolverState extends State<PhSolver> {
         final poh = 14 - ph;
         _result = 'pH = ${ph.toStringAsFixed(2)} · pOH = ${poh.toStringAsFixed(2)}';
         _steps = [
-          'Dato: [H⁺] = ${_fmt(v)} mol/L',
+          'Dato: [H⁺] = ${fmtResult(v)} mol/L',
           'pH = −log[H⁺] = ${ph.toStringAsFixed(2)}',
           'A 25 °C: pH + pOH = 14 → pOH = ${poh.toStringAsFixed(2)}',
           ph < 7 ? 'Disolución ácida.' : (ph > 7 ? 'Disolución básica.' : 'Disolución neutra.'),
         ];
       } else if (_mode == 'ph') {
         final h = math.pow(10, -v).toDouble();
-        _result = '[H⁺] = ${_fmt(h)} mol/L · pOH = ${(14 - v).toStringAsFixed(2)}';
+        _result = '[H⁺] = ${fmtResult(h)} mol/L · pOH = ${(14 - v).toStringAsFixed(2)}';
         _steps = [
-          'Dato: pH = ${_fmt(v)}',
-          '[H⁺] = 10^(−pH) = ${_fmt(h)} mol/L',
+          'Dato: pH = ${fmtResult(v)}',
+          '[H⁺] = 10^(−pH) = ${fmtResult(h)} mol/L',
           'pOH = 14 − pH = ${(14 - v).toStringAsFixed(2)}',
         ];
       } else {
@@ -542,7 +568,7 @@ class _PhSolverState extends State<PhSolver> {
         final ph = 14 - poh;
         _result = 'pOH = ${poh.toStringAsFixed(2)} · pH = ${ph.toStringAsFixed(2)}';
         _steps = [
-          'Dato: [OH⁻] = ${_fmt(oh)} mol/L',
+          'Dato: [OH⁻] = ${fmtResult(oh)} mol/L',
           'pOH = −log[OH⁻] = ${poh.toStringAsFixed(2)}',
           'pH = 14 − pOH = ${ph.toStringAsFixed(2)}',
         ];
@@ -552,7 +578,7 @@ class _PhSolverState extends State<PhSolver> {
 
   @override
   Widget build(BuildContext context) {
-    return _SolverCard(
+    return SolverCard(
       title: 'pH y pOH (a 25 °C)',
       subtitle: 'Puedes escribir la concentración como 0.001 o como 1e-3.',
       child: Column(
@@ -568,14 +594,14 @@ class _PhSolverState extends State<PhSolver> {
             ],
             onChanged: (v) => setState(() => _mode = v ?? 'h'),
           ),
-          _NumField(controller: _value, label: 'Valor'),
+          NumField(controller: _value, label: 'Valor'),
           ElevatedButton(onPressed: _calc, child: const Text('Calcular pH y pOH')),
           if (_result.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 10),
               child: Text(_result, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
             ),
-          if (_steps.isNotEmpty) _Steps(steps: _steps),
+          if (_steps.isNotEmpty) Steps(steps: _steps),
         ],
       ),
     );
@@ -601,10 +627,10 @@ class _GasSolverState extends State<GasSolver> {
   static const double _r = 0.08206;
 
   void _calc() {
-    final p = _parse(_p);
-    final v = _parse(_v);
-    final n = _parse(_n);
-    final t = _parse(_t);
+    final p = parseNum(_p);
+    final v = parseNum(_v);
+    final n = parseNum(_n);
+    final t = parseNum(_t);
     setState(() {
       if (_mode == 'P') {
         if (v == null || n == null || t == null || v == 0) {
@@ -612,39 +638,39 @@ class _GasSolverState extends State<GasSolver> {
           return;
         }
         final r = n * _r * t / v;
-        _result = 'P = ${_fmt(r)} atm';
-        _steps = ['PV = nRT → P = nRT / V', 'P = ${_fmt(n)} × 0.08206 × ${_fmt(t)} ÷ ${_fmt(v)}', 'P = ${_fmt(r)} atm'];
+        _result = 'P = ${fmtResult(r)} atm';
+        _steps = ['PV = nRT → P = nRT / V', 'P = ${fmtResult(n)} × 0.08206 × ${fmtResult(t)} ÷ ${fmtResult(v)}', 'P = ${fmtResult(r)} atm'];
       } else if (_mode == 'V') {
         if (p == null || n == null || t == null || p == 0) {
           _result = 'Introduce P, n y T (en kelvin).';
           return;
         }
         final r = n * _r * t / p;
-        _result = 'V = ${_fmt(r)} L';
-        _steps = ['PV = nRT → V = nRT / P', 'V = ${_fmt(n)} × 0.08206 × ${_fmt(t)} ÷ ${_fmt(p)}', 'V = ${_fmt(r)} L'];
+        _result = 'V = ${fmtResult(r)} L';
+        _steps = ['PV = nRT → V = nRT / P', 'V = ${fmtResult(n)} × 0.08206 × ${fmtResult(t)} ÷ ${fmtResult(p)}', 'V = ${fmtResult(r)} L'];
       } else if (_mode == 'n') {
         if (p == null || v == null || t == null || t == 0) {
           _result = 'Introduce P, V y T (en kelvin).';
           return;
         }
         final r = p * v / (_r * t);
-        _result = 'n = ${_fmt(r)} mol';
-        _steps = ['PV = nRT → n = PV / RT', 'n = ${_fmt(p)} × ${_fmt(v)} ÷ (0.08206 × ${_fmt(t)})', 'n = ${_fmt(r)} mol'];
+        _result = 'n = ${fmtResult(r)} mol';
+        _steps = ['PV = nRT → n = PV / RT', 'n = ${fmtResult(p)} × ${fmtResult(v)} ÷ (0.08206 × ${fmtResult(t)})', 'n = ${fmtResult(r)} mol'];
       } else {
         if (p == null || v == null || n == null || n == 0) {
           _result = 'Introduce P, V y n.';
           return;
         }
         final r = p * v / (_r * n);
-        _result = 'T = ${_fmt(r)} K (${(r - 273.15).toStringAsFixed(1)} °C)';
-        _steps = ['PV = nRT → T = PV / nR', 'T = ${_fmt(p)} × ${_fmt(v)} ÷ (0.08206 × ${_fmt(n)})', 'T = ${_fmt(r)} K'];
+        _result = 'T = ${fmtResult(r)} K (${(r - 273.15).toStringAsFixed(1)} °C)';
+        _steps = ['PV = nRT → T = PV / nR', 'T = ${fmtResult(p)} × ${fmtResult(v)} ÷ (0.08206 × ${fmtResult(n)})', 'T = ${fmtResult(r)} K'];
       }
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return _SolverCard(
+    return SolverCard(
       title: 'Gas ideal · PV = nRT',
       subtitle: 'R = 0,08206 L·atm·mol⁻¹·K⁻¹. La temperatura siempre en kelvin (K = °C + 273,15).',
       child: Column(
@@ -661,17 +687,17 @@ class _GasSolverState extends State<GasSolver> {
             ],
             onChanged: (v) => setState(() => _mode = v ?? 'V'),
           ),
-          _NumField(controller: _p, label: 'Presión P (atm)'),
-          _NumField(controller: _v, label: 'Volumen V (L)'),
-          _NumField(controller: _n, label: 'Moles n (mol)'),
-          _NumField(controller: _t, label: 'Temperatura T (K)'),
+          NumField(controller: _p, label: 'Presión P (atm)'),
+          NumField(controller: _v, label: 'Volumen V (L)'),
+          NumField(controller: _n, label: 'Moles n (mol)'),
+          NumField(controller: _t, label: 'Temperatura T (K)'),
           ElevatedButton(onPressed: _calc, child: const Text('Calcular')),
           if (_result.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 10),
               child: Text(_result, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
             ),
-          if (_steps.isNotEmpty) _Steps(steps: _steps),
+          if (_steps.isNotEmpty) Steps(steps: _steps),
         ],
       ),
     );
@@ -695,10 +721,10 @@ class _LimitingSolverState extends State<LimitingSolver> {
   List<String> _steps = [];
 
   void _calc() {
-    final ca = _parse(_ca);
-    final na = _parse(_na);
-    final cb = _parse(_cb);
-    final nb = _parse(_nb);
+    final ca = parseNum(_ca);
+    final na = parseNum(_na);
+    final cb = parseNum(_cb);
+    final nb = parseNum(_nb);
     if (ca == null || na == null || cb == null || nb == null || ca <= 0 || cb <= 0) {
       setState(() => _result = 'Introduce coeficientes y moles válidos (mayores que 0).');
       return;
@@ -708,14 +734,14 @@ class _LimitingSolverState extends State<LimitingSolver> {
     setState(() {
       _steps = [
         'No compares moles a secas: divide moles entre coeficiente.',
-        'Cociente A: ${_fmt(na)} ÷ ${_fmt(ca)} = ${_fmt(qa)}',
-        'Cociente B: ${_fmt(nb)} ÷ ${_fmt(cb)} = ${_fmt(qb)}',
+        'Cociente A: ${fmtResult(na)} ÷ ${fmtResult(ca)} = ${fmtResult(qa)}',
+        'Cociente B: ${fmtResult(nb)} ÷ ${fmtResult(cb)} = ${fmtResult(qb)}',
         'El cociente menor es el limitante: es el que da menos producto.',
       ];
       if (qa < qb) {
-        _result = 'Limitante: A (cociente ${_fmt(qa)} < ${_fmt(qb)})';
+        _result = 'Limitante: A (cociente ${fmtResult(qa)} < ${fmtResult(qb)})';
       } else if (qb < qa) {
-        _result = 'Limitante: B (cociente ${_fmt(qb)} < ${_fmt(qa)})';
+        _result = 'Limitante: B (cociente ${fmtResult(qb)} < ${fmtResult(qa)})';
       } else {
         _result = 'Ambos se agotan a la vez: mezcla estequiométrica.';
       }
@@ -724,23 +750,23 @@ class _LimitingSolverState extends State<LimitingSolver> {
 
   @override
   Widget build(BuildContext context) {
-    return _SolverCard(
+    return SolverCard(
       title: 'Reactivo limitante',
       subtitle: 'Para una reacción a·A + b·B → productos. Introduce los coeficientes de la ecuación ajustada y los moles de partida.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _NumField(controller: _ca, label: 'Coeficiente de A (a)'),
-          _NumField(controller: _na, label: 'Moles de A'),
-          _NumField(controller: _cb, label: 'Coeficiente de B (b)'),
-          _NumField(controller: _nb, label: 'Moles de B'),
+          NumField(controller: _ca, label: 'Coeficiente de A (a)'),
+          NumField(controller: _na, label: 'Moles de A'),
+          NumField(controller: _cb, label: 'Coeficiente de B (b)'),
+          NumField(controller: _nb, label: 'Moles de B'),
           ElevatedButton(onPressed: _calc, child: const Text('Encontrar el limitante')),
           if (_result.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 10),
               child: Text(_result, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
             ),
-          if (_steps.isNotEmpty) _Steps(steps: _steps),
+          if (_steps.isNotEmpty) Steps(steps: _steps),
         ],
       ),
     );

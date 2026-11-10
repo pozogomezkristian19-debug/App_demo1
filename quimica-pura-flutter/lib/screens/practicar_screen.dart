@@ -2,8 +2,10 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import '../data/questions.dart';
 import '../models.dart';
+import '../services/localization.dart';
 import '../services/progress.dart';
 import '../services/question_generator.dart';
+import '../services/user_prefs.dart';
 
 // Practicar estilo Duolingo: niveles por tema, repaso de errores y memoria
 // que no se borra al cerrar la app (todo vive en ProgressService, que
@@ -13,19 +15,45 @@ import '../services/question_generator.dart';
 //   que sacar al menos 4 de 5 (80%); al pasarlo se desbloquea el siguiente.
 //   Los niveles usan primero las preguntas del banco, en orden, y después
 //   preguntas nuevas generadas, así un nivel siempre tiene 5 preguntas.
-// - El examen mixto (24 preguntas) es el reto final: se desbloquea cuando
-//   se pasa el Nivel 1 de los 8 temas. Sus preguntas pesan hacia los temas
-//   más débiles del usuario.
+// - El examen mixto es el reto final: se desbloquea cuando se pasa el
+//   Nivel 1 de todos los temas de la pista. Sus preguntas pesan hacia los
+//   temas más débiles del usuario.
 // - Cada error se guarda. 'Repasar mis errores' repite solo las preguntas
 //   falladas: acertar una la saca de la lista, fallarla la deja.
 // - Cada nivel empieza con hasta 2 errores pendientes de ese tema.
+// - Dos pistas: Bachillerato (4 temas, examen mixto de 16) y Universidad
+//   (10 temas, examen mixto de 24). Cada pista tiene su propio progreso
+//   guardado (ver ProgressService.setTrack).
 
 const int _levelSize = 5;
 const int _passNeeded = 4; // 4 de 5 = 80%
 const int _passPercent = (_passNeeded * 100) ~/ _levelSize; // 80%
 const int _extraGeneratedLevels = 2; // niveles extra solo con preguntas nuevas
-const int _mixedSize = 24;
+const int _mixedSize = 24; // examen mixto de Universidad
+const int _mixedSizeBach = 16; // examen mixto de Bachillerato
 const int _reviewMax = 20;
+
+/// Temas de la pista Universidad, en orden.
+const List<String> _uniTopics = [
+  'estequiometria',
+  'gases',
+  'disoluciones',
+  'acido-base',
+  'equilibrio',
+  'termo-cinetica',
+  'tabla',
+  'enlace',
+  'organica',
+  'laboratorio',
+];
+
+/// Temas de la pista Bachillerato, en orden.
+const List<String> _bachTopics = [
+  'bach-estequiometria',
+  'bach-disoluciones',
+  'bach-gases',
+  'bach-acido-base',
+];
 
 // ---- Camino de niveles (estilo Duolingo / Candy Crush) ----
 
@@ -49,6 +77,12 @@ const Map<String, IconData> _topicIcons = {
   'termo-cinetica': Icons.thermostat,
   'tabla': Icons.grid_view,
   'enlace': Icons.link,
+  'organica': Icons.hub,
+  'laboratorio': Icons.biotech,
+  'bach-estequiometria': Icons.functions,
+  'bach-gases': Icons.air,
+  'bach-disoluciones': Icons.water_drop,
+  'bach-acido-base': Icons.science,
 };
 
 const Map<String, Color> _topicColors = {
@@ -60,6 +94,12 @@ const Map<String, Color> _topicColors = {
   'termo-cinetica': Color(0xFFEF4444),
   'tabla': Color(0xFF22C55E),
   'enlace': Color(0xFFEC4899),
+  'organica': Color(0xFF84CC16),
+  'laboratorio': Color(0xFFF97316),
+  'bach-estequiometria': Color(0xFF14B8A6),
+  'bach-gases': Color(0xFF38BDF8),
+  'bach-disoluciones': Color(0xFF22D3EE),
+  'bach-acido-base': Color(0xFFA78BFA),
 };
 
 String bankId(QuizQuestion q) => 'bank:${q.topic}:${q.question}';
@@ -136,17 +176,28 @@ class _PracticarScreenState extends State<PracticarScreen> {
     Scrollable.ensureVisible(ctx, alignment: 0.45, duration: const Duration(milliseconds: 400));
   }
 
+  /// Temas y preguntas del banco de la pista actual, en el orden de la
+  /// pista. Cambia al cambiar de pista (ver el selector de arriba).
   Map<String, List<QuizQuestion>> get _byTopic {
-    final byTopic = <String, List<QuizQuestion>>{};
+    final wanted = ProgressService.track == ProgressService.trackBach
+        ? _bachTopics
+        : _uniTopics;
+    final byTopic = <String, List<QuizQuestion>>{
+      for (final t in wanted) t: <QuizQuestion>[],
+    };
     for (final q in allQuestions) {
-      byTopic.putIfAbsent(q.topic, () => []).add(q);
+      byTopic[q.topic]?.add(q);
     }
     return byTopic;
   }
 
   int _levelCount(String topic) {
     final bank = _byTopic[topic]?.length ?? 0;
-    return (bank / _levelSize).ceil() + _extraGeneratedLevels;
+    final base = (bank / _levelSize).ceil();
+    // Temas sin generador (orgánica y laboratorio) solo tienen niveles
+    // de banco: sin niveles extra generados.
+    if (!topicGeneratorTypes.containsKey(topic)) return base;
+    return base + _extraGeneratedLevels;
   }
 
   /// Resuelve una entrada fallada a su pregunta (banco o generada).
@@ -172,23 +223,27 @@ class _PracticarScreenState extends State<PracticarScreen> {
         items.add(_QuizItem(id: f.id, question: q));
       }
     }
-    // Después, las preguntas del banco de este nivel, en orden.
+    // Después, las preguntas del banco de este nivel, en orden, hasta
+    // completar 5 en total (los errores pendientes ocupan su sitio).
     final start = (level - 1) * _levelSize;
-    if (start < bank.length) {
-      final end = min(start + _levelSize, bank.length);
+    if (start < bank.length && items.length < _levelSize) {
+      final end = min(start + (_levelSize - items.length), bank.length);
       for (final q in bank.sublist(start, end)) {
         final id = bankId(q);
         if (used.add(id)) items.add(_QuizItem(id: id, question: q));
       }
     }
-    // Y preguntas nuevas generadas hasta completar 5.
-    final rng = Random();
-    var guard = 0;
-    while (items.length < _levelSize && guard < 60) {
-      guard++;
-      final g = generateForTopic(topic, rng);
-      if (used.add(g.id)) {
-        items.add(_QuizItem(id: g.id, question: g.question));
+    // Y preguntas nuevas generadas hasta completar 5 (solo si el tema
+    // tiene generador; orgánica y laboratorio son solo de banco).
+    if (topicGeneratorTypes.containsKey(topic)) {
+      final rng = Random();
+      var guard = 0;
+      while (items.length < _levelSize && guard < 60) {
+        guard++;
+        final g = generateForTopic(topic, rng);
+        if (used.add(g.id)) {
+          items.add(_QuizItem(id: g.id, question: g.question));
+        }
       }
     }
     return items;
@@ -209,6 +264,9 @@ class _PracticarScreenState extends State<PracticarScreen> {
     final progress = ProgressService.instance;
     final weakest =
         progress.weakestTopics(_byTopic.keys.toList()); // del más débil al más fuerte
+    final size = ProgressService.track == ProgressService.trackBach
+        ? _mixedSizeBach
+        : _mixedSize;
     final rng = Random();
     final items = <_QuizItem>[];
     final used = <String>{};
@@ -222,10 +280,15 @@ class _PracticarScreenState extends State<PracticarScreen> {
       }
     }
     // El resto, preguntas nuevas pesando hacia los temas más débiles.
+    // Solo cuentan los temas con generador (orgánica y laboratorio no
+    // tienen: sus preguntas ya están en el banco de arriba).
+    final adaptiveTopics =
+        weakest.where((t) => topicGeneratorTypes.containsKey(t)).toList();
     var guard = 0;
-    while (items.length < _mixedSize && guard < 200) {
+    while (items.length < size && guard < 200) {
       guard++;
-      final g = generateAdaptive(weakest, rng);
+      final g = generateAdaptive(
+          adaptiveTopics.isEmpty ? weakest : adaptiveTopics, rng);
       if (used.add(g.id)) {
         items.add(_QuizItem(id: g.id, question: g.question));
       }
@@ -248,11 +311,11 @@ class _PracticarScreenState extends State<PracticarScreen> {
   String _titleFor(_QuizSpec spec) {
     switch (spec.kind) {
       case 'level':
-        return '${topicNames[spec.topic] ?? spec.topic} · Nivel ${spec.level}';
+        return '${topicNames[spec.topic] ?? spec.topic} · ${tr('levelWord')} ${spec.level}';
       case 'review':
-        return 'Repasar mis errores';
+        return tr('reviewTitle');
       default:
-        return 'Examen mixto';
+        return tr('mixedTitle');
     }
   }
 
@@ -314,20 +377,49 @@ class _PracticarScreenState extends State<PracticarScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToCurrent());
     }
 
+    final bankTotal =
+        byTopic.values.fold<int>(0, (sum, list) => sum + list.length);
+    final mixedSize = ProgressService.track == ProgressService.trackBach
+        ? _mixedSizeBach
+        : _mixedSize;
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text('Niveles',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+          Text(tr('levelsTitle'),
+              style:
+                  const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
           const SizedBox(height: 6),
-          const Text(
-            'Avanza por el camino: 5 preguntas por nivel, y para pasar necesitas 4 de 5. Tus errores se guardan y se repasan hasta que los aciertes. Todo se guarda en el teléfono.',
+          Text(tr('levelsIntro')),
+          const SizedBox(height: 12),
+          // Selector de pista: Bachillerato o Universidad. Cada pista
+          // tiene sus temas, sus niveles y su progreso guardado.
+          SegmentedButton<String>(
+            segments: [
+              ButtonSegment<String>(
+                value: ProgressService.trackBach,
+                label: Text(tr('trackBach')),
+                icon: const Icon(Icons.school, size: 18),
+              ),
+              ButtonSegment<String>(
+                value: ProgressService.trackUni,
+                label: Text(tr('trackUni')),
+                icon: const Icon(Icons.account_balance, size: 18),
+              ),
+            ],
+            selected: {ProgressService.track},
+            onSelectionChanged: (selection) async {
+              final t = selection.first;
+              if (t == ProgressService.track) return;
+              await ProgressService.setTrack(t);
+              await UserPrefs.saveTrack(t);
+              setState(() => _scrolledToCurrent = false);
+            },
           ),
           const SizedBox(height: 12),
           Text(
-            'Has superado $passedCount de $totalCount niveles.',
+            '${tr('passedWord')}: $passedCount / $totalCount',
             style: TextStyle(
               fontWeight: FontWeight.bold,
               color: Theme.of(context).colorScheme.primary,
@@ -343,10 +435,10 @@ class _PracticarScreenState extends State<PracticarScreen> {
                   .withValues(alpha: 0.15),
               child: ListTile(
                 leading: const Icon(Icons.replay_circle_filled, size: 32),
-                title: const Text('Repasar mis errores',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
+                title: Text(tr('reviewTitle'),
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
                 subtitle: Text(
-                    '${progress.failedCount} ${progress.failedCount == 1 ? 'pregunta' : 'preguntas'} por corregir'),
+                    '${progress.failedCount} ${tr('reviewQuestions')}'),
                 trailing: Chip(label: Text('${progress.failedCount}')),
                 onTap: () => _start(const _QuizSpec(kind: 'review')),
               ),
@@ -369,17 +461,19 @@ class _PracticarScreenState extends State<PracticarScreen> {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(
-                          'Primero pasa el Nivel ${level - 1} con 4 de 5.'),
+                          '${tr('quizLevelFailed')} (${tr('levelWord')} ${level - 1})'),
                     ),
                   );
                 }
               },
             ),
           // Examen mixto: trofeo final del camino, bloqueado hasta pasar
-          // el Nivel 1 de los 8 temas.
+          // el Nivel 1 de todos los temas de la pista.
           _FinalExamSection(
             unlocked: mixedUnlocked,
             level1Done: level1Done,
+            topicCount: topics.length,
+            mixedSize: mixedSize,
             isCurrent: current == null,
             currentKey: current == null ? _currentKey : null,
             onTap: () {
@@ -391,8 +485,7 @@ class _PracticarScreenState extends State<PracticarScreen> {
                     .join(', ');
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text(
-                        'Te falta el Nivel 1 de: $missing. Pásalo con 4 de 5 y el examen se desbloquea.'),
+                    content: Text('${tr('mixedLocked')}: $missing.'),
                   ),
                 );
               }
@@ -400,7 +493,7 @@ class _PracticarScreenState extends State<PracticarScreen> {
           ),
           const SizedBox(height: 16),
           Text(
-            'Banco total: ${allQuestions.length} preguntas únicas, más preguntas nuevas generadas con números distintos cada vez.',
+            '$bankTotal ${tr('questionsWord')} ${tr('bankWord')} + ${tr('newWord')}',
             style: TextStyle(
               color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
             ),
@@ -412,7 +505,13 @@ class _PracticarScreenState extends State<PracticarScreen> {
 }
 
 /// Pinta el sendero que une los nodos de una sección: una línea curva
-/// punteada que pasa por el centro de cada nivel.
+/// punteada que va SOLO entre los nodos, nunca a través de ellos.
+///
+/// La línea se dibuja primero (está detrás de los nodos) y, además, cada
+/// tramo punteado se recorta para que no entre dentro de ningún círculo:
+/// se conserva un guión solo si su punto medio queda fuera de todos los
+/// círculos (radio del nodo + margen). Así, dentro de cada círculo no hay
+/// línea, ni siquiera en los nodos bloqueados, que son semitransparentes.
 class _PathPainter extends CustomPainter {
   const _PathPainter({required this.levelCount, required this.color});
   final int levelCount;
@@ -436,14 +535,20 @@ class _PathPainter extends CustomPainter {
       path.quadraticBezierTo(prev.dx, prev.dy, mid.dx, mid.dy);
     }
     path.lineTo(centers.last.dx, centers.last.dy);
-    // Línea punteada a partir del camino.
+    // Línea punteada, solo en los huecos entre nodos.
+    final keepOut = _nodeSize / 2 + 10; // radio del círculo + margen
     final dashed = Path();
     for (final metric in path.computeMetrics()) {
       var distance = 0.0;
       while (distance < metric.length) {
         final len = min(12.0, metric.length - distance);
-        dashed.addPath(
-            metric.extractPath(distance, distance + len), Offset.zero);
+        final mid = metric.getTangentForOffset(distance + len / 2)?.position;
+        final outside = mid != null &&
+            centers.every((c) => (mid - c).distance > keepOut);
+        if (outside) {
+          dashed.addPath(
+              metric.extractPath(distance, distance + len), Offset.zero);
+        }
         distance += 20.0;
       }
     }
@@ -529,7 +634,7 @@ class _TopicPathSection extends StatelessWidget {
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold)),
                           Text(
-                            'Nivel ${unlocked > levelCount ? levelCount : unlocked} de $levelCount · Mejor: $best%',
+                            '${tr('levelWord')} ${unlocked > levelCount ? levelCount : unlocked} ${tr('quizOf')} $levelCount · ${tr('bestWord')}: $best%',
                             style: TextStyle(
                               color:
                                   scheme.onSurface.withValues(alpha: 0.7),
@@ -601,9 +706,11 @@ class _LevelNodeRow extends StatelessWidget {
               fontWeight: FontWeight.bold,
               color: Colors.white));
     } else {
-      bg = scheme.onSurface.withValues(alpha: 0.12);
+      // Nodo bloqueado: fondo bastante opaco para que el círculo se vea
+      // como círculo (la línea del camino ya no lo atraviesa).
+      bg = scheme.onSurface.withValues(alpha: 0.30);
       inner = Icon(Icons.lock,
-          color: scheme.onSurface.withValues(alpha: 0.5), size: 28);
+          color: scheme.onSurface.withValues(alpha: 0.6), size: 28);
     }
     return SizedBox(
       height: _rowH,
@@ -655,10 +762,10 @@ class _LevelNodeRow extends StatelessWidget {
                 width: 100,
                 child: Text(
                   passed
-                      ? 'Nivel $level · $best%'
+                      ? '${tr('levelWord')} $level · $best%'
                       : generatedOnly && unlocked
-                          ? 'Nivel $level · Nuevas'
-                          : 'Nivel $level',
+                          ? '${tr('levelWord')} $level · ${tr('newWord')}'
+                          : '${tr('levelWord')} $level',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 12,
@@ -678,11 +785,13 @@ class _LevelNodeRow extends StatelessWidget {
   }
 }
 
-/// El trofeo final del camino: el examen mixto de 24 preguntas.
+/// El trofeo final del camino: el examen mixto de la pista.
 class _FinalExamSection extends StatelessWidget {
   const _FinalExamSection({
     required this.unlocked,
     required this.level1Done,
+    required this.topicCount,
+    required this.mixedSize,
     required this.isCurrent,
     required this.currentKey,
     required this.onTap,
@@ -690,6 +799,8 @@ class _FinalExamSection extends StatelessWidget {
 
   final bool unlocked;
   final int level1Done;
+  final int topicCount;
+  final int mixedSize;
   final bool isCurrent;
   final GlobalKey? currentKey;
   final VoidCallback onTap;
@@ -710,15 +821,15 @@ class _FinalExamSection extends StatelessWidget {
               child: const Icon(Icons.emoji_events, color: Colors.amber),
             ),
             const SizedBox(width: 12),
-            const Expanded(
+            Expanded(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Examen final',
-                      style:
-                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  Text('El reto final del camino'),
+                  Text(tr('mixedTitle'),
+                      style: const TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text(tr('mixedBody')),
                 ],
               ),
             ),
@@ -735,7 +846,7 @@ class _FinalExamSection extends StatelessWidget {
               shape: BoxShape.circle,
               color: unlocked
                   ? const Color(0xFFFFB300)
-                  : scheme.onSurface.withValues(alpha: 0.12),
+                  : scheme.onSurface.withValues(alpha: 0.30),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.25),
@@ -750,7 +861,7 @@ class _FinalExamSection extends StatelessWidget {
               size: 44,
               color: unlocked
                   ? const Color(0xFF5D4037)
-                  : scheme.onSurface.withValues(alpha: 0.5),
+                  : scheme.onSurface.withValues(alpha: 0.6),
             ),
           ),
         ),
@@ -758,15 +869,15 @@ class _FinalExamSection extends StatelessWidget {
         Text(
           unlocked
               ? (best > 0
-                  ? 'Examen mixto · Mejor: $best%'
-                  : 'Examen mixto · 24 preguntas')
-              : 'Examen mixto · $level1Done/8',
+                  ? '${tr('mixedTitle')} · ${tr('bestWord')}: $best%'
+                  : '${tr('mixedTitle')} · $mixedSize ${tr('questionsWord')}')
+              : '${tr('mixedTitle')} · $level1Done/$topicCount',
           style: const TextStyle(fontWeight: FontWeight.bold),
           textAlign: TextAlign.center,
         ),
         if (!unlocked)
           Text(
-            'Pasa el Nivel 1 de los 8 temas para desbloquearlo.',
+            tr('mixedLocked'),
             style: TextStyle(
                 color: scheme.onSurface.withValues(alpha: 0.7)),
             textAlign: TextAlign.center,
@@ -882,11 +993,12 @@ class _QuizRunnerState extends State<_QuizRunner> {
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('Resultado',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            Text(tr('quizResult'),
+                style:
+                    const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                 textAlign: TextAlign.center),
             const SizedBox(height: 12),
-            Text('$_score de $total correctas',
+            Text('$_score ${tr('quizOf')} $total ${tr('quizScore')}',
                 style: const TextStyle(fontSize: 20),
                 textAlign: TextAlign.center),
             Text('$percent%',
@@ -898,28 +1010,28 @@ class _QuizRunnerState extends State<_QuizRunner> {
             const SizedBox(height: 8),
             Text(
               passedLevel
-                  ? '¡Nivel superado! Se desbloqueó el Nivel ${widget.spec.level + 1}.'
+                  ? '${tr('quizLevelPassed')} ${tr('levelWord')} ${widget.spec.level + 1}.'
                   : isLevel
-                      ? 'Te faltó poco: necesitas 4 de 5 para pasar de nivel. Tus errores quedaron guardados para repasarlos.'
+                      ? tr('quizLevelFailed')
                       : widget.spec.kind == 'review'
                           ? remaining == 0
-                              ? '¡Sin errores pendientes! Lo corregiste todo.'
-                              : 'Te quedan $remaining ${remaining == 1 ? 'error' : 'errores'} por repasar.'
+                              ? tr('quizNoErrors')
+                              : '$remaining ${tr('reviewQuestions')}'
                           : percent >= _passPercent
-                              ? 'Excelente, nivel de examen.'
+                              ? tr('quizExcellent')
                               : percent >= 60
-                                  ? 'Bien, repasa los temas fallidos en Aprender.'
-                                  : 'Sigue practicando: revisa cada explicación y repite el test.',
+                                  ? tr('quizGood')
+                                  : tr('quizKeepGoing'),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: widget.onRepeat,
-              child: const Text('Repetir este test'),
+              child: Text(tr('quizRepeat')),
             ),
             const SizedBox(height: 8),
             OutlinedButton(
-                onPressed: widget.onExit, child: const Text('Elegir otro test')),
+                onPressed: widget.onExit, child: Text(tr('quizBack'))),
           ],
         ),
       );
@@ -933,7 +1045,7 @@ class _QuizRunnerState extends State<_QuizRunner> {
           children: [
             Expanded(
               child: Text(
-                '${widget.quiz.title} · Pregunta ${_index + 1} de $total',
+                '${widget.quiz.title} · ${tr('quizQuestion')} ${_index + 1} ${tr('quizOf')} $total',
                 style: const TextStyle(fontWeight: FontWeight.bold),
                 maxLines: 2,
               ),
@@ -943,7 +1055,7 @@ class _QuizRunnerState extends State<_QuizRunner> {
             OutlinedButton.icon(
               onPressed: widget.onExit,
               icon: const Icon(Icons.logout, size: 20),
-              label: const Text('Salir', style: TextStyle(fontSize: 16)),
+              label: Text(tr('quizExit'), style: const TextStyle(fontSize: 16)),
               style: OutlinedButton.styleFrom(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -992,8 +1104,8 @@ class _QuizRunnerState extends State<_QuizRunner> {
                 children: [
                   Text(
                     _order[_selected!] == _q.answer
-                        ? 'Correcto ✓'
-                        : 'Incorrecto. Correcta: ${_q.options[_q.answer]}',
+                        ? tr('quizCorrect')
+                        : '${tr('quizIncorrect')}. ${tr('quizCorrectIs')} ${_q.options[_q.answer]}',
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 6),
@@ -1006,8 +1118,8 @@ class _QuizRunnerState extends State<_QuizRunner> {
           ElevatedButton(
             onPressed: _next,
             child: Text(_index + 1 >= total
-                ? 'Ver resultado'
-                : 'Siguiente pregunta'),
+                ? tr('quizResult')
+                : tr('quizNext')),
           ),
         ],
       ],

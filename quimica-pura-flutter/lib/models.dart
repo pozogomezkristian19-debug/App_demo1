@@ -47,6 +47,7 @@ class StudyTopic {
     required this.exampleAnswer,
     required this.errors,
     required this.tip,
+    this.molecules = const [],
   });
 
   final String slug;
@@ -59,6 +60,10 @@ class StudyTopic {
   final String exampleAnswer;
   final List<String> errors;
   final String tip;
+
+  /// Claves de moléculas para dibujar con CustomPaint (ball-and-stick),
+  /// por ejemplo 'metano', 'eteno', 'benceno'. Vacío si no aplica.
+  final List<String> molecules;
 }
 
 class Formula {

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import '../data/element_details.dart';
 import '../data/periodic_table.dart';
+import '../data/reference_tables.dart';
 import '../models.dart';
+import '../services/localization.dart';
 
 class TablaScreen extends StatefulWidget {
   const TablaScreen({super.key});
@@ -37,46 +40,15 @@ class _TablaScreenState extends State<TablaScreen> {
   void _showDetail(ChemicalElement e) {
     showModalBottomSheet<void>(
       context: context,
-      builder: (context) => Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 30,
-                  backgroundColor: _catColors[e.category],
-                  child: Text(e.symbol,
-                      style: const TextStyle(
-                          color: Colors.black, fontWeight: FontWeight.bold, fontSize: 20)),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(e.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                      Text('Número atómico ${e.atomicNumber} · ${categoryNames[e.category]}'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text('Masa atómica: ${e.mass}'),
-            Text('Periodo: ${e.period} · Grupo: ${e.column} · Bloque: ${e.block}'),
-            Text('Categoría: ${categoryNames[e.category]}'),
-            const SizedBox(height: 8),
-            Text(
-              'Los lantánidos (57–71) y actínidos (89–103) se muestran en las dos filas separadas de abajo, como en la tabla clásica.',
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
-              ),
-            ),
-          ],
-        ),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.35,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (context, scrollController) =>
+            _ElementSheet(element: e, scrollController: scrollController),
       ),
     );
   }
@@ -93,16 +65,24 @@ class _TablaScreenState extends State<TablaScreen> {
               ? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.08)
               : _catColors[e.category],
           borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: Colors.black.withValues(alpha: 0.15)),
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(e.atomicNumber.toString(),
-                style: const TextStyle(fontSize: 7, color: Colors.black87)),
-            Text(e.symbol,
-                style: const TextStyle(
-                    fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black)),
-          ],
+        // Solo símbolo + número atómico, con FittedBox: nada puede
+        // salirse de la cuadrícula, por estrecha que sea la pantalla.
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(e.atomicNumber.toString(),
+                  style: const TextStyle(fontSize: 7, color: Colors.black87)),
+              Text(e.symbol,
+                  style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black)),
+            ],
+          ),
         ),
       ),
     );
@@ -110,6 +90,32 @@ class _TablaScreenState extends State<TablaScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 3,
+      child: Column(
+        children: [
+          TabBar(
+            tabs: [
+              Tab(text: tr('tabPeriodic')),
+              Tab(text: tr('tabActivity')),
+              Tab(text: tr('tabSolubility')),
+            ],
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                _periodicTab(context),
+                _activityTab(context),
+                _solubilityTab(context),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _periodicTab(BuildContext context) {
     // Rejilla 18 columnas × 10 filas (filas 9 y 10 = bloques f).
     final grid = List<ChemicalElement?>.filled(18 * 10, null);
     for (final e in allElements) {
@@ -123,9 +129,9 @@ class _TablaScreenState extends State<TablaScreen> {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
           child: TextField(
-            decoration: const InputDecoration(
-              labelText: 'Buscar por nombre o símbolo',
-              prefixIcon: Icon(Icons.search),
+            decoration: InputDecoration(
+              labelText: tr('searchHint'),
+              prefixIcon: const Icon(Icons.search),
             ),
             onChanged: (v) => setState(() => _query = v.trim()),
           ),
@@ -136,7 +142,7 @@ class _TablaScreenState extends State<TablaScreen> {
           child: Row(
             children: [
               ChoiceChip(
-                label: const Text('Todos'),
+                label: Text(tr('allWord')),
                 selected: _filterCategory == null,
                 onSelected: (_) => setState(() => _filterCategory = null),
               ),
@@ -158,7 +164,7 @@ class _TablaScreenState extends State<TablaScreen> {
               ? ListView(
                   padding: const EdgeInsets.all(12),
                   children: [
-                    Text('${_visible.length} elementos',
+                    Text('${_visible.length} ${tr('elementsWord')}',
                         style: TextStyle(
                           color: Theme.of(context)
                               .colorScheme
@@ -170,10 +176,13 @@ class _TablaScreenState extends State<TablaScreen> {
                         leading: CircleAvatar(
                           backgroundColor: _catColors[e.category],
                           child: Text(e.symbol,
-                              style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                              style: const TextStyle(
+                                  color: Colors.black,
+                                  fontWeight: FontWeight.bold)),
                         ),
                         title: Text(e.name),
-                        subtitle: Text('Z = ${e.atomicNumber} · Masa ${e.mass} · ${categoryNames[e.category]}'),
+                        subtitle: Text(
+                            'Z = ${e.atomicNumber} · ${tr('massWord')} ${e.mass} · ${categoryNames[e.category]}'),
                         onTap: () => _showDetail(e),
                       ),
                   ],
@@ -181,7 +190,8 @@ class _TablaScreenState extends State<TablaScreen> {
               : Padding(
                   padding: const EdgeInsets.all(8),
                   child: GridView.builder(
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 18,
                       childAspectRatio: 0.85,
                     ),
@@ -195,9 +205,13 @@ class _TablaScreenState extends State<TablaScreen> {
                             color: _catColors[8],
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: const Center(
+                          child: const FittedBox(
+                            fit: BoxFit.scaleDown,
                             child: Text('57–71',
-                                style: TextStyle(fontSize: 7, color: Colors.black, fontWeight: FontWeight.bold)),
+                                style: TextStyle(
+                                    fontSize: 7,
+                                    color: Colors.black,
+                                    fontWeight: FontWeight.bold)),
                           ),
                         );
                       }
@@ -208,9 +222,13 @@ class _TablaScreenState extends State<TablaScreen> {
                             color: _catColors[9],
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: const Center(
+                          child: const FittedBox(
+                            fit: BoxFit.scaleDown,
                             child: Text('89–103',
-                                style: TextStyle(fontSize: 7, color: Colors.black, fontWeight: FontWeight.bold)),
+                                style: TextStyle(
+                                    fontSize: 7,
+                                    color: Colors.black,
+                                    fontWeight: FontWeight.bold)),
                           ),
                         );
                       }
@@ -219,17 +237,290 @@ class _TablaScreenState extends State<TablaScreen> {
                   ),
                 ),
         ),
+        // Leyenda de colores debajo de la tabla.
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-          child: Text(
-            '118 elementos. Toca cualquier elemento para ver su ficha: masa atómica, grupo, periodo, bloque y categoría.',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
-            ),
-            textAlign: TextAlign.center,
+          child: Column(
+            children: [
+              Text(tr('legendWord'),
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                alignment: WrapAlignment.center,
+                children: [
+                  for (var i = 0; i < categoryNames.length; i++)
+                    InkWell(
+                      onTap: () => setState(() => _filterCategory =
+                          _filterCategory == i ? null : i),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 12,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: _catColors[i],
+                              borderRadius: BorderRadius.circular(3),
+                              border: Border.all(
+                                  color:
+                                      Colors.black.withValues(alpha: 0.2)),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(categoryNames[i],
+                              style: const TextStyle(fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '118 ${tr('elementsWord')}.',
+                style: TextStyle(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(alpha: 0.7),
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
           ),
         ),
       ],
+    );
+  }
+
+  Widget _activityTab(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Text(tr('activityIntro'),
+            style: TextStyle(color: scheme.onSurface.withValues(alpha: 0.8))),
+        const SizedBox(height: 12),
+        for (var i = 0; i < metalActivitySeries.length; i++)
+          Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: ListTile(
+              leading: CircleAvatar(
+                backgroundColor: i < 11
+                    ? Colors.teal.withValues(alpha: 0.18)
+                    : Colors.grey.withValues(alpha: 0.25),
+                child: Text(
+                  metalActivitySeries[i].symbol,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+              ),
+              title: Text(
+                  '${i + 1}. ${metalActivitySeries[i].name}',
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: Text(metalActivitySeries[i].reaction),
+            ),
+          ),
+        const SizedBox(height: 8),
+        Text(
+          'El hidrógeno (H₂) es la referencia: los metales de arriba lo desplazan de los ácidos; los de abajo, no.',
+          style: TextStyle(color: scheme.onSurface.withValues(alpha: 0.7)),
+        ),
+      ],
+    );
+  }
+
+  Widget _solubilityTab(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    Color cellColor(String v) {
+      switch (v) {
+        case 'S':
+          return Colors.green.withValues(alpha: 0.25);
+        case 'I':
+          return Colors.red.withValues(alpha: 0.18);
+        default:
+          return Colors.amber.withValues(alpha: 0.30);
+      }
+    }
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Text(tr('solubilityIntro'),
+            style: TextStyle(color: scheme.onSurface.withValues(alpha: 0.8))),
+        const SizedBox(height: 12),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: DataTable(
+            headingRowHeight: 56,
+            dataRowMinHeight: 40,
+            columns: [
+              const DataColumn(label: Text('Anión')),
+              for (final c in solubilityColumns)
+                DataColumn(label: Text(c, textAlign: TextAlign.center)),
+            ],
+            rows: [
+              for (final row in solubilityTable)
+                DataRow(
+                  cells: [
+                    DataCell(Text('${row.anion}\n${row.name}',
+                        style: const TextStyle(fontSize: 12))),
+                    for (final v in row.cells)
+                      DataCell(
+                        Container(
+                          alignment: Alignment.center,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: cellColor(v),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(v,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        const Text('Reglas',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        for (final rule in solubilityRules)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('•  '),
+                Expanded(child: Text(rule)),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Ficha de un elemento en una ventanita que sale desde abajo
+/// (modal bottom sheet arrastrable, ~60% de la pantalla). El botón
+/// "Ver más" la expande hasta casi toda la pantalla con los detalles
+/// completos.
+class _ElementSheet extends StatefulWidget {
+  const _ElementSheet({required this.element, required this.scrollController});
+  final ChemicalElement element;
+  final ScrollController scrollController;
+
+  @override
+  State<_ElementSheet> createState() => _ElementSheetState();
+}
+
+class _ElementSheetState extends State<_ElementSheet> {
+  bool _expanded = false;
+
+  Widget _row(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 170,
+            child: Text(label,
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+          ),
+          Expanded(child: Text(value)),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final e = widget.element;
+    final en = electronegativity[e.atomicNumber];
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: ListView(
+        controller: widget.scrollController,
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: scheme.onSurface.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 32,
+                backgroundColor:
+                    _TablaScreenState._catColors[e.category],
+                child: Text(e.symbol,
+                    style: const TextStyle(
+                        color: Colors.black,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 22)),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(e.name,
+                        style: const TextStyle(
+                            fontSize: 22, fontWeight: FontWeight.bold)),
+                    Text(
+                        'Z = ${e.atomicNumber} · ${categoryNames[e.category]}'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _row(tr('oxidationWord'),
+              oxidationStates[e.atomicNumber] ?? tr('noData')),
+          _row(tr('electronegativityWord'),
+              en == null ? tr('noData') : en.toStringAsFixed(2)),
+          _row(tr('configWord'), electronConfig(e.atomicNumber)),
+          _row(tr('stateWord'), elementState(e.atomicNumber)),
+          _row(tr('massWord'), e.mass),
+          if (_expanded) ...[
+            _row(tr('periodWord'), '${e.period}'),
+            _row(tr('groupWord'), '${e.column}'),
+            _row(tr('blockWord'), e.block),
+            _row(tr('categoryWord'), categoryNames[e.category]),
+            const SizedBox(height: 8),
+            Text(
+              'Los lantánidos (57–71) y actínidos (89–103) se muestran en las dos filas separadas de abajo, como en la tabla clásica.',
+              style: TextStyle(
+                  color: scheme.onSurface.withValues(alpha: 0.7)),
+            ),
+          ],
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              onPressed: () => setState(() => _expanded = !_expanded),
+              child: Text(_expanded ? tr('seeLess') : tr('seeMore')),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

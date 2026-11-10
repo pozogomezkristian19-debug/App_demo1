@@ -40,12 +40,17 @@ class ProgressService {
   ProgressService._();
   static final ProgressService instance = ProgressService._();
 
-  static const _kBest = 'melli_progress_best'; // JSON {testId: %}
-  static const _kMastered = 'melli_progress_mastered'; // lista de slugs
-  static const _kLevels = 'melli_progress_levels'; // JSON {tema: nivel}
-  static const _kStats =
-      'melli_progress_stats'; // JSON {tema: {'c': aciertos, 't': total}}
-  static const _kFailed = 'melli_progress_failed'; // JSON [FailedEntry]
+  /// Pista (track) actual: 'uni' (Universidad) o 'bach' (Bachillerato).
+  /// Cada pista tiene sus propias claves, así el progreso nunca se mezcla.
+  /// La pista 'uni' conserva las claves históricas sin prefijo, para que
+  /// el progreso ya guardado siga intacto.
+  static const String trackUni = 'uni';
+  static const String trackBach = 'bach';
+  static String track = trackUni;
+
+  /// Clave de guardado para un sufijo, según la pista actual.
+  static String _key(String suffix) =>
+      track == trackBach ? 'melli_progress_bach_$suffix' : 'melli_progress_$suffix';
 
   SharedPreferences? _prefs;
 
@@ -63,19 +68,29 @@ class ProgressService {
     instance._readAll(prefs);
   }
 
+  /// Cambia de pista y vuelve a leer el progreso guardado de esa pista.
+  static Future<void> setTrack(String t) async {
+    if (t != trackBach && t != trackUni) return;
+    if (t == track) return;
+    track = t;
+    final prefs = instance._prefs ?? await SharedPreferences.getInstance();
+    instance._prefs = prefs;
+    instance._readAll(prefs);
+  }
+
   void _readAll(SharedPreferences prefs) {
     masteredTopics
       ..clear()
-      ..addAll(prefs.getStringList(_kMastered) ?? <String>[]);
+      ..addAll(prefs.getStringList(_key('mastered')) ?? <String>[]);
     bestScores
       ..clear()
-      ..addAll(_readIntMap(prefs.getString(_kBest)));
+      ..addAll(_readIntMap(prefs.getString(_key('best'))));
     unlockedLevels
       ..clear()
-      ..addAll(_readIntMap(prefs.getString(_kLevels)));
+      ..addAll(_readIntMap(prefs.getString(_key('levels'))));
     _topicCorrect.clear();
     _topicTotal.clear();
-    final stats = _readJson(prefs.getString(_kStats));
+    final stats = _readJson(prefs.getString(_key('stats')));
     stats.forEach((topic, v) {
       if (v is Map) {
         _topicCorrect[topic] = (v['c'] as num?)?.toInt() ?? 0;
@@ -84,7 +99,7 @@ class ProgressService {
     });
     _failed
       ..clear()
-      ..addAll(_readFailed(prefs.getString(_kFailed)));
+      ..addAll(_readFailed(prefs.getString(_key('failed'))));
   }
 
   static Map<String, dynamic> _readJson(String? raw) {
@@ -122,9 +137,9 @@ class ProgressService {
   void _save() {
     final prefs = _prefs;
     if (prefs == null) return; // aún no se cargó: nada que guardar
-    prefs.setStringList(_kMastered, masteredTopics.toList());
-    prefs.setString(_kBest, jsonEncode(bestScores));
-    prefs.setString(_kLevels, jsonEncode(unlockedLevels));
+    prefs.setStringList(_key('mastered'), masteredTopics.toList());
+    prefs.setString(_key('best'), jsonEncode(bestScores));
+    prefs.setString(_key('levels'), jsonEncode(unlockedLevels));
     final stats = <String, Map<String, int>>{};
     for (final topic in _topicTotal.keys) {
       stats[topic] = {
@@ -132,9 +147,9 @@ class ProgressService {
         't': _topicTotal[topic] ?? 0,
       };
     }
-    prefs.setString(_kStats, jsonEncode(stats));
+    prefs.setString(_key('stats'), jsonEncode(stats));
     prefs.setString(
-        _kFailed, jsonEncode(_failed.map((e) => e.toJson()).toList()));
+        _key('failed'), jsonEncode(_failed.map((e) => e.toJson()).toList()));
   }
 
   // ---- Temas dominados (Aprender) ----

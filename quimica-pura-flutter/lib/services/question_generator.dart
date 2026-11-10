@@ -928,6 +928,13 @@ const Map<String, List<String>> topicGeneratorTypes = {
   'termo-cinetica': ['thermo'],
   'tabla': ['periodic'],
   'enlace': ['bonding'],
+  // Bachillerato: mismos generadores, con números del nivel básico.
+  'bach-estequiometria': ['molar-mass', 'mass-moles', 'stoichiometry'],
+  'bach-gases': ['gas'],
+  'bach-disoluciones': ['molarity', 'dilution'],
+  'bach-acido-base': ['ph'],
+  // 'organica' y 'laboratorio' no tienen generador: sus niveles son
+  // solo de banco (ver PracticarScreen._levelCount).
 };
 
 GeneratedQuestion generateOfType(String type, Random rng) {

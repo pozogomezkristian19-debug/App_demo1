@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../data/topics.dart';
+import '../services/localization.dart';
 
 class TipsScreen extends StatelessWidget {
   const TipsScreen({super.key});
@@ -9,9 +10,9 @@ class TipsScreen extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        const Text(
-          'Tips de cálculo y de examen',
-          style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+        Text(
+          tr('tipsTitle'),
+          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 6),
         const Text(
