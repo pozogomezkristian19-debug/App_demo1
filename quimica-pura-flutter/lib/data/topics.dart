@@ -446,6 +446,79 @@ const List<StudyTopic> topics = [
   ),
 ];
 
+/// Temas de las ramas que no viven en Aprender: son la introducción de
+/// cada rama en el menú de hamburguesa (Ramas de la química).
+/// - 'analitica': panorama de la química analítica.
+/// - 'fisicoquimica': panorama de la fisicoquímica.
+/// Las ramas también enlazan temas de Aprender relacionados (ver
+/// `branchTopics` en branches_screen.dart).
+const List<StudyTopic> branchTopics = [
+  StudyTopic(
+    slug: 'analitica',
+    title: 'Química analítica: medir para saber',
+    level: 'Rama de la química',
+    summary: [
+      'La química analítica responde a dos preguntas: ¿qué hay? (análisis cualitativo) y ¿cuánto hay? (análisis cuantitativo). Todo análisis serio sigue el mismo camino: tomar una muestra representativa, prepararla, medir una señal y convertir esa señal en concentración.',
+      'El análisis cualitativo identifica iones y sustancias por reacciones características: precipitados, colores, llamas y gases. El cuantitativo mide cantidades: valoraciones, gravimetría (pesar un precipitado) y técnicas instrumentales (espectrofotometría, cromatografía).',
+      'Toda medida tiene error. La precisión dice lo repetible que es la medida y la exactitud lo cerca que está del valor real. Por eso se hacen réplicas, blancos y patrones: sin control de calidad, un número no vale nada.',
+      'La valoración es la técnica cuantitativa clásica: se añade un reactivo de concentración conocida hasta el punto de equivalencia, que se detecta con un indicador o potenciométricamente. La valoración por retroceso se usa cuando la reacción es lenta o el analito es volátil: se añade un exceso conocido y se valora lo que sobra.',
+    ],
+    formulas: [
+      Formula(name: 'Valoración', expr: 'C₁V₁ = C₂V₂ (en el punto de equivalencia)', note: 'Con moles, no con volúmenes a secas'),
+      Formula(name: 'pH en el punto de equivalencia', expr: 'Ácido fuerte + base fuerte: pH = 7', note: 'Con débiles, manda la hidrólisis de la sal'),
+      Formula(name: 'Ley de Beer-Lambert', expr: 'A = ε·l·c', note: 'La absorbancia crece con la concentración'),
+      Formula(name: 'Error relativo', expr: '% error = |medido − real| / real × 100', note: 'Exactitud en porcentaje'),
+    ],
+    exampleTitle: 'Se valoran 25.0 mL de HCl con NaOH 0.100 M y se gastan 20.0 mL. ¿Cuál es la concentración del ácido?',
+    exampleSteps: [
+      'En el punto de equivalencia, los moles de H⁺ igualan a los de OH⁻: Cₐ·Vₐ = Cb·Vb.',
+      'Cb·Vb = 0.100 mol/L × 0.0200 L = 0.00200 mol de OH⁻.',
+      'Esos son los moles de HCl: n = 0.00200 mol en 0.0250 L.',
+      'Cₐ = 0.00200 / 0.0250 = 0.0800 mol/L.',
+    ],
+    exampleAnswer: 'La concentración del HCl es 0.0800 M.',
+    errors: [
+      'Confundir punto de equivalencia con punto final: el final es donde cambia el indicador, y puede no coincidir exactamente.',
+      'Usar volúmenes en mL en un lado y en L en el otro sin convertir.',
+      'Olvidar los coeficientes: si la reacción es 1:2, la igualdad de moles no es C₁V₁ = C₂V₂ a secas.',
+      'No hacer réplicas: una sola medida no dice nada de la precisión.',
+    ],
+    tip: 'En el examen, dibuja siempre el esquema de la valoración y escribe la reacción ajustada antes de tocar la calculadora.',
+  ),
+  StudyTopic(
+    slug: 'fisicoquimica',
+    title: 'Fisicoquímica: la física detrás de la química',
+    level: 'Rama de la química',
+    summary: [
+      'La fisicoquímica explica el porqué de los fenómenos químicos con las leyes de la física: la energía, el movimiento de las moléculas y las probabilidades. Sus tres pilares son la termodinámica, la cinética y la estructura de la materia.',
+      'La termodinámica dice si un proceso puede ocurrir y cuánta energía mueve: entalpía (ΔH), entropía (ΔS) y energía libre de Gibbs (ΔG = ΔH − TΔS). Si ΔG < 0, el proceso es espontáneo; si ΔG > 0, no lo es.',
+      'La cinética dice a qué velocidad ocurre: la velocidad depende de las concentraciones y de la temperatura, y la energía de activación es la barrera que hay que superar. Un catalizador no cambia el equilibrio, solo llega antes.',
+      'Los gases son el sistema modelo: PV = nRT describe el comportamiento ideal y las desviaciones revelan las fuerzas entre moléculas. La teoría cinético-molecular explica la presión como choques de moléculas contra las paredes.',
+    ],
+    formulas: [
+      Formula(name: 'Gas ideal', expr: 'PV = nRT', note: 'T siempre en kelvin'),
+      Formula(name: 'Energía libre', expr: 'ΔG = ΔH − TΔS', note: 'ΔG < 0: espontáneo'),
+      Formula(name: 'Velocidad', expr: 'v = k[A]ᵐ[B]ⁿ', note: 'm y n se determinan experimentalmente'),
+      Formula(name: 'Arrhenius', expr: 'k = A·e^(−Ea/RT)', note: 'La velocidad crece mucho con T'),
+      Formula(name: 'Primer orden', expr: 't½ = ln 2 / k', note: 'La vida media no depende de la concentración inicial'),
+    ],
+    exampleTitle: '¿A qué temperatura un proceso con ΔH = −40 kJ/mol y ΔS = −100 J/(mol·K) deja de ser espontáneo?',
+    exampleSteps: [
+      'El proceso deja de ser espontáneo cuando ΔG = 0: 0 = ΔH − TΔS.',
+      'T = ΔH / ΔS = (−40000 J/mol) / (−100 J/(mol·K)) = 400 K.',
+      'Por debajo de 400 K, ΔG < 0 y el proceso es espontáneo; por encima, no.',
+    ],
+    exampleAnswer: 'Deja de ser espontáneo por encima de 400 K (127 °C).',
+    errors: [
+      'Mezclar kJ y J en ΔG = ΔH − TΔS: ΔH suele venir en kJ y ΔS en J/K.',
+      'Olvidar que la temperatura va en kelvin en todas estas fórmulas.',
+      'Creer que un catalizador cambia el equilibrio: solo cambia la velocidad.',
+      'Decir que una reacción exotérmica siempre es espontánea: si ΔS es muy negativa, a alta temperatura no lo es.',
+    ],
+    tip: 'Para ΔG, convierte todo a julios antes de operar: es el error que más puntos cuesta.',
+  ),
+];
+
 const List<ExamTip> generalTips = [
   ExamTip(
     title: 'Método para cualquier problema',

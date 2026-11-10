@@ -2,13 +2,14 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../services/chemistry.dart';
 import '../services/localization.dart';
+import '../services/nav_requests.dart';
 import '../widgets/solver_widgets.dart';
 import 'resolver_extra.dart';
 
 /// Un solucionador de la lista: su grupo, su título, su descripción,
 /// su icono y su pantalla.
-class _SolverEntry {
-  const _SolverEntry({
+class SolverEntry {
+  const SolverEntry({
     required this.group,
     required this.title,
     required this.subtitle,
@@ -24,99 +25,99 @@ class _SolverEntry {
 
 /// Los 14 solucionadores, agrupados. Solo se abre uno a la vez: la lista
 /// es limpia y el solucionador abierto tiene todo el espacio.
-const List<_SolverEntry> _solverEntries = [
-  _SolverEntry(
+const List<SolverEntry> solverEntries = [
+  SolverEntry(
     group: 'Cantidad de sustancia',
     title: 'Masa molar de un compuesto',
     subtitle: 'Escribe la fórmula (acepta paréntesis): H2SO4, Ca(OH)2, Al2(SO4)3…',
     icon: Icons.science_outlined,
     page: MolarMassSolver(),
   ),
-  _SolverEntry(
+  SolverEntry(
     group: 'Cantidad de sustancia',
     title: 'Masa ⇄ moles ⇄ partículas',
     subtitle: 'n = m / M · N = n · 6.022×10²³',
     icon: Icons.functions,
     page: MassMolesSolver(),
   ),
-  _SolverEntry(
+  SolverEntry(
     group: 'Disoluciones',
     title: 'Molaridad',
     subtitle: 'Concentración: M = n / V',
     icon: Icons.water_drop_outlined,
     page: MolaritySolver(),
   ),
-  _SolverEntry(
+  SolverEntry(
     group: 'Disoluciones',
     title: 'Dilución',
     subtitle: 'M₁V₁ = M₂V₂: cómo preparar una disolución más diluida',
     icon: Icons.water_drop,
     page: DilutionSolver(),
   ),
-  _SolverEntry(
+  SolverEntry(
     group: 'Ácidos y bases',
     title: 'pH y pOH',
     subtitle: 'Acidez y basicidad de disoluciones fuertes',
     icon: Icons.opacity_outlined,
     page: PhSolver(),
   ),
-  _SolverEntry(
+  SolverEntry(
     group: 'Ácidos y bases',
     title: 'pH de ácidos polipróticos',
     subtitle: 'Dipróticos y tripróticos, por etapas (H₂CO₃, H₂SO₄, H₃PO₄)',
     icon: Icons.looks_two_outlined,
     page: PolyproticPhSolver(),
   ),
-  _SolverEntry(
+  SolverEntry(
     group: 'Ácidos y bases',
     title: 'pH de mezclas que no reaccionan',
     subtitle: 'Dos ácidos o dos bases, fuertes o débiles',
     icon: Icons.merge_outlined,
     page: MixturePhSolver(),
   ),
-  _SolverEntry(
+  SolverEntry(
     group: 'Ácidos y bases',
     title: 'pH de disoluciones de sales',
     subtitle: 'Con o sin hidrólisis, según de dónde venga la sal',
     icon: Icons.grain_outlined,
     page: SaltPhSolver(),
   ),
-  _SolverEntry(
+  SolverEntry(
     group: 'Equilibrio',
     title: 'Solubilidad y Ksp',
     subtitle: 'De Ksp a solubilidad, o de solubilidad a Ksp (AₐB_b)',
     icon: Icons.balance,
     page: SolubilitySolver(),
   ),
-  _SolverEntry(
+  SolverEntry(
     group: 'Redox',
     title: 'Balanceo redox (ion-electrón)',
     subtitle: 'Reacciones frecuentes, por semirreacciones',
     icon: Icons.swap_horiz,
     page: RedoxSolver(),
   ),
-  _SolverEntry(
+  SolverEntry(
     group: 'Gases y reacciones',
     title: 'Gas ideal',
     subtitle: 'PV = nRT: presión, volumen, moles y temperatura',
     icon: Icons.air_outlined,
     page: GasSolver(),
   ),
-  _SolverEntry(
+  SolverEntry(
     group: 'Gases y reacciones',
     title: 'Reactivo limitante',
     subtitle: 'Quién se agota primero en la reacción',
     icon: Icons.hourglass_bottom_outlined,
     page: LimitingSolver(),
   ),
-  _SolverEntry(
+  SolverEntry(
     group: 'Valoraciones',
     title: 'Valoraciones',
     subtitle: 'Ácido-base, redox y por retroceso',
     icon: Icons.colorize_outlined,
     page: TitrationSolver(),
   ),
-  _SolverEntry(
+  SolverEntry(
     group: 'Valoraciones',
     title: 'Valoración potenciométrica',
     subtitle: 'El punto de equivalencia por el salto de pH',
@@ -133,6 +134,51 @@ class ResolverScreen extends StatefulWidget {
 
 class _ResolverScreenState extends State<ResolverScreen> {
   int? _open; // índice del solucionador abierto (null = lista)
+  var _backRegistered = false;
+
+  @override
+  void dispose() {
+    if (_backRegistered) BackNav.unregister(_closeSolver);
+    super.dispose();
+  }
+
+  /// Cierra el solucionador abierto (manejador del botón atrás).
+  bool _closeSolver() {
+    if (_open == null) return false;
+    setState(() => _open = null);
+    return true;
+  }
+
+  void _openSolver(int i) {
+    if (!_backRegistered) {
+      BackNav.register(_closeSolver);
+      _backRegistered = true;
+    }
+    setState(() => _open = i);
+  }
+
+  void _closeSolverView() {
+    if (_backRegistered) {
+      BackNav.unregister(_closeSolver);
+      _backRegistered = false;
+    }
+    setState(() => _open = null);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Petición de la búsqueda: abrir un solucionador por su título.
+    final title = NavRequests.openSolverTitle;
+    if (title != null) {
+      NavRequests.openSolverTitle = null;
+      final i = solverEntries.indexWhere((s) => s.title == title);
+      if (i >= 0) {
+        WidgetsBinding.instance
+            .addPostFrameCallback((_) => _openSolver(i));
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -143,14 +189,14 @@ class _ResolverScreenState extends State<ResolverScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           TextButton.icon(
-            onPressed: () => setState(() => _open = null),
+            onPressed: _closeSolverView,
             icon: const Icon(Icons.arrow_back),
             label: Text(tr('allSolvers')),
             style: TextButton.styleFrom(
               alignment: Alignment.centerLeft,
             ),
           ),
-          _solverEntries[_open!].page,
+          solverEntries[_open!].page,
           const SizedBox(height: 16),
         ],
       );
@@ -162,11 +208,11 @@ class _ResolverScreenState extends State<ResolverScreen> {
         const SizedBox(height: 8),
         const _IntroCard(),
         const SizedBox(height: 8),
-        for (var i = 0; i < _solverEntries.length; i++) ...[
-          if (i == 0 || _solverEntries[i].group != _solverEntries[i - 1].group)
+        for (var i = 0; i < solverEntries.length; i++) ...[
+          if (i == 0 || solverEntries[i].group != solverEntries[i - 1].group)
             Padding(
               padding: const EdgeInsets.only(top: 14, bottom: 6),
-              child: Text(_solverEntries[i].group,
+              child: Text(solverEntries[i].group,
                   style: const TextStyle(
                       fontSize: 19, fontWeight: FontWeight.bold)),
             ),
@@ -178,14 +224,14 @@ class _ResolverScreenState extends State<ResolverScreen> {
                     .colorScheme
                     .primary
                     .withValues(alpha: 0.15),
-                child: Icon(_solverEntries[i].icon,
+                child: Icon(solverEntries[i].icon,
                     color: Theme.of(context).colorScheme.primary),
               ),
-              title: Text(_solverEntries[i].title,
+              title: Text(solverEntries[i].title,
                   style: const TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text(_solverEntries[i].subtitle),
+              subtitle: Text(solverEntries[i].subtitle),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () => setState(() => _open = i),
+              onTap: () => _openSolver(i),
             ),
           ),
         ],

@@ -1,11 +1,16 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../data/extra_content.dart';
 import '../data/questions.dart';
 import '../models.dart';
 import '../services/localization.dart';
+import '../services/nav_requests.dart';
 import '../services/progress.dart';
 import '../services/question_generator.dart';
 import '../services/user_prefs.dart';
+import '../widgets/celebration.dart';
+import '../widgets/element_sheet.dart';
 
 // Practicar estilo Duolingo: niveles por tema, repaso de errores y memoria
 // que no se borra al cerrar la app (todo vive en ProgressService, que
@@ -28,13 +33,12 @@ import '../services/user_prefs.dart';
 const int _levelSize = 5;
 const int _passNeeded = 4; // 4 de 5 = 80%
 const int _passPercent = (_passNeeded * 100) ~/ _levelSize; // 80%
-const int _extraGeneratedLevels = 2; // niveles extra solo con preguntas nuevas
 const int _mixedSize = 24; // examen mixto de Universidad
 const int _mixedSizeBach = 16; // examen mixto de Bachillerato
 const int _reviewMax = 20;
 
 /// Temas de la pista Universidad, en orden.
-const List<String> _uniTopics = [
+const List<String> uniTopics = [
   'estequiometria',
   'gases',
   'disoluciones',
@@ -48,7 +52,7 @@ const List<String> _uniTopics = [
 ];
 
 /// Temas de la pista Bachillerato, en orden.
-const List<String> _bachTopics = [
+const List<String> bachTopics = [
   'bach-estequiometria',
   'bach-disoluciones',
   'bach-gases',
@@ -111,10 +115,14 @@ class _QuizItem {
 }
 
 class _QuizSpec {
-  const _QuizSpec({required this.kind, this.topic, this.level = 0});
+  const _QuizSpec({required this.kind, this.topic, this.level = 0, this.reviewOnly});
   final String kind; // 'level', 'review' o 'mixto'
   final String? topic;
   final int level;
+
+  /// Repaso inteligente: solo estas entradas (los errores de días
+  /// anteriores). null = todos los errores.
+  final List<FailedEntry>? reviewOnly;
 }
 
 class PracticarScreen extends StatefulWidget {
@@ -130,11 +138,51 @@ class _PracticarScreenState extends State<PracticarScreen> {
   // Para volver al punto donde va el usuario al abrir el camino.
   final _currentKey = GlobalKey();
   var _scrolledToCurrent = false;
+  var _backRegistered = false;
+
+  @override
+  void dispose() {
+    if (_backRegistered) BackNav.unregister(_closeQuiz);
+    super.dispose();
+  }
+
+  /// Cierra el quiz abierto (manejador del botón atrás).
+  bool _closeQuiz() {
+    if (_quiz == null) return false;
+    setState(() => _quiz = null);
+    return true;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Petición del menú ("Repasar mis errores"): empieza el repaso.
+    if (NavRequests.startReview) {
+      NavRequests.startReview = false;
+      if (ProgressService.instance.failedCount > 0) {
+        WidgetsBinding.instance.addPostFrameCallback(
+            (_) => _start(const _QuizSpec(kind: 'review')));
+      }
+    }
+  }
+
+  /// ¿El tema i está desbloqueado? En orden: hay que completar TODOS
+  /// los niveles del tema anterior para abrir el siguiente. El primer
+  /// tema siempre está abierto.
+  bool _topicUnlocked(int i) {
+    if (i == 0) return true;
+    final topics = _byTopic.keys.toList();
+    final prev = topics[i - 1];
+    return ProgressService.instance.isTopicComplete(prev);
+  }
 
   /// Primer nivel sin pasar (tema y nivel), o null si ya pasó todo.
+  /// Solo mira temas desbloqueados: con temas en orden, el primero sin
+  /// pasar es siempre el tema actual.
   ({int topicIndex, int level})? _firstUnpassed() {
     final topics = _byTopic.keys.toList();
     for (var i = 0; i < topics.length; i++) {
+      if (!_topicUnlocked(i)) return null;
       final unlocked = ProgressService.instance.unlockedLevel(topics[i]);
       if (unlocked <= _levelCount(topics[i])) {
         return (topicIndex: i, level: unlocked);
@@ -180,8 +228,8 @@ class _PracticarScreenState extends State<PracticarScreen> {
   /// pista. Cambia al cambiar de pista (ver el selector de arriba).
   Map<String, List<QuizQuestion>> get _byTopic {
     final wanted = ProgressService.track == ProgressService.trackBach
-        ? _bachTopics
-        : _uniTopics;
+        ? bachTopics
+        : uniTopics;
     final byTopic = <String, List<QuizQuestion>>{
       for (final t in wanted) t: <QuizQuestion>[],
     };
@@ -191,14 +239,8 @@ class _PracticarScreenState extends State<PracticarScreen> {
     return byTopic;
   }
 
-  int _levelCount(String topic) {
-    final bank = _byTopic[topic]?.length ?? 0;
-    final base = (bank / _levelSize).ceil();
-    // Temas sin generador (orgánica y laboratorio) solo tienen niveles
-    // de banco: sin niveles extra generados.
-    if (!topicGeneratorTypes.containsKey(topic)) return base;
-    return base + _extraGeneratedLevels;
-  }
+  int _levelCount(String topic) =>
+      ProgressService.levelCountForTopic(topic);
 
   /// Resuelve una entrada fallada a su pregunta (banco o generada).
   QuizQuestion? _resolveFailed(FailedEntry f) {
@@ -249,10 +291,13 @@ class _PracticarScreenState extends State<PracticarScreen> {
     return items;
   }
 
-  List<_QuizItem> _buildReviewQuestions() {
+  /// Preguntas del repaso: todos los errores, o solo los que se pasen
+  /// (repaso inteligente: los de días anteriores).
+  List<_QuizItem> _buildReviewQuestions([List<FailedEntry>? only]) {
     final progress = ProgressService.instance;
     final items = <_QuizItem>[];
-    final entries = List<FailedEntry>.of(progress.failedEntries)..shuffle();
+    final entries = List<FailedEntry>.of(only ?? progress.failedEntries)
+      ..shuffle();
     for (final f in entries.take(_reviewMax)) {
       final q = _resolveFailed(f);
       if (q != null) items.add(_QuizItem(id: f.id, question: q));
@@ -302,7 +347,7 @@ class _PracticarScreenState extends State<PracticarScreen> {
       case 'level':
         return _buildLevelQuestions(spec.topic!, spec.level);
       case 'review':
-        return _buildReviewQuestions();
+        return _buildReviewQuestions(spec.reviewOnly);
       default:
         return _buildMixedQuestions();
     }
@@ -313,7 +358,9 @@ class _PracticarScreenState extends State<PracticarScreen> {
       case 'level':
         return '${topicNames[spec.topic] ?? spec.topic} · ${tr('levelWord')} ${spec.level}';
       case 'review':
-        return tr('reviewTitle');
+        return spec.reviewOnly != null
+            ? tr('smartReviewTitle')
+            : tr('reviewTitle');
       default:
         return tr('mixedTitle');
     }
@@ -323,6 +370,10 @@ class _PracticarScreenState extends State<PracticarScreen> {
     final questions = _buildQuestions(spec);
     if (questions.isEmpty) return;
     _scrolledToCurrent = false;
+    if (!_backRegistered) {
+      BackNav.register(_closeQuiz);
+      _backRegistered = true;
+    }
     setState(() {
       _spec = spec;
       _quiz = _QuizState(
@@ -333,6 +384,14 @@ class _PracticarScreenState extends State<PracticarScreen> {
         items: questions,
       );
     });
+  }
+
+  void _exitQuiz() {
+    if (_backRegistered) {
+      BackNav.unregister(_closeQuiz);
+      _backRegistered = false;
+    }
+    setState(() => _quiz = null);
   }
 
   void _repeat() {
@@ -360,7 +419,7 @@ class _PracticarScreenState extends State<PracticarScreen> {
       return _QuizRunner(
         quiz: _quiz!,
         spec: _spec!,
-        onExit: () => setState(() => _quiz = null),
+        onExit: _exitQuiz,
         onRepeat: _repeat,
       );
     }
@@ -393,29 +452,14 @@ class _PracticarScreenState extends State<PracticarScreen> {
           const SizedBox(height: 6),
           Text(tr('levelsIntro')),
           const SizedBox(height: 12),
-          // Selector de pista: Bachillerato o Universidad. Cada pista
-          // tiene sus temas, sus niveles y su progreso guardado.
-          SegmentedButton<String>(
-            segments: [
-              ButtonSegment<String>(
-                value: ProgressService.trackBach,
-                label: Text(tr('trackBach')),
-                icon: const Icon(Icons.school, size: 18),
-              ),
-              ButtonSegment<String>(
-                value: ProgressService.trackUni,
-                label: Text(tr('trackUni')),
-                icon: const Icon(Icons.account_balance, size: 18),
-              ),
-            ],
-            selected: {ProgressService.track},
-            onSelectionChanged: (selection) async {
-              final t = selection.first;
-              if (t == ProgressService.track) return;
-              await ProgressService.setTrack(t);
-              await UserPrefs.saveTrack(t);
-              setState(() => _scrolledToCurrent = false);
-            },
+          // Racha, meta del día y recordatorio, en una fila.
+          _DailyStrip(),
+          const SizedBox(height: 12),
+          // Pregunta del día y elemento del día.
+          _QuestionOfTheDayCard(),
+          const SizedBox(height: 8),
+          _ElementOfTheDayCard(
+            onOpen: (e) => showElementSheet(context, e),
           ),
           const SizedBox(height: 12),
           Text(
@@ -426,6 +470,22 @@ class _PracticarScreenState extends State<PracticarScreen> {
             ),
           ),
           const SizedBox(height: 12),
+          // Repaso inteligente: errores de días anteriores que resurgen.
+          if (progress.dueFailed().isNotEmpty)
+            Card(
+              color: Colors.amber.withValues(alpha: 0.18),
+              child: ListTile(
+                leading: const Icon(Icons.auto_awesome, size: 32),
+                title: Text(tr('smartReviewTitle'),
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text(
+                    '${progress.dueFailed().length} ${tr('reviewQuestions')} de días anteriores'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _start(_QuizSpec(
+                    kind: 'review', reviewOnly: progress.dueFailed())),
+              ),
+            ),
+          if (progress.dueFailed().isNotEmpty) const SizedBox(height: 8),
           // Repaso de errores, solo si hay algo que repasar.
           if (progress.failedCount > 0)
             Card(
@@ -449,11 +509,18 @@ class _PracticarScreenState extends State<PracticarScreen> {
               topic: topics[i],
               bankCount: byTopic[topics[i]]!.length,
               levelCount: _levelCount(topics[i]),
+              locked: !_topicUnlocked(i),
               currentLevel:
                   current != null && current.topicIndex == i ? current.level : 0,
               currentKey:
                   current != null && current.topicIndex == i ? _currentKey : null,
               onLevelTap: (level, unlocked) {
+                if (!_topicUnlocked(i)) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(tr('topicLocked'))),
+                  );
+                  return;
+                }
                 if (unlocked) {
                   _start(_QuizSpec(
                       kind: 'level', topic: topics[i], level: level));
@@ -566,12 +633,15 @@ class _PathPainter extends CustomPainter {
 }
 
 /// Una sección del camino: un tema con su cabecera y sus niveles en
-/// camino serpenteante, como una unidad de Duolingo.
+/// camino serpenteante, como una unidad de Duolingo. El camino de cada
+/// tema lleva su propio color; un tema bloqueado (todavía no se terminó
+/// el anterior) se ve con candado y no se puede abrir.
 class _TopicPathSection extends StatelessWidget {
   const _TopicPathSection({
     required this.topic,
     required this.bankCount,
     required this.levelCount,
+    required this.locked,
     required this.currentLevel,
     required this.currentKey,
     required this.onLevelTap,
@@ -581,6 +651,9 @@ class _TopicPathSection extends StatelessWidget {
   final int bankCount;
   final int levelCount;
 
+  /// true si el tema anterior no está completo todavía.
+  final bool locked;
+
   /// Nivel actual del tema (0 si ninguno es el actual).
   final int currentLevel;
   final GlobalKey? currentKey;
@@ -589,7 +662,7 @@ class _TopicPathSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final progress = ProgressService.instance;
-    final unlocked = progress.unlockedLevel(topic);
+    final unlocked = locked ? 0 : progress.unlockedLevel(topic);
     var best = 0;
     for (var i = 1; i <= levelCount; i++) {
       final s = progress.bestScore('level:$topic:$i');
@@ -606,7 +679,8 @@ class _TopicPathSection extends StatelessWidget {
             child: CustomPaint(
               painter: _PathPainter(
                 levelCount: levelCount,
-                color: scheme.primary.withValues(alpha: 0.35),
+                // El sendero de cada tema lleva el color del tema.
+                color: color.withValues(alpha: locked ? 0.15 : 0.45),
               ),
             ),
           ),
@@ -614,36 +688,47 @@ class _TopicPathSection extends StatelessWidget {
             children: [
               SizedBox(
                 height: _headerH,
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 22,
-                      backgroundColor: color.withValues(alpha: 0.18),
-                      child: Icon(
-                          _topicIcons[topic] ?? Icons.quiz_outlined,
-                          color: color),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(topicNames[topic] ?? topic,
-                              style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold)),
-                          Text(
-                            '${tr('levelWord')} ${unlocked > levelCount ? levelCount : unlocked} ${tr('quizOf')} $levelCount · ${tr('bestWord')}: $best%',
-                            style: TextStyle(
-                              color:
-                                  scheme.onSurface.withValues(alpha: 0.7),
-                            ),
-                          ),
-                        ],
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: locked ? 0.06 : 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 22,
+                        backgroundColor: color.withValues(alpha: 0.18),
+                        child: Icon(
+                            locked
+                                ? Icons.lock
+                                : (_topicIcons[topic] ?? Icons.quiz_outlined),
+                            color: color),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(topicNames[topic] ?? topic,
+                                style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold)),
+                            Text(
+                              locked
+                                  ? tr('lockedWord')
+                                  : '${tr('levelWord')} ${unlocked > levelCount ? levelCount : unlocked} ${tr('quizOf')} $levelCount · ${tr('bestWord')}: $best%',
+                              style: TextStyle(
+                                color:
+                                    scheme.onSurface.withValues(alpha: 0.7),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               for (var level = 1; level <= levelCount; level++)
@@ -652,7 +737,7 @@ class _TopicPathSection extends StatelessWidget {
                   topic: topic,
                   level: level,
                   bankCount: bankCount,
-                  unlocked: level <= unlocked,
+                  unlocked: !locked && level <= unlocked,
                   isCurrent: level == currentLevel,
                   onLevelTap: onLevelTap,
                 ),
@@ -665,8 +750,10 @@ class _TopicPathSection extends StatelessWidget {
 }
 
 /// Una fila del camino: un nodo de nivel, desplazado a izquierda, centro
-/// o derecha para que el camino serpentee.
-class _LevelNodeRow extends StatelessWidget {
+/// o derecha para que el camino serpentee. El nodo actual respira con
+/// una animación suave (halo que crece y encoge), para que se vea dónde
+/// va el usuario sin buscarlo.
+class _LevelNodeRow extends StatefulWidget {
   const _LevelNodeRow({
     super.key,
     required this.topic,
@@ -685,22 +772,61 @@ class _LevelNodeRow extends StatelessWidget {
   final void Function(int level, bool unlocked) onLevelTap;
 
   @override
+  State<_LevelNodeRow> createState() => _LevelNodeRowState();
+}
+
+class _LevelNodeRowState extends State<_LevelNodeRow>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    );
+    _scale = Tween<double>(begin: 1.0, end: 1.12).animate(
+      CurvedAnimation(parent: _pulse, curve: Curves.easeInOut),
+    );
+    if (widget.isCurrent) _pulse.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(_LevelNodeRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isCurrent && !_pulse.isAnimating) {
+      _pulse.repeat(reverse: true);
+    } else if (!widget.isCurrent && _pulse.isAnimating) {
+      _pulse.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final progress = ProgressService.instance;
-    final best = progress.bestScore('level:$topic:$level');
+    final best = progress.bestScore('level:${widget.topic}:${widget.level}');
     final passed = best >= _passPercent;
     // Niveles sin preguntas del banco: solo preguntas nuevas generadas.
-    final generatedOnly = (level - 1) * _levelSize >= bankCount;
+    final generatedOnly =
+        (widget.level - 1) * _levelSize >= widget.bankCount;
     final scheme = Theme.of(context).colorScheme;
-    final offset = _pathOffsets[(level - 1) % _pathOffsets.length];
+    final offset = _pathOffsets[(widget.level - 1) % _pathOffsets.length];
     final Color bg;
     final Widget inner;
     if (passed) {
       bg = const Color(0xFFFFB300);
       inner = const Icon(Icons.check, color: Color(0xFF5D4037), size: 34);
-    } else if (unlocked) {
+    } else if (widget.unlocked) {
       bg = scheme.primary;
-      inner = Text('$level',
+      inner = Text('${widget.level}',
           style: const TextStyle(
               fontSize: 26,
               fontWeight: FontWeight.bold,
@@ -719,16 +845,23 @@ class _LevelNodeRow extends StatelessWidget {
           final cx = constraints.maxWidth / 2 + offset;
           return Stack(
             children: [
-              if (isCurrent)
+              if (widget.isCurrent)
                 Positioned(
                   left: cx - 38,
                   top: _nodeCenterY - 38,
-                  child: Container(
-                    width: 76,
-                    height: 76,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: scheme.primary.withValues(alpha: 0.18),
+                  child: AnimatedBuilder(
+                    animation: _scale,
+                    builder: (context, child) => Transform.scale(
+                      scale: _scale.value,
+                      child: child,
+                    ),
+                    child: Container(
+                      width: 76,
+                      height: 76,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: scheme.primary.withValues(alpha: 0.18),
+                      ),
                     ),
                   ),
                 ),
@@ -736,7 +869,7 @@ class _LevelNodeRow extends StatelessWidget {
                 left: cx - _nodeSize / 2,
                 top: _nodeCenterY - _nodeSize / 2,
                 child: GestureDetector(
-                  onTap: () => onLevelTap(level, unlocked),
+                  onTap: () => widget.onLevelTap(widget.level, widget.unlocked),
                   child: Container(
                     width: _nodeSize,
                     height: _nodeSize,
@@ -762,16 +895,17 @@ class _LevelNodeRow extends StatelessWidget {
                 width: 100,
                 child: Text(
                   passed
-                      ? '${tr('levelWord')} $level · $best%'
-                      : generatedOnly && unlocked
-                          ? '${tr('levelWord')} $level · ${tr('newWord')}'
-                          : '${tr('levelWord')} $level',
+                      ? '${tr('levelWord')} ${widget.level} · $best%'
+                      : generatedOnly && widget.unlocked
+                          ? '${tr('levelWord')} ${widget.level} · ${tr('newWord')}'
+                          : '${tr('levelWord')} ${widget.level}',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 12,
-                    fontWeight:
-                        isCurrent ? FontWeight.bold : FontWeight.normal,
-                    color: isCurrent
+                    fontWeight: widget.isCurrent
+                        ? FontWeight.bold
+                        : FontWeight.normal,
+                    color: widget.isCurrent
                         ? scheme.primary
                         : scheme.onSurface.withValues(alpha: 0.7),
                   ),
@@ -887,6 +1021,248 @@ class _FinalExamSection extends StatelessWidget {
   }
 }
 
+/// Racha, meta del día y recordatorio, en la parte de arriba de Niveles.
+class _DailyStrip extends StatelessWidget {
+  const _DailyStrip();
+
+  @override
+  Widget build(BuildContext context) {
+    final p = ProgressService.instance;
+    final now = DateTime.now();
+    final reminderDue = UserPrefs.reminderOn &&
+        !p.practiceDays.contains(ProgressService.dateKey(now)) &&
+        (now.hour > UserPrefs.reminderHour ||
+            (now.hour == UserPrefs.reminderHour &&
+                now.minute >= UserPrefs.reminderMinute));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Card(
+                margin: EdgeInsets.zero,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.local_fire_department,
+                          color: Colors.deepOrange, size: 28),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${tr('streakWord')}: ${p.streakNow} ${p.streakNow == 1 ? 'día' : 'días'}',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold),
+                            ),
+                            Text('Mejor: ${p.streakBest} días',
+                                style: const TextStyle(fontSize: 12)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Card(
+                margin: EdgeInsets.zero,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 36,
+                        height: 36,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            CircularProgressIndicator(
+                              value: p.dailyGoalDone ? 1 : 0,
+                              strokeWidth: 4,
+                            ),
+                            Icon(
+                              p.dailyGoalDone
+                                  ? Icons.check
+                                  : Icons.flag_outlined,
+                              size: 18,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(tr('dailyGoalTitle'),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold)),
+                            Text(
+                              p.dailyGoalDone
+                                  ? 'Hecha: 1 nivel hoy'
+                                  : 'Pasa 1 nivel hoy',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (reminderDue) ...[
+          const SizedBox(height: 8),
+          Card(
+            color: Colors.amber.withValues(alpha: 0.18),
+            child: const ListTile(
+              leading: Icon(Icons.alarm),
+              title: Text('Es hora de practicar',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              subtitle:
+                  Text('Tu recordatorio de estudio: aún no practicaste hoy.'),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Pregunta del día: la misma para todos durante el día, con sus 4
+/// opciones. Al contestarla queda guardada como contestada ese día.
+class _QuestionOfTheDayCard extends StatefulWidget {
+  const _QuestionOfTheDayCard();
+  @override
+  State<_QuestionOfTheDayCard> createState() => _QuestionOfTheDayCardState();
+}
+
+class _QuestionOfTheDayCardState extends State<_QuestionOfTheDayCard> {
+  late final QuizQuestion _q;
+  int? _selected;
+  bool _answered = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _q = questionOfTheDay(DateTime.now());
+    _answered =
+        ProgressService.instance.qotdAnsweredOn(DateTime.now());
+  }
+
+  void _answer(int i) {
+    if (_answered) return;
+    final correct = i == _q.answer;
+    final progress = ProgressService.instance;
+    progress.recordAnswer(_q.topic, correct);
+    progress.recordQotd(DateTime.now());
+    final id = 'bank:${_q.topic}:${_q.question}';
+    if (correct) {
+      progress.removeFailed(id);
+    } else {
+      progress.addFailed(
+          FailedEntry(id: id, topic: _q.topic, question: _q.question));
+    }
+    setState(() {
+      _selected = i;
+      _answered = true;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      color: scheme.primary.withValues(alpha: 0.10),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.calendar_today, size: 20),
+                const SizedBox(width: 8),
+                Text(tr('qotdTitle'),
+                    style: const TextStyle(
+                        fontSize: 17, fontWeight: FontWeight.bold)),
+                const Spacer(),
+                if (_answered)
+                  const Icon(Icons.check_circle,
+                      color: Colors.teal, size: 20),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(_q.question,
+                style:
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 10),
+            for (var i = 0; i < 4; i++)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: !_answered
+                          ? scheme.surfaceContainerHighest
+                          : (i == _q.answer
+                              ? Colors.teal
+                              : (_selected == i
+                                  ? Colors.redAccent
+                                  : scheme.surfaceContainerHighest)),
+                      alignment: Alignment.centerLeft,
+                      padding: const EdgeInsets.all(12),
+                    ),
+                    onPressed: () => _answer(i),
+                    child: Text(_q.options[i],
+                        style: const TextStyle(fontSize: 15)),
+                  ),
+                ),
+              ),
+            if (_answered) ...[
+              const SizedBox(height: 4),
+              Text(_q.explanation),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Elemento del día: uno distinto cada día, con su dato curioso.
+class _ElementOfTheDayCard extends StatelessWidget {
+  const _ElementOfTheDayCard({required this.onOpen});
+  final void Function(ChemicalElement element) onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final e = elementOfTheDay(DateTime.now());
+    return Card(
+      child: ListTile(
+        leading: CircleAvatar(
+          child: Text(e.symbol,
+              style: const TextStyle(fontWeight: FontWeight.bold)),
+        ),
+        title: Text('${tr('elementDayTitle')}: ${e.name}',
+            style: const TextStyle(fontWeight: FontWeight.bold)),
+        subtitle: Text(elementFact(e)),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => onOpen(e),
+      ),
+    );
+  }
+}
+
 class _QuizState {
   _QuizState(
       {required this.testId, required this.title, required List<_QuizItem> items})
@@ -942,6 +1318,14 @@ class _QuizRunnerState extends State<_QuizRunner> {
     final correct = realIndex == _q.answer;
     final progress = ProgressService.instance;
     progress.recordAnswer(_q.topic, correct);
+    if (UserPrefs.soundOn) {
+      if (correct) {
+        HapticFeedback.lightImpact();
+        SystemSound.play(SystemSoundType.click);
+      } else {
+        HapticFeedback.vibrate();
+      }
+    }
     if (correct) {
       // Acertar un error lo saca de la lista de repaso.
       progress.removeFailed(_item.id);
@@ -987,7 +1371,9 @@ class _QuizRunnerState extends State<_QuizRunner> {
       final passedLevel = isLevel && percent >= _passPercent;
       final remaining =
           ProgressService.instance.failedCount;
-      return Padding(
+      // Celebración al pasar de nivel: confeti cayendo sobre el
+      // resultado durante unos segundos.
+      final resultBody = Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -1034,6 +1420,13 @@ class _QuizRunnerState extends State<_QuizRunner> {
                 onPressed: widget.onExit, child: Text(tr('quizBack'))),
           ],
         ),
+      );
+      if (!passedLevel) return resultBody;
+      return Stack(
+        children: [
+          resultBody,
+          const Positioned.fill(child: CelebrationOverlay()),
+        ],
       );
     }
 

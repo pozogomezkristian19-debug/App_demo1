@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
-import '../data/element_details.dart';
 import '../data/periodic_table.dart';
 import '../data/reference_tables.dart';
 import '../models.dart';
 import '../services/localization.dart';
+import '../services/nav_requests.dart';
+import '../widgets/element_sheet.dart';
+import 'compare_screen.dart';
+import 'table_quiz_screen.dart';
 
 class TablaScreen extends StatefulWidget {
   const TablaScreen({super.key});
@@ -11,9 +14,38 @@ class TablaScreen extends StatefulWidget {
   State<TablaScreen> createState() => _TablaScreenState();
 }
 
-class _TablaScreenState extends State<TablaScreen> {
+class _TablaScreenState extends State<TablaScreen>
+    with SingleTickerProviderStateMixin {
   String _query = '';
   int? _filterCategory;
+  late final TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Peticiones de la búsqueda o del menú: filtrar por texto o abrir
+    // una pestaña concreta.
+    if (NavRequests.tableQuery != null) {
+      _query = NavRequests.tableQuery!;
+      NavRequests.tableQuery = null;
+    }
+    if (NavRequests.tableTab != null) {
+      _tabController.animateTo(NavRequests.tableTab!);
+      NavRequests.tableTab = null;
+    }
+  }
 
   static const List<Color> _catColors = [
     Color(0xFFF4A261),
@@ -38,19 +70,7 @@ class _TablaScreenState extends State<TablaScreen> {
   }
 
   void _showDetail(ChemicalElement e) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.6,
-        minChildSize: 0.35,
-        maxChildSize: 0.95,
-        expand: false,
-        builder: (context, scrollController) =>
-            _ElementSheet(element: e, scrollController: scrollController),
-      ),
-    );
+    showElementSheet(context, e);
   }
 
   Widget _cell(BuildContext context, ChemicalElement? e) {
@@ -90,28 +110,27 @@ class _TablaScreenState extends State<TablaScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 3,
-      child: Column(
-        children: [
-          TabBar(
-            tabs: [
-              Tab(text: tr('tabPeriodic')),
-              Tab(text: tr('tabActivity')),
-              Tab(text: tr('tabSolubility')),
+    return Column(
+      children: [
+        TabBar(
+          controller: _tabController,
+          tabs: [
+            Tab(text: tr('tabPeriodic')),
+            Tab(text: tr('tabActivity')),
+            Tab(text: tr('tabSolubility')),
+          ],
+        ),
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              _periodicTab(context),
+              _activityTab(context),
+              _solubilityTab(context),
             ],
           ),
-          Expanded(
-            child: TabBarView(
-              children: [
-                _periodicTab(context),
-                _activityTab(context),
-                _solubilityTab(context),
-              ],
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -134,6 +153,38 @@ class _TablaScreenState extends State<TablaScreen> {
               prefixIcon: const Icon(Icons.search),
             ),
             onChanged: (v) => setState(() => _query = v.trim()),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                          builder: (_) => const TableQuizScreen()),
+                    );
+                  },
+                  icon: const Icon(Icons.quiz_outlined, size: 18),
+                  label: Text(tr('tableQuizTitle')),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                          builder: (_) => const CompareScreen()),
+                    );
+                  },
+                  icon: const Icon(Icons.compare_arrows, size: 18),
+                  label: Text(tr('compareTitle')),
+                ),
+              ),
+            ],
           ),
         ),
         SingleChildScrollView(
@@ -402,125 +453,6 @@ class _TablaScreenState extends State<TablaScreen> {
             ),
           ),
       ],
-    );
-  }
-}
-
-/// Ficha de un elemento en una ventanita que sale desde abajo
-/// (modal bottom sheet arrastrable, ~60% de la pantalla). El botón
-/// "Ver más" la expande hasta casi toda la pantalla con los detalles
-/// completos.
-class _ElementSheet extends StatefulWidget {
-  const _ElementSheet({required this.element, required this.scrollController});
-  final ChemicalElement element;
-  final ScrollController scrollController;
-
-  @override
-  State<_ElementSheet> createState() => _ElementSheetState();
-}
-
-class _ElementSheetState extends State<_ElementSheet> {
-  bool _expanded = false;
-
-  Widget _row(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 170,
-            child: Text(label,
-                style: const TextStyle(fontWeight: FontWeight.bold)),
-          ),
-          Expanded(child: Text(value)),
-        ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final e = widget.element;
-    final en = electronegativity[e.atomicNumber];
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      decoration: BoxDecoration(
-        color: scheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: ListView(
-        controller: widget.scrollController,
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-        children: [
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: scheme.onSurface.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 32,
-                backgroundColor:
-                    _TablaScreenState._catColors[e.category],
-                child: Text(e.symbol,
-                    style: const TextStyle(
-                        color: Colors.black,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 22)),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(e.name,
-                        style: const TextStyle(
-                            fontSize: 22, fontWeight: FontWeight.bold)),
-                    Text(
-                        'Z = ${e.atomicNumber} · ${categoryNames[e.category]}'),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          _row(tr('oxidationWord'),
-              oxidationStates[e.atomicNumber] ?? tr('noData')),
-          _row(tr('electronegativityWord'),
-              en == null ? tr('noData') : en.toStringAsFixed(2)),
-          _row(tr('configWord'), electronConfig(e.atomicNumber)),
-          _row(tr('stateWord'), elementState(e.atomicNumber)),
-          _row(tr('massWord'), e.mass),
-          if (_expanded) ...[
-            _row(tr('periodWord'), '${e.period}'),
-            _row(tr('groupWord'), '${e.column}'),
-            _row(tr('blockWord'), e.block),
-            _row(tr('categoryWord'), categoryNames[e.category]),
-            const SizedBox(height: 8),
-            Text(
-              'Los lantánidos (57–71) y actínidos (89–103) se muestran en las dos filas separadas de abajo, como en la tabla clásica.',
-              style: TextStyle(
-                  color: scheme.onSurface.withValues(alpha: 0.7)),
-            ),
-          ],
-          const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed: () => setState(() => _expanded = !_expanded),
-              child: Text(_expanded ? tr('seeLess') : tr('seeMore')),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
