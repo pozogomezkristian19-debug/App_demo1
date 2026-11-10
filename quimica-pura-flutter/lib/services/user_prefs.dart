@@ -16,30 +16,43 @@ class UserPrefs {
   static const _kReminderOn = 'melli_reminder_on';
   static const _kReminderHour = 'melli_reminder_hour';
   static const _kReminderMinute = 'melli_reminder_minute';
+  static const _kAvatar = 'melli_avatar'; // 'm0'..'m2' | 'f0'..'f2'
+  static const _kRulesSeenV6 = 'melli_rules_seen_v6';
+  static const _kMetBrenda = 'melli_met_brenda';
+  static const _kMetBritany = 'melli_met_britany';
 
   static bool onboardingDone = false;
   static String userName = '';
   static String userGender = '';
-  static bool isDark = true; // La app nació oscura; se puede cambiar con el botoncito.
+  static bool isDark = false; // La app nace clara (tema claro por
+  // defecto); se puede cambiar con el botoncito.
   static String language = 'es';
   static String track = 'uni';
   static bool soundOn = true; // Sonidos y vibración al contestar.
   static bool reminderOn = false; // Recordatorio diario de estudio.
   static int reminderHour = 19;
   static int reminderMinute = 0;
+  static String avatar = ''; // Avatar elegido ('' = el de su género).
+  static bool rulesSeenV6 = false; // ¿Ya vio la ventanita de reglas v6?
+  static bool metBrenda = false; // ¿Brenda ya se presentó?
+  static bool metBritany = false; // ¿Britany ya se presentó?
 
   static Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
     onboardingDone = prefs.getBool(_kOnboardingDone) ?? false;
     userName = prefs.getString(_kUserName) ?? '';
     userGender = prefs.getString(_kUserGender) ?? '';
-    isDark = prefs.getBool(_kDarkMode) ?? true;
+    isDark = prefs.getBool(_kDarkMode) ?? false; // Sin preferencia guardada: claro.
     language = prefs.getString(_kLanguage) ?? 'es';
     track = prefs.getString(_kTrack) ?? 'uni';
     soundOn = prefs.getBool(_kSoundOn) ?? true;
     reminderOn = prefs.getBool(_kReminderOn) ?? false;
     reminderHour = prefs.getInt(_kReminderHour) ?? 19;
     reminderMinute = prefs.getInt(_kReminderMinute) ?? 0;
+    avatar = prefs.getString(_kAvatar) ?? '';
+    rulesSeenV6 = prefs.getBool(_kRulesSeenV6) ?? false;
+    metBrenda = prefs.getBool(_kMetBrenda) ?? false;
+    metBritany = prefs.getBool(_kMetBritany) ?? false;
   }
 
   static Future<void> saveProfile(String name, String gender) async {
@@ -84,6 +97,30 @@ class UserPrefs {
     await prefs.setBool(_kReminderOn, on);
     await prefs.setInt(_kReminderHour, hour);
     await prefs.setInt(_kReminderMinute, minute);
+  }
+
+  static Future<void> saveAvatar(String id) async {
+    final prefs = await SharedPreferences.getInstance();
+    avatar = id;
+    await prefs.setString(_kAvatar, id);
+  }
+
+  static Future<void> saveRulesSeenV6() async {
+    final prefs = await SharedPreferences.getInstance();
+    rulesSeenV6 = true;
+    await prefs.setBool(_kRulesSeenV6, true);
+  }
+
+  /// La gemela se acaba de presentar por primera vez.
+  static Future<void> saveMetTwin(bool twinA) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (twinA) {
+      metBrenda = true;
+      await prefs.setBool(_kMetBrenda, true);
+    } else {
+      metBritany = true;
+      await prefs.setBool(_kMetBritany, true);
+    }
   }
 
   /// Saludo de cada entrada: "Bienvenida Ana" o "Bienvenido Luis".

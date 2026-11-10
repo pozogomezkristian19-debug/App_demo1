@@ -1,4 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Permiso para las notificaciones locales (Android 13+ lo pide
+         al activar el recordatorio; en versiones viejas no hace falta). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <application
         android:label="Melli-Qui"
         android:name="${applicationName}"
@@ -25,6 +28,18 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Widget de la pantalla de inicio (v6): tarjeta con la
+             pregunta del día, la racha, las vidas y los puntos.
+             Lo pinta MelliQuiWidgetProvider (Kotlin, RemoteViews). -->
+        <receiver android:name=".MelliQuiWidgetProvider"
+            android:exported="true"
+            android:label="Melli-Qui">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider"
+                android:resource="@xml/melli_qui_widget" />
+        </receiver>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

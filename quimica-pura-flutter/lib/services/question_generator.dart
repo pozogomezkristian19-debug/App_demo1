@@ -17,6 +17,8 @@ import 'dart:math';
 import '../data/periodic_table.dart';
 import '../models.dart';
 
+import '../data/i18n/generator_i18n.dart';
+
 /// Una pregunta generada junto con su id estable.
 class GeneratedQuestion {
   const GeneratedQuestion({required this.id, required this.question});
@@ -202,11 +204,11 @@ GeneratedQuestion buildMolarMass(String formula) {
     id: id,
     question: QuizQuestion(
       topic: 'estequiometria',
-      question: '¿Cuál es la masa molar del ${c.name} (${c.formula})?',
+      question: gt('molarMassQ', {'name': genSubstanceName(c.name), 'formula': c.formula}),
       options: built.options,
       answer: built.answer,
       explanation:
-          'M = ${c.massSteps}. Suma cada elemento multiplicado por su subíndice.',
+          gt('molarMassE', {'steps': c.massSteps}),
     ),
   );
 }
@@ -231,19 +233,19 @@ GeneratedQuestion buildMassMoles(String form, String formula, double value) {
     final grams = value;
     correct = grams / m;
     question =
-        '¿Cuántos moles hay en ${fmtNum(grams, 0)} g de ${c.name} (${c.formula})?';
+        gt('massMolesQ', {'g': fmtNum(grams, 0), 'name': genSubstanceName(c.name), 'formula': c.formula});
     wrongs = [grams * m, grams / c.massIgnoringSubscript, correct * 10];
     explanation =
-        'n = m/M = ${fmtNum(grams, 0)} g ÷ ${fmtNum(m)} g/mol = ${fmtNum(correct)} mol.';
+        gt('massMolesE', {'g': fmtNum(grams, 0), 'm': fmtNum(m), 'v': fmtNum(correct)});
   } else {
     // form == 'mass': value = moles. ¿Qué masa tienen n mol?
     final moles = value;
     correct = moles * m;
     question =
-        '¿Qué masa tienen ${fmtNum(moles)} mol de ${c.name} (${c.formula})?';
+        gt('massMassQ', {'n': fmtNum(moles), 'name': genSubstanceName(c.name), 'formula': c.formula});
     wrongs = [moles / m, moles * c.massIgnoringSubscript, correct * 10];
     explanation =
-        'm = n × M = ${fmtNum(moles)} mol × ${fmtNum(m)} g/mol = ${fmtNum(correct)} g.';
+        gt('massMassE', {'n': fmtNum(moles), 'm': fmtNum(m), 'v': fmtNum(correct)});
   }
   final id = 'gen:mass-moles:$form:${formula}_${value.toStringAsFixed(2)}';
   final rng = Random(id.hashCode);
@@ -292,20 +294,18 @@ GeneratedQuestion buildMolarity(String form, double a, double volMl) {
     // a = moles, volMl = volumen en mL. M = n / V(L).
     correct = a / (volMl / 1000);
     question =
-        'Disuelves ${fmtNum(a)} mol de un soluto y aforas a ${fmtNum(volMl, 0)} mL. ¿Cuál es la molaridad?';
+        gt('molarityQ', {'n': fmtNum(a), 'v': fmtNum(volMl, 0)});
     wrongs = [a / volMl, a * (volMl / 1000), a / (volMl / 100)];
     explanation =
-        'Pasa el volumen a litros: ${fmtNum(volMl, 0)} mL = ${fmtNum(volMl / 1000)} L. '
-        'M = n/V = ${fmtNum(a)} mol ÷ ${fmtNum(volMl / 1000)} L = ${fmtNum(correct)} M.';
+        gt('molarityE', {'v': fmtNum(volMl, 0), 'l': fmtNum(volMl / 1000), 'n': fmtNum(a), 'c': fmtNum(correct)});
   } else {
     // form == 'moles': a = molaridad, volMl = volumen. n = M × V(L).
     correct = a * (volMl / 1000);
     question =
-        '¿Cuántos moles de soluto hay en ${fmtNum(volMl, 0)} mL de una disolución ${fmtNum(a)} M?';
+        gt('molesFromMQ', {'v': fmtNum(volMl, 0), 'm': fmtNum(a)});
     wrongs = [a * volMl, a / (volMl / 1000), a * (volMl / 100)];
     explanation =
-        'Pasa el volumen a litros: ${fmtNum(volMl, 0)} mL = ${fmtNum(volMl / 1000)} L. '
-        'n = M × V = ${fmtNum(a)} M × ${fmtNum(volMl / 1000)} L = ${fmtNum(correct)} mol.';
+        gt('molesFromME', {'v': fmtNum(volMl, 0), 'l': fmtNum(volMl / 1000), 'm': fmtNum(a), 'c': fmtNum(correct)});
   }
   final id = 'gen:molarity:$form:${a.toStringAsFixed(2)}_${fmtNum(volMl, 0)}';
   final rng = Random(id.hashCode);
@@ -348,18 +348,18 @@ GeneratedQuestion buildDilution(String form, double a, double b, double c) {
     // a = C1, b = V1 (mL), c = V2 (mL). C2 = C1·V1/V2.
     correct = a * b / c;
     question =
-        'Tienes una disolución ${fmtNum(a)} M y tomas ${fmtNum(b, 0)} mL. Los diluyes hasta ${fmtNum(c, 0)} mL. ¿Cuál es la concentración final?';
+        gt('dilutionC2Q', {'c1': fmtNum(a), 'v1': fmtNum(b, 0), 'v2': fmtNum(c, 0)});
     wrongs = [a * c / b, a * b / (b + c), a];
     explanation =
-        'C₁V₁ = C₂V₂, así que C₂ = C₁V₁/V₂ = ${fmtNum(a)} × ${fmtNum(b, 0)} ÷ ${fmtNum(c, 0)} = ${fmtNum(correct)} M.';
+        gt('dilutionC2E', {'c1': fmtNum(a), 'v1': fmtNum(b, 0), 'v2': fmtNum(c, 0), 'c': fmtNum(correct)});
   } else {
     // form == 'v1': a = C1, b = C2, c = V2 (mL). V1 = C2·V2/C1.
     correct = b * c / a;
     question =
-        'Quieres preparar ${fmtNum(c, 0)} mL de una disolución ${fmtNum(b)} M a partir de una concentrada ${fmtNum(a)} M. ¿Qué volumen de la concentrada necesitas?';
+        gt('dilutionV1Q', {'v2': fmtNum(c, 0), 'c2': fmtNum(b), 'c1': fmtNum(a)});
     wrongs = [b * c * a, a * c / b, c];
     explanation =
-        'C₁V₁ = C₂V₂, así que V₁ = C₂V₂/C₁ = ${fmtNum(b)} × ${fmtNum(c, 0)} ÷ ${fmtNum(a)} = ${fmtNum(correct)} mL.';
+        gt('dilutionV1E', {'c2': fmtNum(b), 'v2': fmtNum(c, 0), 'c1': fmtNum(a), 'v': fmtNum(correct)});
   }
   final id =
       'gen:dilution:$form:${a.toStringAsFixed(2)}_${b.toStringAsFixed(2)}_${c.toStringAsFixed(2)}';
@@ -409,23 +409,22 @@ GeneratedQuestion buildPh(String form, int mantissa, int exponent) {
   if (form == 'ph') {
     correct = p;
     question =
-        'El pH de una disolución con [H₃O⁺] = $mantissa×10${sup(-exponent)} M es:';
+        gt('phQ', {'mant': '$mantissa', 'sup': sup(-exponent)});
     explanation =
-        'pH = −log[H⁺] = −log($mantissa×10${sup(-exponent)}) = $exponent − log $mantissa = ${p.toStringAsFixed(2)}.';
+        gt('phE', {'mant': '$mantissa', 'sup': sup(-exponent), 'exp': '$exponent', 'p': p.toStringAsFixed(2)});
   } else if (form == 'poh') {
     correct = p;
     question =
-        'El pOH de una disolución con [OH⁻] = $mantissa×10${sup(-exponent)} M es:';
+        gt('pohQ', {'mant': '$mantissa', 'sup': sup(-exponent)});
     explanation =
-        'pOH = −log[OH⁻] = −log($mantissa×10${sup(-exponent)}) = $exponent − log $mantissa = ${p.toStringAsFixed(2)}.';
+        gt('pohE', {'mant': '$mantissa', 'sup': sup(-exponent), 'exp': '$exponent', 'p': p.toStringAsFixed(2)});
   } else {
     // form == 'ph-from-oh': dan [OH-] y piden el pH.
     correct = 14 - p;
     question =
-        'Una disolución tiene [OH⁻] = $mantissa×10${sup(-exponent)} M. Su pH a 25 °C es:';
+        gt('phFromOhQ', {'mant': '$mantissa', 'sup': sup(-exponent)});
     explanation =
-        'Primero pOH = −log($mantissa×10${sup(-exponent)}) = ${p.toStringAsFixed(2)}. '
-        'A 25 °C, pH + pOH = 14, así que pH = 14 − ${p.toStringAsFixed(2)} = ${correct.toStringAsFixed(2)}.';
+        gt('phFromOhE', {'mant': '$mantissa', 'sup': sup(-exponent), 'p': p.toStringAsFixed(2), 'c': correct.toStringAsFixed(2)});
   }
   final wrongs = <double>[
     exponent + logM, // error de signo clásico
@@ -479,41 +478,38 @@ GeneratedQuestion buildGas(String form, double x, double tC, double y) {
     // x = n (mol), y = P (atm). V = nRT/P.
     correct = x * _rGas * tK / y;
     question =
-        '¿Qué volumen ocupan ${fmtNum(x)} mol de un gas ideal a ${fmtNum(tC, 0)} °C y ${fmtNum(y)} atm?';
+        gt('gasVolumeQ', {'n': fmtNum(x), 't': fmtNum(tC, 0), 'p': fmtNum(y)});
     wrongs = [
       x * _rGas * tC / y, // usar °C en vez de K: el error clásico
       x * 8.314 * tK / y, // R equivocado para estas unidades
       x * _rGas * tK * y, // despeje al revés
     ];
     explanation =
-        'La temperatura va en kelvin: T = ${fmtNum(tC, 0)} + 273.15 = ${fmtNum(tK)} K. '
-        'V = nRT/P = ${fmtNum(x)} × 0.08206 × ${fmtNum(tK)} ÷ ${fmtNum(y)} = ${fmtNum(correct)} L.';
+        gt('gasVolumeE', {'t': fmtNum(tC, 0), 'tk': fmtNum(tK), 'n': fmtNum(x), 'p': fmtNum(y), 'v': fmtNum(correct)});
   } else if (form == 'moles') {
     // x = P (atm), y = V (L). n = PV/RT.
     correct = x * y / (_rGas * tK);
     question =
-        '¿Cuántos moles hay en ${fmtNum(y)} L de un gas ideal a ${fmtNum(tC, 0)} °C y ${fmtNum(x)} atm?';
+        gt('gasMolesQ', {'v': fmtNum(y), 't': fmtNum(tC, 0), 'p': fmtNum(x)});
     wrongs = [
       x * y / (_rGas * tC),
       x * y * _rGas * tK,
       x * y / (8.314 * tK),
     ];
     explanation =
-        'La temperatura va en kelvin: T = ${fmtNum(tC, 0)} + 273.15 = ${fmtNum(tK)} K. '
-        'n = PV/RT = ${fmtNum(x)} × ${fmtNum(y)} ÷ (0.08206 × ${fmtNum(tK)}) = ${fmtNum(correct)} mol.';
+        gt('gasMolesE', {'t': fmtNum(tC, 0), 'tk': fmtNum(tK), 'p': fmtNum(x), 'v': fmtNum(y), 'n': fmtNum(correct)});
   } else {
     // form == 'pressure': x = n (mol), y = V (L). P = nRT/V.
     correct = x * _rGas * tK / y;
     question =
-        '¿Qué presión ejerce ${fmtNum(x)} mol de un gas ideal en ${fmtNum(y)} L a ${fmtNum(tC, 0)} °C?';
+        gt('gasPressureQ', {'n': fmtNum(x), 'v': fmtNum(y), 't': fmtNum(tC, 0)});
     wrongs = [
       x * _rGas * tC / y,
       x * _rGas * tK * y,
       x * 8.314 * tK / y,
     ];
     explanation =
-        'La temperatura va en kelvin: T = ${fmtNum(tC, 0)} + 273.15 = ${fmtNum(tK)} K. '
-        'P = nRT/V = ${fmtNum(x)} × 0.08206 × ${fmtNum(tK)} ÷ ${fmtNum(y)} = ${fmtNum(correct)} atm.';
+        gt('gasPressureE', {'t': fmtNum(tC, 0), 'tk': fmtNum(tK), 'n': fmtNum(x), 'v': fmtNum(y), 'p': fmtNum(correct)});
   }
   final id =
       'gen:gas:$form:${x.toStringAsFixed(2)}_${fmtNum(tC, 0)}_${y.toStringAsFixed(2)}';
@@ -591,11 +587,11 @@ GeneratedQuestion buildStoichiometry(String form, int reaction, double moles) {
   if (form == 'product') {
     correct = moles * r.cb / r.ca;
     question =
-        'En la reacción ${r.equation}, si reaccionan ${fmtNum(moles)} mol de ${r.a}, ¿cuántos moles de ${r.b} se forman?';
+        gt('stoichProductQ', {'eq': r.equation, 'n': fmtNum(moles), 'a': r.a, 'b': r.b});
   } else {
     correct = moles * r.ca / r.cb;
     question =
-        'En la reacción ${r.equation}, ¿cuántos moles de ${r.a} se necesitan para formar ${fmtNum(moles)} mol de ${r.b}?';
+        gt('stoichReactantQ', {'eq': r.equation, 'a': r.a, 'n': fmtNum(moles), 'b': r.b});
   }
   final wrongs = <double>[
     form == 'product' ? moles * r.ca / r.cb : moles * r.cb / r.ca, // proporción al revés
@@ -606,8 +602,8 @@ GeneratedQuestion buildStoichiometry(String form, int reaction, double moles) {
   final rng = Random(id.hashCode);
   final built = numericOptions(correct, wrongs, (v) => '${fmtNum(v)} mol', rng);
   final ratio = form == 'product'
-      ? 'La proporción ${r.a}:${r.b} es ${r.ca}:${r.cb}, así que ${fmtNum(moles)} mol × (${r.cb}/${r.ca}) = ${fmtNum(correct)} mol.'
-      : 'La proporción ${r.b}:${r.a} es ${r.cb}:${r.ca}, así que ${fmtNum(moles)} mol × (${r.ca}/${r.cb}) = ${fmtNum(correct)} mol.';
+      ? gt('stoichProductE', {'a': r.a, 'b': r.b, 'ca': '${r.ca}', 'cb': '${r.cb}', 'n': fmtNum(moles), 'v': fmtNum(correct)})
+      : gt('stoichReactantE', {'b': r.b, 'a': r.a, 'cb': '${r.cb}', 'ca': '${r.ca}', 'n': fmtNum(moles), 'v': fmtNum(correct)});
   return GeneratedQuestion(
     id: id,
     question: QuizQuestion(
@@ -677,12 +673,11 @@ GeneratedQuestion buildEquilibrium(
     question: QuizQuestion(
       topic: 'equilibrio',
       question:
-          'Para la reacción ${r.equation}, con [${r.a}] = ${fmtNum(concA)} M, [${r.b}] = ${fmtNum(concB)} M y [${r.c}] = ${fmtNum(concC)} M, calcula el cociente de reacción Qc.',
+          gt('equilibQ', {'eq': r.equation, 'a': r.a, 'ca': fmtNum(concA), 'b': r.b, 'cb': fmtNum(concB), 'c': r.c, 'cc': fmtNum(concC)}),
       options: built.options,
       answer: built.answer,
       explanation:
-          'Qc = [${r.c}]^${r.cc} / ([${r.a}]^${r.ca} × [${r.b}]^${r.cb}) = ${fmtNum(_powInt(concC, r.cc))} ÷ (${fmtNum(_powInt(concA, r.ca))} × ${fmtNum(_powInt(concB, r.cb))}) = ${fmtQ(q)}. '
-          'Los exponentes son los coeficientes: olvidarlos es el error clásico.',
+          gt('equilibE', {'c': r.c, 'cc': '${r.cc}', 'a': r.a, 'ca': '${r.ca}', 'b': r.b, 'cb': '${r.cb}', 'qc1': fmtNum(_powInt(concC, r.cc)), 'qa': fmtNum(_powInt(concA, r.ca)), 'qb': fmtNum(_powInt(concB, r.cb)), 'q': fmtQ(q)}),
     ),
   );
 }
@@ -731,12 +726,11 @@ GeneratedQuestion buildThermo(int mass, int substance, int dT) {
     question: QuizQuestion(
       topic: 'termo-cinetica',
       question:
-          '¿Cuánto calor (en kJ) se necesita para calentar $mass g de ${s.name} $dT °C? (c = ${fmtNum(s.c)} J/g·°C)',
+          gt('thermoQ', {'m': '$mass', 'name': genSubstanceName(s.name), 'dt': '$dT', 'c': fmtNum(s.c)}),
       options: built.options,
       answer: built.answer,
       explanation:
-          'q = m·c·ΔT = $mass g × ${fmtNum(s.c)} J/g·°C × $dT °C = ${fmtNum(qJ)} J = ${fmtNum(qKj)} kJ. '
-          'Recuerda pasar de J a kJ dividiendo entre 1000.',
+          gt('thermoE', {'m': '$mass', 'c': fmtNum(s.c), 'dt': '$dT', 'qj': fmtNum(qJ), 'qk': fmtNum(qKj)}),
     ),
   );
 }
@@ -760,7 +754,7 @@ GeneratedQuestion buildPeriodic(String form, String symbol) {
   late final List<String> candidates;
   late final String explanation;
   if (form == 'z') {
-    question = '¿Cuál es el número atómico del ${e.name}?';
+    question = gt('periodicZQ', {'name': genElementName(e.atomicNumber, e.name)});
     candidates = [
       e.atomicNumber.toString(),
       (e.atomicNumber + 1).toString(),
@@ -768,16 +762,16 @@ GeneratedQuestion buildPeriodic(String form, String symbol) {
       (e.atomicNumber + 10).toString(),
     ];
     explanation =
-        'El número atómico es la cantidad de protones: el ${e.name} tiene Z = ${e.atomicNumber}.';
+        gt('periodicZE', {'name': genElementName(e.atomicNumber, e.name), 'z': '${e.atomicNumber}'});
   } else if (form == 'symbol') {
     final others = List<ChemicalElement>.of(allElements)
       ..shuffle(rng)
       ..removeWhere((el) => el.symbol == symbol);
-    question = '¿Cuál es el símbolo químico del ${e.name}?';
+    question = gt('periodicSymbolQ', {'name': genElementName(e.atomicNumber, e.name)});
     candidates = [e.symbol, ...others.take(3).map((el) => el.symbol)];
-    explanation = 'El símbolo del ${e.name} es ${e.symbol}.';
+    explanation = gt('periodicSymbolE', {'name': genElementName(e.atomicNumber, e.name), 'symbol': e.symbol});
   } else if (form == 'mass') {
-    question = '¿Cuál es la masa atómica aproximada del ${e.name}?';
+    question = gt('periodicMassQ', {'name': genElementName(e.atomicNumber, e.name)});
     final m = e.numericMass;
     candidates = [
       fmtNum(m),
@@ -786,11 +780,11 @@ GeneratedQuestion buildPeriodic(String form, String symbol) {
       fmtNum(m * 0.9),
     ];
     explanation =
-        'La masa atómica del ${e.name} es ${e.mass} u (aprox. ${fmtNum(m)} u).';
+        gt('periodicMassE', {'name': genElementName(e.atomicNumber, e.name), 'mass': e.mass, 'm': fmtNum(m)});
   } else {
     // form == 'group': 4 grupos distintos (el periodo puede coincidir
     // con el grupo, así que se rellena con grupos vecinos válidos).
-    question = '¿En qué grupo de la tabla periódica está el ${e.name}?';
+    question = gt('periodicGroupQ', {'name': genElementName(e.atomicNumber, e.name)});
     final groups = <String>[e.column.toString()];
     for (final v in [
       e.column + 1,
@@ -808,7 +802,7 @@ GeneratedQuestion buildPeriodic(String form, String symbol) {
     }
     candidates = groups;
     explanation =
-        'El ${e.name} está en el grupo ${e.column} y en el periodo ${e.period}.';
+        gt('periodicGroupE', {'name': genElementName(e.atomicNumber, e.name), 'g': '${e.column}', 'p': '${e.period}'});
   }
   final built = buildOptions(candidates, rng);
   return GeneratedQuestion(
@@ -880,15 +874,15 @@ GeneratedQuestion buildBonding(String form, String formula) {
   late final List<String> candidates;
   late final String explanation;
   if (form == 'geometry') {
-    question = '¿Qué geometría molecular tiene el ${m.name} (${m.formula})?';
-    candidates = [m.geometry!, ..._geometries.where((g) => g != m.geometry)];
+    question = gt('bondingGeometryQ', {'name': genSubstanceName(m.name), 'formula': m.formula});
+    candidates = [genGeometry(m.geometry!), ..._geometries.where((g) => g != m.geometry).map(genGeometry)];
     explanation =
-        'El ${m.name} (${m.formula}) tiene geometría ${m.geometry!.toLowerCase()} según la teoría VSEPR.';
+        gt('bondingGeometryE', {'name': genSubstanceName(m.name), 'formula': m.formula, 'geom': genGeometry(m.geometry!).toLowerCase()});
   } else {
-    question = '¿Qué tipo de enlace predomina en el ${m.name} (${m.formula})?';
-    candidates = [m.bond, ..._bondTypes.where((b) => b != m.bond)];
+    question = gt('bondingBondQ', {'name': genSubstanceName(m.name), 'formula': m.formula});
+    candidates = [genBond(m.bond), ..._bondTypes.where((b) => b != m.bond).map(genBond)];
     explanation =
-        'En el ${m.name} (${m.formula}) predomina el enlace ${m.bond.toLowerCase()}.';
+        gt('bondingBondE', {'name': genSubstanceName(m.name), 'formula': m.formula, 'bond': genBond(m.bond).toLowerCase()});
   }
   final built = buildOptions(candidates, rng);
   return GeneratedQuestion(
@@ -938,6 +932,11 @@ const Map<String, List<String>> topicGeneratorTypes = {
 };
 
 GeneratedQuestion generateOfType(String type, Random rng) {
+  final g = _generateOfTypeRaw(type, rng);
+  return _withDifficulty(g);
+}
+
+GeneratedQuestion _generateOfTypeRaw(String type, Random rng) {
   switch (type) {
     case 'molar-mass':
       return generateMolarMass(rng);
@@ -966,6 +965,53 @@ GeneratedQuestion generateOfType(String type, Random rng) {
   }
 }
 
+/// Dificultad de cada tipo de pregunta generada (ver points.dart):
+/// el cálculo estequiométrico y el equilibrio son lo más difícil;
+/// reconocer un elemento de la tabla es lo más fácil.
+int difficultyForType(String type) {
+  switch (type) {
+    case 'stoichiometry':
+    case 'equilibrium-q':
+      return 3;
+    case 'periodic':
+      return 1;
+    default:
+      return 2;
+  }
+}
+
+GeneratedQuestion _withDifficulty(GeneratedQuestion g) {
+  final type = g.id.split(':').length > 1 ? g.id.split(':')[1] : '';
+  return GeneratedQuestion(
+    id: g.id,
+    question: g.question.copyWith(difficulty: difficultyForType(type)),
+  );
+}
+
+/// Genera una VARIANTE de una pregunta fallada (v6): el mismo concepto
+/// con otros datos, nunca la misma pregunta. Para una id generada,
+/// otra pregunta del mismo tipo; para una del banco cuyo tema tiene
+/// generador, una pregunta nueva de ese tema; para banco sin generador
+/// (orgánica, laboratorio), null: el repaso usa otra pregunta del banco
+/// del mismo tema (ver PracticarScreen).
+GeneratedQuestion? generateVariantForFailed(
+    String failedId, String topic, Random rng) {
+  var guard = 0;
+  if (failedId.startsWith('gen:')) {
+    final type = failedId.split(':')[1];
+    while (guard < 10) {
+      guard++;
+      final g = generateOfType(type, rng);
+      if (g.id != failedId) return g;
+    }
+    return generateOfType(type, rng);
+  }
+  if (topicGeneratorTypes.containsKey(topic)) {
+    return generateForTopic(topic, rng);
+  }
+  return null;
+}
+
 /// Genera una pregunta nueva del tema dado.
 GeneratedQuestion generateForTopic(String topic, Random rng) {
   final types = topicGeneratorTypes[topic] ?? topicGeneratorTypes['estequiometria']!;
@@ -988,6 +1034,11 @@ GeneratedQuestion generateAdaptive(List<String> weakestFirst, Random rng) {
 /// Reconstruye exactamente la pregunta de una id estable. Devuelve null
 /// si la id no se reconoce o sus parámetros no son válidos.
 GeneratedQuestion? rebuildGenerated(String id) {
+  final g = _rebuildRaw(id);
+  return g == null ? null : _withDifficulty(g);
+}
+
+GeneratedQuestion? _rebuildRaw(String id) {
   try {
     final parts = id.split(':');
     if (parts.length < 4 || parts[0] != 'gen') return null;

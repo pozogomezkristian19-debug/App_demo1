@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'widgets/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'data/extra_content.dart';
 import 'data/periodic_table.dart';
 import 'data/search_index.dart';
+import 'screens/account_screen.dart';
 import 'screens/aprender_screen.dart';
 import 'screens/branches_screen.dart';
 import 'screens/challenge_screen.dart';
@@ -29,13 +32,21 @@ import 'screens/timed_exam_screen.dart';
 import 'screens/tips_screen.dart';
 import 'screens/topic_detail_screen.dart';
 import 'screens/version_screen.dart';
+import 'data/i18n/content_i18n.dart';
 import 'services/favorites.dart';
+import 'services/home_widget_service.dart';
 import 'services/localization.dart';
+import 'services/notification_service.dart';
 import 'services/nav_requests.dart';
 import 'services/notes.dart';
 import 'services/progress.dart';
+import 'services/sound_service.dart';
 import 'services/user_prefs.dart';
+import 'widgets/avatar.dart';
+import 'widgets/brand_logo.dart';
 import 'widgets/element_sheet.dart';
+import 'widgets/lives_chip.dart';
+import 'widgets/support_button.dart';
 
 /// URL de la página de descarga de Melli-Qui (landing en GitHub Pages).
 const String kLandingUrl =
@@ -51,7 +62,68 @@ Future<void> main() async {
   await NotesService.load();
   await FavoritesService.load();
   await AppLang.load();
+  syncGeneratorLang();
+  await NotificationService.init();
+  // Primera carga de datos del widget de inicio (pregunta del día,
+  // racha, vidas y puntos). Si no hay widget, no pasa nada.
+  await HomeWidgetService.update();
   runApp(const MelliQuiApp());
+}
+
+/// Transición suave para TODAS las pantallas (v6): fundido + pequeño
+/// deslizamiento, en vez del deslizamiento brusco por defecto. Se
+/// aplica en el tema, así no hay que tocar cada Navigator.push.
+class _FadeSlideTransitionsBuilder extends PageTransitionsBuilder {
+  const _FadeSlideTransitionsBuilder();
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    final fade = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(parent: animation, curve: Curves.easeOut),
+    );
+    final slide =
+        Tween<Offset>(begin: const Offset(0.04, 0.03), end: Offset.zero)
+            .animate(
+      CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+    );
+    return FadeTransition(
+      opacity: fade,
+      child: SlideTransition(position: slide, child: child),
+    );
+  }
+}
+
+/// Borde de botón estilo Duolingo: píldora con un borde inferior de
+/// 4 px en teal oscuro, que hace el efecto 3D (el botón parece
+/// levantado). Material pinta el ShapeBorder del botón, así que el
+/// borde inferior se dibuja de verdad, no es solo una sombra.
+class _DuoPillBorder extends RoundedRectangleBorder {
+  const _DuoPillBorder({
+    super.borderRadius =
+        const BorderRadius.all(Radius.circular(999)),
+  });
+
+  @override
+  void paint(Canvas canvas, Rect rect, {TextDirection? textDirection}) {
+    final rrect = borderRadius.resolve(textDirection).toRRect(rect);
+    canvas.save();
+    canvas.clipPath(Path()..addRRect(rrect));
+    canvas.drawRect(
+      Rect.fromLTRB(rect.left, rect.bottom - 4, rect.right, rect.bottom),
+      Paint()..color = BrandColors.tealDark,
+    );
+    canvas.restore();
+  }
+
+  @override
+  ShapeBorder scale(double t) => _DuoPillBorder(
+        borderRadius: borderRadius * t,
+      );
 }
 
 class MelliQuiApp extends StatefulWidget {
@@ -69,28 +141,37 @@ class _MelliQuiAppState extends State<MelliQuiApp> {
   /// cero con la versión nueva, como si cambiara la app entera.
   int _reloadToken = 0;
 
-  static const _teal = Color(0xFF14B8A6);
-  static const _deep = Color(0xFF0C1A17);
+  // Nueva identidad visual (rediseño claro estilo Duolingo, con el
+  // color propio de Melli-Qui: teal #00C2A8, nunca verde Duolingo).
+  // Los colores de marca viven en BrandColors.
+  static const _deep = Color(0xFF171226);
 
   ThemeData _darkTheme() {
     return ThemeData(
       useMaterial3: true,
+      fontFamily: 'Roboto',
       brightness: Brightness.dark,
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: _FadeSlideTransitionsBuilder(),
+          TargetPlatform.iOS: _FadeSlideTransitionsBuilder(),
+        },
+      ),
       scaffoldBackgroundColor: _deep,
       colorScheme: const ColorScheme.dark(
-        primary: _teal,
-        secondary: Color(0xFF2DD4BF),
-        surface: Color(0xFF122622),
-        onSurface: Color(0xFFE8F5F1),
+        primary: BrandColors.violetLight,
+        secondary: BrandColors.mintLight,
+        surface: Color(0xFF241B3A),
+        onSurface: Color(0xFFF1EAFB),
       ),
       cardTheme: const CardThemeData(
-        color: Color(0xFF122622),
+        color: Color(0xFF241B3A),
         elevation: 0,
         margin: EdgeInsets.symmetric(vertical: 6),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: const Color(0xFF0F211D),
+        fillColor: const Color(0xFF1B1530),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
         ),
@@ -100,55 +181,201 @@ class _MelliQuiAppState extends State<MelliQuiApp> {
         bodyLarge: TextStyle(fontSize: 17, height: 1.45),
         titleMedium: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
         titleLarge: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-      ),
+      ).apply(fontFamily: 'Roboto'),
     );
   }
 
+  /// Tema claro estilo Duolingo con el color propio de Melli-Qui
+  /// (teal #00C2A8, NUNCA verde Duolingo): fondo blanco, texto
+  /// oscuro, tarjetas blancas muy redondeadas con sombra suave,
+  /// tipografía gruesa y amistosa, y botones píldora teal con borde
+  /// inferior oscuro (efecto 3D, ver _DuoPillBorder).
   ThemeData _lightTheme() {
     return ThemeData(
       useMaterial3: true,
+      fontFamily: 'Roboto',
       brightness: Brightness.light,
-      scaffoldBackgroundColor: const Color(0xFFF7F4EE),
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: _FadeSlideTransitionsBuilder(),
+          TargetPlatform.iOS: _FadeSlideTransitionsBuilder(),
+        },
+      ),
+      scaffoldBackgroundColor: Colors.white,
       colorScheme: const ColorScheme.light(
-        primary: Color(0xFF0F766E),
-        secondary: _teal,
+        primary: BrandColors.teal,
+        onPrimary: Colors.white,
+        secondary: BrandColors.violet,
         surface: Colors.white,
-        onSurface: Color(0xFF1C2B28),
+        onSurface: BrandColors.ink,
+        surfaceContainerHighest: BrandColors.cardGray,
+        error: Color(0xFFEF4444),
       ),
       appBarTheme: const AppBarTheme(
-        backgroundColor: Color(0xFFF7F4EE),
-        foregroundColor: Color(0xFF1C2B28),
-        elevation: 0,
-      ),
-      navigationBarTheme: const NavigationBarThemeData(
         backgroundColor: Colors.white,
-        indicatorColor: Color(0xFF14B8A6),
+        foregroundColor: BrandColors.ink,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        titleTextStyle: TextStyle(
+          fontFamily: 'Roboto',
+          fontSize: 20,
+          fontWeight: FontWeight.w800,
+          color: BrandColors.ink,
+        ),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: Colors.white,
+        elevation: 2,
+        shadowColor: Colors.black.withValues(alpha: 0.08),
+        indicatorColor: BrandColors.teal.withValues(alpha: 0.15),
+        iconTheme: WidgetStateProperty.resolveWith(
+          (states) => IconThemeData(
+            color: states.contains(WidgetState.selected)
+                ? BrandColors.teal
+                : const Color(0xFF9CA3AF),
+            size: 26,
+          ),
+        ),
+        labelTextStyle: WidgetStateProperty.resolveWith(
+          (states) => TextStyle(
+            fontFamily: 'Roboto',
+            fontSize: 12,
+            fontWeight: states.contains(WidgetState.selected)
+                ? FontWeight.w800
+                : FontWeight.w600,
+            color: states.contains(WidgetState.selected)
+                ? BrandColors.teal
+                : const Color(0xFF9CA3AF),
+          ),
+        ),
       ),
       cardTheme: CardThemeData(
         color: Colors.white,
-        elevation: 1,
-        shadowColor: Colors.black.withValues(alpha: 0.12),
+        elevation: 2,
+        shadowColor: Colors.black.withValues(alpha: 0.10),
         margin: const EdgeInsets.symmetric(vertical: 6),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(18),
+        ),
+      ),
+      dialogTheme: const DialogThemeData(
+        backgroundColor: Colors.white,
+        elevation: 4,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(20)),
+        ),
+        titleTextStyle: TextStyle(
+          fontFamily: 'Roboto',
+          fontSize: 20,
+          fontWeight: FontWeight.w800,
+          color: BrandColors.ink,
+        ),
+        contentTextStyle: TextStyle(
+          fontFamily: 'Roboto',
+          fontSize: 16,
+          height: 1.45,
+          color: BrandColors.ink,
+        ),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: BrandColors.teal,
+          foregroundColor: Colors.white,
+          disabledBackgroundColor:
+              BrandColors.teal.withValues(alpha: 0.40),
+          elevation: 2,
+          shadowColor: BrandColors.tealDark,
+          surfaceTintColor: Colors.transparent,
+          shape: const _DuoPillBorder(),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          textStyle: const TextStyle(
+              fontFamily: 'Roboto',
+              fontSize: 16, fontWeight: FontWeight.w800),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: BrandColors.teal,
+          foregroundColor: Colors.white,
+          disabledBackgroundColor:
+              BrandColors.teal.withValues(alpha: 0.40),
+          elevation: 2,
+          shadowColor: BrandColors.tealDark,
+          surfaceTintColor: Colors.transparent,
+          shape: const _DuoPillBorder(),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          textStyle: const TextStyle(
+              fontFamily: 'Roboto',
+              fontSize: 16, fontWeight: FontWeight.w800),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: BrandColors.teal,
+          backgroundColor: Colors.white,
+          side: const BorderSide(color: BrandColors.teal, width: 2),
+          shape: const StadiumBorder(),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          textStyle: const TextStyle(
+              fontFamily: 'Roboto',
+              fontSize: 16, fontWeight: FontWeight.w800),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: BrandColors.teal,
+          textStyle: const TextStyle(
+              fontFamily: 'Roboto',
+              fontSize: 15, fontWeight: FontWeight.w700),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: Colors.white,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide(
-            color: const Color(0xFF0F766E).withValues(alpha: 0.35),
+            color: BrandColors.teal.withValues(alpha: 0.40),
           ),
         ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(
+            color: BrandColors.teal.withValues(alpha: 0.40),
+          ),
+        ),
+        focusedBorder: const OutlineInputBorder(
+          borderRadius: BorderRadius.all(Radius.circular(16)),
+          borderSide: BorderSide(color: BrandColors.teal, width: 2),
+        ),
+      ),
+      snackBarTheme: const SnackBarThemeData(
+        backgroundColor: BrandColors.ink,
+        contentTextStyle: TextStyle(
+            fontFamily: 'Roboto', color: Colors.white, fontSize: 15),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(12)),
+        ),
+      ),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(
+        color: BrandColors.teal,
+        linearTrackColor: BrandColors.cardGray,
       ),
       textTheme: const TextTheme(
-        bodyMedium: TextStyle(fontSize: 16, height: 1.45),
-        bodyLarge: TextStyle(fontSize: 17, height: 1.45),
-        titleMedium: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-        titleLarge: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-      ),
+        bodyMedium: TextStyle(
+            fontSize: 16, height: 1.45, color: BrandColors.ink),
+        bodyLarge: TextStyle(
+            fontSize: 17, height: 1.45, color: BrandColors.ink),
+        titleMedium: TextStyle(
+            fontSize: 18, fontWeight: FontWeight.w700, color: BrandColors.ink),
+        titleLarge: TextStyle(
+            fontSize: 22, fontWeight: FontWeight.w800, color: BrandColors.ink),
+        headlineSmall: TextStyle(
+            fontSize: 24, fontWeight: FontWeight.w800, color: BrandColors.ink),
+      ).apply(fontFamily: 'Roboto'),
     );
   }
 
@@ -200,17 +427,17 @@ class _ThemeToggleIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!isDark) {
       // Modo claro: el sol.
-      return const Icon(Icons.wb_sunny_rounded, size: 24);
+      return const LucideIcon(LucideIcons.sun, size: 24);
     }
     // Modo oscuro: lunita con nubes.
     return const Stack(
       clipBehavior: Clip.none,
       children: [
-        Icon(Icons.nightlight_round, size: 24),
+        LucideIcon(LucideIcons.moon, size: 24),
         Positioned(
           right: -3,
           bottom: -2,
-          child: Icon(Icons.cloud, size: 14),
+          child: LucideIcon(LucideIcons.cloud, size: 14),
         ),
       ],
     );
@@ -235,15 +462,94 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _index = 0;
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _maybeShowElementOfDay());
+  }
+
+  /// Elemento del día como POPUP al abrir la app (v6, item 2): nombre,
+  /// símbolo y curiosidad. Al cerrarlo no vuelve a salir hoy.
+  Future<void> _maybeShowElementOfDay() async {
+    final p = ProgressService.instance;
+    if (p.elementDayShownToday) return;
+    final element = elementOfTheDay(DateTime.now());
+    p.markElementDayShown();
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(tr('elementDayTitle')),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 26,
+                  backgroundColor:
+                      Theme.of(context).colorScheme.primary,
+                  child: Text(
+                    element.symbol,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    localizedElementName(element),
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(localizedElementFact(element)),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(tr('closeWord')),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              showElementSheet(context, element);
+            },
+            child: Text(tr('elementDaySeeMore')),
+          ),
+        ],
+      ),
+    );
+  }
+
   // La primera pantalla es el camino de niveles (Niveles), como en
   // Duolingo; Resolver queda como una opción más. Niveles lleva la
   // pista como clave: al cambiar de versión se crea de nuevo.
+  // La quinta pestaña es Cuenta (v6): Tips se mudó a Aprender.
   List<Widget> get _pages => [
-        PracticarScreen(key: ValueKey(ProgressService.track)),
+        PracticarScreen(
+            key: ValueKey(ProgressService.track),
+            onOpenScreen: _openScreenKey),
         const ResolverScreen(),
         const AprenderScreen(),
         const TablaScreen(),
-        const TipsScreen(),
+        AccountScreen(
+          onOpenScreen: _openScreenKey,
+          onShowAbout: () => _showAbout(context),
+          onShowShareApp: () => _showShareApp(context),
+          trackTopics: _trackTopics,
+        ),
       ];
 
   /// Títulos de las 5 secciones, en el idioma actual.
@@ -252,7 +558,7 @@ class _HomeScreenState extends State<HomeScreen> {
         tr('tabResolver'),
         tr('tabLearn'),
         tr('tableTitle'),
-        tr('tipsTitle'),
+        tr('accountTitle'),
       ];
 
   /// Temas de la pista actual, en orden (para Mis estadísticas).
@@ -316,6 +622,8 @@ class _HomeScreenState extends State<HomeScreen> {
         page = const LabSimScreen();
       case 'version':
         page = VersionScreen(onVersionChanged: widget.onTrackChanged);
+      case 'tips':
+        page = const TipsScreen();
       case 'review':
         _goToTab(0, startReview: true);
         return;
@@ -469,15 +777,7 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             Row(
               children: [
-                const ClipRRect(
-                  borderRadius: BorderRadius.all(Radius.circular(10)),
-                  child: Image(
-                    image: AssetImage('assets/logo.png'),
-                    width: 48,
-                    height: 48,
-                    fit: BoxFit.cover,
-                  ),
-                ),
+                const BrandLogo(size: 48),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -515,7 +815,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     SnackBar(content: Text(tr('phoneCopied'))),
                   );
                 },
-                icon: const Icon(Icons.copy),
+                icon: const LucideIcon(LucideIcons.copy),
                 label: Text(tr('copyPhone')),
               ),
             ),
@@ -528,20 +828,37 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Una fila del menú de hamburguesa: solo abre su pantalla. Nada de
   /// listas sueltas dentro del menú: cada cosa tiene su pantalla propia.
   Widget _drawerItem({
-    required IconData icon,
+    required LucideIconData icon,
     required String title,
     String? subtitle,
     required VoidCallback onTap,
   }) {
     return ListTile(
-      leading: Icon(icon),
+      leading: LucideIcon(icon, size: 24),
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
       subtitle: subtitle == null ? null : Text(subtitle),
-      trailing: const Icon(Icons.chevron_right, size: 18),
+      trailing: const LucideIcon(LucideIcons.chevronRight, size: 18),
       onTap: () {
+        SoundService.tap();
         Navigator.of(context).pop();
         onTap();
       },
+    );
+  }
+
+  /// Título pequeño de una sección del menú (Practicar, Referencia...).
+  Widget _drawerSection(String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 2),
+      child: Text(
+        title.toUpperCase(),
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 1.2,
+          color: Theme.of(context).colorScheme.primary,
+        ),
+      ),
     );
   }
 
@@ -565,17 +882,12 @@ class _HomeScreenState extends State<HomeScreen> {
       },
       child: Scaffold(
         // Botón flotante de WhatsApp, visible en las 5 secciones:
-        // lleva directo al chat del creador.
-        floatingActionButton: FloatingActionButton(
-          tooltip: tr('writeWhatsApp'),
-          backgroundColor: const Color(0xFF25D366),
-          onPressed: () => _openWhatsApp(context),
-          child: const Image(
-            image: AssetImage('assets/whatsapp.png'),
-            width: 32,
-            height: 32,
-          ),
-        ),
+        // lleva directo al chat del creador. Es un botón a mano
+        // (widgets/support_button.dart), SIN FloatingActionButton: el
+        // FAB dibujaba un borde negro grueso alrededor de la píldora
+        // verde, y este botón no tiene borde de ningún tipo.
+        floatingActionButton:
+            SupportButton(onPressed: () => _openWhatsApp(context)),
         // Menú hamburguesa: el organizador de la app. Cada fila abre su
         // propia pantalla; nada suelto ni repetido dentro del menú.
         drawer: Drawer(
@@ -589,15 +901,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const ClipRRect(
-                      borderRadius: BorderRadius.all(Radius.circular(12)),
-                      child: Image(
-                        image: AssetImage('assets/logo.png'),
-                        width: 56,
-                        height: 56,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
+                    const BrandLogo(size: 56),
                     const SizedBox(height: 10),
                     const Text('Melli-Qui',
                         style: TextStyle(
@@ -607,87 +911,91 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               _drawerItem(
-                icon: Icons.hub,
+                icon: LucideIcons.network,
                 title: tr('menuBranches'),
                 subtitle: 'Orgánica, Inorgánica, Analítica, Fisicoquímica',
                 onTap: () => _openScreenKey('branches'),
               ),
               _drawerItem(
-                icon: Icons.biotech,
+                icon: LucideIcons.dna,
                 title: tr('menuLab'),
                 subtitle: 'Seguridad, cuestionario y simulador',
                 onTap: () => _openScreenKey('lab'),
               ),
+              _drawerSection(tr('drawerPractice')),
               _drawerItem(
-                icon: Icons.swap_horizontal_circle,
-                title: tr('menuVersion'),
-                subtitle: ProgressService.track == ProgressService.trackBach
-                    ? tr('trackBach')
-                    : tr('trackUni'),
-                onTap: () => _openScreenKey('version'),
+                icon: LucideIcons.layers,
+                title: tr('flashcardsTitle'),
+                subtitle: tr('flashcardsSub'),
+                onTap: () => _openScreenKey('flashcards'),
               ),
               _drawerItem(
-                icon: Icons.language,
-                title: tr('languageWord'),
-                subtitle: AppLang.supported
-                    .firstWhere((e) => e.$1 == AppLang.code,
-                        orElse: () => AppLang.supported.first)
-                    .$2,
-                onTap: () => _openScreenKey('language'),
-              ),
-              const Divider(),
-              _drawerItem(
-                icon: Icons.bar_chart,
-                title: tr('menuStats'),
-                subtitle: 'Racha, logros y progreso',
-                onTap: () => _openScreenKey('stats'),
+                icon: LucideIcons.timer,
+                title: tr('timedTitle'),
+                subtitle: tr('timedSub'),
+                onTap: () => _openScreenKey('timed'),
               ),
               _drawerItem(
-                icon: Icons.replay_circle_filled,
-                title: tr('reviewTitle'),
-                subtitle: '${ProgressService.instance.failedCount} por repasar',
-                onTap: () => _openScreenKey('review'),
+                icon: LucideIcons.gamepad2,
+                title: tr('challengeTitle'),
+                subtitle: tr('challengeSub'),
+                onTap: () => _openScreenKey('challenge'),
               ),
               _drawerItem(
-                icon: Icons.table_chart,
+                icon: LucideIcons.circleHelp,
+                title: tr('tableQuizTitle'),
+                subtitle: 'Adivina el elemento',
+                onTap: () => _openScreenKey('tableQuiz'),
+              ),
+              _drawerSection(tr('drawerReference')),
+              _drawerItem(
+                icon: LucideIcons.table,
                 title: tr('menuTables'),
                 subtitle: 'Actividad de metales y solubilidad',
                 onTap: () => _openScreenKey('tables'),
               ),
               _drawerItem(
-                icon: Icons.functions,
+                icon: LucideIcons.sigma,
                 title: tr('menuFormulas'),
                 subtitle: 'Todas las fórmulas juntas',
                 onTap: () => _openScreenKey('formulas'),
               ),
               _drawerItem(
-                icon: Icons.swap_horiz,
+                icon: LucideIcons.arrowLeftRight,
                 title: tr('menuConstants'),
                 subtitle: 'Constantes y conversor de unidades',
                 onTap: () => _openScreenKey('constants'),
               ),
               _drawerItem(
-                icon: Icons.star,
-                title: tr('menuFavorites'),
-                subtitle: 'Elementos, temas y fórmulas',
-                onTap: () => _openScreenKey('favorites'),
+                icon: LucideIcons.bookOpen,
+                title: tr('glossaryTitle'),
+                subtitle: 'Términos de química explicados',
+                onTap: () => _openScreenKey('glossary'),
               ),
               _drawerItem(
-                icon: Icons.alarm,
-                title: tr('menuReminder'),
-                subtitle: UserPrefs.reminderOn ? 'Activado' : 'Desactivado',
-                onTap: () => _openScreenKey('reminder'),
+                icon: LucideIcons.arrowLeftRight,
+                title: tr('compareTitle'),
+                subtitle: 'Dos elementos, cara a cara',
+                onTap: () => _openScreenKey('compare'),
               ),
               _drawerItem(
-                icon: Icons.share,
-                title: tr('menuShare'),
-                onTap: () => _showShareApp(context),
+                icon: LucideIcons.notebookPen,
+                title: tr('notesTitle'),
+                subtitle: 'Tus notas por tema',
+                onTap: () => _openScreenKey('notes'),
               ),
-              const Divider(),
               _drawerItem(
-                icon: Icons.info_outline,
-                title: tr('aboutWord'),
-                onTap: () => _showAbout(context),
+                icon: LucideIcons.flaskConical,
+                title: tr('labSimTitle'),
+                subtitle: 'Mezcla ácidos, bases e indicadores',
+                onTap: () => _openScreenKey('labSim'),
+              ),
+              _drawerSection(tr('searchWord')),
+              _drawerItem(
+                icon: LucideIcons.search,
+                title: tr('searchWord'),
+                subtitle: 'Temas, elementos, fórmulas y pantallas',
+                onTap: _openSearch,
               ),
             ],
           ),
@@ -695,22 +1003,14 @@ class _HomeScreenState extends State<HomeScreen> {
         appBar: AppBar(
           leading: Builder(
             builder: (context) => IconButton(
-              icon: const Icon(Icons.menu),
+              icon: const LucideIcon(LucideIcons.menu),
               tooltip: tr('menuWord'),
               onPressed: () => Scaffold.of(context).openDrawer(),
             ),
           ),
           title: Row(
             children: [
-              const ClipRRect(
-                borderRadius: BorderRadius.all(Radius.circular(10)),
-                child: Image(
-                  image: AssetImage('assets/logo.png'),
-                  width: 36,
-                  height: 36,
-                  fit: BoxFit.cover,
-                ),
-              ),
+              const BrandLogo(size: 36),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -720,6 +1020,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     if (UserPrefs.userName.isNotEmpty)
                       Text(
                         greeting,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.normal,
@@ -732,15 +1034,37 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
           actions: [
+            // Chip de vidas junto al saludo (corazón + número, fix 1):
+            // siempre visible en las 5 pestañas. Se actualiza solo
+            // cuando cambian las vidas, sin reconstruir la pantalla.
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.only(right: 2),
+                child: ValueListenableBuilder<int>(
+                  valueListenable: ProgressService.livesNotifier,
+                  builder: (context, _, __) => LivesChip(
+                    lives: ProgressService.instance.livesLeft,
+                  ),
+                ),
+              ),
+            ),
+            // Tu avatar junto al saludo: toca para abrir tu Cuenta.
+            if (UserPrefs.userName.isNotEmpty)
+              IconButton(
+                tooltip: tr('accountTitle'),
+                onPressed: () => _goToTab(4),
+                icon: MelliAvatar(
+                  avatarId: UserPrefs.avatar.isNotEmpty &&
+                          MelliAvatar.isValidId(UserPrefs.avatar)
+                      ? UserPrefs.avatar
+                      : MelliAvatar.defaultForGender(UserPrefs.userGender),
+                  size: 30,
+                ),
+              ),
             IconButton(
               tooltip: tr('searchWord'),
               onPressed: _openSearch,
-              icon: const Icon(Icons.search),
-            ),
-            IconButton(
-              tooltip: tr('aboutTitle'),
-              onPressed: () => _showAbout(context),
-              icon: const Icon(Icons.info_outline),
+              icon: const LucideIcon(LucideIcons.search),
             ),
             IconButton(
               tooltip: widget.isDark ? tr('lightWord') : tr('darkWord'),
@@ -750,36 +1074,71 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
           centerTitle: false,
         ),
-        body: SafeArea(child: _pages[_index]),
+        body: SafeArea(
+          // Cambio de pestaña con fundido + deslizamiento suave.
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            transitionBuilder: (child, animation) => FadeTransition(
+              opacity: animation,
+              child: SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(0.05, 0),
+                  end: Offset.zero,
+                ).animate(animation),
+                child: child,
+              ),
+            ),
+            child: KeyedSubtree(
+              key: ValueKey('tab-$_index'),
+              child: _pages[_index],
+            ),
+          ),
+        ),
         bottomNavigationBar: NavigationBar(
           selectedIndex: _index,
-          onDestinationSelected: (i) => setState(() => _index = i),
-          indicatorColor: const Color(0xFF14B8A6).withValues(alpha: 0.25),
+          onDestinationSelected: (i) {
+            SoundService.tap();
+            setState(() => _index = i);
+          },
+          // Barra blanca; cada pestaña tiene su color al estar
+          // seleccionada (Niveles teal, Resolver violeta, Aprender
+          // ámbar, Tabla azul, Cuenta coral) y gris si no lo está.
+          indicatorColor: BrandColors.teal.withValues(alpha: 0.15),
           destinations: [
             NavigationDestination(
-              icon: const Icon(Icons.route_outlined),
-              selectedIcon: const Icon(Icons.route),
+              icon: const LucideIcon(LucideIcons.route,
+                  color: Color(0xFF9CA3AF)),
+              selectedIcon:
+                  const LucideIcon(LucideIcons.route, color: BrandColors.teal),
               label: tr('tabLevels'),
             ),
             NavigationDestination(
-              icon: const Icon(Icons.calculate_outlined),
-              selectedIcon: const Icon(Icons.calculate),
+              icon: const LucideIcon(LucideIcons.calculator,
+                  color: Color(0xFF9CA3AF)),
+              selectedIcon:
+                  const LucideIcon(LucideIcons.calculator, color: BrandColors.violet),
               label: tr('tabResolver'),
             ),
             NavigationDestination(
-              icon: const Icon(Icons.menu_book_outlined),
-              selectedIcon: const Icon(Icons.menu_book),
+              icon: const LucideIcon(LucideIcons.bookOpen,
+                  color: Color(0xFF9CA3AF)),
+              selectedIcon:
+                  const LucideIcon(LucideIcons.bookOpen, color: BrandColors.amber),
               label: tr('tabLearn'),
             ),
             NavigationDestination(
-              icon: const Icon(Icons.grid_view_outlined),
-              selectedIcon: const Icon(Icons.grid_view),
+              icon: const LucideIcon(LucideIcons.layoutGrid,
+                  color: Color(0xFF9CA3AF)),
+              selectedIcon:
+                  const LucideIcon(LucideIcons.layoutGrid, color: BrandColors.blue),
               label: tr('tabTable'),
             ),
             NavigationDestination(
-              icon: const Icon(Icons.lightbulb_outlined),
-              selectedIcon: const Icon(Icons.lightbulb),
-              label: tr('tabTips'),
+              icon: const LucideIcon(LucideIcons.userRound,
+                  color: Color(0xFF9CA3AF)),
+              selectedIcon:
+                  const LucideIcon(LucideIcons.userRound, color: BrandColors.coral),
+              label: tr('accountTitle'),
             ),
           ],
         ),

@@ -6,8 +6,10 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import '../widgets/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../data/i18n/content_i18n.dart';
 import '../data/questions.dart';
 import '../models.dart';
 import '../services/localization.dart';
@@ -26,18 +28,40 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
   int _phase = 0; // 0 nombres, 1 juega P1, 2 juega P2, 3 resultado
   late final List<QuizQuestion> _q1;
   late final List<QuizQuestion> _q2;
+  // Ids de error en español, en paralelo a _q1/_q2 (v6: los ids no
+  // dependen del idioma en que se muestran las preguntas).
+  late final List<String> _ids1;
+  late final List<String> _ids2;
   int _s1 = 0;
   int _s2 = 0;
 
   @override
   void initState() {
     super.initState();
+    // Jugador 1: el nombre del perfil del usuario, con "(tú)" al lado
+    // (p. ej. "Kristian (tú)"). Es un campo editable: se puede cambiar.
+    // Jugador 2: empieza VACÍO, sin ningún nombre de ejemplo: la otra
+    // persona escribe su propio nombre.
     _p1 = TextEditingController(
-        text: UserPrefs.userName.isEmpty ? 'Jugador 1' : UserPrefs.userName);
-    _p2 = TextEditingController(text: 'Novia');
+        text: UserPrefs.userName.isEmpty
+            ? ''
+            : '${UserPrefs.userName} ${tr('challengeYouSuffix')}');
+    _p2 = TextEditingController();
     final pool = List<QuizQuestion>.of(allQuestions)..shuffle(Random());
-    _q1 = pool.sublist(0, 5);
-    _q2 = pool.sublist(5, 10);
+    _q1 = [
+      for (final q in pool.sublist(0, 5))
+        localizedQuestionAt(allQuestions.indexOf(q))
+    ];
+    _q2 = [
+      for (final q in pool.sublist(5, 10))
+        localizedQuestionAt(allQuestions.indexOf(q))
+    ];
+    _ids1 = [
+      for (final q in pool.sublist(0, 5)) 'bank:${q.topic}:${q.question}'
+    ];
+    _ids2 = [
+      for (final q in pool.sublist(5, 10)) 'bank:${q.topic}:${q.question}'
+    ];
   }
 
   @override
@@ -47,14 +71,17 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
     super.dispose();
   }
 
+  /// "¡Empate!" o "¡Ganó <nombre>!" (en el idioma de la app).
+  String _winnerText() {
+    if (_s1 == _s2) return tr('challengeDraw');
+    final name = _s1 > _s2 ? _p1.text : _p2.text;
+    return tr('challengeWon').replaceFirst('%s', name);
+  }
+
   Future<void> _shareResult() async {
-    final winner = _s1 == _s2
-        ? '¡Empate!'
-        : _s1 > _s2
-            ? '¡Ganó ${_p1.text}!'
-            : '¡Ganó ${_p2.text}!';
+    final winner = _winnerText();
     final text =
-        'Reto de química en Melli-Qui: ${_p1.text} $_s1 - $_s2 ${_p2.text}. $winner';
+        '${tr('challengeTitle')}: ${_p1.text} $_s1 - $_s2 ${_p2.text}. $winner';
     final uri = Uri.parse('https://wa.me/?text=${Uri.encodeComponent(text)}');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -72,6 +99,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
               : SimpleQuizRunner(
                   title: tr('challengeTitle'),
                   items: _phase == 1 ? _q1 : _q2,
+                  itemIds: _phase == 1 ? _ids1 : _ids2,
                   playerName: _phase == 1 ? _p1.text : _p2.text,
                   onFinished: (score, total) {
                     if (_phase == 1) {
@@ -97,27 +125,29 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Icon(Icons.sports_esports, size: 64, color: Colors.teal),
+          const LucideIcon(LucideIcons.gamepad2, size: 64, color: Colors.teal),
           const SizedBox(height: 16),
-          const Text(
-            'El reto',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          Text(
+            tr('challengeIntroTitle'),
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Dos jugadores, un teléfono, 5 preguntas cada uno. Gana quien acierte más. Pasad el teléfono al cambiar de turno.',
+          Text(
+            tr('challengeIntroBody'),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 24),
           TextField(
             controller: _p1,
-            decoration: const InputDecoration(labelText: 'Jugador 1'),
+            decoration:
+                InputDecoration(labelText: tr('challengePlayer1Hint')),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _p2,
-            decoration: const InputDecoration(labelText: 'Jugador 2'),
+            decoration:
+                InputDecoration(labelText: tr('challengePlayer2Hint')),
           ),
           const SizedBox(height: 24),
           ElevatedButton(
@@ -125,7 +155,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
               if (_p1.text.trim().isEmpty || _p2.text.trim().isEmpty) return;
               setState(() => _phase = 1);
             },
-            child: const Text('Empezar el reto'),
+            child: Text(tr('challengeStart')),
           ),
         ],
       ),
@@ -133,18 +163,14 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
   }
 
   Widget _resultPhase(BuildContext context) {
-    final winner = _s1 == _s2
-        ? '¡Empate!'
-        : _s1 > _s2
-            ? '¡Ganó ${_p1.text}!'
-            : '¡Ganó ${_p2.text}!';
+    final winner = _winnerText();
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Icon(Icons.emoji_events, size: 64, color: Colors.amber),
+          const LucideIcon(LucideIcons.trophy, size: 64, color: Colors.amber),
           const SizedBox(height: 16),
           Text(winner,
               style:
@@ -160,8 +186,8 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
           const SizedBox(height: 24),
           ElevatedButton.icon(
             onPressed: _shareResult,
-            icon: const Icon(Icons.share),
-            label: const Text('Compartir resultado por WhatsApp'),
+            icon: const LucideIcon(LucideIcons.share2),
+            label: Text(tr('challengeShareResult')),
           ),
           const SizedBox(height: 8),
           OutlinedButton(
@@ -169,14 +195,30 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
               final pool = List<QuizQuestion>.of(allQuestions)
                 ..shuffle(Random());
               _q1.clear();
-              _q1.addAll(pool.sublist(0, 5));
+              _q1.addAll([
+                for (final q in pool.sublist(0, 5))
+                  localizedQuestionAt(allQuestions.indexOf(q))
+              ]);
               _q2.clear();
-              _q2.addAll(pool.sublist(5, 10));
+              _q2.addAll([
+                for (final q in pool.sublist(5, 10))
+                  localizedQuestionAt(allQuestions.indexOf(q))
+              ]);
+              _ids1.clear();
+              _ids1.addAll([
+                for (final q in pool.sublist(0, 5))
+                  'bank:${q.topic}:${q.question}'
+              ]);
+              _ids2.clear();
+              _ids2.addAll([
+                for (final q in pool.sublist(5, 10))
+                  'bank:${q.topic}:${q.question}'
+              ]);
               _s1 = 0;
               _s2 = 0;
               _phase = 1;
             }),
-            child: const Text('Revancha'),
+            child: Text(tr('challengeRematch')),
           ),
           const SizedBox(height: 8),
           OutlinedButton(

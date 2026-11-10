@@ -14,9 +14,11 @@
 
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/questions.dart';
+import 'points.dart';
 import 'question_generator.dart';
 
 /// Una pregunta fallada, guardada para repasarla después.
@@ -26,24 +28,34 @@ import 'question_generator.dart';
 /// - `failedDate`: día en que se falló ('yyyy-MM-dd'), para el repaso
 ///   inteligente. Las entradas viejas (sin fecha) se tratan como
 ///   pendientes de repaso.
+/// - `level`: nivel del tema en el que se falló (0 = no se sabe): el
+///   repaso se organiza POR NIVEL, no en una lista global.
+/// - `reviewStreak`: aciertos seguidos en el repaso de variantes de
+///   esta entrada (hacen falta 3 para darla por superada).
 class FailedEntry {
   const FailedEntry({
     required this.id,
     required this.topic,
     required this.question,
     this.failedDate,
+    this.level = 0,
+    this.reviewStreak = 0,
   });
 
   final String id;
   final String topic;
   final String question; // texto de la pregunta
   final String? failedDate; // 'yyyy-MM-dd' o null (entrada vieja)
+  final int level;
+  final int reviewStreak;
 
   Map<String, dynamic> toJson() => {
         'id': id,
         'topic': topic,
         'question': question,
         if (failedDate != null) 'd': failedDate,
+        if (level != 0) 'l': level,
+        if (reviewStreak != 0) 'rs': reviewStreak,
       };
 
   factory FailedEntry.fromJson(Map<String, dynamic> json) => FailedEntry(
@@ -51,6 +63,17 @@ class FailedEntry {
         topic: json['topic'] as String,
         question: json['question'] as String,
         failedDate: json['d'] as String?,
+        level: (json['l'] as num?)?.toInt() ?? 0,
+        reviewStreak: (json['rs'] as num?)?.toInt() ?? 0,
+      );
+
+  FailedEntry copyWith({int? reviewStreak}) => FailedEntry(
+        id: id,
+        topic: topic,
+        question: question,
+        failedDate: failedDate,
+        level: level,
+        reviewStreak: reviewStreak ?? this.reviewStreak,
       );
 }
 
@@ -77,6 +100,22 @@ class ProgressService {
   static const _kQotdDays = 'melli_progress_qotd_days';
   static const _kEverFailed = 'melli_progress_ever_failed';
 
+  /// Saldo total de puntos (sin pista: los puntos son de la persona,
+  /// no de la pista). Ver points.dart para la tabla por dificultad.
+  static const _kPoints = 'melli_progress_points';
+
+  /// Vidas (v6): cuántas quedan y de qué día son. Sin pista: las vidas
+  /// son de la persona, no de la pista.
+  static const _kLives = 'melli_progress_lives';
+  static const _kLivesDate = 'melli_progress_lives_date';
+
+  /// Búsquedas recientes (v6): las últimas 5 consultas, en orden.
+  static const _kRecentSearches = 'melli_progress_recent_searches';
+
+  /// Día en que se mostró el elemento del día como popup (v6): solo
+  /// una vez al día, al abrir la app.
+  static const _kElementDayShown = 'melli_progress_element_day_shown';
+
   SharedPreferences? _prefs;
 
   final Set<String> masteredTopics = <String>{};
@@ -98,6 +137,104 @@ class ProgressService {
   /// true desde la primera vez que se falla una pregunta (para el logro
   /// de "repaso al día": no vale empezar con cero errores).
   bool everFailed = false;
+
+  /// Saldo total de puntos (puede bajar si se falla mucho).
+  int _pointsBalance = 0;
+
+  int get points => _pointsBalance;
+
+  /// Suma (o resta, si delta es negativo) puntos al saldo total.
+  void addPoints(int delta) {
+    _pointsBalance += delta;
+    _save();
+  }
+
+  // ---- Vidas (v6) ----
+
+  /// Aviso de cambio de vidas: la AppBar escucha este notificador
+  /// para actualizar el chip de vidas (corazón + número) sin tener
+  /// que reconstruir toda la pantalla. Solo avisa, no cambia la
+  /// lógica: las vidas se siguen guardando igual.
+  static final ValueNotifier<int> livesNotifier = ValueNotifier<int>(0);
+
+  static void _bumpLives() => livesNotifier.value++;
+
+  int _livesLeft = 5;
+  String? _livesDate;
+
+  /// Vidas que quedan hoy (5 al empezar cada día nuevo).
+  int get livesLeft {
+    if (_livesDate != dateKey(DateTime.now())) return maxLives;
+    return _livesLeft.clamp(0, maxLives);
+  }
+
+  /// ¿Se puede empezar un nivel hoy?
+  bool get canStartLevel => livesLeft > 0;
+
+  /// Cuándo se reponen las vidas (mañana), para el mensaje de 0 vidas.
+  String get livesRefillLabel => 'mañana';
+
+  /// Abandonar un nivel en curso cuesta 1 vida.
+  void loseLifeOnAbandon() {
+    final today = dateKey(DateTime.now());
+    if (_livesDate != today) {
+      _livesDate = today;
+      _livesLeft = maxLives;
+    }
+    if (_livesLeft > 0) _livesLeft--;
+    _save();
+    _bumpLives();
+  }
+
+  /// Ganar un nivel COMPLETO restaura 1 vida, hasta el máximo de 5.
+  /// Devuelve true si se restauró una vida (si ya tenía 5, no suma
+  /// nada). Fallar un nivel terminado no quita ni devuelve vida: solo
+  /// se llama cuando el nivel se aprueba.
+  bool restoreLifeOnPass() {
+    final today = dateKey(DateTime.now());
+    if (_livesDate != today) {
+      _livesDate = today;
+      _livesLeft = maxLives;
+      _save();
+      _bumpLives();
+      return false;
+    }
+    if (_livesLeft >= maxLives) return false;
+    _livesLeft++;
+    _save();
+    _bumpLives();
+    return true;
+  }
+
+  // ---- Búsquedas recientes (v6) ----
+
+  final List<String> _recentSearches = <String>[];
+
+  List<String> get recentSearches => List.unmodifiable(_recentSearches);
+
+  /// Guarda una consulta como reciente (sin duplicados, como mucho 5).
+  void recordSearch(String query) {
+    final q = query.trim();
+    if (q.isEmpty) return;
+    _recentSearches.remove(q);
+    _recentSearches.insert(0, q);
+    if (_recentSearches.length > 5) {
+      _recentSearches.removeRange(5, _recentSearches.length);
+    }
+    _save();
+  }
+
+  // ---- Elemento del día como popup (v6) ----
+
+  /// ¿Ya se mostró el popup del elemento del día hoy?
+  bool get elementDayShownToday {
+    final shown = _prefs?.getString(_kElementDayShown);
+    return shown == dateKey(DateTime.now());
+  }
+
+  void markElementDayShown() {
+    _prefs?.setString(_kElementDayShown, dateKey(DateTime.now()));
+  }
 
   /// Carga el progreso guardado. Llamar en main() antes de runApp.
   static Future<void> load() async {
@@ -123,6 +260,15 @@ class ProgressService {
     bestScores
       ..clear()
       ..addAll(_readIntMap(prefs.getString(_key('best'))));
+    // Migración v6 (una sola vez): con la regla vieja (4/5 = 80 %) un
+    // nivel pasado guardaba 80; con la nueva (nota sobre 5 > 4,0) el
+    // aprobado empieza en 81. Sin esto, un nivel pasado con 80 se
+    // vería como suspendido.
+    for (final k in bestScores.keys.toList()) {
+      if (k.startsWith('level:') && bestScores[k] == 80) {
+        bestScores[k] = 81;
+      }
+    }
     unlockedLevels
       ..clear()
       ..addAll(_readIntMap(prefs.getString(_key('levels'))));
@@ -149,6 +295,12 @@ class ProgressService {
       ..clear()
       ..addAll(prefs.getStringList(_kQotdDays) ?? <String>[]);
     everFailed = prefs.getBool(_kEverFailed) ?? false;
+    _pointsBalance = prefs.getInt(_kPoints) ?? 0;
+    _livesLeft = prefs.getInt(_kLives) ?? maxLives;
+    _livesDate = prefs.getString(_kLivesDate);
+    _recentSearches
+      ..clear()
+      ..addAll(prefs.getStringList(_kRecentSearches) ?? <String>[]);
   }
 
   static Map<String, dynamic> _readJson(String? raw) {
@@ -203,6 +355,10 @@ class ProgressService {
     prefs.setStringList(_kLevelPassDays, levelPassDays.toList());
     prefs.setStringList(_kQotdDays, qotdDays.toList());
     prefs.setBool(_kEverFailed, everFailed);
+    prefs.setInt(_kPoints, _pointsBalance);
+    prefs.setInt(_kLives, _livesLeft);
+    if (_livesDate != null) prefs.setString(_kLivesDate, _livesDate!);
+    prefs.setStringList(_kRecentSearches, _recentSearches);
   }
 
   // ---- Fechas y racha (lógica pura, comprobable sin Flutter) ----
@@ -388,6 +544,7 @@ class ProgressService {
       topic: entry.topic,
       question: entry.question,
       failedDate: entry.failedDate ?? dateKey(DateTime.now()),
+      level: entry.level,
     ));
     _save();
   }
@@ -396,6 +553,51 @@ class ProgressService {
     final before = _failed.length;
     _failed.removeWhere((f) => f.id == id);
     if (_failed.length != before) _save();
+  }
+
+  /// Grupos de errores por (tema, nivel), para el repaso por niveles:
+  /// cada grupo es un fallo de un nivel concreto, con sus entradas.
+  List<({String topic, int level, List<FailedEntry> entries})>
+      failedGroups() {
+    final map = <String, List<FailedEntry>>{};
+    for (final f in _failed) {
+      map.putIfAbsent('${f.topic}|${f.level}', () => []).add(f);
+    }
+    final out = <({String topic, int level, List<FailedEntry> entries})>[];
+    for (final e in map.entries) {
+      final parts = e.key.split('|');
+      out.add((
+        topic: parts[0],
+        level: int.tryParse(parts[1]) ?? 0,
+        entries: e.value
+      ));
+    }
+    out.sort((a, b) {
+      final c = a.topic.compareTo(b.topic);
+      return c != 0 ? c : a.level.compareTo(b.level);
+    });
+    return out;
+  }
+
+  /// Una respuesta del repaso de variantes de una entrada: el acierto
+  /// suma racha y el fallo la pone a cero. Con 3 aciertos SEGUIDOS la
+  /// entrada se da por superada y se borra. Devuelve true si se borró.
+  bool recordReviewAnswer(String id, bool correct) {
+    final i = _failed.indexWhere((f) => f.id == id);
+    if (i < 0) return false;
+    if (correct) {
+      final streak = _failed[i].reviewStreak + 1;
+      if (streak >= 3) {
+        _failed.removeAt(i);
+        _save();
+        return true;
+      }
+      _failed[i] = _failed[i].copyWith(reviewStreak: streak);
+    } else {
+      _failed[i] = _failed[i].copyWith(reviewStreak: 0);
+    }
+    _save();
+    return false;
   }
 
   // ---- Foto de otra pista (Mis estadísticas muestra las dos) ----

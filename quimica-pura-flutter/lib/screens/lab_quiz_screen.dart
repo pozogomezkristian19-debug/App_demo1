@@ -7,7 +7,9 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import '../widgets/lucide_icons.dart';
 
+import '../data/i18n/content_i18n.dart';
 import '../data/questions.dart';
 import '../models.dart';
 import '../services/localization.dart';
@@ -20,7 +22,10 @@ class LabQuizPage extends StatefulWidget {
 }
 
 class _LabQuizPageState extends State<LabQuizPage> {
-  late final List<QuizQuestion> _questions;
+  late List<QuizQuestion> _questions;
+  // Índices en el banco original, en el mismo orden que _questions:
+  // así los ids de error se construyen siempre en español (v6).
+  late List<int> _idx;
   int _index = 0;
   int _score = 0;
   int? _selected;
@@ -30,10 +35,13 @@ class _LabQuizPageState extends State<LabQuizPage> {
   @override
   void initState() {
     super.initState();
-    _questions = allQuestions
-        .where((q) => q.topic == 'laboratorio')
-        .toList()
-      ..shuffle(Random());
+    final bank = localizedAllQuestions();
+    _idx = <int>[];
+    for (var i = 0; i < allQuestions.length; i++) {
+      if (allQuestions[i].topic == 'laboratorio') _idx.add(i);
+    }
+    _idx.shuffle(Random());
+    _questions = [for (final i in _idx) bank[i]];
     _shuffleOptions();
   }
 
@@ -50,7 +58,9 @@ class _LabQuizPageState extends State<LabQuizPage> {
     final correct = realIndex == _q.answer;
     final progress = ProgressService.instance;
     progress.recordAnswer(_q.topic, correct);
-    final id = 'bank:${_q.topic}:${_q.question}';
+    // Id y texto del error, siempre en español (regla de content_i18n).
+    final es = allQuestions[_idx[_index]];
+    final id = 'bank:${es.topic}:${es.question}';
     if (correct) {
       progress.removeFailed(id);
       setState(() {
@@ -59,7 +69,7 @@ class _LabQuizPageState extends State<LabQuizPage> {
       });
     } else {
       progress.addFailed(
-          FailedEntry(id: id, topic: _q.topic, question: _q.question));
+          FailedEntry(id: id, topic: es.topic, question: es.question));
       setState(() => _selected = displayedIndex);
     }
   }
@@ -77,7 +87,9 @@ class _LabQuizPageState extends State<LabQuizPage> {
 
   void _repeat() {
     setState(() {
-      _questions.shuffle(Random());
+      _idx.shuffle(Random());
+      final bank = localizedAllQuestions();
+      _questions = [for (final i in _idx) bank[i]];
       _index = 0;
       _score = 0;
       _finished = false;
@@ -136,7 +148,7 @@ class _LabQuizPageState extends State<LabQuizPage> {
                     const SizedBox(width: 8),
                     OutlinedButton.icon(
                       onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.logout, size: 20),
+                      icon: const LucideIcon(LucideIcons.logOut, size: 20),
                       label: Text(tr('quizExit'),
                           style: const TextStyle(fontSize: 16)),
                       style: OutlinedButton.styleFrom(

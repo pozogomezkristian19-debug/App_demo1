@@ -7,6 +7,7 @@ import '../data/periodic_table.dart';
 import '../data/questions.dart';
 import '../data/topics.dart';
 import '../screens/resolver_screen.dart';
+import 'i18n/content_i18n.dart';
 
 /// Una entrada buscable.
 class SearchEntry {
@@ -39,7 +40,7 @@ const List<(String, String, String, String)> appScreens = [
   ('lab', 'Laboratorio', 'Seguridad, material, cuestionario y simulador', 'biotech'),
   ('stats', 'Mis estadísticas', 'Racha, niveles, logros y progreso', 'bar_chart'),
   ('flashcards', 'Tarjetas de memoria', 'Repasar fórmulas y elementos', 'style'),
-  ('timed', 'Examen con tiempo', 'Simulacro de 24 preguntas en 30 minutos', 'timer'),
+  ('timed', 'Examen con tiempo', 'Elige el tiempo y responde todo lo que puedas', 'timer'),
   ('challenge', 'Reto', 'Duelo de dos jugadores en el mismo teléfono', 'sports_esports'),
   ('glossary', 'Glosario', 'Términos de química explicados', 'book'),
   ('compare', 'Comparar elementos', 'Dos elementos lado a lado', 'compare_arrows'),
@@ -60,10 +61,11 @@ List<SearchEntry> buildSearchEntries() {
   final entries = <SearchEntry>[];
   // Temas de estudio (Aprender + ramas).
   for (final t in [...topics, ...branchTopics]) {
+    final lt = localizedTopic(t);
     entries.add(SearchEntry(
       kind: 'topic',
-      title: t.title,
-      subtitle: 'Tema · ${t.level}',
+      title: lt.title,
+      subtitle: 'Tema · ${lt.level}',
       icon: 'menu_book',
       target: t.slug,
     ));
@@ -72,7 +74,7 @@ List<SearchEntry> buildSearchEntries() {
   for (final slug in topicNames.keys) {
     entries.add(SearchEntry(
       kind: 'levels',
-      title: 'Niveles: ${topicNames[slug]}',
+      title: 'Niveles: ${localizedTopicName(slug)}',
       subtitle: 'Camino de niveles',
       icon: 'route',
       target: slug,
@@ -80,10 +82,11 @@ List<SearchEntry> buildSearchEntries() {
   }
   // Solucionadores.
   for (final s in solverEntries) {
+    final ls = localizedSolver(s.id);
     entries.add(SearchEntry(
       kind: 'solver',
-      title: s.title,
-      subtitle: 'Solucionador · ${s.group}',
+      title: ls?.title ?? s.title,
+      subtitle: 'Solucionador · ${localizedSolverGroup(s.group)}',
       icon: 'calculate',
       target: s.title,
     ));
@@ -92,8 +95,9 @@ List<SearchEntry> buildSearchEntries() {
   for (final e in allElements) {
     entries.add(SearchEntry(
       kind: 'element',
-      title: e.name,
-      subtitle: '${e.symbol} · Z = ${e.atomicNumber} · ${categoryNames[e.category]}',
+      title: localizedElementName(e),
+      subtitle:
+          '${e.symbol} · Z = ${e.atomicNumber} · ${localizedCategoryName(e.category)}',
       icon: 'grid_view',
       target: '${e.atomicNumber}',
     ));
@@ -102,14 +106,15 @@ List<SearchEntry> buildSearchEntries() {
   for (final f in formulary) {
     entries.add(SearchEntry(
       kind: 'formula',
-      title: f['name'] ?? '',
-      subtitle: '${f['expr'] ?? ''} · ${f['group'] ?? ''}',
+      title: localizedFormularyName(f['name'] ?? ''),
+      subtitle:
+          '${f['expr'] ?? ''} · ${localizedFormularyGroup(f['group'] ?? '')}',
       icon: 'functions',
       target: f['name'] ?? '',
     ));
   }
   // Glosario.
-  for (final g in glossary) {
+  for (final g in localizedGlossary()) {
     entries.add(SearchEntry(
       kind: 'glossary',
       title: g.term,

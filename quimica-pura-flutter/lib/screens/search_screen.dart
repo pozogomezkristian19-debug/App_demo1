@@ -3,34 +3,36 @@
 // va directo a él. Se abre con la lupita de la barra de arriba.
 
 import 'package:flutter/material.dart';
+import '../widgets/lucide_icons.dart';
 
 import '../data/search_index.dart';
 import '../services/localization.dart';
+import '../services/progress.dart';
 
-const Map<String, IconData> _icons = {
-  'hub': Icons.hub,
-  'biotech': Icons.biotech,
-  'bar_chart': Icons.bar_chart,
-  'style': Icons.style,
-  'timer': Icons.timer,
-  'sports_esports': Icons.sports_esports,
-  'book': Icons.book,
-  'compare_arrows': Icons.compare_arrows,
-  'note': Icons.note,
-  'table_chart': Icons.table_chart,
-  'functions': Icons.functions,
-  'swap_horiz': Icons.swap_horiz,
-  'star': Icons.star,
-  'alarm': Icons.alarm,
-  'swap_horizontal_circle': Icons.swap_horizontal_circle,
-  'language': Icons.language,
-  'quiz': Icons.quiz,
-  'science': Icons.science,
-  'replay': Icons.replay_circle_filled,
-  'menu_book': Icons.menu_book,
-  'route': Icons.route,
-  'calculate': Icons.calculate,
-  'grid_view': Icons.grid_view,
+const Map<String, LucideIconData> _icons = {
+  'hub': LucideIcons.network,
+  'biotech': LucideIcons.dna,
+  'bar_chart': LucideIcons.chartColumn,
+  'style': LucideIcons.layers,
+  'timer': LucideIcons.timer,
+  'sports_esports': LucideIcons.gamepad2,
+  'book': LucideIcons.bookOpen,
+  'compare_arrows': LucideIcons.arrowLeftRight,
+  'note': LucideIcons.notebookPen,
+  'table_chart': LucideIcons.table,
+  'functions': LucideIcons.sigma,
+  'swap_horiz': LucideIcons.arrowLeftRight,
+  'star': LucideIcons.star,
+  'alarm': LucideIcons.alarmClock,
+  'swap_horizontal_circle': LucideIcons.refreshCw,
+  'language': LucideIcons.globe,
+  'quiz': LucideIcons.circleHelp,
+  'science': LucideIcons.flaskConical,
+  'replay': LucideIcons.rotateCcw,
+  'menu_book': LucideIcons.bookOpen,
+  'route': LucideIcons.route,
+  'calculate': LucideIcons.calculator,
+  'grid_view': LucideIcons.layoutGrid,
 };
 
 class SearchScreen extends StatefulWidget {
@@ -43,12 +45,31 @@ class SearchScreen extends StatefulWidget {
 
 class _SearchScreenState extends State<SearchScreen> {
   late final List<SearchEntry> _all;
+  final _controller = TextEditingController();
   String _query = '';
 
   @override
   void initState() {
     super.initState();
     _all = buildSearchEntries();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  /// Guarda la consulta actual como reciente (si hay algo escrito).
+  void _recordCurrentQuery() {
+    final q = _query.trim();
+    if (q.isNotEmpty) ProgressService.instance.recordSearch(q);
+  }
+
+  /// Corre una búsqueda reciente: la pone en la barra y la ejecuta.
+  void _runRecent(String q) {
+    _controller.text = q;
+    setState(() => _query = q);
   }
 
   String _kindLabel(String kind) {
@@ -80,23 +101,19 @@ class _SearchScreenState extends State<SearchScreen> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
             child: TextField(
+              controller: _controller,
               autofocus: true,
               decoration: InputDecoration(
                 labelText: 'Busca temas, solucionadores, elementos…',
-                prefixIcon: const Icon(Icons.search),
+                prefixIcon: const LucideIcon(LucideIcons.search),
               ),
               onChanged: (v) => setState(() => _query = v),
+              onSubmitted: (_) => _recordCurrentQuery(),
             ),
           ),
           Expanded(
             child: _query.trim().isEmpty
-                ? const Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Text(
-                      'Escribe algo: un tema (orgánica, gases), un solucionador (pH, molaridad), un elemento (oxígeno, Fe) o una pantalla (estadísticas, glosario).',
-                      textAlign: TextAlign.center,
-                    ),
-                  )
+                ? _RecentSearches(onPick: _runRecent)
                 : results.isEmpty
                     ? const Padding(
                         padding: EdgeInsets.all(24),
@@ -113,8 +130,8 @@ class _SearchScreenState extends State<SearchScreen> {
                                     .colorScheme
                                     .primary
                                     .withValues(alpha: 0.15),
-                                child: Icon(
-                                  _icons[e.icon] ?? Icons.search,
+                                child: LucideIcon(
+                                  _icons[e.icon] ?? LucideIcons.search,
                                   color: Theme.of(context).colorScheme.primary,
                                 ),
                               ),
@@ -123,14 +140,52 @@ class _SearchScreenState extends State<SearchScreen> {
                                       fontWeight: FontWeight.bold)),
                               subtitle: Text('${_kindLabel(e.kind)} · ${e.subtitle}'),
                               trailing:
-                                  const Icon(Icons.chevron_right, size: 18),
-                              onTap: () => widget.onEntryTap(e),
+                                  const LucideIcon(LucideIcons.chevronRight, size: 18),
+                              onTap: () {
+                                _recordCurrentQuery();
+                                widget.onEntryTap(e);
+                              },
                             ),
                         ],
                       ),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Cuando no hay nada escrito: la pista de qué buscar y las últimas 5
+/// búsquedas guardadas (v6), que se pueden tocar para repetirlas.
+class _RecentSearches extends StatelessWidget {
+  const _RecentSearches({required this.onPick});
+  final void Function(String query) onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final recent = ProgressService.instance.recentSearches;
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const Text(
+          'Escribe algo: un tema (orgánica, gases), un solucionador (pH, molaridad), un elemento (oxígeno, Fe) o una pantalla (estadísticas, glosario).',
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 20),
+        Text(tr('recentSearches'),
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 4),
+        if (recent.isEmpty)
+          Text(tr('noRecentSearches'))
+        else
+          for (final q in recent)
+            ListTile(
+              leading: const LucideIcon(LucideIcons.history),
+              title: Text(q),
+              trailing: const LucideIcon(LucideIcons.chevronRight, size: 18),
+              onTap: () => onPick(q),
+            ),
+      ],
     );
   }
 }

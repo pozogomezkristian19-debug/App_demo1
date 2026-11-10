@@ -4,9 +4,11 @@
 
 import 'package:flutter/material.dart';
 
+import '../data/i18n/content_i18n.dart';
 import '../data/topics.dart';
 import '../services/favorites.dart';
 import '../services/localization.dart';
+import '../widgets/lucide_icons.dart';
 
 class FormulaScreen extends StatefulWidget {
   const FormulaScreen({super.key});
@@ -18,18 +20,30 @@ class _FormulaScreenState extends State<FormulaScreen> {
   @override
   Widget build(BuildContext context) {
     // Todas las fórmulas: el formulario general + las de cada tema,
-    // agrupadas por el nombre del tema.
-    final groups = <String, List<(String, String, String)>>{};
+    // agrupadas por el nombre del tema. Cada entrada guarda el nombre
+    // español (para el id de favorito, que no depende del idioma) y el
+    // nombre a mostrar (traducido, v6).
+    final groups = <String, List<(String, String, String, String)>>{};
     for (final f in formulary) {
-      groups.putIfAbsent(f['group'] ?? 'Fórmulas', () => []).add((
+      groups.putIfAbsent(
+          localizedFormularyGroup(f['group'] ?? 'Fórmulas'), () => []).add((
         f['name'] ?? '',
+        localizedFormularyName(f['name'] ?? ''),
         f['expr'] ?? '',
         '',
       ));
     }
     for (final t in topics) {
-      for (final f in t.formulas) {
-        groups.putIfAbsent(t.title, () => []).add((f.name, f.expr, f.note));
+      final lt = localizedTopic(t);
+      for (var j = 0; j < t.formulas.length; j++) {
+        final f = t.formulas[j];
+        final tf = lt.formulas[j];
+        groups.putIfAbsent(localizedTopicName(t.slug), () => []).add((
+          f.name,
+          tf.name,
+          f.expr,
+          tf.note,
+        ));
       }
     }
     return Scaffold(
@@ -48,7 +62,7 @@ class _FormulaScreenState extends State<FormulaScreen> {
                   style: const TextStyle(
                       fontSize: 18, fontWeight: FontWeight.bold)),
             ),
-            for (final (name, expr, note) in groups[group]!)
+            for (final (spanishName, name, expr, note) in groups[group]!)
               Card(
                 margin: const EdgeInsets.only(bottom: 6),
                 child: ListTile(
@@ -56,16 +70,16 @@ class _FormulaScreenState extends State<FormulaScreen> {
                       style: const TextStyle(fontWeight: FontWeight.w600)),
                   subtitle: Text(note.isEmpty ? expr : '$expr — $note'),
                   trailing: IconButton(
-                    icon: Icon(
-                      FavoritesService.instance.isFav('formula:$name')
-                          ? Icons.star
-                          : Icons.star_border,
-                      color: FavoritesService.instance.isFav('formula:$name')
+                    icon: LucideIcon(
+                      LucideIcons.star,
+                      filled: FavoritesService.instance
+                          .isFav('formula:$spanishName'),
+                      color: FavoritesService.instance.isFav('formula:$spanishName')
                           ? Colors.amber
                           : null,
                     ),
                     onPressed: () {
-                      FavoritesService.instance.toggle('formula:$name');
+                      FavoritesService.instance.toggle('formula:$spanishName');
                       setState(() {});
                     },
                   ),

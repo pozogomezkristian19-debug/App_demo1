@@ -3,8 +3,11 @@
 // idioma en el teléfono, y cada entrada saluda "Bienvenida [nombre]" o
 // "Bienvenido [nombre]" (en el idioma elegido).
 
+import '../data/i18n/content_i18n.dart';
 import 'package:flutter/material.dart';
+import '../widgets/lucide_icons.dart';
 import '../services/localization.dart';
+import '../widgets/brand_logo.dart';
 import '../services/user_prefs.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -79,19 +82,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 children: [
                   const _WelcomePage(),
                   _ExplainPage(
-                    icon: Icons.calculate,
+                    icon: LucideIcons.calculator,
                     title: tr('obSolveTitle'),
                     body: tr('obSolveBody'),
                     points: [tr('obSolveP1'), tr('obSolveP2'), tr('obSolveP3')],
                   ),
                   _ExplainPage(
-                    icon: Icons.menu_book,
+                    icon: LucideIcons.bookOpen,
                     title: tr('obStudyTitle'),
                     body: tr('obStudyBody'),
                     points: [tr('obStudyP1'), tr('obStudyP2'), tr('obStudyP3')],
                   ),
                   _ExplainPage(
-                    icon: Icons.quiz,
+                    icon: LucideIcons.circleHelp,
                     title: tr('obPracticeTitle'),
                     body: tr('obPracticeBody'),
                     points: [
@@ -162,16 +165,20 @@ class _WelcomePage extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
+          // Marca nueva (molécula) y, debajo, la ilustración de las
+          // gemelas como decoración del regalo.
+          const BrandLogo(size: 76),
+          const SizedBox(height: 20),
           const ClipRRect(
             borderRadius: BorderRadius.all(Radius.circular(32)),
             child: Image(
-              image: AssetImage('assets/logo.png'),
-              width: 190,
-              height: 190,
+              image: AssetImage('assets/twins.png'),
+              width: 170,
+              height: 170,
               fit: BoxFit.cover,
             ),
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 24),
           Text(
             tr('obWelcome'),
             textAlign: TextAlign.center,
@@ -206,7 +213,7 @@ class _ExplainPage extends StatelessWidget {
     required this.body,
     required this.points,
   });
-  final IconData icon;
+  final LucideIconData icon;
   final String title;
   final String body;
   final List<String> points;
@@ -223,7 +230,7 @@ class _ExplainPage extends StatelessWidget {
             child: CircleAvatar(
               radius: 44,
               backgroundColor: const Color(0xFF14B8A6).withValues(alpha: 0.18),
-              child: Icon(icon, size: 46, color: const Color(0xFF14B8A6)),
+              child: LucideIcon(icon, size: 46, color: const Color(0xFF14B8A6)),
             ),
           ),
           const SizedBox(height: 28),
@@ -406,6 +413,7 @@ class _LanguagePageState extends State<_LanguagePage> {
                   selected: AppLang.code == code,
                   onSelected: (_) async {
                     await AppLang.setLang(code);
+                    syncGeneratorLang();
                     if (mounted) setState(() {});
                   },
                 ),

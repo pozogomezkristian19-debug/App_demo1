@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../widgets/lucide_icons.dart';
+import '../data/i18n/content_i18n.dart';
 import '../data/periodic_table.dart';
 import '../data/reference_tables.dart';
 import '../models.dart';
@@ -65,7 +67,9 @@ class _TablaScreenState extends State<TablaScreen>
       if (_filterCategory != null && e.category != _filterCategory) return false;
       if (_query.isEmpty) return true;
       final q = _query.toLowerCase();
-      return e.name.toLowerCase().contains(q) || e.symbol.toLowerCase() == q;
+      return e.name.toLowerCase().contains(q) ||
+          localizedElementName(e).toLowerCase().contains(q) ||
+          e.symbol.toLowerCase() == q;
     }).toList();
   }
 
@@ -150,7 +154,7 @@ class _TablaScreenState extends State<TablaScreen>
           child: TextField(
             decoration: InputDecoration(
               labelText: tr('searchHint'),
-              prefixIcon: const Icon(Icons.search),
+              prefixIcon: const LucideIcon(LucideIcons.search),
             ),
             onChanged: (v) => setState(() => _query = v.trim()),
           ),
@@ -167,7 +171,7 @@ class _TablaScreenState extends State<TablaScreen>
                           builder: (_) => const TableQuizScreen()),
                     );
                   },
-                  icon: const Icon(Icons.quiz_outlined, size: 18),
+                  icon: const LucideIcon(LucideIcons.circleHelp, size: 18),
                   label: Text(tr('tableQuizTitle')),
                 ),
               ),
@@ -180,7 +184,7 @@ class _TablaScreenState extends State<TablaScreen>
                           builder: (_) => const CompareScreen()),
                     );
                   },
-                  icon: const Icon(Icons.compare_arrows, size: 18),
+                  icon: const LucideIcon(LucideIcons.arrowLeftRight, size: 18),
                   label: Text(tr('compareTitle')),
                 ),
               ),
@@ -231,9 +235,9 @@ class _TablaScreenState extends State<TablaScreen>
                                   color: Colors.black,
                                   fontWeight: FontWeight.bold)),
                         ),
-                        title: Text(e.name),
+                        title: Text(localizedElementName(e)),
                         subtitle: Text(
-                            'Z = ${e.atomicNumber} · ${tr('massWord')} ${e.mass} · ${categoryNames[e.category]}'),
+                            'Z = ${e.atomicNumber} · ${tr('massWord')} ${e.mass} · ${localizedCategoryName(e.category)}'),
                         onTap: () => _showDetail(e),
                       ),
                   ],
@@ -368,9 +372,10 @@ class _TablaScreenState extends State<TablaScreen>
                 ),
               ),
               title: Text(
-                  '${i + 1}. ${metalActivitySeries[i].name}',
+                  '${i + 1}. ${_activityName(metalActivitySeries[i])}',
                   style: const TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text(metalActivitySeries[i].reaction),
+              subtitle: Text(localizedReferenceString(
+                  metalActivitySeries[i].reaction)),
             ),
           ),
         const SizedBox(height: 8),
@@ -409,13 +414,16 @@ class _TablaScreenState extends State<TablaScreen>
             columns: [
               const DataColumn(label: Text('Anión')),
               for (final c in solubilityColumns)
-                DataColumn(label: Text(c, textAlign: TextAlign.center)),
+                DataColumn(
+                    label: Text(localizedReferenceString(c),
+                        textAlign: TextAlign.center)),
             ],
             rows: [
               for (final row in solubilityTable)
                 DataRow(
                   cells: [
-                    DataCell(Text('${row.anion}\n${row.name}',
+                    DataCell(Text(
+                        '${row.anion}\n${localizedReferenceString(row.name)}',
                         style: const TextStyle(fontSize: 12))),
                     for (final v in row.cells)
                       DataCell(
@@ -455,4 +463,11 @@ class _TablaScreenState extends State<TablaScreen>
       ],
     );
   }
+}
+
+/// Nombre del metal en el idioma activo: la serie guarda el nombre en
+/// español; se resuelve el elemento por su símbolo.
+String _activityName(ActivityEntry a) {
+  final el = allElements.where((e) => e.symbol == a.symbol).firstOrNull;
+  return el == null ? a.name : localizedElementName(el);
 }

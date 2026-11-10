@@ -4,6 +4,7 @@
 // menú de hamburguesa.
 
 import 'package:flutter/material.dart';
+import '../widgets/lucide_icons.dart';
 
 import '../models.dart';
 import '../services/localization.dart';
@@ -24,7 +25,7 @@ class Branch {
   final String slug;
   final String title;
   final String body;
-  final IconData icon;
+  final LucideIconData icon;
   final Color color;
   final List<String> topicSlugs;
 }
@@ -34,7 +35,7 @@ const List<Branch> branches = [
     slug: 'organica',
     title: 'Química orgánica',
     body: 'El carbono y sus compuestos: grupos funcionales, reacciones y estereoquímica.',
-    icon: Icons.hub,
+    icon: LucideIcons.network,
     color: Color(0xFF84CC16),
     topicSlugs: ['organica'],
   ),
@@ -42,7 +43,7 @@ const List<Branch> branches = [
     slug: 'inorganica',
     title: 'Química inorgánica',
     body: 'Óxidos, sales, iones y sus reacciones: lo que no es carbono.',
-    icon: Icons.science,
+    icon: LucideIcons.flaskConical,
     color: Color(0xFF38BDF8),
     topicSlugs: [
       'reacciones-inorganicas',
@@ -55,7 +56,7 @@ const List<Branch> branches = [
     slug: 'analitica',
     title: 'Química analítica',
     body: 'Medir para saber: valoraciones, equilibrio iónico y pH.',
-    icon: Icons.biotech,
+    icon: LucideIcons.dna,
     color: Color(0xFFA78BFA),
     topicSlugs: ['analitica', 'acido-base', 'equilibrio'],
   ),
@@ -63,7 +64,7 @@ const List<Branch> branches = [
     slug: 'fisicoquimica',
     title: 'Fisicoquímica',
     body: 'La física detrás de la química: energía, gases y velocidad.',
-    icon: Icons.thermostat,
+    icon: LucideIcons.thermometer,
     color: Color(0xFFEF4444),
     topicSlugs: ['fisicoquimica', 'termo-cinetica', 'gases'],
   ),
@@ -89,12 +90,12 @@ class BranchesScreen extends StatelessWidget {
               child: ListTile(
                 leading: CircleAvatar(
                   backgroundColor: b.color.withValues(alpha: 0.18),
-                  child: Icon(b.icon, color: b.color),
+                  child: LucideIcon(b.icon, color: b.color),
                 ),
                 title: Text(b.title,
                     style: const TextStyle(fontWeight: FontWeight.bold)),
                 subtitle: Text(b.body),
-                trailing: const Icon(Icons.chevron_right),
+                trailing: const LucideIcon(LucideIcons.chevronRight),
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
@@ -130,7 +131,7 @@ class BranchDetailScreen extends StatelessWidget {
               CircleAvatar(
                 radius: 26,
                 backgroundColor: branch.color.withValues(alpha: 0.18),
-                child: Icon(branch.icon, color: branch.color, size: 28),
+                child: LucideIcon(branch.icon, color: branch.color, size: 28),
               ),
               const SizedBox(width: 12),
               Expanded(child: Text(branch.body)),
@@ -144,7 +145,7 @@ class BranchDetailScreen extends StatelessWidget {
                 title: Text(t.title,
                     style: const TextStyle(fontWeight: FontWeight.bold)),
                 subtitle: Text(t.level),
-                trailing: const Icon(Icons.chevron_right),
+                trailing: const LucideIcon(LucideIcons.chevronRight),
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(

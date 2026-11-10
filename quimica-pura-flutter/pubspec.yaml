@@ -11,9 +11,16 @@ environment:
 # y el progreso (mejor puntuación, niveles, aciertos por tema y errores
 # para repasar) se guardan en el teléfono con SharedPreferences.
 dependencies:
+  audioplayers: ^6.8.1
   flutter:
     sdk: flutter
+  flutter_local_notifications: ^23.0.0
+  flutter_timezone: ^5.1.1
+  home_widget: ^0.10.0
+  path_provider: ^2.1.6
+  share_plus: ^13.3.1
   shared_preferences: ^2.5.6
+  timezone: ^0.11.2
   url_launcher: ^6.3.1
 
 dev_dependencies:
@@ -24,4 +31,12 @@ flutter:
   uses-material-design: true
   assets:
     - assets/logo.png
+    - assets/twins.png
+    - assets/brenda.png
+    - assets/britany.png
     - assets/whatsapp.png
+    - assets/sounds/correct.wav
+    - assets/sounds/wrong.wav
+    - assets/sounds/levelup.wav
+    - assets/sounds/streak.wav
+    - assets/sounds/click.wav

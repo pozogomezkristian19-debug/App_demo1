@@ -4,6 +4,7 @@
 
 import 'package:flutter/material.dart';
 import '../services/advanced_solvers.dart';
+import '../data/i18n/content_i18n.dart';
 import '../services/localization.dart';
 import '../widgets/solver_widgets.dart';
 
@@ -106,7 +107,7 @@ class _PolyproticPhSolverState extends State<PolyproticPhSolver> {
           NumField(controller: _ka1, label: 'Ka₁ (primera disociación)'),
           NumField(controller: _ka2, label: 'Ka₂ (segunda disociación)'),
           SwitchListTile(
-            title: const Text('Ácido triprótico (tercera etapa)'),
+            title: Text(localizedSolverString('Ácido triprótico (tercera etapa)')),
             value: _triprotic,
             onChanged: (v) => setState(() => _triprotic = v),
           ),
@@ -284,11 +285,11 @@ class _SolubilitySolverState extends State<SolubilitySolver> {
           DropdownButton<bool>(
             value: _fromKsp,
             isExpanded: true,
-            items: const [
+            items: [
               DropdownMenuItem(
-                  value: true, child: Text('Solubilidad a partir de Ksp')),
+                  value: true, child: Text(localizedSolverString('Solubilidad a partir de Ksp'))),
               DropdownMenuItem(
-                  value: false, child: Text('Ksp a partir de la solubilidad')),
+                  value: false, child: Text(localizedSolverString('Ksp a partir de la solubilidad'))),
             ],
             onChanged: (v) => setState(() => _fromKsp = v ?? true),
           ),
@@ -303,10 +304,10 @@ class _SolubilitySolverState extends State<SolubilitySolver> {
                 child: DropdownButton<int>(
                   value: _a,
                   isExpanded: true,
-                  items: const [
-                    DropdownMenuItem(value: 1, child: Text('a = 1 (catión)')),
-                    DropdownMenuItem(value: 2, child: Text('a = 2 (catión)')),
-                    DropdownMenuItem(value: 3, child: Text('a = 3 (catión)')),
+                  items: [
+                    DropdownMenuItem(value: 1, child: Text(localizedSolverString('a = 1 (catión)'))),
+                    DropdownMenuItem(value: 2, child: Text(localizedSolverString('a = 2 (catión)'))),
+                    DropdownMenuItem(value: 3, child: Text(localizedSolverString('a = 3 (catión)'))),
                   ],
                   onChanged: (v) => setState(() => _a = v ?? 1),
                 ),
@@ -316,10 +317,10 @@ class _SolubilitySolverState extends State<SolubilitySolver> {
                 child: DropdownButton<int>(
                   value: _b,
                   isExpanded: true,
-                  items: const [
-                    DropdownMenuItem(value: 1, child: Text('b = 1 (anión)')),
-                    DropdownMenuItem(value: 2, child: Text('b = 2 (anión)')),
-                    DropdownMenuItem(value: 3, child: Text('b = 3 (anión)')),
+                  items: [
+                    DropdownMenuItem(value: 1, child: Text(localizedSolverString('b = 1 (anión)'))),
+                    DropdownMenuItem(value: 2, child: Text(localizedSolverString('b = 2 (anión)'))),
+                    DropdownMenuItem(value: 3, child: Text(localizedSolverString('b = 3 (anión)'))),
                   ],
                   onChanged: (v) => setState(() => _b = v ?? 1),
                 ),
@@ -379,19 +380,19 @@ class _SaltPhSolverState extends State<SaltPhSolver> {
           DropdownButton<SaltKind>(
             value: _kind,
             isExpanded: true,
-            items: const [
+            items: [
               DropdownMenuItem(
                   value: SaltKind.neutral,
-                  child: Text('Ácido fuerte + base fuerte (neutra)')),
+                  child: Text(localizedSolverString('Ácido fuerte + base fuerte (neutra)'))),
               DropdownMenuItem(
                   value: SaltKind.acidic,
-                  child: Text('Ácido fuerte + base débil (ácida)')),
+                  child: Text(localizedSolverString('Ácido fuerte + base débil (ácida)'))),
               DropdownMenuItem(
                   value: SaltKind.basic,
-                  child: Text('Ácido débil + base fuerte (básica)')),
+                  child: Text(localizedSolverString('Ácido débil + base fuerte (básica)'))),
               DropdownMenuItem(
                   value: SaltKind.amphoteric,
-                  child: Text('Ácido débil + base débil (comparar Ka y Kb)')),
+                  child: Text(localizedSolverString('Ácido débil + base débil (comparar Ka y Kb)'))),
             ],
             onChanged: (v) => setState(() => _kind = v ?? SaltKind.basic),
           ),
@@ -534,19 +535,19 @@ class _TitrationSolverState extends State<TitrationSolver> {
           DropdownButton<_TitrationMode>(
             value: _mode,
             isExpanded: true,
-            items: const [
+            items: [
               DropdownMenuItem(
                   value: _TitrationMode.strongStrong,
-                  child: Text('Ácido-base fuerte-fuerte')),
+                  child: Text(localizedSolverString('Ácido-base fuerte-fuerte'))),
               DropdownMenuItem(
                   value: _TitrationMode.weakStrong,
-                  child: Text('Ácido-base débil-fuerte')),
+                  child: Text(localizedSolverString('Ácido-base débil-fuerte'))),
               DropdownMenuItem(
                   value: _TitrationMode.redox,
-                  child: Text('Redox (KMnO₄ con Fe²⁺)')),
+                  child: Text(localizedSolverString('Redox (KMnO₄ con Fe²⁺)'))),
               DropdownMenuItem(
                   value: _TitrationMode.back,
-                  child: Text('Por retroceso (exceso + retitulación)')),
+                  child: Text(localizedSolverString('Por retroceso (exceso + retitulación)'))),
             ],
             onChanged: (v) => setState(() => _mode = v ?? _mode),
           ),
@@ -567,11 +568,11 @@ class _TitrationSolverState extends State<TitrationSolver> {
             DropdownButton<int>(
               value: _hclPerAnalyte,
               isExpanded: true,
-              items: const [
+              items: [
                 DropdownMenuItem(
-                    value: 1, child: Text('1 mol de HCl por mol de analito')),
+                    value: 1, child: Text(localizedSolverString('1 mol de HCl por mol de analito'))),
                 DropdownMenuItem(
-                    value: 2, child: Text('2 mol de HCl por mol de analito')),
+                    value: 2, child: Text(localizedSolverString('2 mol de HCl por mol de analito'))),
               ],
               onChanged: (v) => setState(() => _hclPerAnalyte = v ?? 2),
             ),

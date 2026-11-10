@@ -2,6 +2,7 @@
 // estrellita, todos juntos en su pantalla. Al tocar uno, se abre.
 
 import 'package:flutter/material.dart';
+import '../widgets/lucide_icons.dart';
 
 import '../data/periodic_table.dart';
 import '../models.dart';
@@ -58,7 +59,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                         title: Text(e.name),
                         subtitle: Text(
                             'Z = ${e.atomicNumber} · ${categoryNames[e.category]}'),
-                        trailing: const Icon(Icons.chevron_right),
+                        trailing: const LucideIcon(LucideIcons.chevronRight),
                         onTap: () => showElementSheet(context, e),
                       ),
                     ),
@@ -73,10 +74,10 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                     Card(
                       margin: const EdgeInsets.only(bottom: 6),
                       child: ListTile(
-                        leading: const Icon(Icons.menu_book_outlined),
+                        leading: const LucideIcon(LucideIcons.bookOpen),
                         title: Text(t.title),
                         subtitle: Text(t.level),
-                        trailing: const Icon(Icons.chevron_right),
+                        trailing: const LucideIcon(LucideIcons.chevronRight),
                         onTap: () {
                           Navigator.of(context).push(
                             MaterialPageRoute(
@@ -96,7 +97,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                     Card(
                       margin: const EdgeInsets.only(bottom: 6),
                       child: ListTile(
-                        leading: const Icon(Icons.functions),
+                        leading: const LucideIcon(LucideIcons.sigma),
                         title: Text(name),
                       ),
                     ),

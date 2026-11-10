@@ -6,8 +6,10 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import '../widgets/lucide_icons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../data/i18n/content_i18n.dart';
 import '../data/periodic_table.dart';
 import '../data/topics.dart';
 import '../services/localization.dart';
@@ -46,7 +48,8 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
           .map((e) => _FlashCard(
                 id: 'el:${e.atomicNumber}',
                 front: e.symbol,
-                back: '${e.name}\nZ = ${e.atomicNumber} · ${categoryNames[e.category]}',
+                back:
+                    '${localizedElementName(e)}\nZ = ${e.atomicNumber} · ${localizedCategoryName(e.category)}',
               ))
           .toList();
     }
@@ -54,16 +57,19 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
     for (final f in formulary) {
       cards.add(_FlashCard(
         id: 'f:${f['name']}',
-        front: f['name'] ?? '',
+        front: localizedFormularyName(f['name'] ?? ''),
         back: f['expr'] ?? '',
       ));
     }
     for (final t in topics) {
-      for (final f in t.formulas) {
+      final lt = localizedTopic(t);
+      for (var j = 0; j < t.formulas.length; j++) {
+        final f = t.formulas[j];
+        final tf = lt.formulas[j];
         cards.add(_FlashCard(
           id: 'f:${f.name}',
-          front: f.name,
-          back: '${f.expr}\n${f.note}',
+          front: tf.name,
+          back: '${tf.expr}\n${tf.note}',
         ));
       }
     }
@@ -201,7 +207,7 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: () => _mark(false),
-                    icon: const Icon(Icons.close),
+                    icon: const LucideIcon(LucideIcons.x),
                     label: const Text('No la sé'),
                   ),
                 ),
@@ -209,7 +215,7 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () => _mark(true),
-                    icon: const Icon(Icons.check),
+                    icon: const LucideIcon(LucideIcons.check),
                     label: const Text('La sé'),
                   ),
                 ),
@@ -221,7 +227,7 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: _prev,
-                    icon: const Icon(Icons.arrow_back),
+                    icon: const LucideIcon(LucideIcons.arrowLeft),
                     label: const Text('Anterior'),
                   ),
                 ),
@@ -229,7 +235,7 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: _shuffle,
-                    icon: const Icon(Icons.shuffle),
+                    icon: const LucideIcon(LucideIcons.shuffle),
                     label: const Text('Barajar'),
                   ),
                 ),
@@ -237,7 +243,7 @@ class _FlashcardsScreenState extends State<FlashcardsScreen> {
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: _next,
-                    icon: const Icon(Icons.arrow_forward),
+                    icon: const LucideIcon(LucideIcons.arrowRight),
                     label: const Text('Siguiente'),
                   ),
                 ),

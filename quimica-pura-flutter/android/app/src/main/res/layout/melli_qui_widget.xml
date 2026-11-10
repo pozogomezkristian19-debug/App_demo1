@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!-- Tarjeta del widget de inicio (v6): título, pregunta del día y
+     racha / vidas / puntos. Colores literales (RemoteViews no admite
+     atributos de tema): noche #0A1628, texto claro y acento menta. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/widget_container"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:layout_margin="8dp"
+    android:background="@drawable/widget_background"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Melli-Qui"
+        android:textColor="#FFFFFF"
+        android:textSize="18sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/widget_qotd"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:ellipsize="end"
+        android:maxLines="3"
+        android:textColor="#D9D2F2"
+        android:textSize="14sp"
+        tools:text="¿Cuál es la masa molar del ácido sulfúrico?" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/widget_streak"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="#2DD4BF"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            tools:text="Racha: 3" />
+
+        <TextView
+            android:id="@+id/widget_lives"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:textColor="#F59E0B"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            tools:text="Vidas: 5/5" />
+
+        <TextView
+            android:id="@+id/widget_points"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="end"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            tools:text="Puntos: 120" />
+    </LinearLayout>
+</LinearLayout>

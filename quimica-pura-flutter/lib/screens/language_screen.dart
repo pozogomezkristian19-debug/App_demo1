@@ -2,7 +2,9 @@
 // idioma. Antes los idiomas eran una lista suelta dentro del menú
 // hamburguesa; ahora el menú solo enlaza aquí.
 
+import '../data/i18n/content_i18n.dart';
 import 'package:flutter/material.dart';
+import '../widgets/lucide_icons.dart';
 
 import '../services/localization.dart';
 import '../widgets/flags.dart';
@@ -44,11 +46,12 @@ class LanguageScreen extends StatelessWidget {
                                     ? 'Português'
                                     : 'Русский'),
                 trailing: AppLang.code == code
-                    ? Icon(Icons.check_circle,
+                    ? LucideIcon(LucideIcons.circleCheck,
                         color: Theme.of(context).colorScheme.primary)
                     : null,
                 onTap: () async {
                   await AppLang.setLang(code);
+                    syncGeneratorLang();
                   if (context.mounted) Navigator.of(context).pop();
                 },
               ),

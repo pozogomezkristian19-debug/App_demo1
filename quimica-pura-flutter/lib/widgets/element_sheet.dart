@@ -6,10 +6,11 @@
 // Se usa desde la Tabla y desde la búsqueda. La estrellita marca el
 // elemento como favorito.
 
+import '../data/i18n/content_i18n.dart';
 import 'package:flutter/material.dart';
+import 'lucide_icons.dart';
 
 import '../data/element_details.dart';
-import '../data/periodic_table.dart';
 import '../models.dart';
 import '../services/favorites.dart';
 import '../services/localization.dart';
@@ -115,18 +116,19 @@ class _ElementSheetState extends State<ElementSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(e.name,
+                    Text(localizedElementName(e),
                         style: const TextStyle(
                             fontSize: 22, fontWeight: FontWeight.bold)),
                     Text(
-                        'Z = ${e.atomicNumber} · ${categoryNames[e.category]}'),
+                        'Z = ${e.atomicNumber} · ${localizedCategoryName(e.category)}'),
                   ],
                 ),
               ),
               IconButton(
                 tooltip: 'Favorito',
-                icon: Icon(
-                  isFav ? Icons.star : Icons.star_border,
+                icon: LucideIcon(
+                  LucideIcons.star,
+                  filled: isFav,
                   color: isFav ? Colors.amber : null,
                   size: 28,
                 ),
@@ -148,7 +150,7 @@ class _ElementSheetState extends State<ElementSheet> {
           _row(tr('periodWord'), '${e.period}'),
           _row(tr('groupWord'), '${e.column}'),
           _row(tr('blockWord'), e.block),
-          _row(tr('categoryWord'), categoryNames[e.category]),
+          _row(tr('categoryWord'), localizedCategoryName(e.category)),
           const SizedBox(height: 8),
           Text(
             'Los lantánidos (57–71) y actínidos (89–103) se muestran en las dos filas separadas de abajo, como en la tabla clásica.',

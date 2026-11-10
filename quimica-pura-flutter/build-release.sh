@@ -44,6 +44,13 @@ if [ ! -f assets/logo.png ] && [ -f assets/logo.png.b64 ]; then
   echo "Logo reconstruido desde assets/logo.png.b64"
 fi
 
+# La ilustración de las gemelas (assets/twins.png) viaja igual, como
+# assets/twins.png.b64: es la decoración de la bienvenida.
+if [ ! -f assets/twins.png ] && [ -f assets/twins.png.b64 ]; then
+  base64 -d assets/twins.png.b64 > assets/twins.png
+  echo "Gemelas reconstruidas desde assets/twins.png.b64"
+fi
+
 # Igual con el logo de WhatsApp (assets/whatsapp.png): viaja como
 # assets/whatsapp.png.b64 y se reconstruye aquí antes del build,
 # porque pubspec.yaml lo declara como asset y sin el PNG el build falla.
@@ -51,6 +58,18 @@ if [ ! -f assets/whatsapp.png ] && [ -f assets/whatsapp.png.b64 ]; then
   base64 -d assets/whatsapp.png.b64 > assets/whatsapp.png
   echo "Logo de WhatsApp reconstruido desde assets/whatsapp.png.b64"
 fi
+
+# Cualquier otro binario que viaje como *.b64 (mascotas brenda/britany,
+# sonidos, ...) se reconstruye con el mismo mecanismo genérico que el
+# workflow de GitHub Actions: si falta el archivo real y existe su .b64,
+# se decodifica aquí antes del build.
+for b in $(find assets -name "*.b64" 2>/dev/null); do
+  real="${b%.b64}"
+  if [ ! -f "$real" ]; then
+    base64 -d "$b" > "$real"
+    echo "Reconstruido: $real desde $b"
+  fi
+done
 
 # El conector de GitHub sube los binarios como texto base64, asi que el
 # jar de Gradle y los iconos de la app llegaron al repo como texto y hay

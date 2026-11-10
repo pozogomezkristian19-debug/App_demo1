@@ -3,6 +3,7 @@
 // cuestionario y del simulador.
 
 import 'package:flutter/material.dart';
+import '../widgets/lucide_icons.dart';
 
 import '../services/localization.dart';
 import 'lab_quiz_screen.dart';
@@ -31,7 +32,7 @@ class LabScreen extends StatelessWidget {
                             builder: (_) => const LabQuizPage()),
                       );
                     },
-                    icon: const Icon(Icons.quiz_outlined),
+                    icon: const LucideIcon(LucideIcons.circleHelp),
                     label: Text(tr('labQuizButton')),
                   ),
                 ),
@@ -44,7 +45,7 @@ class LabScreen extends StatelessWidget {
                             builder: (_) => const LabSimScreen()),
                       );
                     },
-                    icon: const Icon(Icons.science_outlined),
+                    icon: const LucideIcon(LucideIcons.flaskConical),
                     label: Text(tr('labSimTitle')),
                   ),
                 ),

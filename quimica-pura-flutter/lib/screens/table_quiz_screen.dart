@@ -6,6 +6,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import '../data/i18n/content_i18n.dart';
 import '../data/periodic_table.dart';
 import '../models.dart';
 import '../services/localization.dart';
@@ -111,11 +112,13 @@ class _TableQuizScreenState extends State<TableQuizScreen> {
               padding: const EdgeInsets.all(16),
               children: [
                 SegmentedButton<bool>(
-                  segments: const [
+                  segments: [
                     ButtonSegment(
-                        value: true, label: Text('Símbolo → nombre')),
+                        value: true,
+                        label: Text(tr('tableQuizSymToName'))),
                     ButtonSegment(
-                        value: false, label: Text('Nombre → símbolo')),
+                        value: false,
+                        label: Text(tr('tableQuizNameToSym'))),
                   ],
                   selected: {_symbolToName},
                   onSelectionChanged: (s) =>
@@ -123,7 +126,9 @@ class _TableQuizScreenState extends State<TableQuizScreen> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Pregunta ${_index + 1} de 10 · Aciertos: $_score',
+                  tr('tableQuizCounter')
+                      .replaceFirst('%d', '${_index + 1}')
+                      .replaceFirst('%d', '$_score'),
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 12),
@@ -136,8 +141,10 @@ class _TableQuizScreenState extends State<TableQuizScreen> {
                     padding: const EdgeInsets.all(24),
                     child: Text(
                       _symbolToName
-                          ? '¿Qué elemento es ${_rounds[_index].symbol}?'
-                          : '¿Cuál es el símbolo de ${_rounds[_index].name}?',
+                          ? tr('tableQuizQSym')
+                              .replaceFirst('%s', _rounds[_index].symbol)
+                          : tr('tableQuizQName').replaceFirst(
+                              '%s', localizedElementName(_rounds[_index])),
                       style: const TextStyle(
                           fontSize: 22, fontWeight: FontWeight.bold),
                       textAlign: TextAlign.center,
@@ -167,7 +174,7 @@ class _TableQuizScreenState extends State<TableQuizScreen> {
                       onPressed: () => _answer(i),
                       child: Text(
                         _symbolToName
-                            ? _options[_index][i].name
+                            ? localizedElementName(_options[_index][i])
                             : _options[_index][i].symbol,
                         style: const TextStyle(fontSize: 17),
                       ),
@@ -178,7 +185,7 @@ class _TableQuizScreenState extends State<TableQuizScreen> {
                   Text(
                     _options[_index][_selected!] == _rounds[_index]
                         ? tr('quizCorrect')
-                        : '${tr('quizIncorrect')}. ${tr('quizCorrectIs')} ${_symbolToName ? _rounds[_index].name : _rounds[_index].symbol}',
+                        : '${tr('quizIncorrect')}. ${tr('quizCorrectIs')} ${_symbolToName ? localizedElementName(_rounds[_index]) : _rounds[_index].symbol}',
                     style: const TextStyle(fontWeight: FontWeight.bold),
                     textAlign: TextAlign.center,
                   ),

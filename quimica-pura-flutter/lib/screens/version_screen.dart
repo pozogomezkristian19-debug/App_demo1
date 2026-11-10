@@ -4,6 +4,7 @@
 // cambiara la app entera). La elección se guarda en el teléfono.
 
 import 'package:flutter/material.dart';
+import '../widgets/lucide_icons.dart';
 
 import '../services/localization.dart';
 import '../services/progress.dart';
@@ -67,7 +68,7 @@ class _VersionScreenState extends State<VersionScreen> {
             value: ProgressService.trackBach,
             title: tr('trackBach'),
             body: 'Para preuniversitario: estequiometría básica, disoluciones, gases y ácido-base, con su examen final de 16 preguntas.',
-            icon: Icons.school,
+            icon: LucideIcons.graduationCap,
             selected: current == ProgressService.trackBach,
           ),
           const SizedBox(height: 10),
@@ -76,7 +77,7 @@ class _VersionScreenState extends State<VersionScreen> {
             value: ProgressService.trackUni,
             title: tr('trackUni'),
             body: 'Más difícil: 8 temas más Orgánica y Laboratorio, con el examen final de 24 preguntas.',
-            icon: Icons.account_balance,
+            icon: LucideIcons.landmark,
             selected: current == ProgressService.trackUni,
           ),
         ],
@@ -89,7 +90,7 @@ class _VersionScreenState extends State<VersionScreen> {
     required String value,
     required String title,
     required String body,
-    required IconData icon,
+    required LucideIconData icon,
     required bool selected,
   }) {
     final scheme = Theme.of(context).colorScheme;
@@ -98,14 +99,14 @@ class _VersionScreenState extends State<VersionScreen> {
       child: ListTile(
         leading: CircleAvatar(
           backgroundColor: scheme.primary.withValues(alpha: 0.18),
-          child: Icon(icon, color: scheme.primary),
+          child: LucideIcon(icon, color: scheme.primary),
         ),
         title: Text(title,
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         subtitle: Text(body),
         trailing: selected
-            ? Icon(Icons.check_circle, color: scheme.primary)
-            : const Icon(Icons.chevron_right),
+            ? LucideIcon(LucideIcons.circleCheck, color: scheme.primary)
+            : const LucideIcon(LucideIcons.chevronRight),
         onTap: _changing ? null : () => _change(value),
       ),
     );

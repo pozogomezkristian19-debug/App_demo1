@@ -2,6 +2,7 @@
 // general), guardadas en el teléfono. Sin internet.
 
 import 'package:flutter/material.dart';
+import '../widgets/lucide_icons.dart';
 
 import '../data/topics.dart';
 import '../services/localization.dart';
@@ -33,10 +34,10 @@ class _NotesScreenState extends State<NotesScreen> {
             Card(
               margin: const EdgeInsets.only(bottom: 8),
               child: ListTile(
-                leading: Icon(
+                leading: LucideIcon(
                   NotesService.instance.hasNote(slug)
-                      ? Icons.note_alt
-                      : Icons.note_add_outlined,
+                      ? LucideIcons.notebookPen
+                      : LucideIcons.pencil,
                 ),
                 title: Text(title,
                     style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -47,7 +48,7 @@ class _NotesScreenState extends State<NotesScreen> {
                         overflow: TextOverflow.ellipsis,
                       )
                     : const Text('Sin nota todavía'),
-                trailing: const Icon(Icons.chevron_right),
+                trailing: const LucideIcon(LucideIcons.chevronRight),
                 onTap: () async {
                   await Navigator.of(context).push(
                     MaterialPageRoute(
@@ -96,7 +97,7 @@ class _NoteEditPageState extends State<_NoteEditPage> {
         actions: [
           IconButton(
             tooltip: 'Guardar',
-            icon: const Icon(Icons.save),
+            icon: const LucideIcon(LucideIcons.save),
             onPressed: () {
               NotesService.instance.saveNote(widget.slug, _ctrl.text);
               Navigator.of(context).pop();

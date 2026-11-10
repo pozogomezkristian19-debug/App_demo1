@@ -2,8 +2,10 @@
 // Al tocar un término desde la búsqueda se abre esta pantalla.
 
 import 'package:flutter/material.dart';
+import '../widgets/lucide_icons.dart';
 
 import '../data/extra_content.dart';
+import '../data/i18n/content_i18n.dart';
 import '../services/localization.dart';
 
 class GlossaryScreen extends StatefulWidget {
@@ -26,9 +28,11 @@ class _GlossaryScreenState extends State<GlossaryScreen> {
   @override
   Widget build(BuildContext context) {
     final q = fold(_query.trim());
+    // El glosario se muestra en el idioma activo (v6).
+    final all = localizedGlossary();
     final visible = q.isEmpty
-        ? glossary
-        : glossary
+        ? all
+        : all
             .where((g) =>
                 fold(g.term).contains(q) || fold(g.definition).contains(q))
             .toList();
@@ -41,7 +45,7 @@ class _GlossaryScreenState extends State<GlossaryScreen> {
             child: TextField(
               decoration: InputDecoration(
                 labelText: tr('searchWord'),
-                prefixIcon: const Icon(Icons.search),
+                prefixIcon: const LucideIcon(LucideIcons.search),
               ),
               onChanged: (v) => setState(() => _query = v),
             ),

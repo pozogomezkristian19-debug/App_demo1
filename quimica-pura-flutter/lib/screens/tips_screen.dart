@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../data/topics.dart';
+import '../data/i18n/content_i18n.dart';
 import '../services/localization.dart';
 
 class TipsScreen extends StatelessWidget {
@@ -19,7 +19,7 @@ class TipsScreen extends StatelessWidget {
           'Lo que distingue una respuesta correcta de una «casi»: método, unidades y comprobaciones rápidas.',
         ),
         const SizedBox(height: 12),
-        for (final tip in generalTips)
+        for (final tip in localizedGeneralTips())
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),

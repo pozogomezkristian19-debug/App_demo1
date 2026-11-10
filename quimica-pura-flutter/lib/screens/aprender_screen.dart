@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
+import '../widgets/lucide_icons.dart';
+import '../data/i18n/content_i18n.dart';
 import '../data/topics.dart';
 import '../services/localization.dart';
 import '../services/progress.dart';
 import '../widgets/molecule_diagrams.dart';
+import 'glossary_screen.dart';
+import 'notes_screen.dart';
+import 'tips_screen.dart';
 
 class AprenderScreen extends StatefulWidget {
   const AprenderScreen({super.key});
@@ -24,6 +29,54 @@ class _AprenderScreenState extends State<AprenderScreen> {
         const SizedBox(height: 6),
         Text(tr('learnIntro')),
         const SizedBox(height: 12),
+        // Glosario y cuaderno: antes solo se llegaba desde la búsqueda.
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                        builder: (_) => const GlossaryScreen()),
+                  );
+                },
+                icon: const LucideIcon(LucideIcons.bookOpen, size: 18),
+                label: Text(tr('glossaryTitle')),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                        builder: (_) => const NotesScreen()),
+                  );
+                },
+                icon: const LucideIcon(LucideIcons.notebookPen, size: 18),
+                label: Text(tr('notesTitle')),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        // Tips de examen: antes era una pestaña aparte; ahora vive aquí,
+        // en Aprender, como tarjeta visible (v6).
+        Card(
+          child: ListTile(
+            leading: const LucideIcon(LucideIcons.lightbulb, size: 28),
+            title: Text(tr('tipsExamCard'),
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text(tr('tipsExamSub')),
+            trailing: const LucideIcon(LucideIcons.chevronRight),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const TipsScreen()),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 12),
         Text(
           tr('formulary'),
           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -43,7 +96,7 @@ class _AprenderScreenState extends State<AprenderScreen> {
                       children: [
                         Expanded(
                           flex: 2,
-                          child: Text(f['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.w600)),
+                          child: Text(localizedFormularyName(f['name'] ?? ''), style: const TextStyle(fontWeight: FontWeight.w600)),
                         ),
                         Expanded(
                           flex: 3,
@@ -60,16 +113,17 @@ class _AprenderScreenState extends State<AprenderScreen> {
         // Aprender guarda los temas de estudio principales. Orgánica y
         // Laboratorio viven en el menú de hamburguesa (Ramas y
         // Laboratorio), no aquí, para que nada esté escondido.
-        for (final topic in topics.where((t) =>
-            t.slug != 'organica' && t.slug != 'laboratorio'))
+        for (final topic in topics
+            .where((t) => t.slug != 'organica' && t.slug != 'laboratorio')
+            .map(localizedTopic))
           Card(
             child: ExpansionTile(
               title: Text(topic.title, style: const TextStyle(fontWeight: FontWeight.bold)),
               subtitle: Text(topic.level),
-              trailing: Icon(
+              trailing: LucideIcon(
                 progress.isMastered(topic.slug)
-                    ? Icons.check_circle
-                    : Icons.check_circle_outline,
+                    ? LucideIcons.circleCheck
+                    : LucideIcons.circle,
                 color: progress.isMastered(topic.slug)
                     ? Theme.of(context).colorScheme.primary
                     : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.35),
@@ -126,7 +180,7 @@ class _AprenderScreenState extends State<AprenderScreen> {
                 const SizedBox(height: 12),
                 ElevatedButton.icon(
                   onPressed: () => setState(() => progress.toggleMastered(topic.slug)),
-                  icon: Icon(progress.isMastered(topic.slug) ? Icons.check : Icons.check_box_outline_blank),
+                  icon: LucideIcon(progress.isMastered(topic.slug) ? LucideIcons.check : LucideIcons.circle),
                   label: Text(progress.isMastered(topic.slug)
                       ? tr('mastered')
                       : tr('markMastered')),

@@ -1,25 +1,33 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../widgets/lucide_icons.dart';
+import '../data/i18n/content_i18n.dart';
 import '../services/chemistry.dart';
 import '../services/localization.dart';
 import '../services/nav_requests.dart';
+import '../services/sound_service.dart';
+import '../widgets/brand_logo.dart';
 import '../widgets/solver_widgets.dart';
+import 'formula_screen.dart';
+import 'lab_sim_screen.dart';
 import 'resolver_extra.dart';
 
 /// Un solucionador de la lista: su grupo, su título, su descripción,
 /// su icono y su pantalla.
 class SolverEntry {
   const SolverEntry({
+    required this.id,
     required this.group,
     required this.title,
     required this.subtitle,
     required this.icon,
     required this.page,
   });
+  final String id;
   final String group;
   final String title;
   final String subtitle;
-  final IconData icon;
+  final LucideIconData icon;
   final Widget page;
 }
 
@@ -27,101 +35,115 @@ class SolverEntry {
 /// es limpia y el solucionador abierto tiene todo el espacio.
 const List<SolverEntry> solverEntries = [
   SolverEntry(
+    id: 'molar-mass',
     group: 'Cantidad de sustancia',
     title: 'Masa molar de un compuesto',
     subtitle: 'Escribe la fórmula (acepta paréntesis): H2SO4, Ca(OH)2, Al2(SO4)3…',
-    icon: Icons.science_outlined,
+    icon: LucideIcons.flaskConical,
     page: MolarMassSolver(),
   ),
   SolverEntry(
+    id: 'mass-moles',
     group: 'Cantidad de sustancia',
     title: 'Masa ⇄ moles ⇄ partículas',
     subtitle: 'n = m / M · N = n · 6.022×10²³',
-    icon: Icons.functions,
+    icon: LucideIcons.sigma,
     page: MassMolesSolver(),
   ),
   SolverEntry(
+    id: 'molarity',
     group: 'Disoluciones',
     title: 'Molaridad',
     subtitle: 'Concentración: M = n / V',
-    icon: Icons.water_drop_outlined,
+    icon: LucideIcons.droplet,
     page: MolaritySolver(),
   ),
   SolverEntry(
+    id: 'dilution',
     group: 'Disoluciones',
     title: 'Dilución',
     subtitle: 'M₁V₁ = M₂V₂: cómo preparar una disolución más diluida',
-    icon: Icons.water_drop,
+    icon: LucideIcons.droplet,
     page: DilutionSolver(),
   ),
   SolverEntry(
+    id: 'ph',
     group: 'Ácidos y bases',
     title: 'pH y pOH',
     subtitle: 'Acidez y basicidad de disoluciones fuertes',
-    icon: Icons.opacity_outlined,
+    icon: LucideIcons.droplet,
     page: PhSolver(),
   ),
   SolverEntry(
+    id: 'polyprotic-ph',
     group: 'Ácidos y bases',
     title: 'pH de ácidos polipróticos',
     subtitle: 'Dipróticos y tripróticos, por etapas (H₂CO₃, H₂SO₄, H₃PO₄)',
-    icon: Icons.looks_two_outlined,
+    icon: LucideIcons.layers,
     page: PolyproticPhSolver(),
   ),
   SolverEntry(
+    id: 'mixture-ph',
     group: 'Ácidos y bases',
     title: 'pH de mezclas que no reaccionan',
     subtitle: 'Dos ácidos o dos bases, fuertes o débiles',
-    icon: Icons.merge_outlined,
+    icon: LucideIcons.gitMerge,
     page: MixturePhSolver(),
   ),
   SolverEntry(
+    id: 'salt-ph',
     group: 'Ácidos y bases',
     title: 'pH de disoluciones de sales',
     subtitle: 'Con o sin hidrólisis, según de dónde venga la sal',
-    icon: Icons.grain_outlined,
+    icon: LucideIcons.hexagon,
     page: SaltPhSolver(),
   ),
   SolverEntry(
+    id: 'solubility',
     group: 'Equilibrio',
     title: 'Solubilidad y Ksp',
     subtitle: 'De Ksp a solubilidad, o de solubilidad a Ksp (AₐB_b)',
-    icon: Icons.balance,
+    icon: LucideIcons.scale,
     page: SolubilitySolver(),
   ),
   SolverEntry(
+    id: 'redox',
     group: 'Redox',
     title: 'Balanceo redox (ion-electrón)',
     subtitle: 'Reacciones frecuentes, por semirreacciones',
-    icon: Icons.swap_horiz,
+    icon: LucideIcons.arrowLeftRight,
     page: RedoxSolver(),
   ),
   SolverEntry(
+    id: 'gas',
     group: 'Gases y reacciones',
     title: 'Gas ideal',
     subtitle: 'PV = nRT: presión, volumen, moles y temperatura',
-    icon: Icons.air_outlined,
+    icon: LucideIcons.wind,
     page: GasSolver(),
   ),
   SolverEntry(
+    id: 'limiting',
     group: 'Gases y reacciones',
     title: 'Reactivo limitante',
     subtitle: 'Quién se agota primero en la reacción',
-    icon: Icons.hourglass_bottom_outlined,
+    icon: LucideIcons.hourglass,
     page: LimitingSolver(),
   ),
   SolverEntry(
+    id: 'titration',
     group: 'Valoraciones',
     title: 'Valoraciones',
     subtitle: 'Ácido-base, redox y por retroceso',
-    icon: Icons.colorize_outlined,
+    icon: LucideIcons.pipette,
     page: TitrationSolver(),
   ),
   SolverEntry(
+    id: 'potentiometric',
     group: 'Valoraciones',
     title: 'Valoración potenciométrica',
     subtitle: 'El punto de equivalencia por el salto de pH',
-    icon: Icons.show_chart,
+    icon: LucideIcons.trendingUp,
     page: PotentiometricSolver(),
   ),
 ];
@@ -132,37 +154,59 @@ class ResolverScreen extends StatefulWidget {
   State<ResolverScreen> createState() => _ResolverScreenState();
 }
 
+/// Grupos de solucionadores, en el orden en que aparecen.
+const List<String> _solverGroupOrder = [
+  'Cantidad de sustancia',
+  'Disoluciones',
+  'Ácidos y bases',
+  'Equilibrio',
+  'Redox',
+  'Gases y reacciones',
+  'Valoraciones',
+];
+
 class _ResolverScreenState extends State<ResolverScreen> {
-  int? _open; // índice del solucionador abierto (null = lista)
-  var _backRegistered = false;
+  final _scroll = ScrollController();
+  final _groupKeys = <String, GlobalKey>{
+    for (final g in _solverGroupOrder) g: GlobalKey(),
+  };
 
   @override
   void dispose() {
-    if (_backRegistered) BackNav.unregister(_closeSolver);
+    _scroll.dispose();
     super.dispose();
   }
 
-  /// Cierra el solucionador abierto (manejador del botón atrás).
-  bool _closeSolver() {
-    if (_open == null) return false;
-    setState(() => _open = null);
-    return true;
-  }
-
+  /// Abre el solucionador en su propia pantalla completa (v6): con su
+  /// AppBar y su botón atrás, sin el efecto raro de "descomprimirse"
+  /// que tenía al abrirse dentro de la lista.
   void _openSolver(int i) {
-    if (!_backRegistered) {
-      BackNav.register(_closeSolver);
-      _backRegistered = true;
-    }
-    setState(() => _open = i);
+    final entry = solverEntries[i];
+    final t = localizedSolver(entry.id);
+    SoundService.tap();
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          appBar: AppBar(title: Text(t?.title ?? entry.title)),
+          body: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [entry.page, const SizedBox(height: 16)],
+          ),
+        ),
+      ),
+    );
   }
 
-  void _closeSolverView() {
-    if (_backRegistered) {
-      BackNav.unregister(_closeSolver);
-      _backRegistered = false;
-    }
-    setState(() => _open = null);
+  /// Salta a un grupo de la lista (chips de arriba, sin desplazar).
+  void _jumpToGroup(String group) {
+    final ctx = _groupKeys[group]?.currentContext;
+    if (ctx == null) return;
+    SoundService.tap();
+    Scrollable.ensureVisible(
+      ctx,
+      duration: const Duration(milliseconds: 400),
+      alignment: 0.0,
+    );
   }
 
   @override
@@ -182,58 +226,105 @@ class _ResolverScreenState extends State<ResolverScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Un solucionador abierto: botón para volver y el solucionador a
-    // pantalla completa, con sus campos grandes y su tarjeta de resultado.
-    if (_open != null) {
-      return ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          TextButton.icon(
-            onPressed: _closeSolverView,
-            icon: const Icon(Icons.arrow_back),
-            label: Text(tr('allSolvers')),
-            style: TextButton.styleFrom(
-              alignment: Alignment.centerLeft,
-            ),
-          ),
-          solverEntries[_open!].page,
-          const SizedBox(height: 16),
-        ],
-      );
-    }
     return ListView(
+      controller: _scroll,
       padding: const EdgeInsets.all(16),
       children: [
         const _LogoHeader(),
         const SizedBox(height: 8),
         const _IntroCard(),
-        const SizedBox(height: 8),
-        for (var i = 0; i < solverEntries.length; i++) ...[
-          if (i == 0 || solverEntries[i].group != solverEntries[i - 1].group)
-            Padding(
-              padding: const EdgeInsets.only(top: 14, bottom: 6),
-              child: Text(solverEntries[i].group,
-                  style: const TextStyle(
-                      fontSize: 19, fontWeight: FontWeight.bold)),
-            ),
-          Card(
-            margin: const EdgeInsets.only(bottom: 8),
-            child: ListTile(
-              leading: CircleAvatar(
-                backgroundColor: Theme.of(context)
-                    .colorScheme
-                    .primary
-                    .withValues(alpha: 0.15),
-                child: Icon(solverEntries[i].icon,
-                    color: Theme.of(context).colorScheme.primary),
+        const SizedBox(height: 12),
+        // Chips de sección (v6): saltar a cada grupo sin desplazar.
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              ActionChip(
+                label: Text(tr('allSolvers')),
+                onPressed: () {
+                  SoundService.tap();
+                  _scroll.animateTo(0,
+                      duration: const Duration(milliseconds: 400),
+                      curve: Curves.easeInOut);
+                },
               ),
-              title: Text(solverEntries[i].title,
-                  style: const TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text(solverEntries[i].subtitle),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => _openSolver(i),
-            ),
+              for (final g in _solverGroupOrder) ...[
+                const SizedBox(width: 6),
+                ActionChip(
+                  label: Text(localizedSolverGroup(g)),
+                  onPressed: () => _jumpToGroup(g),
+                ),
+              ],
+            ],
           ),
+        ),
+        const SizedBox(height: 12),
+        // Formulario rápido: entrada propia y visible (v6), no al final.
+        Card(
+          child: ListTile(
+            leading: const LucideIcon(LucideIcons.sigma, size: 28),
+            title: Text(tr('menuFormulas'),
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text(tr('formulaCardSub')),
+            trailing: const LucideIcon(LucideIcons.chevronRight),
+            onTap: () {
+              SoundService.tap();
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const FormulaScreen()),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 8),
+        // Simulador de laboratorio: entrada visible (v6), para que no
+        // haya que buscarlo en el menú.
+        Card(
+          child: ListTile(
+            leading: const LucideIcon(LucideIcons.flaskConical, size: 28),
+            title: Text(tr('labSimTitle'),
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text(tr('labSimCardSub')),
+            trailing: const LucideIcon(LucideIcons.chevronRight),
+            onTap: () {
+              SoundService.tap();
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const LabSimScreen()),
+              );
+            },
+          ),
+        ),
+        for (final group in _solverGroupOrder) ...[
+          Padding(
+            key: _groupKeys[group],
+            padding: const EdgeInsets.only(top: 14, bottom: 6),
+            child: Text(localizedSolverGroup(group),
+                style: const TextStyle(
+                    fontSize: 19, fontWeight: FontWeight.bold)),
+          ),
+          for (var i = 0; i < solverEntries.length; i++)
+            if (solverEntries[i].group == group)
+              Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Theme.of(context)
+                        .colorScheme
+                        .primary
+                        .withValues(alpha: 0.15),
+                    child: LucideIcon(solverEntries[i].icon,
+                        color: Theme.of(context).colorScheme.primary),
+                  ),
+                  title: Text(
+                      localizedSolver(solverEntries[i].id)?.title ??
+                          solverEntries[i].title,
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text(
+                      localizedSolver(solverEntries[i].id)?.subtitle ??
+                          solverEntries[i].subtitle),
+                  trailing: const LucideIcon(LucideIcons.chevronRight),
+                  onTap: () => _openSolver(i),
+                ),
+              ),
         ],
         const SizedBox(height: 16),
       ],
@@ -247,15 +338,7 @@ class _LogoHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Column(
       children: [
-        ClipRRect(
-          borderRadius: const BorderRadius.all(Radius.circular(28)),
-          child: Image(
-            image: AssetImage('assets/logo.png'),
-            width: 140,
-            height: 140,
-            fit: BoxFit.cover,
-          ),
-        ),
+        BrandLogo(size: 96),
         SizedBox(height: 8),
         Text(
           'Melli-Qui',
@@ -284,7 +367,7 @@ class _IntroCard extends StatelessWidget {
             Text(tr('resolverIntro')),
             const SizedBox(height: 6),
             Text(
-              '14 solucionadores que no solo dan el resultado: muestran el procedimiento completo, como lo escribirías en un examen.',
+              localizedSolverString('14 solucionadores que no solo dan el resultado: muestran el procedimiento completo, como lo escribirías en un examen.'),
               style: TextStyle(
                   color: Theme.of(context)
                       .colorScheme
@@ -342,7 +425,7 @@ class _MolarMassSolverState extends State<MolarMassSolver> {
             decoration: const InputDecoration(labelText: 'Fórmula química'),
           ),
           const SizedBox(height: 10),
-          ElevatedButton(onPressed: _calc, child: const Text('Calcular masa molar')),
+          ElevatedButton(onPressed: _calc, child: Text(localizedSolverString('Calcular masa molar'))),
           if (_error.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 10),
@@ -420,15 +503,15 @@ class _MassMolesSolverState extends State<MassMolesSolver> {
           DropdownButton<String>(
             value: _mode,
             isExpanded: true,
-            items: const [
-              DropdownMenuItem(value: 'moles', child: Text('Moles a partir de la masa')),
-              DropdownMenuItem(value: 'masa', child: Text('Masa a partir de los moles')),
+            items: [
+              DropdownMenuItem(value: 'moles', child: Text(localizedSolverString('Moles a partir de la masa'))),
+              DropdownMenuItem(value: 'masa', child: Text(localizedSolverString('Masa a partir de los moles'))),
             ],
             onChanged: (v) => setState(() => _mode = v ?? 'moles'),
           ),
           NumField(controller: _mass, label: _mode == 'moles' ? 'Masa (g)' : 'Moles (mol)'),
           NumField(controller: _molar, label: 'Masa molar M (g/mol)'),
-          ElevatedButton(onPressed: _calc, child: const Text('Calcular')),
+          ElevatedButton(onPressed: _calc, child: Text(localizedSolverString('Calcular'))),
           if (_result.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 10),
@@ -484,7 +567,7 @@ class _MolaritySolverState extends State<MolaritySolver> {
         children: [
           NumField(controller: _moles, label: 'Moles de soluto (mol)'),
           NumField(controller: _vol, label: 'Volumen (L)'),
-          ElevatedButton(onPressed: _calc, child: const Text('Calcular')),
+          ElevatedButton(onPressed: _calc, child: Text(localizedSolverString('Calcular'))),
           if (_result.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 10),
@@ -556,7 +639,7 @@ class _DilutionSolverState extends State<DilutionSolver> {
           NumField(controller: _v1, label: 'V₁ inicial (mL)'),
           NumField(controller: _c2, label: 'C₂ final (mol/L)'),
           NumField(controller: _v2, label: 'V₂ final (mL)'),
-          ElevatedButton(onPressed: _calc, child: const Text('Calcular el dato que falta')),
+          ElevatedButton(onPressed: _calc, child: Text(localizedSolverString('Calcular el dato que falta'))),
           if (_result.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 10),
@@ -633,15 +716,15 @@ class _PhSolverState extends State<PhSolver> {
           DropdownButton<String>(
             value: _mode,
             isExpanded: true,
-            items: const [
-              DropdownMenuItem(value: 'h', child: Text('Concentración [H⁺] (mol/L)')),
-              DropdownMenuItem(value: 'ph', child: Text('pH')),
-              DropdownMenuItem(value: 'oh', child: Text('Concentración [OH⁻] (mol/L)')),
+            items: [
+              DropdownMenuItem(value: 'h', child: Text(localizedSolverString('Concentración [H⁺] (mol/L)'))),
+              DropdownMenuItem(value: 'ph', child: Text(localizedSolverString('pH'))),
+              DropdownMenuItem(value: 'oh', child: Text(localizedSolverString('Concentración [OH⁻] (mol/L)'))),
             ],
             onChanged: (v) => setState(() => _mode = v ?? 'h'),
           ),
           NumField(controller: _value, label: 'Valor'),
-          ElevatedButton(onPressed: _calc, child: const Text('Calcular pH y pOH')),
+          ElevatedButton(onPressed: _calc, child: Text(localizedSolverString('Calcular pH y pOH'))),
           if (_result.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 10),
@@ -725,11 +808,11 @@ class _GasSolverState extends State<GasSolver> {
           DropdownButton<String>(
             value: _mode,
             isExpanded: true,
-            items: const [
-              DropdownMenuItem(value: 'P', child: Text('Calcular presión P (atm)')),
-              DropdownMenuItem(value: 'V', child: Text('Calcular volumen V (L)')),
-              DropdownMenuItem(value: 'n', child: Text('Calcular moles n (mol)')),
-              DropdownMenuItem(value: 'T', child: Text('Calcular temperatura T (K)')),
+            items: [
+              DropdownMenuItem(value: 'P', child: Text(localizedSolverString('Calcular presión P (atm)'))),
+              DropdownMenuItem(value: 'V', child: Text(localizedSolverString('Calcular volumen V (L)'))),
+              DropdownMenuItem(value: 'n', child: Text(localizedSolverString('Calcular moles n (mol)'))),
+              DropdownMenuItem(value: 'T', child: Text(localizedSolverString('Calcular temperatura T (K)'))),
             ],
             onChanged: (v) => setState(() => _mode = v ?? 'V'),
           ),
@@ -737,7 +820,7 @@ class _GasSolverState extends State<GasSolver> {
           NumField(controller: _v, label: 'Volumen V (L)'),
           NumField(controller: _n, label: 'Moles n (mol)'),
           NumField(controller: _t, label: 'Temperatura T (K)'),
-          ElevatedButton(onPressed: _calc, child: const Text('Calcular')),
+          ElevatedButton(onPressed: _calc, child: Text(localizedSolverString('Calcular'))),
           if (_result.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 10),
@@ -806,7 +889,7 @@ class _LimitingSolverState extends State<LimitingSolver> {
           NumField(controller: _na, label: 'Moles de A'),
           NumField(controller: _cb, label: 'Coeficiente de B (b)'),
           NumField(controller: _nb, label: 'Moles de B'),
-          ElevatedButton(onPressed: _calc, child: const Text('Encontrar el limitante')),
+          ElevatedButton(onPressed: _calc, child: Text(localizedSolverString('Encontrar el limitante'))),
           if (_result.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 10),

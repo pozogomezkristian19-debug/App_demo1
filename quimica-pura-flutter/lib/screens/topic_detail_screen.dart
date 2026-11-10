@@ -5,7 +5,9 @@
 // de cuestionario (tema de laboratorio) y la estrellita de favorito.
 
 import 'package:flutter/material.dart';
+import '../widgets/lucide_icons.dart';
 
+import '../data/i18n/content_i18n.dart';
 import '../data/topics.dart';
 import '../models.dart';
 import '../services/favorites.dart';
@@ -29,12 +31,13 @@ class _TopicDetailScreenState extends State<TopicDetailScreen> {
     final isFav = FavoritesService.instance.isFav(favId);
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.topic.title),
+        title: Text(localizedTopicName(widget.topic.slug)),
         actions: [
           IconButton(
             tooltip: 'Favorito',
-            icon: Icon(
-              isFav ? Icons.star : Icons.star_border,
+            icon: LucideIcon(
+              LucideIcons.star,
+              filled: isFav,
               color: isFav ? Colors.amber : null,
             ),
             onPressed: () {
@@ -61,7 +64,7 @@ class TopicDetailView extends StatefulWidget {
 class _TopicDetailViewState extends State<TopicDetailView> {
   @override
   Widget build(BuildContext context) {
-    final topic = widget.topic;
+    final topic = localizedTopic(widget.topic);
     final progress = ProgressService.instance;
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -133,7 +136,7 @@ class _TopicDetailViewState extends State<TopicDetailView> {
                         builder: (_) => const LabQuizPage()),
                   );
                 },
-                icon: const Icon(Icons.quiz_outlined),
+                icon: const LucideIcon(LucideIcons.circleHelp),
                 label: Text(tr('labQuizButton')),
               ),
             ),
@@ -141,9 +144,9 @@ class _TopicDetailViewState extends State<TopicDetailView> {
         ElevatedButton.icon(
           onPressed: () =>
               setState(() => progress.toggleMastered(topic.slug)),
-          icon: Icon(progress.isMastered(topic.slug)
-              ? Icons.check
-              : Icons.check_box_outline_blank),
+          icon: LucideIcon(progress.isMastered(topic.slug)
+              ? LucideIcons.check
+              : LucideIcons.circle),
           label: Text(progress.isMastered(topic.slug)
               ? tr('mastered')
               : tr('markMastered')),

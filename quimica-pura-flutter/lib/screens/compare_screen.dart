@@ -2,6 +2,7 @@
 // propiedades lado a lado. Se abre desde Tabla y desde la búsqueda.
 
 import 'package:flutter/material.dart';
+import '../widgets/lucide_icons.dart';
 
 import '../data/element_details.dart';
 import '../data/periodic_table.dart';
@@ -98,7 +99,7 @@ class _CompareScreenState extends State<CompareScreen> {
                   ],
                 ),
               ),
-              const Icon(Icons.compare_arrows, size: 32),
+              const LucideIcon(LucideIcons.arrowLeftRight, size: 32),
               Expanded(
                 child: Column(
                   children: [

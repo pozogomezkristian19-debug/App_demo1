@@ -3,8 +3,10 @@
 // energía y temperatura). Todo offline.
 
 import 'package:flutter/material.dart';
+import '../widgets/lucide_icons.dart';
 
 import '../data/extra_content.dart';
+import '../data/i18n/content_i18n.dart';
 import '../services/localization.dart';
 
 class _UnitCategory {
@@ -120,7 +122,7 @@ class _ConstantsScreenState extends State<ConstantsScreen> {
               child: ListTile(
                 title: Text('${c.symbol} = ${c.value}',
                     style: const TextStyle(fontWeight: FontWeight.w600)),
-                subtitle: Text(c.note),
+                subtitle: Text(localizedConstantNote(c.note)),
               ),
             ),
           const SizedBox(height: 16),
@@ -156,7 +158,7 @@ class _ConstantsScreenState extends State<ConstantsScreen> {
           TextField(
             decoration: const InputDecoration(
               labelText: 'Valor',
-              prefixIcon: Icon(Icons.input),
+              prefixIcon: LucideIcon(LucideIcons.logIn),
             ),
             keyboardType:
                 const TextInputType.numberWithOptions(decimal: true),
@@ -192,7 +194,7 @@ class _ConstantsScreenState extends State<ConstantsScreen> {
                 ),
               ),
               const SizedBox(width: 8),
-              const Icon(Icons.arrow_forward),
+              const LucideIcon(LucideIcons.arrowRight),
               const SizedBox(width: 8),
               Expanded(
                 child: DropdownButtonFormField<String>(

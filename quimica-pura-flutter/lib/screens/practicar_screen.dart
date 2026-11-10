@@ -1,23 +1,40 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import '../widgets/lucide_icons.dart';
+import '../data/i18n/content_i18n.dart';
 import '../data/extra_content.dart';
 import '../data/questions.dart';
 import '../models.dart';
+import '../services/home_widget_service.dart';
 import '../services/localization.dart';
 import '../services/nav_requests.dart';
+import '../services/points.dart';
 import '../services/progress.dart';
 import '../services/question_generator.dart';
+import '../services/sound_service.dart';
 import '../services/user_prefs.dart';
+import '../widgets/brand_logo.dart';
 import '../widgets/celebration.dart';
-import '../widgets/element_sheet.dart';
+import '../widgets/icon_animations.dart';
+import '../widgets/twin_avatars.dart';
+import '../widgets/how_to_play.dart';
 
 // Practicar estilo Duolingo: niveles por tema, repaso de errores y memoria
 // que no se borra al cerrar la app (todo vive en ProgressService, que
 // guarda en SharedPreferences).
 //
-// - Cada tema se parte en niveles de 5 preguntas. Para pasar de nivel hay
-//   que sacar al menos 4 de 5 (80%); al pasarlo se desbloquea el siguiente.
+// - Cada tema se parte en niveles de 5 preguntas. Para pasar de nivel la
+//   NOTA sobre 5 (por puntos según la dificultad) tiene que ser MÁS DE 4
+//   (v6: ya no vale el viejo 4/5 correctas; 4 medias de 5 dan 4,0 exactos
+//   y NO pasan). Al pasarlo se desbloquea el siguiente.
+//   Cada respuesta suma o resta puntos del saldo total (ver points.dart).
+// - Abandonar un nivel en curso (Salir o atrás) cuesta 1 vida; hay 5 al
+//   día y se reponen cada día nuevo. Con 0 vidas no se puede empezar.
+//   Ganar un nivel completo devuelve 1 vida (hasta 5). La primera vez
+//   que se entra a Niveles tras la v6 sale una ventanita con las reglas.
+// - El repaso es POR NIVEL y con VARIANTES (v6): no se repite la misma
+//   pregunta, sino el mismo concepto con otros datos, y hacen falta 3
+//   aciertos seguidos para dar un error por superado.
 //   Los niveles usan primero las preguntas del banco, en orden, y después
 //   preguntas nuevas generadas, así un nivel siempre tiene 5 preguntas.
 // - El examen mixto es el reto final: se desbloquea cuando se pasa el
@@ -31,8 +48,11 @@ import '../widgets/element_sheet.dart';
 //   guardado (ver ProgressService.setTrack).
 
 const int _levelSize = 5;
-const int _passNeeded = 4; // 4 de 5 = 80%
-const int _passPercent = (_passNeeded * 100) ~/ _levelSize; // 80%
+/// Con la nota por puntos, el aprobado es nota5 > 4,0.
+/// En porcentaje guardado (nota5 x 20), el aprobado empieza en 81:
+/// 4,0 exactos son 80 y NO pasan (ver points.dart y la migración en
+/// ProgressService._readAll).
+const int _passPercent = 81;
 const int _mixedSize = 24; // examen mixto de Universidad
 const int _mixedSizeBach = 16; // examen mixto de Bachillerato
 const int _reviewMax = 20;
@@ -72,50 +92,48 @@ const double _nodeCenterY = 36.0; // centro del nodo dentro de su fila
 // serpentea izquierda-centro-derecha, como en Duolingo.
 const List<double> _pathOffsets = [0, -52, -78, -52, 0, 52, 78, 52];
 
-const Map<String, IconData> _topicIcons = {
-  'estequiometria': Icons.functions,
-  'gases': Icons.air,
-  'disoluciones': Icons.water_drop,
-  'acido-base': Icons.science,
-  'equilibrio': Icons.balance,
-  'termo-cinetica': Icons.thermostat,
-  'tabla': Icons.grid_view,
-  'enlace': Icons.link,
-  'organica': Icons.hub,
-  'laboratorio': Icons.biotech,
-  'bach-estequiometria': Icons.functions,
-  'bach-gases': Icons.air,
-  'bach-disoluciones': Icons.water_drop,
-  'bach-acido-base': Icons.science,
+const Map<String, LucideIconData> _topicIcons = {
+  'estequiometria': LucideIcons.sigma,
+  'gases': LucideIcons.wind,
+  'disoluciones': LucideIcons.droplet,
+  'acido-base': LucideIcons.flaskConical,
+  'equilibrio': LucideIcons.scale,
+  'termo-cinetica': LucideIcons.thermometer,
+  'tabla': LucideIcons.layoutGrid,
+  'enlace': LucideIcons.link,
+  'organica': LucideIcons.hexagon,
+  'laboratorio': LucideIcons.dna,
+  'bach-estequiometria': LucideIcons.sigma,
+  'bach-gases': LucideIcons.wind,
+  'bach-disoluciones': LucideIcons.droplet,
+  'bach-acido-base': LucideIcons.flaskConical,
 };
 
-const Map<String, Color> _topicColors = {
-  'estequiometria': Color(0xFF14B8A6),
-  'gases': Color(0xFF38BDF8),
-  'disoluciones': Color(0xFF22D3EE),
-  'acido-base': Color(0xFFA78BFA),
-  'equilibrio': Color(0xFFF59E0B),
-  'termo-cinetica': Color(0xFFEF4444),
-  'tabla': Color(0xFF22C55E),
-  'enlace': Color(0xFFEC4899),
-  'organica': Color(0xFF84CC16),
-  'laboratorio': Color(0xFFF97316),
-  'bach-estequiometria': Color(0xFF14B8A6),
-  'bach-gases': Color(0xFF38BDF8),
-  'bach-disoluciones': Color(0xFF22D3EE),
-  'bach-acido-base': Color(0xFFA78BFA),
-};
+// Rediseño claro estilo Duolingo (color propio, teal de Melli-Qui):
+// el camino, sus nodos y las cabeceras de tema usan todos el mismo
+// teal de la marca; no hay un color distinto por tema. El icono de
+// cada tema sigue distinto (ver _topicIcons).
 
 String bankId(QuizQuestion q) => 'bank:${q.topic}:${q.question}';
 
 class _QuizItem {
-  const _QuizItem({required this.id, required this.question});
+  const _QuizItem({required this.id, required this.question, this.reviewEntryId});
+
   final String id; // 'bank:...' o 'gen:...'
   final QuizQuestion question;
+
+  /// En el repaso de variantes: la entrada fallada original que esta
+  /// variante está repasando (su id). null en niveles y mixto.
+  final String? reviewEntryId;
 }
 
 class _QuizSpec {
-  const _QuizSpec({required this.kind, this.topic, this.level = 0, this.reviewOnly});
+  const _QuizSpec(
+      {required this.kind,
+      this.topic,
+      this.level = 0,
+      this.reviewOnly,
+      this.groupLabel});
   final String kind; // 'level', 'review' o 'mixto'
   final String? topic;
   final int level;
@@ -123,10 +141,19 @@ class _QuizSpec {
   /// Repaso inteligente: solo estas entradas (los errores de días
   /// anteriores). null = todos los errores.
   final List<FailedEntry>? reviewOnly;
+
+  /// Etiqueta del grupo que se repasa ("Estequiometría · Nivel 2"),
+  /// para el título del repaso por niveles.
+  final String? groupLabel;
 }
 
 class PracticarScreen extends StatefulWidget {
-  const PracticarScreen({super.key});
+  const PracticarScreen({super.key, this.onOpenScreen});
+
+  /// Abre una pantalla del menú por su clave (tarjetas, examen con
+  /// tiempo, reto…): lo resuelve HomeScreen con _openScreenKey.
+  final void Function(String key)? onOpenScreen;
+
   @override
   State<PracticarScreen> createState() => _PracticarScreenState();
 }
@@ -135,10 +162,32 @@ class _PracticarScreenState extends State<PracticarScreen> {
   _QuizState? _quiz;
   _QuizSpec? _spec;
 
+  /// ¿El quiz abierto ya terminó (resultado en pantalla)? Solo
+  /// abandonar ANTES de terminar cuesta una vida.
+  var _finishedQuiz = false;
+
   // Para volver al punto donde va el usuario al abrir el camino.
   final _currentKey = GlobalKey();
   var _scrolledToCurrent = false;
   var _backRegistered = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Primera vez en Niveles tras la v6: ventanita corta con las reglas
+    // (vidas, puntos, cómo se pasa de nivel). Solo una vez.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      if (UserPrefs.rulesSeenV6) return;
+      // Un respiro para no pisar el popup del elemento del día, que
+      // sale al abrir la app desde HomeScreen.
+      await Future.delayed(const Duration(milliseconds: 900));
+      if (!mounted) return;
+      await UserPrefs.saveRulesSeenV6();
+      if (!mounted) return;
+      await showHowToPlayDialog(context);
+    });
+  }
 
   @override
   void dispose() {
@@ -146,10 +195,12 @@ class _PracticarScreenState extends State<PracticarScreen> {
     super.dispose();
   }
 
-  /// Cierra el quiz abierto (manejador del botón atrás).
+  /// Cierra el quiz abierto (manejador del botón atrás): abandonar un
+  /// nivel en curso cuesta 1 vida, igual que el botón Salir, así que
+  /// también pide confirmación antes de salir.
   bool _closeQuiz() {
     if (_quiz == null) return false;
-    setState(() => _quiz = null);
+    _requestExitQuiz();
     return true;
   }
 
@@ -224,9 +275,25 @@ class _PracticarScreenState extends State<PracticarScreen> {
     Scrollable.ensureVisible(ctx, alignment: 0.45, duration: const Duration(milliseconds: 400));
   }
 
-  /// Temas y preguntas del banco de la pista actual, en el orden de la
-  /// pista. Cambia al cambiar de pista (ver el selector de arriba).
+  /// Temas y preguntas del banco de la pista actual, en el idioma
+  /// activo, en el orden de la pista.
   Map<String, List<QuizQuestion>> get _byTopic {
+    final wanted = ProgressService.track == ProgressService.trackBach
+        ? bachTopics
+        : uniTopics;
+    final byTopic = <String, List<QuizQuestion>>{
+      for (final t in wanted) t: <QuizQuestion>[],
+    };
+    for (final q in localizedAllQuestions()) {
+      byTopic[q.topic]?.add(q);
+    }
+    return byTopic;
+  }
+
+  /// Lo mismo, pero con los textos españoles: los ids persistentes de
+  /// los errores se construyen SIEMPRE con el texto español, para que
+  /// no dependan del idioma activo.
+  Map<String, List<QuizQuestion>> get _spanishByTopic {
     final wanted = ProgressService.track == ProgressService.trackBach
         ? bachTopics
         : uniTopics;
@@ -242,13 +309,17 @@ class _PracticarScreenState extends State<PracticarScreen> {
   int _levelCount(String topic) =>
       ProgressService.levelCountForTopic(topic);
 
-  /// Resuelve una entrada fallada a su pregunta (banco o generada).
+  /// Resuelve una entrada fallada a su pregunta (banco o generada),
+  /// en el idioma activo.
   QuizQuestion? _resolveFailed(FailedEntry f) {
     if (f.id.startsWith('gen:')) {
       return rebuildGenerated(f.id)?.question;
     }
-    for (final q in allQuestions) {
-      if (q.topic == f.topic && q.question == f.question) return q;
+    for (var i = 0; i < allQuestions.length; i++) {
+      final q = allQuestions[i];
+      if (q.topic == f.topic && q.question == f.question) {
+        return localizedQuestionAt(i);
+      }
     }
     return null;
   }
@@ -256,6 +327,7 @@ class _PracticarScreenState extends State<PracticarScreen> {
   List<_QuizItem> _buildLevelQuestions(String topic, int level) {
     final progress = ProgressService.instance;
     final bank = _byTopic[topic] ?? <QuizQuestion>[];
+    final spanishBank = _spanishByTopic[topic] ?? <QuizQuestion>[];
     final items = <_QuizItem>[];
     final used = <String>{};
     // Hasta 2 errores pendientes del tema, primero.
@@ -267,12 +339,13 @@ class _PracticarScreenState extends State<PracticarScreen> {
     }
     // Después, las preguntas del banco de este nivel, en orden, hasta
     // completar 5 en total (los errores pendientes ocupan su sitio).
+    // El id se calcula con la pregunta española (índice alineado).
     final start = (level - 1) * _levelSize;
     if (start < bank.length && items.length < _levelSize) {
       final end = min(start + (_levelSize - items.length), bank.length);
-      for (final q in bank.sublist(start, end)) {
-        final id = bankId(q);
-        if (used.add(id)) items.add(_QuizItem(id: id, question: q));
+      for (var i = start; i < end; i++) {
+        final id = bankId(spanishBank[i]);
+        if (used.add(id)) items.add(_QuizItem(id: id, question: bank[i]));
       }
     }
     // Y preguntas nuevas generadas hasta completar 5 (solo si el tema
@@ -291,17 +364,67 @@ class _PracticarScreenState extends State<PracticarScreen> {
     return items;
   }
 
-  /// Preguntas del repaso: todos los errores, o solo los que se pasen
-  /// (repaso inteligente: los de días anteriores).
+  /// Repaso con VARIANTES (v6): nunca se muestra la misma pregunta
+  /// que se falló. Cada error se repasa con al menos 3 preguntas nuevas
+  /// del mismo concepto y con otros datos: del generador si el tema
+  /// tiene (o del mismo tipo si la fallada era generada), y de otras
+  /// preguntas del banco del mismo tema si no (orgánica, laboratorio).
+  /// Cada variante lleva el id de la entrada original, para que al
+  /// contestarla se sume su racha de repaso (3 seguidos = superada).
   List<_QuizItem> _buildReviewQuestions([List<FailedEntry>? only]) {
     final progress = ProgressService.instance;
     final items = <_QuizItem>[];
     final entries = List<FailedEntry>.of(only ?? progress.failedEntries)
       ..shuffle();
-    for (final f in entries.take(_reviewMax)) {
-      final q = _resolveFailed(f);
-      if (q != null) items.add(_QuizItem(id: f.id, question: q));
+    final rng = Random();
+    for (final f in entries) {
+      if (items.length >= _reviewMax) break;
+      var made = 0;
+      var guard = 0;
+      while (made < 3 && guard < 12 && items.length < _reviewMax) {
+        guard++;
+        GeneratedQuestion? g;
+        if (f.id.startsWith('gen:')) {
+          g = generateVariantForFailed(f.id, f.topic, rng);
+        } else if (topicGeneratorTypes.containsKey(f.topic)) {
+          g = generateForTopic(f.topic, rng);
+        }
+        if (g != null) {
+          if (items.any((it) => it.id == g!.id)) continue;
+          items.add(_QuizItem(
+              id: g.id, question: g.question, reviewEntryId: f.id));
+          made++;
+        } else {
+          // Sin generador: otras preguntas del banco del mismo tema
+          // (nunca la fallada), con id español estable.
+          final bank = _byTopic[f.topic] ?? <QuizQuestion>[];
+          final spanishBank = _spanishByTopic[f.topic] ?? <QuizQuestion>[];
+          final pool = <int>[];
+          for (var i = 0; i < bank.length; i++) {
+            if (bank[i].question != f.question) pool.add(i);
+          }
+          pool.shuffle(rng);
+          for (final i in pool) {
+            if (made >= 3 || items.length >= _reviewMax) break;
+            final id = bankId(spanishBank[i]);
+            if (items.any((it) => it.id == id)) continue;
+            // La pregunta se muestra en el idioma activo.
+            items.add(_QuizItem(
+                id: id, question: bank[i], reviewEntryId: f.id));
+            made++;
+          }
+          break; // sin generador no hay más variantes que probar
+        }
+      }
+      if (made == 0) {
+        // No se pudo hacer ninguna variante: la pregunta original.
+        final q = _resolveFailed(f);
+        if (q != null && items.length < _reviewMax) {
+          items.add(_QuizItem(id: f.id, question: q, reviewEntryId: f.id));
+        }
+      }
     }
+    items.shuffle(rng);
     return items;
   }
 
@@ -316,12 +439,14 @@ class _PracticarScreenState extends State<PracticarScreen> {
     final items = <_QuizItem>[];
     final used = <String>{};
     // 2 preguntas del banco por tema, empezando por los más débiles.
+    // El id se calcula con la pregunta española (índice alineado).
     for (final topic in weakest) {
-      final pool = List<QuizQuestion>.of(_byTopic[topic] ?? <QuizQuestion>[])
-        ..shuffle(rng);
-      for (final q in pool.take(2)) {
-        final id = bankId(q);
-        if (used.add(id)) items.add(_QuizItem(id: id, question: q));
+      final pool = List<QuizQuestion>.of(_byTopic[topic] ?? <QuizQuestion>[]);
+      final spanishPool = _spanishByTopic[topic] ?? <QuizQuestion>[];
+      final order = List<int>.generate(pool.length, (i) => i)..shuffle(rng);
+      for (final i in order.take(2)) {
+        final id = bankId(spanishPool[i]);
+        if (used.add(id)) items.add(_QuizItem(id: id, question: pool[i]));
       }
     }
     // El resto, preguntas nuevas pesando hacia los temas más débiles.
@@ -356,8 +481,9 @@ class _PracticarScreenState extends State<PracticarScreen> {
   String _titleFor(_QuizSpec spec) {
     switch (spec.kind) {
       case 'level':
-        return '${topicNames[spec.topic] ?? spec.topic} · ${tr('levelWord')} ${spec.level}';
+        return '${localizedTopicName(spec.topic!)} · ${tr('levelWord')} ${spec.level}';
       case 'review':
+        if (spec.groupLabel != null) return spec.groupLabel!;
         return spec.reviewOnly != null
             ? tr('smartReviewTitle')
             : tr('reviewTitle');
@@ -367,6 +493,18 @@ class _PracticarScreenState extends State<PracticarScreen> {
   }
 
   void _start(_QuizSpec spec) {
+    // Sin vidas no se puede empezar un nivel (v6): hay que esperar a
+    // mañana, cuando se reponen las 5.
+    if (spec.kind == 'level' &&
+        !ProgressService.instance.canStartLevel) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(tr('livesEmptyBody')),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+      return;
+    }
     final questions = _buildQuestions(spec);
     if (questions.isEmpty) return;
     _scrolledToCurrent = false;
@@ -376,6 +514,7 @@ class _PracticarScreenState extends State<PracticarScreen> {
     }
     setState(() {
       _spec = spec;
+      _finishedQuiz = false;
       _quiz = _QuizState(
         testId: spec.kind == 'level'
             ? 'level:${spec.topic}:${spec.level}'
@@ -391,7 +530,54 @@ class _PracticarScreenState extends State<PracticarScreen> {
       BackNav.unregister(_closeQuiz);
       _backRegistered = false;
     }
+    // Abandonar un nivel en curso cuesta 1 vida (v6). Terminarlo
+    // (aprobado o suspendido) no cuesta nada.
+    if (_spec != null && _spec!.kind == 'level' && !_finishedQuiz) {
+      ProgressService.instance.loseLifeOnAbandon();
+    }
     setState(() => _quiz = null);
+  }
+
+  /// Salir de un quiz pidiendo confirmación cuando cuesta una vida:
+  /// de un nivel sin terminar se sale solo si el usuario confirma el
+  /// aviso ("Si sales ahora, pierdes una vida, ¿seguro?"). De un
+  /// examen, un repaso o un quiz ya terminado se sale directo.
+  void _requestExitQuiz() {
+    if (_spec != null && _spec!.kind == 'level' && !_finishedQuiz) {
+      showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(tr('exitLevelTitle')),
+          content: Text(tr('exitLevelBody')),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(tr('exitLevelStay')),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                _exitQuiz();
+              },
+              child: Text(tr('exitLevelLeave')),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    _exitQuiz();
+  }
+
+  /// Empieza el repaso de un grupo (tema + nivel) con variantes.
+  void _startReviewGroup(
+      String topic, int level, List<FailedEntry> entries) {
+    _start(_QuizSpec(
+      kind: 'review',
+      reviewOnly: entries,
+      groupLabel:
+          tr('reviewLevelTitle').replaceFirst('%s', localizedTopicName(topic)).replaceFirst('%d', '$level'),
+    ));
   }
 
   void _repeat() {
@@ -419,8 +605,9 @@ class _PracticarScreenState extends State<PracticarScreen> {
       return _QuizRunner(
         quiz: _quiz!,
         spec: _spec!,
-        onExit: _exitQuiz,
+        onExit: _requestExitQuiz,
         onRepeat: _repeat,
+        onFinished: () => _finishedQuiz = true,
       );
     }
     final progress = ProgressService.instance;
@@ -429,6 +616,9 @@ class _PracticarScreenState extends State<PracticarScreen> {
     final mixedUnlocked = _mixedUnlocked();
     final level1Done = topics.length - _missingLevel1Topics().length;
     final current = _firstUnpassed();
+    // Gemela del día, una sola vez: el banner y el nodo actual
+    // usan la misma.
+    final twinA = twinOfTheDay();
     final passedCount = _passedLevelCount();
     final totalCount = _totalLevelCount();
     if (!_scrolledToCurrent) {
@@ -451,17 +641,41 @@ class _PracticarScreenState extends State<PracticarScreen> {
                   const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
           const SizedBox(height: 6),
           Text(tr('levelsIntro')),
-          const SizedBox(height: 12),
-          // Racha, meta del día y recordatorio, en una fila.
-          _DailyStrip(),
-          const SizedBox(height: 12),
-          // Pregunta del día y elemento del día.
-          _QuestionOfTheDayCard(),
-          const SizedBox(height: 8),
-          _ElementOfTheDayCard(
-            onOpen: (e) => showElementSheet(context, e),
+          const SizedBox(height: 16),
+          // El recordatorio ("es hora de practicar") sigue aquí arriba
+          // cuando toca; la tarjeta de estadísticas (vidas/puntos/
+          // racha/meta) ya NO está en Niveles: vive en Cuenta (fix 3),
+          // así el camino empieza más arriba y se ve más.
+          const _ReminderCard(),
+          // Gemela del día (v6): va rotando, una cada día.
+          FadeSlideIn(
+            child: Card(
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Row(
+                  children: [
+                    twinA
+                        ? const TwinAvatarA(size: 36)
+                        : const TwinAvatarB(size: 36),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        tr(twinOfDayKey(twinA)),
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
+          FadeSlideIn(
+            delay: const Duration(milliseconds: 80),
+            child: _QuestionOfTheDayChip(onChanged: () => setState(() {})),
+          ),
+          const SizedBox(height: 16),
           Text(
             '${tr('passedWord')}: $passedCount / $totalCount',
             style: TextStyle(
@@ -469,41 +683,36 @@ class _PracticarScreenState extends State<PracticarScreen> {
               color: Theme.of(context).colorScheme.primary,
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           // Repaso inteligente: errores de días anteriores que resurgen.
           if (progress.dueFailed().isNotEmpty)
             Card(
-              color: Colors.amber.withValues(alpha: 0.18),
               child: ListTile(
-                leading: const Icon(Icons.auto_awesome, size: 32),
+                leading: const LucideIcon(LucideIcons.sparkles,
+                    size: 32, color: BrandColors.amber),
                 title: Text(tr('smartReviewTitle'),
                     style: const TextStyle(fontWeight: FontWeight.bold)),
                 subtitle: Text(
                     '${progress.dueFailed().length} ${tr('reviewQuestions')} de días anteriores'),
-                trailing: const Icon(Icons.chevron_right),
+                trailing: const LucideIcon(LucideIcons.chevronRight),
                 onTap: () => _start(_QuizSpec(
                     kind: 'review', reviewOnly: progress.dueFailed())),
               ),
             ),
           if (progress.dueFailed().isNotEmpty) const SizedBox(height: 8),
-          // Repaso de errores, solo si hay algo que repasar.
+          // Repaso de errores POR NIVEL (v6), solo si hay algo que
+          // repasar: cada grupo es un nivel de un tema, con variantes.
           if (progress.failedCount > 0)
-            Card(
-              color: Theme.of(context)
-                  .colorScheme
-                  .primary
-                  .withValues(alpha: 0.15),
-              child: ListTile(
-                leading: const Icon(Icons.replay_circle_filled, size: 32),
-                title: Text(tr('reviewTitle'),
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text(
-                    '${progress.failedCount} ${tr('reviewQuestions')}'),
-                trailing: Chip(label: Text('${progress.failedCount}')),
-                onTap: () => _start(const _QuizSpec(kind: 'review')),
-              ),
-            ),
+            _ReviewGroupsCard(onGroupTap: _startReviewGroup),
           if (progress.failedCount > 0) const SizedBox(height: 8),
+          // Practicar de otra forma: tarjetas, examen con tiempo y
+          // reto. Antes solo se llegaba desde la búsqueda, por eso
+          // casi nadie los veía: ahora están aquí, en Niveles.
+          _OtherWaysSection(
+            onOpen: widget.onOpenScreen ??
+                (_) {},
+          ),
+          const SizedBox(height: 20),
           for (var i = 0; i < topics.length; i++)
             _TopicPathSection(
               topic: topics[i],
@@ -548,7 +757,7 @@ class _PracticarScreenState extends State<PracticarScreen> {
                 _start(const _QuizSpec(kind: 'mixto'));
               } else {
                 final missing = _missingLevel1Topics()
-                    .map((t) => topicNames[t] ?? t)
+                    .map((t) => localizedTopicName(t))
                     .join(', ');
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -567,6 +776,92 @@ class _PracticarScreenState extends State<PracticarScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Practicar de otra forma: tres tarjetas visibles en Niveles que
+/// abren las Tarjetas de memoria, el Examen con tiempo y el Reto con
+/// otra persona. Estas tres pantallas existen desde v5, pero solo se
+/// podían abrir desde la búsqueda sabiendo su nombre, así que casi
+/// nadie las encontraba.
+///
+/// Las tres tarjetas miden EXACTAMENTE lo mismo (fix 4): la fila
+/// estira las tres a la altura de la más alta, los huecos entre
+/// ellas son fijos (8 px) y el título tiene alto fijo de 2 líneas,
+/// así "Reto" (una sola línea) no encoge su tarjeta.
+class _OtherWaysSection extends StatelessWidget {
+  const _OtherWaysSection({required this.onOpen});
+  final void Function(String key) onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget card(String key, LucideIconData icon, String title) {
+      return Expanded(
+        child: Card(
+          margin: EdgeInsets.zero,
+          color: BrandColors.cardGray,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: () {
+              SoundService.tap();
+              onOpen(key);
+            },
+            child: Padding(
+              padding:
+                  const EdgeInsets.symmetric(vertical: 14, horizontal: 6),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  LucideIcon(icon, size: 30, color: BrandColors.teal),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 34,
+                    child: Center(
+                      child: Text(
+                        title,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          tr('practiceOtherWays'),
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 10),
+        // IntrinsicHeight: la fila vive dentro de un scroll vertical
+        // (alto sin límite), y con CrossAxisAlignment.stretch la
+        // fila intentaría estirar las tarjetas a un alto infinito.
+        // IntrinsicHeight le da a la fila el alto de la tarjeta más
+        // alta, y stretch iguala las otras dos a ese alto.
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              card('flashcards', LucideIcons.layers, tr('flashcardsTitle')),
+              const SizedBox(width: 8),
+              card('timed', LucideIcons.timer, tr('timedTitle')),
+              const SizedBox(width: 8),
+              card('challenge', LucideIcons.gamepad2, tr('challengeTitle')),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -668,9 +963,8 @@ class _TopicPathSection extends StatelessWidget {
       final s = progress.bestScore('level:$topic:$i');
       if (s > best) best = s;
     }
-    final color =
-        _topicColors[topic] ?? Theme.of(context).colorScheme.primary;
-    final scheme = Theme.of(context).colorScheme;
+    // Cabecera y camino en el teal propio de Melli-Qui (gris si el
+    // tema está bloqueado): todos los temas comparten el color.
     return SizedBox(
       height: _headerH + levelCount * _rowH,
       child: Stack(
@@ -679,8 +973,9 @@ class _TopicPathSection extends StatelessWidget {
             child: CustomPaint(
               painter: _PathPainter(
                 levelCount: levelCount,
-                // El sendero de cada tema lleva el color del tema.
-                color: color.withValues(alpha: locked ? 0.15 : 0.45),
+                color: locked
+                    ? const Color(0xFFD1D5DB)
+                    : BrandColors.teal.withValues(alpha: 0.35),
               ),
             ),
           ),
@@ -690,20 +985,31 @@ class _TopicPathSection extends StatelessWidget {
                 height: _headerH,
                 child: Container(
                   decoration: BoxDecoration(
-                    color: color.withValues(alpha: locked ? 0.06 : 0.12),
-                    borderRadius: BorderRadius.circular(12),
+                    color: locked
+                        ? const Color(0xFFE5E7EB)
+                        : BrandColors.teal,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.08),
+                        blurRadius: 6,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Row(
                     children: [
                       CircleAvatar(
                         radius: 22,
-                        backgroundColor: color.withValues(alpha: 0.18),
-                        child: Icon(
+                        backgroundColor: Colors.white,
+                        child: LucideIcon(
                             locked
-                                ? Icons.lock
-                                : (_topicIcons[topic] ?? Icons.quiz_outlined),
-                            color: color),
+                                ? LucideIcons.lock
+                                : (_topicIcons[topic] ?? LucideIcons.circleHelp),
+                            color: locked
+                                ? const Color(0xFF9CA3AF)
+                                : BrandColors.teal),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -711,17 +1017,22 @@ class _TopicPathSection extends StatelessWidget {
                           mainAxisAlignment: MainAxisAlignment.center,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(topicNames[topic] ?? topic,
-                                style: const TextStyle(
+                            Text(localizedTopicName(topic),
+                                style: TextStyle(
                                     fontSize: 18,
-                                    fontWeight: FontWeight.bold)),
+                                    fontWeight: FontWeight.w800,
+                                    color: locked
+                                        ? BrandColors.ink
+                                            .withValues(alpha: 0.6)
+                                        : Colors.white)),
                             Text(
                               locked
                                   ? tr('lockedWord')
                                   : '${tr('levelWord')} ${unlocked > levelCount ? levelCount : unlocked} ${tr('quizOf')} $levelCount · ${tr('bestWord')}: $best%',
                               style: TextStyle(
-                                color:
-                                    scheme.onSurface.withValues(alpha: 0.7),
+                                color: locked
+                                    ? BrandColors.ink.withValues(alpha: 0.6)
+                                    : Colors.white.withValues(alpha: 0.9),
                               ),
                             ),
                           ],
@@ -817,26 +1128,25 @@ class _LevelNodeRowState extends State<_LevelNodeRow>
     // Niveles sin preguntas del banco: solo preguntas nuevas generadas.
     final generatedOnly =
         (widget.level - 1) * _levelSize >= widget.bankCount;
-    final scheme = Theme.of(context).colorScheme;
     final offset = _pathOffsets[(widget.level - 1) % _pathOffsets.length];
     final Color bg;
     final Widget inner;
     if (passed) {
-      bg = const Color(0xFFFFB300);
-      inner = const Icon(Icons.check, color: Color(0xFF5D4037), size: 34);
+      // Nivel pasado: teal con palomita blanca.
+      bg = BrandColors.teal;
+      inner = const LucideIcon(LucideIcons.check, color: Colors.white, size: 34);
     } else if (widget.unlocked) {
-      bg = scheme.primary;
+      bg = BrandColors.teal;
       inner = Text('${widget.level}',
           style: const TextStyle(
               fontSize: 26,
               fontWeight: FontWeight.bold,
               color: Colors.white));
     } else {
-      // Nodo bloqueado: fondo bastante opaco para que el círculo se vea
-      // como círculo (la línea del camino ya no lo atraviesa).
-      bg = scheme.onSurface.withValues(alpha: 0.30);
-      inner = Icon(Icons.lock,
-          color: scheme.onSurface.withValues(alpha: 0.6), size: 28);
+      // Nodo bloqueado: gris claro con candado gris.
+      bg = const Color(0xFFE5E7EB);
+      inner = const LucideIcon(LucideIcons.lock,
+          color: Color(0xFF9CA3AF), size: 28);
     }
     return SizedBox(
       height: _rowH,
@@ -860,27 +1170,51 @@ class _LevelNodeRowState extends State<_LevelNodeRow>
                       height: 76,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: scheme.primary.withValues(alpha: 0.18),
+                        color: BrandColors.teal.withValues(alpha: 0.18),
                       ),
                     ),
                   ),
+                ),
+              // La gemela del día, junto al nodo actual, como en
+              // Duolingo: a un lado del camino, sin tapar el nodo.
+              if (widget.isCurrent)
+                Positioned(
+                  left: offset >= 0
+                      ? cx - _nodeSize / 2 - 56
+                      : cx + _nodeSize / 2 + 16,
+                  top: _nodeCenterY - 20,
+                  child: twinOfTheDay()
+                      ? const TwinAvatarA(size: 40)
+                      : const TwinAvatarB(size: 40),
                 ),
               Positioned(
                 left: cx - _nodeSize / 2,
                 top: _nodeCenterY - _nodeSize / 2,
                 child: GestureDetector(
-                  onTap: () => widget.onLevelTap(widget.level, widget.unlocked),
+                  onTap: () {
+                    SoundService.tap();
+                    widget.onLevelTap(widget.level, widget.unlocked);
+                  },
                   child: Container(
                     width: _nodeSize,
                     height: _nodeSize,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: bg,
+                      // El nodo actual lleva un anillo blanco (y un
+                      // aro teal por fuera, para que el blanco se vea
+                      // sobre el fondo blanco), además del halo.
+                      border: widget.isCurrent
+                          ? Border.all(color: Colors.white, width: 3)
+                          : null,
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.25),
-                          blurRadius: 4,
-                          offset: const Offset(0, 3),
+                          color: widget.isCurrent
+                              ? BrandColors.teal.withValues(alpha: 0.35)
+                              : Colors.black.withValues(alpha: 0.15),
+                          blurRadius: widget.isCurrent ? 0 : 4,
+                          spreadRadius: widget.isCurrent ? 2 : 0,
+                          offset: Offset(0, widget.isCurrent ? 0 : 3),
                         ),
                       ],
                     ),
@@ -906,8 +1240,11 @@ class _LevelNodeRowState extends State<_LevelNodeRow>
                         ? FontWeight.bold
                         : FontWeight.normal,
                     color: widget.isCurrent
-                        ? scheme.primary
-                        : scheme.onSurface.withValues(alpha: 0.7),
+                        ? BrandColors.teal
+                        : Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withValues(alpha: 0.7),
                   ),
                 ),
               ),
@@ -951,8 +1288,8 @@ class _FinalExamSection extends StatelessWidget {
           children: [
             CircleAvatar(
               radius: 22,
-              backgroundColor: Colors.amber.withValues(alpha: 0.18),
-              child: const Icon(Icons.emoji_events, color: Colors.amber),
+              backgroundColor: BrandColors.amber.withValues(alpha: 0.15),
+              child: const LucideIcon(LucideIcons.trophy, color: BrandColors.amber),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -979,23 +1316,23 @@ class _FinalExamSection extends StatelessWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: unlocked
-                  ? const Color(0xFFFFB300)
-                  : scheme.onSurface.withValues(alpha: 0.30),
+                  ? BrandColors.teal
+                  : const Color(0xFFE5E7EB),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.25),
+                  color: Colors.black.withValues(alpha: 0.15),
                   blurRadius: 4,
                   offset: const Offset(0, 3),
                 ),
               ],
             ),
             alignment: Alignment.center,
-            child: Icon(
-              unlocked ? Icons.emoji_events : Icons.lock,
+            child: LucideIcon(
+              unlocked ? LucideIcons.trophy : LucideIcons.lock,
               size: 44,
               color: unlocked
-                  ? const Color(0xFF5D4037)
-                  : scheme.onSurface.withValues(alpha: 0.6),
+                  ? Colors.white
+                  : const Color(0xFF9CA3AF),
             ),
           ),
         ),
@@ -1021,9 +1358,13 @@ class _FinalExamSection extends StatelessWidget {
   }
 }
 
-/// Racha, meta del día y recordatorio, en la parte de arriba de Niveles.
-class _DailyStrip extends StatelessWidget {
-  const _DailyStrip();
+/// Recordatorio ("es hora de practicar") en lo alto de Niveles.
+/// Antes vivía dentro de la tarjeta de estadísticas, que se mudó a
+/// Cuenta (fix 3): el recordatorio se queda aquí, solo cuando toca
+/// (recordatorio activo, aún no se practicó hoy y ya pasó la hora).
+/// Si no toca, no ocupa nada.
+class _ReminderCard extends StatelessWidget {
+  const _ReminderCard();
 
   @override
   Widget build(BuildContext context) {
@@ -1034,230 +1375,260 @@ class _DailyStrip extends StatelessWidget {
         (now.hour > UserPrefs.reminderHour ||
             (now.hour == UserPrefs.reminderHour &&
                 now.minute >= UserPrefs.reminderMinute));
+    if (!reminderDue) return const SizedBox.shrink();
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Card(
-                margin: EdgeInsets.zero,
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.local_fire_department,
-                          color: Colors.deepOrange, size: 28),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '${tr('streakWord')}: ${p.streakNow} ${p.streakNow == 1 ? 'día' : 'días'}',
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold),
-                            ),
-                            Text('Mejor: ${p.streakBest} días',
-                                style: const TextStyle(fontSize: 12)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Card(
-                margin: EdgeInsets.zero,
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: 36,
-                        height: 36,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            CircularProgressIndicator(
-                              value: p.dailyGoalDone ? 1 : 0,
-                              strokeWidth: 4,
-                            ),
-                            Icon(
-                              p.dailyGoalDone
-                                  ? Icons.check
-                                  : Icons.flag_outlined,
-                              size: 18,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(tr('dailyGoalTitle'),
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold)),
-                            Text(
-                              p.dailyGoalDone
-                                  ? 'Hecha: 1 nivel hoy'
-                                  : 'Pasa 1 nivel hoy',
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-        if (reminderDue) ...[
-          const SizedBox(height: 8),
-          Card(
-            color: Colors.amber.withValues(alpha: 0.18),
-            child: const ListTile(
-              leading: Icon(Icons.alarm),
-              title: Text('Es hora de practicar',
-                  style: TextStyle(fontWeight: FontWeight.bold)),
-              subtitle:
-                  Text('Tu recordatorio de estudio: aún no practicaste hoy.'),
-            ),
+        Card(
+          margin: EdgeInsets.zero,
+          child: const ListTile(
+            leading: LucideIcon(LucideIcons.alarmClock,
+                color: BrandColors.amber),
+            title: Text('Es hora de practicar',
+                style: TextStyle(fontWeight: FontWeight.bold)),
+            subtitle:
+                Text('Tu recordatorio de estudio: aún no practicaste hoy.'),
           ),
-        ],
+        ),
+        const SizedBox(height: 16),
       ],
     );
   }
 }
 
-/// Pregunta del día: la misma para todos durante el día, con sus 4
-/// opciones. Al contestarla queda guardada como contestada ese día.
-class _QuestionOfTheDayCard extends StatefulWidget {
-  const _QuestionOfTheDayCard();
+/// Pregunta del día, compacta (v6): una ficha pequeña con su valor en
+/// puntos y un botón que abre el diálogo con la pregunta. Acertar suma
+/// los puntos; fallar RESTA EL DOBLE. Al contestarla, la ficha queda
+/// marcada por hoy.
+class _QuestionOfTheDayChip extends StatefulWidget {
+  const _QuestionOfTheDayChip({required this.onChanged});
+  final VoidCallback onChanged;
+
   @override
-  State<_QuestionOfTheDayCard> createState() => _QuestionOfTheDayCardState();
+  State<_QuestionOfTheDayChip> createState() => _QuestionOfTheDayChipState();
 }
 
-class _QuestionOfTheDayCardState extends State<_QuestionOfTheDayCard> {
+class _QuestionOfTheDayChipState extends State<_QuestionOfTheDayChip> {
   late final QuizQuestion _q;
-  int? _selected;
+  late final QuizQuestion _qEs;
+  late final int _value;
   bool _answered = false;
 
   @override
   void initState() {
     super.initState();
-    _q = questionOfTheDay(DateTime.now());
-    _answered =
-        ProgressService.instance.qotdAnsweredOn(DateTime.now());
+    final spanish = questionOfTheDay(DateTime.now());
+    final index = allQuestions.indexOf(spanish);
+    _qEs = spanish;
+    _q = index >= 0 ? localizedQuestionAt(index) : spanish;
+    _value = pointsForCorrect(_q.difficulty);
+    _answered = ProgressService.instance.qotdAnsweredOn(DateTime.now());
   }
 
-  void _answer(int i) {
-    if (_answered) return;
-    final correct = i == _q.answer;
-    final progress = ProgressService.instance;
-    progress.recordAnswer(_q.topic, correct);
-    progress.recordQotd(DateTime.now());
-    final id = 'bank:${_q.topic}:${_q.question}';
-    if (correct) {
-      progress.removeFailed(id);
-    } else {
-      progress.addFailed(
-          FailedEntry(id: id, topic: _q.topic, question: _q.question));
+  Future<void> _showDialog() async {
+    var answeredInDialog = false;
+    var wasCorrect = false;
+    var delta = 0;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          if (!answeredInDialog) {
+            return AlertDialog(
+              title: Text(tr('qotdTitle')),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  MascotBubble(
+                    twinA: twinOfTheDay(),
+                    text: tr(mascotCheerKey(DateTime.now().day)),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    tr(twinOfDayKey(twinOfTheDay())),
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.primary),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    _q.question,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w600, fontSize: 16),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(tr('qotdWorth')
+                      .replaceFirst('%d', '$_value')
+                      .replaceFirst('%d', '${_value * 2}')),
+                  const SizedBox(height: 12),
+                  for (var i = 0; i < 4; i++)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            final correct = i == _q.answer;
+                            delta = qotdPoints(_q.difficulty, correct);
+                            final p = ProgressService.instance;
+                            p.addPoints(delta);
+                            p.recordAnswer(_q.topic, correct);
+                            p.recordQotd(DateTime.now());
+                            final id = bankId(_qEs);
+                            if (correct) {
+                              p.removeFailed(id);
+                            } else {
+                              p.addFailed(FailedEntry(
+                                  id: id,
+                                  topic: _qEs.topic,
+                                  question: _qEs.question));
+                            }
+                            if (correct) {
+                              SoundService.correct();
+                            } else {
+                              SoundService.wrong();
+                            }
+                            setDialogState(() {
+                              answeredInDialog = true;
+                              wasCorrect = correct;
+                            });
+                          },
+                          child: Text(_q.options[i]),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text(tr('closeWord')),
+                ),
+              ],
+            );
+          }
+          return AlertDialog(
+            title: Text(wasCorrect
+                ? tr('qotdCorrect').replaceFirst('%d', '$delta')
+                : tr('qotdWrong').replaceFirst('%d', '${delta.abs()}')),
+            content: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  MascotBubble(
+                    twinA: twinOfTheDay(),
+                    mood: wasCorrect ? TwinMood.happy : TwinMood.soft,
+                    text: tr(wasCorrect
+                        ? mascotPraiseKey(DateTime.now().day)
+                        : mascotConsoleKey(DateTime.now().day)),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(_q.explanation),
+                ],
+              ),
+            ),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: Text(tr('closeWord')),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    if (mounted) {
+      setState(() =>
+          _answered = ProgressService.instance.qotdAnsweredOn(DateTime.now()));
     }
-    setState(() {
-      _selected = i;
-      _answered = true;
-    });
+    widget.onChanged();
   }
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Card(
-      color: scheme.primary.withValues(alpha: 0.10),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.calendar_today, size: 20),
-                const SizedBox(width: 8),
-                Text(tr('qotdTitle'),
-                    style: const TextStyle(
-                        fontSize: 17, fontWeight: FontWeight.bold)),
-                const Spacer(),
-                if (_answered)
-                  const Icon(Icons.check_circle,
-                      color: Colors.teal, size: 20),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(_q.question,
-                style:
-                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 10),
-            for (var i = 0; i < 4; i++)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: !_answered
-                          ? scheme.surfaceContainerHighest
-                          : (i == _q.answer
-                              ? Colors.teal
-                              : (_selected == i
-                                  ? Colors.redAccent
-                                  : scheme.surfaceContainerHighest)),
-                      alignment: Alignment.centerLeft,
-                      padding: const EdgeInsets.all(12),
-                    ),
-                    onPressed: () => _answer(i),
-                    child: Text(_q.options[i],
-                        style: const TextStyle(fontSize: 15)),
-                  ),
-                ),
+      color: BrandColors.cardGray,
+      child: ListTile(
+        leading: const LucideIcon(LucideIcons.calendar,
+            size: 22, color: BrandColors.teal),
+        title: Text(tr('qotdTitle'),
+            style: const TextStyle(fontWeight: FontWeight.bold)),
+        subtitle: _answered
+            ? Text(tr('qotdDone'))
+            : Text(tr('qotdWorth')
+                .replaceFirst('%d', '$_value')
+                .replaceFirst('%d', '${_value * 2}')),
+        trailing: _answered
+            ? const LucideIcon(LucideIcons.circleCheck,
+                color: BrandColors.teal, size: 24)
+            : FilledButton(
+                onPressed: () async {
+                  await _showDialog();
+                  HomeWidgetService.update();
+                },
+                child: Text(tr('qotdAnswer')),
               ),
-            if (_answered) ...[
-              const SizedBox(height: 4),
-              Text(_q.explanation),
-            ],
-          ],
-        ),
       ),
     );
   }
 }
 
-/// Elemento del día: uno distinto cada día, con su dato curioso.
-class _ElementOfTheDayCard extends StatelessWidget {
-  const _ElementOfTheDayCard({required this.onOpen});
-  final void Function(ChemicalElement element) onOpen;
+/// Repaso POR NIVEL (v6): los errores agrupados por tema y nivel.
+/// Cada grupo se repasa con variantes (mismo concepto, otros datos) y
+/// hacen falta 3 aciertos seguidos para darlo por superado.
+class _ReviewGroupsCard extends StatelessWidget {
+  const _ReviewGroupsCard({required this.onGroupTap});
+
+  final void Function(String topic, int level, List<FailedEntry> entries)
+      onGroupTap;
 
   @override
   Widget build(BuildContext context) {
-    final e = elementOfTheDay(DateTime.now());
+    final p = ProgressService.instance;
+    final groups = p.failedGroups();
     return Card(
-      child: ListTile(
-        leading: CircleAvatar(
-          child: Text(e.symbol,
-              style: const TextStyle(fontWeight: FontWeight.bold)),
+      color: BrandColors.cardGray,
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ListTile(
+              leading: const LucideIcon(LucideIcons.rotateCcw,
+                  size: 32, color: BrandColors.teal),
+              title: Text(tr('reviewTitle'),
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: Text(
+                  '${p.failedCount} ${tr('reviewQuestions')} · ${tr('reviewVariants')}'),
+            ),
+            Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: MascotBubble(
+                twinA: false,
+                mood: TwinMood.soft,
+                size: 44,
+                text: tr(mascotConsoleKey(p.failedCount)),
+              ),
+            ),
+            for (final g in groups)
+              ListTile(
+                leading: const LucideIcon(LucideIcons.graduationCap, size: 20),
+                title: Text(g.level > 0
+                    ? '${localizedTopicName(g.topic)} · ${tr('levelWord')} ${g.level}'
+                    : localizedTopicName(g.topic)),
+                subtitle:
+                    Text('${g.entries.length} ${tr('reviewQuestions')}'),
+                trailing: const LucideIcon(LucideIcons.chevronRight, size: 18),
+                onTap: () {
+                  SoundService.tap();
+                  onGroupTap(g.topic, g.level, g.entries);
+                },
+              ),
+          ],
         ),
-        title: Text('${tr('elementDayTitle')}: ${e.name}',
-            style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text(elementFact(e)),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () => onOpen(e),
       ),
     );
   }
@@ -1279,12 +1650,17 @@ class _QuizRunner extends StatefulWidget {
     required this.spec,
     required this.onExit,
     required this.onRepeat,
+    required this.onFinished,
   });
 
   final _QuizState quiz;
   final _QuizSpec spec;
   final VoidCallback onExit;
   final VoidCallback onRepeat;
+
+  /// Avisa de que el quiz terminó (resultado en pantalla): salir
+  /// después ya no cuesta una vida.
+  final VoidCallback onFinished;
 
   @override
   State<_QuizRunner> createState() => _QuizRunnerState();
@@ -1297,10 +1673,27 @@ class _QuizRunnerState extends State<_QuizRunner> {
   List<int> _order = [];
   bool _finished = false;
 
+  /// Respuestas en orden (para la nota por puntos) y puntos del quiz.
+  final List<bool> _correct = [];
+  var _quizPoints = 0;
+
+  /// ¿Este nivel aprobado devolvió una vida? (Se muestra en el resultado.)
+  var _lifeRestored = false;
+
+  /// Entradas del repaso que se dieron por superadas en esta sesión
+  /// (3 aciertos seguidos en sus variantes).
+  final Set<String> _clearedReview = {};
+
   @override
   void initState() {
     super.initState();
     _shuffleOptions();
+  }
+
+  @override
+  void didUpdateWidget(covariant _QuizRunner oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.quiz != oldWidget.quiz) _lifeRestored = false;
   }
 
   void _shuffleOptions() {
@@ -1318,15 +1711,28 @@ class _QuizRunnerState extends State<_QuizRunner> {
     final correct = realIndex == _q.answer;
     final progress = ProgressService.instance;
     progress.recordAnswer(_q.topic, correct);
-    if (UserPrefs.soundOn) {
-      if (correct) {
-        HapticFeedback.lightImpact();
-        SystemSound.play(SystemSoundType.click);
-      } else {
-        HapticFeedback.vibrate();
-      }
-    }
+    // Sonidos propios (v6): campanita al acertar, zumbido al fallar.
     if (correct) {
+      SoundService.correct();
+    } else {
+      SoundService.wrong();
+    }
+    // Puntos (v6): cada respuesta suma o resta según la dificultad.
+    _correct.add(correct);
+    _quizPoints +=
+        correct ? pointsForCorrect(_q.difficulty) : pointsForWrong(_q.difficulty);
+    if (widget.spec.kind == 'review' && _item.reviewEntryId != null) {
+      // Repaso de variantes: la respuesta suma racha de la entrada
+      // original (3 seguidos = superada). Fallar no crea un error
+      // nuevo: la variante no es una pregunta del banco.
+      final cleared =
+          progress.recordReviewAnswer(_item.reviewEntryId!, correct);
+      if (cleared) _clearedReview.add(_item.reviewEntryId!);
+      setState(() {
+        _selected = displayedIndex;
+        if (correct) _score++;
+      });
+    } else if (correct) {
       // Acertar un error lo saca de la lista de repaso.
       progress.removeFailed(_item.id);
       setState(() {
@@ -1334,11 +1740,12 @@ class _QuizRunnerState extends State<_QuizRunner> {
         _score++;
       });
     } else {
-      // Fallar guarda el error para repasarlo después.
+      // Fallar guarda el error para repasarlo después, con su nivel.
       progress.addFailed(FailedEntry(
         id: _item.id,
         topic: _q.topic,
         question: _q.question,
+        level: widget.spec.kind == 'level' ? widget.spec.level : 0,
       ));
       setState(() => _selected = displayedIndex);
     }
@@ -1346,13 +1753,33 @@ class _QuizRunnerState extends State<_QuizRunner> {
 
   void _next() {
     if (_index + 1 >= widget.quiz.items.length) {
-      final percent =
-          ((100 * _score) / widget.quiz.items.length).round();
+      // Los puntos del quiz van al saldo total (v6).
       final progress = ProgressService.instance;
+      progress.addPoints(_quizPoints);
+      // Nota por puntos (v6): cada pregunta vale según su dificultad
+      // (fácil 4, media 5, difícil 6) y se pasa con nota > 4,0.
+      final nota5 = levelScore5(
+        widget.quiz.items.map((it) => it.question.difficulty).toList(),
+        _correct,
+      );
+      final percent = (nota5 * 20).round();
       progress.recordScore(widget.quiz.testId, percent);
-      if (widget.spec.kind == 'level' && percent >= _passPercent) {
+      if (widget.spec.kind == 'level' && levelPassed(nota5)) {
+        final wasGoalDone = progress.dailyGoalDone;
+        // Ganar el nivel completo devuelve 1 vida (hasta 5).
+        _lifeRestored = progress.restoreLifeOnPass();
         progress.recordLevelPass(widget.spec.topic!, widget.spec.level);
+        SoundService.levelUp();
+        // Meta del día recién cumplida: campana de racha después de la
+        // fanfarria (la fanfarria dura 0,74 s).
+        if (!wasGoalDone && progress.dailyGoalDone) {
+          Future.delayed(
+              const Duration(milliseconds: 900), SoundService.streak);
+        }
       }
+      widget.onFinished();
+      // El widget de inicio muestra los puntos, vidas y racha nuevos.
+      HomeWidgetService.update();
       setState(() => _finished = true);
     } else {
       setState(() {
@@ -1368,7 +1795,12 @@ class _QuizRunnerState extends State<_QuizRunner> {
       final total = widget.quiz.items.length;
       final percent = ((100 * _score) / total).round();
       final isLevel = widget.spec.kind == 'level';
-      final passedLevel = isLevel && percent >= _passPercent;
+      // Nota por puntos (v6): se pasa con más de 4,0 sobre 5.
+      final nota5 = levelScore5(
+        widget.quiz.items.map((it) => it.question.difficulty).toList(),
+        _correct,
+      );
+      final passedLevel = isLevel && levelPassed(nota5);
       final remaining =
           ProgressService.instance.failedCount;
       // Celebración al pasar de nivel: confeti cayendo sobre el
@@ -1391,8 +1823,29 @@ class _QuizRunnerState extends State<_QuizRunner> {
                 style: const TextStyle(
                     fontSize: 48,
                     fontWeight: FontWeight.bold,
-                    color: Colors.tealAccent),
+                    color: BrandColors.teal),
                 textAlign: TextAlign.center),
+            if (isLevel)
+              Text(
+                'Nota: ${nota5.toStringAsFixed(1)} / 5',
+                style: const TextStyle(
+                    fontSize: 18, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+            Text(
+              '${tr('pointsTitle')}: ${_quizPoints >= 0 ? '+' : ''}$_quizPoints',
+              style: const TextStyle(fontSize: 16),
+              textAlign: TextAlign.center,
+            ),
+            if (_lifeRestored)
+              Text(
+                tr('livesRestored'),
+                style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: BrandColors.teal),
+                textAlign: TextAlign.center,
+              ),
             const SizedBox(height: 8),
             Text(
               passedLevel
@@ -1402,13 +1855,23 @@ class _QuizRunnerState extends State<_QuizRunner> {
                       : widget.spec.kind == 'review'
                           ? remaining == 0
                               ? tr('quizNoErrors')
-                              : '$remaining ${tr('reviewQuestions')}'
+                              : _clearedReview.isNotEmpty
+                                  ? '${tr('reviewCleared')} ($remaining ${tr('reviewQuestions')})'
+                                  : '$remaining ${tr('reviewQuestions')}'
                           : percent >= _passPercent
                               ? tr('quizExcellent')
                               : percent >= 60
                                   ? tr('quizGood')
                                   : tr('quizKeepGoing'),
               textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            MascotBubble(
+              twinA: (total - 1) % 2 != 0,
+              mood: passedLevel ? TwinMood.happy : TwinMood.soft,
+              text: tr(passedLevel
+                  ? mascotPraiseKey(total)
+                  : mascotConsoleKey(total)),
             ),
             const SizedBox(height: 24),
             ElevatedButton(
@@ -1447,7 +1910,7 @@ class _QuizRunnerState extends State<_QuizRunner> {
             // Botón Salir de verdad: grande, con borde y con icono.
             OutlinedButton.icon(
               onPressed: widget.onExit,
-              icon: const Icon(Icons.logout, size: 20),
+              icon: const LucideIcon(LucideIcons.logOut, size: 20),
               label: Text(tr('quizExit'), style: const TextStyle(fontSize: 16)),
               style: OutlinedButton.styleFrom(
                 padding:
@@ -1458,6 +1921,20 @@ class _QuizRunnerState extends State<_QuizRunner> {
         ),
         const SizedBox(height: 12),
         LinearProgressIndicator(value: (_index + 1) / total),
+        const SizedBox(height: 16),
+        MascotBubble(
+          twinA: _index % 2 == 0,
+          mood: _selected == null
+              ? TwinMood.happy
+              : (_order[_selected!] == _q.answer
+                  ? TwinMood.happy
+                  : TwinMood.soft),
+          text: tr(_selected == null
+              ? mascotCheerKey(_index)
+              : (_order[_selected!] == _q.answer
+                  ? mascotPraiseKey(_index)
+                  : mascotConsoleKey(_index))),
+        ),
         const SizedBox(height: 16),
         Text(_q.question,
             style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w600)),
@@ -1470,7 +1947,7 @@ class _QuizRunnerState extends State<_QuizRunner> {
                 backgroundColor: _selected == null
                     ? Theme.of(context).colorScheme.surfaceContainerHighest
                     : (_order[i] == _q.answer
-                        ? Colors.teal
+                        ? BrandColors.teal
                         : (_selected == i
                             ? Colors.redAccent
                             : Theme.of(context)
@@ -1488,7 +1965,7 @@ class _QuizRunnerState extends State<_QuizRunner> {
           const SizedBox(height: 8),
           Card(
             color: _order[_selected!] == _q.answer
-                ? Colors.teal.withValues(alpha: 0.2)
+                ? BrandColors.teal.withValues(alpha: 0.2)
                 : Colors.redAccent.withValues(alpha: 0.15),
             child: Padding(
               padding: const EdgeInsets.all(14),

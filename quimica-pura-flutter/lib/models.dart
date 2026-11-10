@@ -80,6 +80,7 @@ class QuizQuestion {
     required this.options,
     required this.answer,
     required this.explanation,
+    this.difficulty = 2,
   });
 
   final String topic; // slug del tema, o "tabla" / "enlace" / "atomos"
@@ -87,6 +88,27 @@ class QuizQuestion {
   final List<String> options; // 4 opciones
   final int answer; // índice de la correcta en options
   final String explanation;
+
+  /// Dificultad 1 (fácil), 2 (media) o 3 (difícil). Manda en los
+  /// puntos que vale la pregunta y en la nota del nivel (ver points.dart).
+  final int difficulty;
+
+  QuizQuestion copyWith({
+    String? topic,
+    String? question,
+    List<String>? options,
+    int? answer,
+    String? explanation,
+    int? difficulty,
+  }) =>
+      QuizQuestion(
+        topic: topic ?? this.topic,
+        question: question ?? this.question,
+        options: options ?? this.options,
+        answer: answer ?? this.answer,
+        explanation: explanation ?? this.explanation,
+        difficulty: difficulty ?? this.difficulty,
+      );
 }
 
 class ExamTip {
