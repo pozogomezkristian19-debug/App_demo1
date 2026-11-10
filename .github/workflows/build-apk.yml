@@ -31,16 +31,17 @@ jobs:
       - name: Restore binary assets from base64
         run: |
           cd quimica-pura-flutter
-          if [ ! -f assets/logo.png ] && [ -f assets/logo.png.b64 ]; then
-            base64 -d assets/logo.png.b64 > assets/logo.png
-          fi
-          if [ ! -f assets/whatsapp.png ] && [ -f assets/whatsapp.png.b64 ]; then
-            base64 -d assets/whatsapp.png.b64 > assets/whatsapp.png
-          fi
-          # El conector de GitHub sube los binarios como texto base64, asi
-          # que el jar de Gradle y los iconos de la app llegaron al repo
-          # como texto y hay que convertirlos a binarios antes de compilar.
-          # Si un archivo ya es binario de verdad, se deja como esta.
+          # Generic: decode EVERY *.b64 file under assets/ (logo, twins,
+          # whatsapp, brenda, britany, sounds, and any future binary asset).
+          # The GitHub connector uploads binaries as base64 text, so each
+          # binary travels as <name>.b64 and is rebuilt here before building.
+          find assets -name "*.b64" | while read -r b; do
+            base64 -d "$b" > "${b%.b64}"
+            echo "Restaurado: ${b%.b64}"
+          done
+          # The Gradle wrapper jar and the launcher icons arrive as base64
+          # text too (no .b64 extension); restore them if needed. If a file
+          # is already a real binary, leave it as is.
           for f in android/gradle/wrapper/gradle-wrapper.jar android/app/src/main/res/mipmap-*/ic_launcher.png; do
             if file "$f" | grep -qE "Zip archive|PNG image"; then
               echo "OK binario: $f"
