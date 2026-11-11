@@ -1,0 +1,68 @@
+{
+  "project_info": {
+    "project_number": "898001909401",
+    "project_id": "quemia-8410a",
+    "storage_bucket": "quemia-8410a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:898001909401:android:c5c003015f8234d0076a08",
+        "android_client_info": {
+          "package_name": "com.melliqui.quemia_admin"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "898001909401-o2ins4m72vvgb5hg6v5rgsl0llgu9glj.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC6y3wEHo4kPp5JA_4nsfp4vgTxLmip7KY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "898001909401-o2ins4m72vvgb5hg6v5rgsl0llgu9glj.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:898001909401:android:f4c91c3bfcfca657076a08",
+        "android_client_info": {
+          "package_name": "com.melliqui.quimica_pura"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "898001909401-o2ins4m72vvgb5hg6v5rgsl0llgu9glj.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC6y3wEHo4kPp5JA_4nsfp4vgTxLmip7KY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "898001909401-o2ins4m72vvgb5hg6v5rgsl0llgu9glj.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

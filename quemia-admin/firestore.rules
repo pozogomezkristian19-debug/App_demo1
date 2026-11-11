@@ -1,0 +1,108 @@
+// Reglas de Firestore propuestas para Quemia Admin (referencia).
+//
+// NO se despliegan solas: copiar en la consola de Firebase
+// (Firestore Database > Reglas) y publicar. La app principal ya escribe
+// sus propios datos con sus propias reglas; estas reglas cubren además el
+// acceso del panel de admin.
+//
+// Idea central: solo quien tiene un documento en 'admins' puede leer; para
+// escribir hace falta el permiso correspondiente en su mapa 'permissions'.
+// El dueño (role == 'owner') lo puede todo.
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function adminDoc() {
+      return get(/databases/$(database)/documents/admins/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function isOwner() {
+      return isAdmin() && adminDoc().role == 'owner';
+    }
+
+    function hasPerm(perm) {
+      return isOwner() || (isAdmin() && adminDoc().permissions[perm] == true);
+    }
+
+    // Usuarios de la app Quemia: lectura para admins; el baneo solo con
+    // banUsers. La propia app escribe sus datos desde el cliente anónimo
+    // (eso lo cubren las reglas de la app principal).
+    match /users/{userId} {
+      allow read: if hasPerm('viewUsers');
+      allow update: if hasPerm('banUsers')
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['banned', 'bannedReason', 'bannedAt']);
+    }
+
+    // Administradores: lectura para admins; crear/cambiar/borrar solo con
+    // manageAdmins. Nadie puede tocar al dueño desde el cliente: el dueño
+    // se gestiona en la consola.
+    match /admins/{adminId} {
+      allow read: if isAdmin();
+      allow create: if hasPerm('manageAdmins');
+      allow update: if hasPerm('manageAdmins')
+        && resource.data.role != 'owner'
+        && request.resource.data.role == resource.data.role;
+      allow delete: if hasPerm('manageAdmins')
+        && resource.data.role != 'owner'
+        && adminId != request.auth.uid;
+    }
+
+    // Ajustes remotos: lectura para admins, escritura solo con
+    // manageAdmins (o dueño).
+    match /settings/app {
+      allow read: if isAdmin();
+      allow write: if hasPerm('manageAdmins');
+    }
+
+    // Avisos para todos los usuarios: solo los admins con manageAdmins
+    // los publican, activan o borran. La app principal los lee (activos).
+    match /announcements/{announcementId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if hasPerm('manageAdmins');
+    }
+
+    // Banco remoto de preguntas: solo los admins con manageAdmins editan
+    // niveles y preguntas. La app principal los lee con fallback al
+    // contenido local.
+    match /levels/{levelId} {
+      allow read: if isAdmin();
+      allow write: if hasPerm('manageAdmins');
+    }
+
+    // Reportes de preguntas: lectura para admins; el admin solo cambia el
+    // estado (open -> fixed). Los reportes los crean los usuarios desde la
+    // app principal (eso lo cubren las reglas de la app principal).
+    match /reports/{reportId} {
+      allow read: if hasPerm('manageAdmins');
+      allow update: if hasPerm('manageAdmins')
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['status']);
+    }
+
+    // Mensajes de soporte: lectura y respuesta para admins con
+    // manageAdmins; el admin solo escribe la respuesta (reply, replyAt y
+    // status). Los mensajes los crean los usuarios desde la ventanita de
+    // Soporte de la app principal (eso lo cubren las reglas de la app
+    // principal); el usuario lee su propio mensaje y la respuesta en su
+    // ventanita.
+    match /support_messages/{messageId} {
+      allow read: if hasPerm('manageAdmins')
+        || (isSignedIn() && resource.data.authorUid == request.auth.uid);
+      allow update: if hasPerm('manageAdmins')
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['reply', 'replyAt', 'status'])
+        && request.resource.data.status == 'respondido';
+    }
+  }
+}
