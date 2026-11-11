@@ -60,7 +60,7 @@ const Map<int, TranslatedQuestion> bankRu = {
   ),
   11: const TranslatedQuestion(
     question: "Молярная масса Al₂(SO₄)₃ (Al 26.98, S 32.06, O 16.00):",
-    options: ["342.15 г/моль", "150.14 г/моль", "278.02 г/моль", "98.08 г/моль"],
+    options: ["342.14 г/моль", "150.14 г/моль", "278.02 г/моль", "98.08 г/моль"],
     explanation: "2(26.98) + 3(32.06) + 12(16.00) = 53.96 + 96.18 + 192.00 = 342.14 г/моль.",
   ),
   12: const TranslatedQuestion(

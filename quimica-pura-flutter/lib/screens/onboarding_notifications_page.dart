@@ -4,9 +4,11 @@
 //
 // Antes la app NUNCA pedía el permiso al instalarse: solo se pedía
 // dentro de la pantalla de Recordatorio, que casi nadie abre, y por
-// eso a Kristian casi nunca le llegaba ningún aviso. Aquí se explica
-// para qué sirven los recordatorios (que la racha no se pierda) y se
-// pide el permiso con el botón "Activar recordatorios".
+// eso a Kristian casi nunca le llegaba ningún aviso. Aquí se pide el
+// permiso con el botón "Activar recordatorios", que dispara el
+// diálogo del sistema DIRECTO (fix5, punto 1): sin pantallas de
+// explicación antes y sin abrir los Ajustes de alarmas exactas (eso
+// era lo que parecía "una explicación de cómo activar").
 //
 // Si lo niega (denegar el diálogo del sistema), los recordatorios
 // quedan apagados sin romper nada: se avanza igual al siguiente paso
@@ -15,6 +17,10 @@
 // screens/reminder_screen.dart). Solo hay un botón: "Activar
 // recordatorios" (el "Ahora no" se quitó a petición de Kristian,
 // 2026-11-10 20:43).
+//
+// Si el permiso está denegado de forma permanente, el sistema ya no
+// muestra su diálogo: el único camino es "Ir a Ajustes", de un
+// toque, y al volver se re-comprueba y se activa solo (fix5).
 
 import 'package:flutter/material.dart';
 
@@ -35,24 +41,84 @@ class OnboardingNotificationsPage extends StatefulWidget {
 }
 
 class _OnboardingNotificationsPageState
-    extends State<OnboardingNotificationsPage> {
+    extends State<OnboardingNotificationsPage>
+    with WidgetsBindingObserver {
   var _busy = false;
 
-  /// Pide el permiso y programa los recordatorios; avance lo mismo
-  /// si se niega (quedan apagados, se pueden activar luego).
+  /// El usuario tocó "Ir a Ajustes": al volver se vuelve a
+  /// comprobar el permiso y, si ya está dado, se activan los
+  /// recordatorios (fix5, punto 1; en Recordatorios ya existía).
+  var _waitingForPermission = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _waitingForPermission) {
+      _waitingForPermission = false;
+      _recheckPermission();
+    }
+  }
+
+  /// Al volver de Ajustes con el permiso ya concedido: activar los
+  /// recordatorios (programa la tanda y dispara la confirmación
+  /// inmediata) y avanzar al idioma. Si no se concedió, se sigue
+  /// desde esta pantalla (el botón vuelve a pedir el permiso).
+  Future<void> _recheckPermission() async {
+    final granted = await NotificationService.isPermissionGranted;
+    if (!granted || !mounted) return;
+    final ok = await NotificationService.enable();
+    if (!mounted) return;
+    if (ok) _advance();
+  }
+
+  /// Ya se avanzó a la siguiente pantalla (no avanzar dos veces).
+  var _advanced = false;
+
+  void _advance() {
+    if (_advanced) return;
+    _advanced = true;
+    widget.onNext();
+  }
+
+  /// Pide el permiso con el diálogo del sistema DIRECTO y programa
+  /// los recordatorios; se avanza lo mismo si se niega (quedan
+  /// apagados, se pueden activar luego).
   Future<void> _enable() async {
     if (_busy) return;
     setState(() => _busy = true);
     final ok = await NotificationService.enable();
     if (!mounted) return;
     setState(() => _busy = false);
-    // Permiso denegado: el diálogo con "Ir a Ajustes" (fix4, punto
-    // 3); se avanza igual al siguiente paso y los recordatorios
-    // quedan apagados, para activarlos luego desde Cuenta.
-    if (!ok) {
-      await showNotificationSettingsDialog(context);
+    if (ok) {
+      _advance();
+      return;
     }
-    widget.onNext();
+    // Permiso denegado (de forma permanente el sistema ya no muestra
+    // su diálogo): el ÚNICO camino es Ajustes, de un toque (fix5).
+    final went = await showNotificationSettingsDialog(context);
+    if (!mounted) return;
+    if (went) {
+      // NO se avanza todavía: si se avanzara, el PageView destruye
+      // esta página y el re-chequeo al volver de Ajustes no podría
+      // dispararse (la página ya no estaría viva). Al volver con el
+      // permiso dado se activa solo y se avanza; si no se concedió,
+      // se sigue desde aquí (el botón vuelve a pedirlo, y "Cerrar"
+      // en el diálogo avanza igual).
+      _waitingForPermission = true;
+    } else {
+      _advance();
+    }
   }
 
   @override

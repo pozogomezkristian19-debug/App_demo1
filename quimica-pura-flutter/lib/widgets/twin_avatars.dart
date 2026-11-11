@@ -17,15 +17,19 @@
 // - mascotCheerKey / mascotPraiseKey / mascotConsoleKey: las 3 frases
 //   genéricas antiguas (compatibilidad; siguen en localization.dart).
 // - MascotLine + mascotLineKey: el repertorio NUEVO, por compañero
-//   (Brenda, Britany, Kristian) y por momento: saludo de presentación
-//   (greet), presentar una pregunta (ask), ánimo al acertar (praise)
-//   y consuelo al fallar (console). 5 variantes por compañero y
-//   categoría (claves mascotGreetBrenda0…4, mascotAskBritany0…4…,
-//   en los 6 idiomas). Rota sin repetirse seguida: el índice avanza
-//   de uno en uno por (compañero, categoría) y solo avanza cuando
-//   cambia el turno, así un mismo turno (misma pregunta, mismo día)
-//   reconstruye la pantalla con la MISMA frase y la siguiente vez
-//   sale otra distinta.
+//   (Brenda, Britany, Kristian) y por momento: presentar una
+//   pregunta (ask), ánimo al acertar (praise) y consuelo al fallar
+//   (console). 5 variantes por compañero y categoría (claves
+//   mascotAskBritany0…4…, en los 6 idiomas). Rota sin repetirse
+//   seguida: el índice avanza de uno en uno por (compañero,
+//   categoría) y solo avanza cuando cambia el turno, así un mismo
+//   turno (misma pregunta, mismo día) reconstruye la pantalla con
+//   la MISMA frase y la siguiente vez sale otra distinta.
+//   (El momento "greet" y sus claves mascotGreet*0…4 ya NO se usan:
+//   la burbuja nunca muestra un saludo — los saludos no tienen que
+//   ver con las preguntas. Quedan en localization.dart y en el enum
+//   solo por compatibilidad con tests viejos; el coordinador los
+//   quita en el cierre.)
 //
 // En cada pregunta aparece uno de los tres (por turnos) y en los
 // demás momentos (pregunta del día, racha, repaso de errores,
@@ -33,8 +37,6 @@
 
 import 'package:flutter/material.dart';
 
-import '../services/localization.dart';
-import '../services/user_prefs.dart';
 import 'brand_logo.dart';
 
 /// Expresión de la mascota: contenta (sonrisa grande) o suave
@@ -55,9 +57,12 @@ String mascotPraiseKey(int i) => 'mascotPraise${i % 3}';
 /// [MascotLine.console], 5 variantes por compañero.)
 String mascotConsoleKey(int i) => 'mascotConsole${i % 3}';
 
-/// Momento en el que habla la mascota: saludo de presentación,
-/// presentar una pregunta, ánimo al acertar o consuelo al fallar.
-/// Cada momento tiene 5 variantes por compañero.
+/// Momento en el que habla la mascota: presentar una pregunta,
+/// ánimo al acertar o consuelo al fallar. Cada momento tiene 5
+/// variantes por compañero. (El valor [MascotLine.greet], saludo de
+/// presentación, ya NO lo usa la burbuja: se conserva solo porque
+/// tests viejos lo referencian; sus claves mascotGreet* se quitan en
+/// el cierre.)
 enum MascotLine { greet, ask, praise, console }
 
 /// Variantes por compañero y categoría.
@@ -101,13 +106,6 @@ String mascotLineKey(Companion c, MascotLine kind, int turn) {
   }
   return mascotLineKeyAt(c, kind, _mascotLastIndex[mapKey] ?? 0);
 }
-
-/// Turno nuevo para cada presentación (saludo): cada vez que un
-/// compañero se presenta por primera vez, el saludo rota. La
-/// primera presentación de cada compañero es la variante 0, la
-/// presentación clásica ("¡Hola! Soy Brenda/Britany/Kristian").
-int _mascotIntroTurn = 0;
-int mascotNextIntroTurn() => _mascotIntroTurn++;
 
 /// Los tres compañeros de Melli-Qui, en el orden de la rotación:
 /// Brenda (violeta), Britany (azul) y Kristian (teal).
@@ -161,6 +159,9 @@ String companionOfDayKey(Companion c) => switch (c) {
     };
 
 /// Clave del texto de presentación "¡Hola! Soy Brenda/Britany/Kristian".
+/// (Legado: la burbuja ya no muestra el saludo; se conserva porque
+/// tests viejos lo usan. Las claves mascotIntro* se quitan de
+/// localization.dart en el cierre.)
 String companionIntroKey(Companion c) => switch (c) {
       Companion.brenda => 'mascotIntroBrenda',
       Companion.britany => 'mascotIntroBritany',
@@ -300,14 +301,22 @@ class CompanionAvatar extends StatelessWidget {
 
 /// Avatar de un compañero + bocadillo con un mensaje corto.
 ///
-/// - El nombre aparece en una etiquetita junto al avatar, siempre.
-/// - El bocadillo va firmado con su nombre.
-/// - La primera vez que aparece cada compañero, se presenta:
-///   "¡Hola! Soy Brenda" / "¡Hola! Soy Britany" / "¡Hola! Soy
-///   Kristian" (se guarda en el teléfono, así que solo pasa una
-///   vez por compañero). El saludo rota entre 5 variantes
-///   ([MascotLine.greet]); la primera vez es la clásica.
-class MascotBubble extends StatefulWidget {
+/// (fix5) La foto se queda, pero el nombre ya NO aparece: ni
+/// etiquetita debajo de la foto ni firma al pie de la burbuja.
+/// Antes se repetía hasta 4 veces en el mismo sitio (nombre bajo
+/// la foto, saludo "¡Hola! Soy…", firma "— Nombre" y la línea
+/// "Hoy te acompaña…" del diálogo de la pregunta del día).
+///
+/// La burbuja muestra SIEMPRE el mensaje que le pasa el llamador
+/// ([text]): NUNCA un saludo. Los saludos no tienen que ver con
+/// las preguntas — en las preguntas la burbuja dice la pregunta o
+/// un ánimo ("tú puedes" y cosas así). La presentación ("¡Hola!
+/// Soy…") se eliminó de la burbuja en esta ronda: al no sustituir
+/// nunca el texto, foto y texto siempre salen del MISMO
+/// acompañante, el que pasa el llamador (companionForTurn etc.),
+/// y el saludo ya no puede repetirse en cada pregunta ni salir
+/// con el nombre equivocado.
+class MascotBubble extends StatelessWidget {
   const MascotBubble({
     super.key,
     this.twinA = true,
@@ -327,82 +336,21 @@ class MascotBubble extends StatefulWidget {
   final TwinMood mood;
   final double size;
 
-  @override
-  State<MascotBubble> createState() => _MascotBubbleState();
-}
-
-class _MascotBubbleState extends State<MascotBubble> {
-  /// Presentaciones ya hechas en esta sesión (para que dos burbujas
-  /// del mismo compañero en la misma pantalla no se presenten dos veces).
-  static final _introducedThisSession = <Companion>{};
-
-  var _showIntro = false;
-
-  /// Saludo de presentación que toca (variante que rota): solo se
-  /// elige una vez, al crearse la burbuja, para que no cambie si la
-  /// pantalla se reconstruye.
-  String? _introKey;
-
-  /// El compañero que habla: [MascotBubble.companion] si se pasó,
-  /// si no el de [MascotBubble.twinA] (Brenda/Britany).
+  /// El compañero que habla: [companion] si se pasó, si no el de
+  /// [twinA] (Brenda/Britany).
   Companion get _companion =>
-      widget.companion ??
-      (widget.twinA ? Companion.brenda : Companion.britany);
-
-  /// ¿Este compañero ya se presentó alguna vez (en el teléfono)?
-  bool _alreadyMet(Companion c) => switch (c) {
-        Companion.brenda => UserPrefs.metBrenda,
-        Companion.britany => UserPrefs.metBritany,
-        Companion.kristian => UserPrefs.metKristian,
-      };
-
-  @override
-  void initState() {
-    super.initState();
-    final met =
-        _introducedThisSession.contains(_companion) || _alreadyMet(_companion);
-    _showIntro = !met;
-    if (_showIntro) {
-      // El saludo de presentación también rota (variante 0 la
-      // primera vez: la presentación clásica "¡Hola! Soy…").
-      _introKey =
-          mascotLineKey(_companion, MascotLine.greet, mascotNextIntroTurn());
-      _introducedThisSession.add(_companion);
-      switch (_companion) {
-        case Companion.brenda:
-        case Companion.britany:
-          UserPrefs.saveMetTwin(_companion == Companion.brenda);
-        case Companion.kristian:
-          UserPrefs.saveMetKristian();
-      }
-    }
-  }
+      companion ?? (twinA ? Companion.brenda : Companion.britany);
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final accent = companionAccent(_companion);
-    final name = companionName(_companion);
-    final text =
-        _showIntro ? tr(_introKey ?? companionIntroKey(_companion)) : widget.text;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Column(
-          children: [
-            CompanionAvatar(
-                companion: _companion, size: widget.size, mood: widget.mood),
-            const SizedBox(height: 2),
-            Text(
-              name,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: accent,
-              ),
-            ),
-          ],
-        ),
+        // (fix5) Solo la foto, sin el nombre debajo.
+        CompanionAvatar(
+            companion: _companion, size: size, mood: mood),
         const SizedBox(width: 10),
         Expanded(
           child: Container(
@@ -418,24 +366,10 @@ class _MascotBubbleState extends State<MascotBubble> {
               ),
               border: Border.all(color: accent.withValues(alpha: 0.45)),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(text, style: const TextStyle(fontSize: 14)),
-                const SizedBox(height: 2),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Text(
-                    '— $name',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: accent,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+            // (fix5) Solo el texto del mensaje, sin la firma
+            // "— Nombre" abajo a la derecha. Siempre [text]:
+            // nunca se sustituye por ningún saludo.
+            child: Text(text, style: const TextStyle(fontSize: 14)),
           ),
         ),
       ],

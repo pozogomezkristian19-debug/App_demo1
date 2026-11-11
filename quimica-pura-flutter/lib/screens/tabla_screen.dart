@@ -268,12 +268,23 @@ class _TablaScreenState extends State<TablaScreen>
         ),
       );
     }
-    return Column(
-      children: [
-        ...header,
-        Expanded(child: _normalGrid(context, grid)),
-        legend,
-      ],
+    // Modo normal (fix5, punto 3): la página ENTERA se desplaza en
+    // vertical (SingleChildScrollView + Column), con la rejilla
+    // COMPLETA de 10 filas dibujada entera (shrinkWrap, sin scroll
+    // interno) y la leyenda debajo — exactamente como ya hace el
+    // modo angosto y como era en v6 ("como estaban"). El Column con
+    // Expanded anterior se comía la altura: la cabecera (búsqueda +
+    // 2 tarjetas + chips) dejaba a la rejilla solo lo que quedaba
+    // (~3,5 filas en el Redmi de Kristian) y la leyenda quedaba
+    // fijada debajo. Ya no hay Expanded que recorte la rejilla.
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          ...header,
+          _normalGrid(context, grid),
+          legend,
+        ],
+      ),
     );
   }
 
@@ -294,7 +305,15 @@ class _TablaScreenState extends State<TablaScreen>
   }
 
   /// Dos acciones superiores: quiz de la tabla y comparación.
+  /// SOLO sin filtro de categoría activo (ronda #5, punto extra):
+  /// en cuanto se activa cualquier filtro, las dos tarjetas
+  /// desaparecen y la tabla filtrada gana ese sitio; al volver a
+  /// "Todos" reaparecen. Mismo patrón que la leyenda (_legend).
+  /// Como _actionCards está en la cabecera común de los tres modos
+  /// (búsqueda, tabla normal y tabla angosta), el chequeo aquí
+  /// vale para los tres.
   Widget _actionCards(BuildContext context) {
+    if (_filterCategory != null) return const SizedBox.shrink();
     return // Dos acciones superiores con el MISMO patrón que las tarjetas
         // "Practicar de otra forma": icono ARRIBA en un círculo
         // tintado, texto ABAJO centrado. El OutlinedButton.icon
@@ -431,14 +450,27 @@ class _TablaScreenState extends State<TablaScreen>
   }
 
   /// Rejilla de 18 columnas con el ancho dado. Las celdas llevan
-  /// su elemento o el marcador 57–71 / 89–103.
-  Widget _gridView(List<ChemicalElement?> grid, double width) {
+  /// su elemento o el marcador 57–71 / 89–103. En modo normal
+  /// (fix5, punto 3) se dibuja ENTERA dentro de la página con
+  /// scroll: shrinkWrap + NeverScrollableScrollPhysics (sin scroll
+  /// interno). En modo angosto se deja el comportamiento de siempre
+  /// (rejilla con su propia altura fija, _narrowGridHeight, y
+  /// aspecto 0,85).
+  Widget _gridView(
+    List<ChemicalElement?> grid,
+    double width, {
+    bool shrinkWrap = false,
+    ScrollPhysics? physics,
+    double childAspectRatio = 0.85,
+  }) {
     return SizedBox(
       width: width,
       child: GridView.builder(
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        shrinkWrap: shrinkWrap,
+        physics: physics,
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 18,
-          childAspectRatio: 0.85,
+          childAspectRatio: childAspectRatio,
         ),
         itemCount: grid.length,
         itemBuilder: (context, i) {
@@ -483,13 +515,35 @@ class _TablaScreenState extends State<TablaScreen>
     );
   }
 
-  /// Tabla completa SIN scroll (teléfono normal): la rejilla
-  /// original de 18 columnas, como en v6.
+  /// Tabla completa SIN scroll propio (teléfono normal): la rejilla
+  /// original de 18 columnas, como en v6, dibujada ENTERA dentro de
+  /// la página con scroll vertical (fix5, punto 3): shrinkWrap y
+  /// sin scroll interno, así ninguna fila queda recortada.
+  ///
+  /// Afinado por tamaño (fix5, punto 3): la altura de celda se
+  /// adapta al ancho. La celda siempre mide ancho/18; su alto es
+  /// ancho/aspecto con aspecto = anchoCelda/22,5, entre 0,85 y
+  /// 1,02: en teléfonos chicos la celda queda alta (0,85, como
+  /// siempre, para que el número y el símbolo quepan legibles y se
+  /// puedan tocar) y en los grandes la celda, más ancha, no
+  /// necesita ser tan alta — la altura de celda se queda en
+  /// ~22,5 dp en todos los tamaños y la rejilla entera ocupa
+  /// ~225 dp de alto, así en un teléfono grande (430x900) caben
+  /// la rejilla completa Y la leyenda sin desplazar. El padding
+  /// inferior es 8 (la leyenda ya trae 12 arriba).
   Widget _normalGrid(BuildContext context, List<ChemicalElement?> grid) {
     final available = MediaQuery.sizeOf(context).width - 16;
+    final cellW = available / 18;
+    final aspect = (cellW / 22.5).clamp(0.85, 1.02).toDouble();
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 8, 8, 16),
-      child: _gridView(grid, available),
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+      child: _gridView(
+        grid,
+        available,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        childAspectRatio: aspect,
+      ),
     );
   }
 

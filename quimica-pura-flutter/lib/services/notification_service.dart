@@ -50,6 +50,51 @@
 // confirmar en el teléfono: depende del permiso (Android 13+ lo pide
 // al activar el recordatorio) y de que el sistema no mate la app en
 // segundo plano.
+//
+// Ronda #5 (6.2), punto 1 — por qué "no se activan las
+// notificaciones" (verificado en el código y en el fuente del plugin
+// flutter_local_notifications 23.0.0):
+//  1. REAL (la principal): enable() pedía las alarmas exactas con
+//     requestExactAlarmsPermission() justo después del diálogo del
+//     permiso. En Android 12+ ese método, si no están concedidas,
+//     abre los Ajustes del sistema ("Alarmas y recordatorios", con
+//     su interruptor) y no vuelve hasta que el usuario sale de
+//     Ajustes. Eso es lo que Kristian veía como "una explicación de
+//     cómo activar" en vez de una petición. Ahora ya NO se piden ni
+//     se consultan: al programar la tanda se PRUEBAN las exactas
+//     (el propio plugin lanza ExactAlarmPermissionException ANTES
+//     de programar si no están concedidas, verificado en su
+//     fuente) y _scheduleOne vuelve a inexactas solo (llegan tarde
+//     con Doze, pero llegan). Sin abrir Ajustes, sin diálogo extra.
+//     Si el usuario las concede luego en Ajustes, la siguiente
+//     tanda las vuelve a probar y las usa.
+//  2. REAL: denegación permanente. En Android 13+ el sistema, tras
+//     dos negativas, ya NO muestra su diálogo: requestPermissions
+//     devuelve denegado en el acto y la app solo puede ofrecer "Ir
+//     a Ajustes". Kristian ya había negado en el onboarding de la
+//     6.0/6.1, así que cada toque iba directo al diálogo de Ajustes
+//     sin que el sistema le preguntara nada. No se puede forzar el
+//     diálogo; el arreglo es que "Ir a Ajustes" sea de un toque, con
+//     texto corto, y que al volver se re-compruebe y se active solo
+//     (en Recordatorios ya existía; en el onboarding faltaba).
+//  3. NO es la causa en el teléfono: init() no puede devolver false
+//     sin que se haya pedido el permiso por un fallo suyo (la zona
+//     horaria tiene tope de 3 s y try/catch, y scheduleNext / la
+//     bandeja tragan sus errores). Pero SÍ había una contradicción
+//     real en el código: con init() fallido, isPermissionGranted
+//     devolvía true ("se asume que sí") mientras requestPermission()
+//     devolvía false; y si requestNotificationsPermission() lanzaba
+//     una excepción, requestPermission() devolvía true y enable()
+//     guardaba los recordatorios como activos aunque ningún aviso
+//     pudiera llegar. Ahora ambos devuelven false si no se pudo
+//     comprobar o pedir el permiso.
+//  4. REAL: nada confirmaba en el acto que funcionara. Al conceder
+//     el permiso no salía ningún aviso, así que el usuario no tenía
+//     forma de saber si estaba activo. Ahora enable() dispara UNA
+//     notificación inmediata de confirmación ("Recordatorios
+//     activados") y la pantalla de Recordatorios muestra el estado
+//     REAL del permiso (concedido/denegado), no solo la preferencia
+//     guardada.
 
 import 'dart:async';
 import 'dart:io';
@@ -129,10 +174,13 @@ class NotificationService {
 
   static bool _ready = false;
 
-  /// ¿Se pueden usar alarmas exactas? Se decide al activar los
-  /// recordatorios (se pide SCHEDULE_EXACT_ALARM) y se guarda. Si no
-  /// está dado, las alarmas son inexactas y Doze puede retrasarlas
-  /// horas: se sigue avisando, pero tarde.
+  /// ¿Se pueden usar alarmas exactas? Se PRUEBAN al programar la
+  /// tanda (fix5, punto 1): se intenta exacta y, si el plugin dice
+  /// que no están concedidas, _scheduleOne vuelve a inexacta y
+  /// apaga el modo exacto hasta la siguiente tanda. Nunca se piden
+  /// (pedirlas abre los Ajustes del sistema) ni se consultan. Si
+  /// no están dadas, las alarmas son inexactas y Doze puede
+  /// retrasarlas horas: se sigue avisando, pero tarde.
   static bool _exactAlarms = false;
 
   /// ¿Las alarmas se programan exactas? (Para pruebas.)
@@ -178,7 +226,16 @@ class NotificationService {
   /// la próxima tanda. No pide el permiso aquí: se pide al activar el
   /// recordatorio (o en la pantalla de permiso del onboarding), para no
   /// asustar al abrir la app por primera vez.
-  static Future<bool> init() async {
+  static Future<bool> init() async => _init(reschedule: true);
+
+  /// Inicialización con o sin reprogramación. La consulta del permiso
+  /// ([isPermissionGranted]) es de SOLO LECTURA y no debe tener
+  /// efectos secundarios: si inicializara con reprogramación,
+  /// comprobar el permiso reprogramaría la tanda (y su copia del
+  /// icono grande) en mitad de una comprobación (fix5, punto 1).
+  /// main() siempre llama a [init] (completa) al arrancar, así que
+  /// en la app la reprogramación de inicio no se pierde.
+  static Future<bool> _init({required bool reschedule}) async {
     try {
       tz.initializeTimeZones();
       try {
@@ -230,7 +287,7 @@ class NotificationService {
       // cerrada quedan registrados en la bandeja ANTES de
       // reprogramar la tanda (que borraría sus horas).
       await reconcileFiredReminders();
-      if (UserPrefs.reminderOn) {
+      if (reschedule && UserPrefs.reminderOn) {
         await scheduleNext();
       }
       return true;
@@ -242,12 +299,17 @@ class NotificationService {
 
   /// ¿Está dado el permiso de notificaciones? (Android 13+:
   /// POST_NOTIFICATIONS; antes: avisos activados.) Solo consulta,
-  /// no pide nada. Si la plataforma no responde, se asume que sí
-  /// (en Android < 13 no hay permiso que pedir).
+  /// no pide nada y no reprograma nada: si el servicio aún no está
+  /// inicializado, se inicializa SIN reprogramar la tanda (fix5,
+  /// punto 1; main() ya programa al arrancar). Si la plataforma no
+  /// responde, se asume que sí (en Android < 13 no hay permiso que
+  /// pedir). Si init() falló, en cambio, NO se puede afirmar que
+  /// esté dado: antes se devolvía true y el flujo decía lo
+  /// contrario que requestPermission().
   static Future<bool> get isPermissionGranted async {
     if (!_ready) {
-      final ok = await init();
-      if (!ok) return true;
+      final ok = await _init(reschedule: false);
+      if (!ok) return false;
     }
     try {
       // areNotificationsEnabled vive en la implementación de
@@ -256,7 +318,14 @@ class NotificationService {
       // antes, si los avisos están activados.
       final android = _plugin.resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>();
-      return await android?.areNotificationsEnabled() ?? true;
+      final enabled = android?.areNotificationsEnabled();
+      if (enabled == null) return true;
+      // Tope de 100 ms: si el canal no responde (en pruebas sin
+      // mock se queda colgado), no se puede quedar la app esperando:
+      // se asume que sí, como antes (fix5). Es una consulta local y
+      // en el teléfono responde en milisegundos.
+      return await enabled.timeout(const Duration(milliseconds: 100)) ??
+          true;
     } catch (_) {
       return true;
     }
@@ -266,6 +335,13 @@ class NotificationService {
   /// sistema la primera vez). Devuelve si quedó concedido. Extraído
   /// de [enable] para reutilizarlo en la pantalla de Recordatorios,
   /// en el botón de prueba y en el onboarding (fix4, punto 3).
+  /// OJO: si el permiso está denegado de forma permanente, el
+  /// sistema ya NO muestra su diálogo y devuelve false en el acto
+  /// (fix5, punto 1): el único camino es entonces "Ir a Ajustes".
+  /// Si la petición en sí falla (p. ej. otra petición en curso),
+  /// se devuelve false: antes se devolvía true y enable() guardaba
+  /// los recordatorios como activos aunque ningún aviso pudiera
+  /// llegar.
   static Future<bool> requestPermission() async {
     if (!_ready) {
       final ok = await init();
@@ -276,8 +352,7 @@ class NotificationService {
           AndroidFlutterLocalNotificationsPlugin>();
       return await android?.requestNotificationsPermission() ?? true;
     } catch (_) {
-      // En Android < 13 no hay permiso que pedir.
-      return true;
+      return false;
     }
   }
 
@@ -294,36 +369,31 @@ class NotificationService {
     }
   }
 
-  /// Activa los recordatorios: pide el permiso (Android 13+), pide el
-  /// permiso de alarmas exactas (Android 12+, en Android 14+ abre los
-  /// ajustes del sistema), guarda el ajuste y programa la primera
-  /// tanda (el primer aviso llega dentro de la primera hora). Si el
-  /// permiso está denegado de forma permanente, el sistema ya no
-  /// muestra su diálogo y devuelve false: la UI ofrece entonces
+  /// Activa los recordatorios: pide el permiso con el diálogo del
+  /// sistema DIRECTO (Android 13+), guarda el ajuste, programa la
+  /// primera tanda (el primer aviso llega dentro de la primera
+  /// hora) y dispara UNA notificación inmediata de confirmación para
+  /// que se VEA que las notificaciones funcionan (fix5, punto 1).
+  /// Si el permiso está denegado de forma permanente, el sistema ya
+  /// no muestra su diálogo y devuelve false: la UI ofrece entonces
   /// "Ir a Ajustes" (fix4, punto 3).
+  ///
+  /// Las alarmas exactas YA NO se piden aquí: en Android 12+
+  /// requestExactAlarmsPermission() abre los Ajustes del sistema
+  /// ("Alarmas y recordatorios") justo después del diálogo del
+  /// permiso, y eso es lo que al usuario le parecía "una explicación
+  /// de cómo activar" en vez de una petición (fix5). Al programar
+  /// se PRUEBAN las exactas (el plugin falla antes de programar si
+  /// no están concedidas) y se vuelve a inexactas sin abrir nada.
+  /// La confirmación se dispara sin esperar (unawaited): si el
+  /// canal no responde, la activación no se queda colgada.
   static Future<bool> enable() async {
     if (!await requestPermission()) return false;
-    try {
-      final android = _plugin.resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>();
-      // Alarmas exactas: sin este permiso, Doze retrasa los avisos
-      // horas. Si el sistema abre los ajustes y el usuario no lo
-      // concede, se sigue con alarmas inexactas (llegan tarde, pero
-      // llegan). No bloquea la activación.
-      try {
-        final exact = await android?.requestExactAlarmsPermission();
-        _exactAlarms = exact == true;
-      } catch (_) {
-        _exactAlarms = false;
-      }
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_kExactAlarms, _exactAlarms);
-    } catch (_) {
-      // En Android < 13 no hay permiso que pedir.
-    }
     await UserPrefs.saveReminder(
         true, UserPrefs.reminderHour, UserPrefs.reminderMinute);
     await scheduleNext();
+    // Confirmación inmediata: que se VEA que funciona (fix5).
+    unawaited(sendEnabledConfirmation());
     return true;
   }
 
@@ -351,6 +421,21 @@ class NotificationService {
     var at = now;
     final scheduled = <DateTime>[];
     try {
+      // Sin permiso no hay nada que programar: las alarmas no se
+      // mostrarían nunca y el "Próximo aviso" guardado mentiría
+      // (fix5, punto 1). Se borra la tanda vieja, si la había; al
+      // volver a concederse el permiso, enable() reprograma.
+      if (!await isPermissionGranted) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(_kNextNotifs);
+        return [];
+      }
+      // Alarmas exactas (fix5): se PRUEBAN en cada tanda. Si el
+      // usuario las concedió en Ajustes desde la última vez, esta
+      // tanda ya sale exacta; si no están concedidas, el primer
+      // intento falla antes de programar y _scheduleOne vuelve a
+      // inexacta (sin abrir Ajustes ni pedir nada).
+      _exactAlarms = true;
       await _plugin.cancelAll();
       final details = await _details();
       for (var i = 0; i < 3; i++) {
@@ -512,6 +597,49 @@ class NotificationService {
     } catch (_) {
       return null;
     }
+  }
+
+  /// UNA notificación inmediata de confirmación ("Recordatorios
+  /// activados"): se dispara al concederse el permiso (al final de
+  /// [enable], sin esperar) para que se VEA en ese momento que las
+  /// notificaciones funcionan (fix5, punto 1). Sin icono grande ni
+  /// acción: tiene que salir ya, sin esperar la copia del PNG del
+  /// compañero (hasta 3 s). Tocar la notificación solo abre la app.
+  /// Devuelve false si no se pudo mostrar (sin permiso, sin plugin).
+  /// Sin tope: en enable() se llama sin esperar (unawaited), así
+  /// que un canal que no responda no puede colgar la activación.
+  static Future<bool> sendEnabledConfirmation() async {
+    if (!_ready) {
+      final ok = await init();
+      if (!ok) return false;
+    }
+    try {
+      await _plugin.show(
+        id: 9998,
+        title: 'Quemia',
+        body: tr('notifEnabledConfirm'),
+        notificationDetails: _confirmationDetails(),
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Detalles de la confirmación inmediata: mismo canal, icono
+  /// pequeño blanco y acento teal que los avisos, pero sin icono
+  /// grande (sin espera) y sin la acción "Repasar ahora".
+  static NotificationDetails _confirmationDetails() {
+    return const NotificationDetails(
+      android: AndroidNotificationDetails(
+        _channelId,
+        _channelName,
+        importance: Importance.defaultImportance,
+        priority: Priority.defaultPriority,
+        icon: _smallIcon,
+        color: Color(0xFF00C2A8),
+      ),
+    );
   }
 
   /// Una notificación de prueba, ahora mismo (botón "Probar" del

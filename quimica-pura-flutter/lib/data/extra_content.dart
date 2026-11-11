@@ -145,14 +145,16 @@ class ChemConstant {
 }
 
 const List<ChemConstant> chemConstants = [
+  // c y e van primero (auditoría A13, fix5 ronda #5): son las
+  // constantes que más se usan y antes estaban en los puestos 8 y 6.
+  ChemConstant(symbol: 'c', value: '3.00 × 10⁸ m·s⁻¹', note: 'Velocidad de la luz en el vacío'),
+  ChemConstant(symbol: 'e', value: '1.602 × 10⁻¹⁹ C', note: 'Carga elemental'),
   ChemConstant(symbol: 'NA', value: '6.022 × 10²³ mol⁻¹', note: 'Número de Avogadro'),
   ChemConstant(symbol: 'R', value: '0.08206 L·atm·mol⁻¹·K⁻¹', note: 'Constante de los gases ideales'),
   ChemConstant(symbol: 'R', value: '8.314 J·mol⁻¹·K⁻¹', note: 'Constante de los gases ideales (SI)'),
   ChemConstant(symbol: 'F', value: '96485 C·mol⁻¹', note: 'Constante de Faraday'),
   ChemConstant(symbol: 'Kw', value: '1.0 × 10⁻¹⁴ (25 °C)', note: 'Producto iónico del agua'),
-  ChemConstant(symbol: 'e', value: '1.602 × 10⁻¹⁹ C', note: 'Carga elemental'),
   ChemConstant(symbol: 'h', value: '6.626 × 10⁻³⁴ J·s', note: 'Constante de Planck'),
-  ChemConstant(symbol: 'c', value: '3.00 × 10⁸ m·s⁻¹', note: 'Velocidad de la luz en el vacío'),
   ChemConstant(symbol: 'Vm', value: '22.4 L·mol⁻¹', note: 'Volumen molar en condiciones normales'),
   // TPEA = Temperatura y Presión Estándar Ambiente (25 °C y 1 atm).
   // El cálculo ideal con R = 0.08206 da 24.47 ≈ 24.5 L/mol, pero la

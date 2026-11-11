@@ -71,7 +71,7 @@ const Map<int, TranslatedQuestion> bankFr = {
   ),
   11: TranslatedQuestion(
     question: "Masse molaire de l'Al₂(SO₄)₃ (Al 26.98, S 32.06, O 16.00) :",
-    options: ["342.15 g/mol", "150.14 g/mol", "278.02 g/mol", "98.08 g/mol"],
+    options: ["342.14 g/mol", "150.14 g/mol", "278.02 g/mol", "98.08 g/mol"],
     explanation: "2(26.98) + 3(32.06) + 12(16.00) = 53.96 + 96.18 + 192.00 = 342.14 g/mol.",
   ),
   12: TranslatedQuestion(
@@ -612,7 +612,7 @@ const Map<int, TranslatedQuestion> bankFr = {
   119: TranslatedQuestion(
     question: "Combien de litres occupe 1 mol de gaz parfait dans les CNTP (0 °C et 1 atm) ?",
     options: ["11.2 L", "22.4 L", "24 L", "44.8 L"],
-    explanation: "Le volume molaire dans les CNTP est de 22.4 L/mol.",
+    explanation: "Le volume molaire dans les CNTP est de 22.41 L/mol.",
   ),
   120: TranslatedQuestion(
     question: "Si la température absolue double à pression constante, le volume :",

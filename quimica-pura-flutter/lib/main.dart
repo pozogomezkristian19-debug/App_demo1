@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'widgets/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'data/extra_content.dart';
 import 'data/periodic_table.dart';
 import 'data/search_index.dart';
 import 'screens/account_screen.dart';
@@ -14,6 +13,7 @@ import 'screens/constants_screen.dart';
 import 'screens/favorites_screen.dart';
 import 'screens/formula_screen.dart';
 import 'screens/glossary_screen.dart';
+import 'screens/how_to_play_screen.dart';
 import 'screens/lab_screen.dart';
 import 'screens/lab_sim_screen.dart';
 import 'screens/language_screen.dart';
@@ -778,14 +778,12 @@ class _HomeScreenState extends State<HomeScreen> {
     // pide el diálogo o la instalación, igual que el repaso.
     NavRequests.updateRequested.addListener(_onNotificationUpdateRequest);
     NavRequests.installRequested.addListener(_onNotificationInstallRequest);
-    // Tras el primer frame: primero el elemento del día (si toca),
-    // luego el diálogo de actualización si la app se abrió desde su
-    // recordatorio, y si no, la comprobación normal vía GitHub
-    // (fix3, punto 20). En ese orden para que los diálogos no se
-    // pisen: el de actualización espera a que se cierre el del
-    // elemento.
+    // Tras el primer frame: el diálogo de actualización si la app
+    // se abrió desde su recordatorio, y si no, la comprobación
+    // normal vía GitHub (fix3, punto 20). El popup del elemento
+    // del día ya no existe (ronda fix5, punto 2): antes salía
+    // aquí y se pisaba con la ventanita "Cómo se juega".
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await _maybeShowElementOfDay();
       if (!mounted) return;
       if (NavRequests.showUpdateDialog) {
         NavRequests.showUpdateDialog = false;
@@ -832,108 +830,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void _onNotificationInstallRequest() {
     if (!mounted) return;
     UpdateCheckService.installDownloadedApk(context);
-  }
-
-  /// Elemento del día como POPUP al abrir la app (v6, item 2): nombre,
-  /// símbolo y curiosidad. Al cerrarlo no vuelve a salir hoy.
-  Future<void> _maybeShowElementOfDay() async {
-    final p = ProgressService.instance;
-    if (p.elementDayShownToday) return;
-    final element = elementOfTheDay(DateTime.now());
-    p.markElementDayShown();
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(tr('elementDayTitle')),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 26,
-                  backgroundColor: Theme.of(context).colorScheme.primary,
-                  child: Text(
-                    element.symbol,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    localizedElementName(element),
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(localizedElementFact(element)),
-            // Fix3, punto 9: los botones iban en `actions` y el
-            // OverflowBar del diálogo los apilaba al no caber lado a
-            // lado — "Cerrar" quedaba como enlace de texto encima
-            // de la pastilla grande "Ver ficha completa". Ahora van
-            // en una fila limpia dentro del contenido: secundario
-            // con borde a la izquierda y primario teal relleno a la
-            // derecha, mismo ancho y mismo alto (stretch), sin que
-            // uno quede encima del otro.
-            const SizedBox(height: 20),
-            // IntrinsicHeight: la fila usa stretch para igualar el
-            // alto de los dos botones, y sin altura acotada el
-            // stretch pide altura infinita y rompe el diálogo
-            // (mismo patrón que el menú de Laboratorio).
-            IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.of(dialogContext).pop(),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 12),
-                        textStyle: const TextStyle(fontSize: 14),
-                      ),
-                      child: Text(
-                        tr('closeWord'),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: FilledButton(
-                      onPressed: () {
-                        Navigator.of(dialogContext).pop();
-                        showElementSheet(context, element);
-                      },
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 12),
-                        textStyle: const TextStyle(fontSize: 14),
-                      ),
-                      child: Text(
-                        tr('elementDaySeeMore'),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   // La primera pantalla es el camino de niveles (Niveles), como en
@@ -1036,6 +932,10 @@ class _HomeScreenState extends State<HomeScreen> {
         page = VersionScreen(onVersionChanged: widget.onTrackChanged);
       case 'theme':
         page = const ThemeScreen();
+      case 'howToPlay':
+        // "¿Cómo se juega?" como pantalla completa (fix5, punto 1):
+        // se abre desde la fila de Cuenta.
+        page = const HowToPlayScreen();
       case 'tips':
         page = const TipsScreen();
       case 'review':

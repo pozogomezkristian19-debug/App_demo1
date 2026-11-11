@@ -56,6 +56,14 @@ class UserPrefs {
   static int reminderHour = 19;
   static int reminderMinute = 0;
   static String avatar = ''; // Avatar elegido ('' = el de su género).
+  // MUERTO desde la ronda fix5, punto 1 (Quemia 6.2): el diálogo
+  // "Cómo se juega" ya no sale solo en la primera entrada a Niveles
+  // (ahora es una pantalla que se abre desde Cuenta), así que nada
+  // en lib/ lee ni escribe este flag. Se CONSERVA el campo, su
+  // lectura en load() y saveRulesSeenV6() solo para no romper la
+  // veintena de tests viejos que lo ponen a true/false en su setUp
+  // (fuera del ámbito de esta ronda): quitarlo exige tocarlos
+  // todos. La próxima limpieza lo puede borrar junto con ellos.
   static bool rulesSeenV6 = false; // ¿Ya vio la ventanita de reglas v6?
   // Tema de acento (fix2 2026-11-10): 'verde' (teal de siempre) o
   // 'violeta' (el acento actual). Se guarda en el teléfono y la app

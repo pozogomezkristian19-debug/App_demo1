@@ -1,12 +1,25 @@
-// Calculadora científica propia de Melli-Qui (ronda fix3, punto 7),
+// Calculadora propia de Melli-Qui (ronda fix3, punto 7; pantalla
+// completa desde la fix5, punto B, corrección 2026-11-11 00:26),
 // estilo Duolingo: teclas grandes y redondeadas, sin el teclado del
-// sistema. Se muestra ABIERTA junto a la pregunta de cálculo (no hay
-// que tocar nada para que aparezca); junto al campo se ve la unidad
-// esperada ('mol', 'g', 'L', 'pH'...) para que se sepa qué escribir.
+// sistema. Junto al campo se ve la unidad esperada ('mol', 'g', 'L',
+// 'pH'...) para que se sepa qué escribir. NO es un panel inline
+// dentro de la pregunta: vive en su propia pantalla
+// (screens/calculator_screen.dart), que se abre con el botoncito de
+// teclado de la pregunta y SE CIERRA para responder; al volver, la
+// pregunta sigue intacta. La calculadora NUNCA se abre sola.
+//
+// Dos modos, un solo componente ([scientific]):
+// - Científica: log, ln, potencias, raíces, π y notación científica
+//   (×10^). Es la de las preguntas de cálculo (respuesta numérica):
+//   '=' rellena el campo de respuesta y "Usar resultado" entrega el valor.
+// - Normal: solo dígitos, + − × ÷, paréntesis y '='. Es la de las
+//   demás preguntas (opción múltiple): no hay campo de respuesta que
+//   rellenar; la calculadora es para calcular a mano y el resultado se
+//   ve en su propio visor, sin botón Usar resultado ([onSubmit] null).
 //
 // Flujo: el usuario escribe el cálculo (p. ej. pH = −log[H⁺]: escribe
 // "−log(0.01)"), ve la expresión y el resultado en vivo, pulsa '='
-// y el resultado queda en el campo de respuesta; luego "Comprobar"
+// y el resultado queda en el campo de respuesta; luego "Usar resultado"
 // es el equivalente a tocar una opción: llama a `onSubmit` con ese
 // valor y el runner pasa por su `_answer` de siempre (mismos puntos,
 // mismas vidas, misma explicación y mismo repaso de errores, con la
@@ -20,10 +33,11 @@
 // división entre cero...), la vista previa se queda en blanco y '='
 // no hace nada.
 //
-// Solo se usa cuando la pregunta es de cálculo
-// (`QuizQuestion.isNumeric`): las conceptuales siguen con las 4
-// opciones. El campo es de solo lectura a propósito: no es un
-// TextField, así que el teclado del sistema nunca se abre encima.
+// En las preguntas de cálculo (`QuizQuestion.isNumeric`) la
+// calculadora es científica y entrega la respuesta; en las demás es
+// normal y solo sirve para calcular a mano. El campo es de solo
+// lectura a propósito: no es un TextField, así que el teclado del
+// sistema nunca se abre encima.
 
 import 'package:flutter/material.dart';
 
@@ -31,25 +45,32 @@ import '../services/calculator.dart';
 import '../services/localization.dart';
 import '../services/numeric_answer.dart';
 
-/// Calculadora científica para responder una pregunta de cálculo.
+/// Calculadora para responder una pregunta de cálculo o para calcular
+/// a mano en una de opción múltiple (ver la cabecera del archivo).
 ///
 /// [unit] es la etiqueta de unidad que se muestra junto al campo
 /// (null = la respuesta no lleva unidad, como el Qc).
 /// [enabled] false cuando la pregunta ya está contestada: las teclas
 /// se apagan pero el valor tecleado sigue visible.
 /// [onSubmit] recibe el número del campo de respuesta al pulsar
-/// "Comprobar" (solo se activa después de pulsar '=').
+/// "Usar resultado" (solo se activa después de pulsar '='); null = modo
+/// para calcular a mano, sin botón Usar resultado.
+/// [scientific] false esconde las teclas científicas (log, ln,
+/// potencias, raíces, π, notación científica y '^'): queda la
+/// calculadora normal (dígitos, + − × ÷, paréntesis, =).
 class NumericKeypad extends StatefulWidget {
   const NumericKeypad({
     super.key,
     required this.unit,
     required this.enabled,
-    required this.onSubmit,
+    this.onSubmit,
+    this.scientific = true,
   });
 
   final String? unit;
   final bool enabled;
-  final ValueChanged<double> onSubmit;
+  final ValueChanged<double>? onSubmit;
+  final bool scientific;
 
   @override
   State<NumericKeypad> createState() => _NumericKeypadState();
@@ -258,8 +279,9 @@ class _NumericKeypadState extends State<NumericKeypad> {
 
   void _submit() {
     final value = _answerValue;
-    if (!widget.enabled || value == null) return;
-    widget.onSubmit(value);
+    final submit = widget.onSubmit;
+    if (!widget.enabled || value == null || submit == null) return;
+    submit(value);
   }
 
   Widget _key({
@@ -319,6 +341,10 @@ class _NumericKeypadState extends State<NumericKeypad> {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
             ),
+            // Padding corto: en modo normal hay 4 teclas pequeñas y
+            // con el padding por defecto "Limpiar" no cabe y se parte
+            // en dos líneas.
+            padding: const EdgeInsets.symmetric(horizontal: 8),
           ),
           child: Text(label,
               style: const TextStyle(
@@ -336,6 +362,9 @@ class _NumericKeypadState extends State<NumericKeypad> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
+          // Padding corto: como arriba, "Limpiar" no cabe con el
+          // padding por defecto cuando hay 4 teclas pequeñas.
+          padding: const EdgeInsets.symmetric(horizontal: 8),
         ),
         child: Text(label,
             style:
@@ -466,34 +495,39 @@ class _NumericKeypadState extends State<NumericKeypad> {
           ),
         ),
         const SizedBox(height: 12),
-        // Fila científica (teclas compactas): log, ln, raíz, x², 10^x.
-        _row([
-          _key(label: 'log', onTap: () => _pressOperandStart('log('),
-              height: 44, fontSize: 16),
-          _key(label: 'ln', onTap: () => _pressOperandStart('ln('),
-              height: 44, fontSize: 16),
-          _key(label: '√', onTap: () => _pressOperandStart('√('),
-              height: 44, fontSize: 20),
-          _key(label: 'x²', onTap: _pressSquare,
-              height: 44, fontSize: 16),
-          _key(label: '10^x', onTap: () => _pressOperandStart('10^'),
-              height: 44, fontSize: 16),
-        ]),
-        // Segunda fila científica: e^x, paréntesis, notación
-        // científica y π. Cinco teclas como la fila de arriba: la
-        // retícula queda simétrica (antes eran cuatro, más anchas).
-        _row([
-          _key(label: 'e^x', onTap: () => _pressOperandStart('e^'),
-              height: 44, fontSize: 16),
-          _key(label: '(', onTap: _pressOpenParen,
-              height: 44, fontSize: 20),
-          _key(label: ')', onTap: _pressCloseParen,
-              height: 44, fontSize: 20),
-          _key(label: '×10^x', onTap: _pressTimesPow10,
-              height: 44, fontSize: 16),
-          _key(label: 'π', onTap: () => _pressOperandStart('π'),
-              height: 44, fontSize: 20),
-        ]),
+        // Filas científicas (teclas compactas): solo en modo
+        // científico. En modo normal no salen log, ln, raíz, x²,
+        // 10^x, e^x, ×10^x, π ni '^': queda la calculadora normal.
+        if (widget.scientific) ...[
+          // Fila científica (teclas compactas): log, ln, raíz, x², 10^x.
+          _row([
+            _key(label: 'log', onTap: () => _pressOperandStart('log('),
+                height: 44, fontSize: 16),
+            _key(label: 'ln', onTap: () => _pressOperandStart('ln('),
+                height: 44, fontSize: 16),
+            _key(label: '√', onTap: () => _pressOperandStart('√('),
+                height: 44, fontSize: 20),
+            _key(label: 'x²', onTap: _pressSquare,
+                height: 44, fontSize: 16),
+            _key(label: '10^x', onTap: () => _pressOperandStart('10^'),
+                height: 44, fontSize: 16),
+          ]),
+          // Segunda fila científica: e^x, paréntesis, notación
+          // científica y π. Cinco teclas como la fila de arriba: la
+          // retícula queda simétrica (antes eran cuatro, más anchas).
+          _row([
+            _key(label: 'e^x', onTap: () => _pressOperandStart('e^'),
+                height: 44, fontSize: 16),
+            _key(label: '(', onTap: _pressOpenParen,
+                height: 44, fontSize: 20),
+            _key(label: ')', onTap: _pressCloseParen,
+                height: 44, fontSize: 20),
+            _key(label: '×10^x', onTap: _pressTimesPow10,
+                height: 44, fontSize: 16),
+            _key(label: 'π', onTap: () => _pressOperandStart('π'),
+                height: 44, fontSize: 20),
+          ]),
+        ],
         // Teclas grandes: dígitos y operadores (no GridView: el grid
         // fuerza celdas cuadradas y las teclas saldrían gigantes en
         // pantallas anchas; aquí cada tecla mide 56 de alto siempre).
@@ -518,20 +552,39 @@ class _NumericKeypadState extends State<NumericKeypad> {
         _row([
           _key(label: '0', onTap: () => _pressDigit('0')),
           _key(label: '.', onTap: _pressDot),
-          _key(label: '^', onTap: () => _pressOperator('^'), accent: true),
+          // En modo normal el paréntesis de abrir ocupa el sitio de
+          // '^': la normal lleva paréntesis, no potencias.
+          if (widget.scientific)
+            _key(label: '^', onTap: () => _pressOperator('^'), accent: true)
+          else
+            _key(label: '(', onTap: _pressOpenParen),
           _key(label: '+', onTap: () => _pressOperator('+'), accent: true),
         ]),
         Row(
           children: [
+            // En modo normal el paréntesis de cerrar va aquí: en
+            // científico ya está en la segunda fila científica. Con
+            // cuatro teclas pequeñas, ')' lleva flex 1 y las demás
+            // flex 2: si no, "Borrar" y "Limpiar" no caben y se
+            // parten en dos líneas.
+            if (!widget.scientific) ...[
+              Expanded(
+                  flex: 1,
+                  child: _smallKey(label: ')', onTap: _pressCloseParen)),
+              const SizedBox(width: 8),
+            ],
             Expanded(
+                flex: widget.scientific ? 1 : 2,
                 child: _smallKey(
                     label: tr('keypadDelete'), onTap: _backspace)),
             const SizedBox(width: 8),
             Expanded(
+                flex: widget.scientific ? 1 : 2,
                 child:
                     _smallKey(label: tr('keypadClear'), onTap: _clear)),
             const SizedBox(width: 8),
             Expanded(
+                flex: widget.scientific ? 1 : 2,
                 child: _smallKey(
                     label: '=', onTap: _equals, primary: true,
                     // '=' solo se enciende con un resultado válido:
@@ -539,25 +592,30 @@ class _NumericKeypadState extends State<NumericKeypad> {
                     enabled: canEquals)),
           ],
         ),
-        const SizedBox(height: 12),
-        SizedBox(
-          height: 56,
-          child: FilledButton(
-            onPressed: canSubmit ? _submit : null,
-            style: FilledButton.styleFrom(
-              backgroundColor: scheme.primary,
-              foregroundColor: scheme.onPrimary,
-              disabledBackgroundColor:
-                  scheme.primary.withValues(alpha: 0.45),
-              shape: const StadiumBorder(),
-            ),
-            child: Text(
-              tr('quizCheck'),
-              style:
-                  const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        // "Usar resultado" solo en las preguntas de cálculo (onSubmit no
+        // null): en modo "para calcular a mano" no hay nada que
+        // entregar; '=' ya deja el resultado en el visor.
+        if (widget.onSubmit != null) ...[
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 56,
+            child: FilledButton(
+              onPressed: canSubmit ? _submit : null,
+              style: FilledButton.styleFrom(
+                backgroundColor: scheme.primary,
+                foregroundColor: scheme.onPrimary,
+                disabledBackgroundColor:
+                    scheme.primary.withValues(alpha: 0.45),
+                shape: const StadiumBorder(),
+              ),
+              child: Text(
+                tr('calcUseResult'),
+                style: const TextStyle(
+                    fontSize: 18, fontWeight: FontWeight.bold),
+              ),
             ),
           ),
-        ),
+        ],
       ],
     );
   }

@@ -473,12 +473,14 @@ class _MassMolesSolverState extends State<MassMolesSolver> {
     final m = parseNum(_mass);
     final mm = parseNum(_molar);
     if (mm == null || mm <= 0) {
-      setState(() => _result = 'Introduce una masa molar válida (g/mol).');
+      setState(() => _result =
+          'Revisa los datos: introduce una masa molar válida (g/mol), mayor que cero.');
       return;
     }
     if (_mode == 'moles') {
-      if (m == null) {
-        setState(() => _result = 'Introduce la masa en gramos.');
+      if (m == null || m <= 0) {
+        setState(() => _result =
+            'Revisa los datos: introduce la masa en gramos (mayor que cero).');
         return;
       }
       final n = m / mm;
@@ -492,8 +494,9 @@ class _MassMolesSolverState extends State<MassMolesSolver> {
       });
     } else {
       // Aquí _mass se reusa como moles en este modo.
-      if (m == null) {
-        setState(() => _result = 'Introduce los moles.');
+      if (m == null || m <= 0) {
+        setState(() => _result =
+            'Revisa los datos: introduce los moles (mayores que cero).');
         return;
       }
       final mass = m * mm;
@@ -557,8 +560,9 @@ class _MolaritySolverState extends State<MolaritySolver> {
   void _calc() {
     final n = parseNum(_moles);
     final v = parseNum(_vol);
-    if (n == null || v == null || v <= 0) {
-      setState(() => _result = 'Introduce moles y volumen en litros (mayor que 0).');
+    if (n == null || n <= 0 || v == null || v <= 0) {
+      setState(() => _result =
+          'Revisa los datos: introduce moles y volumen en litros, mayores que cero.');
       return;
     }
     final m = n / v;
@@ -620,6 +624,11 @@ class _DilutionSolverState extends State<DilutionSolver> {
     final missing = [c1, v1, c2, v2].where((e) => e == null).length;
     if (missing != 1) {
       setState(() => _result = 'Deja vacío SOLO el dato que quieres calcular y rellena los otros tres.');
+      return;
+    }
+    if ([c1, v1, c2, v2].whereType<double>().any((e) => e <= 0)) {
+      setState(() => _result =
+          'Revisa los datos: concentraciones y volúmenes deben ser mayores que cero.');
       return;
     }
     setState(() {
@@ -684,8 +693,19 @@ class _PhSolverState extends State<PhSolver> {
 
   void _calc() {
     final v = parseNum(_value);
-    if (v == null || v <= 0) {
-      setState(() => _result = 'Introduce un valor mayor que 0.');
+    if (v == null) {
+      setState(() => _result = 'Revisa los datos: introduce un valor.');
+      return;
+    }
+    // El pH = 0 es válido (ácido 1 M): solo las concentraciones
+    // exigen un valor mayor que cero; el pH solo no puede ser negativo.
+    if (_mode == 'ph') {
+      if (v < 0) {
+        setState(() => _result = 'Revisa los datos: el pH no puede ser negativo.');
+        return;
+      }
+    } else if (v <= 0) {
+      setState(() => _result = 'Revisa los datos: introduce un valor mayor que cero.');
       return;
     }
     setState(() {
@@ -776,6 +796,14 @@ class _GasSolverState extends State<GasSolver> {
     final v = parseNum(_v);
     final n = parseNum(_n);
     final t = parseNum(_t);
+    if ((p != null && p <= 0) ||
+        (v != null && v <= 0) ||
+        (n != null && n <= 0) ||
+        (t != null && t <= 0)) {
+      setState(() => _result =
+          'Revisa los datos: la presión, el volumen, los moles y la temperatura deben ser mayores que cero.');
+      return;
+    }
     setState(() {
       if (_mode == 'P') {
         if (v == null || n == null || t == null || v == 0) {
@@ -870,8 +898,16 @@ class _LimitingSolverState extends State<LimitingSolver> {
     final na = parseNum(_na);
     final cb = parseNum(_cb);
     final nb = parseNum(_nb);
-    if (ca == null || na == null || cb == null || nb == null || ca <= 0 || cb <= 0) {
-      setState(() => _result = 'Introduce coeficientes y moles válidos (mayores que 0).');
+    if (ca == null ||
+        na == null ||
+        cb == null ||
+        nb == null ||
+        ca <= 0 ||
+        cb <= 0 ||
+        na <= 0 ||
+        nb <= 0) {
+      setState(() => _result =
+          'Revisa los datos: introduce coeficientes y moles mayores que cero.');
       return;
     }
     final qa = na / ca;

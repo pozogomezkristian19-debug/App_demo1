@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import '../data/i18n/content_i18n.dart';
 import '../data/periodic_table.dart';
 import '../models.dart';
+import '../screens/calculator_screen.dart';
 import '../services/localization.dart';
 import '../services/points.dart';
 import '../services/progress.dart';
@@ -200,24 +201,33 @@ class _TableQuizScreenState extends State<TableQuizScreen> {
                     style: const TextStyle(
                         fontSize: 16, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 12),
-                Card(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .primary
-                      .withValues(alpha: 0.12),
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(
-                      _symbolToName
-                          ? tr('tableQuizQSym')
-                              .replaceFirst('%s', _rounds[_index].symbol)
-                          : tr('tableQuizQName').replaceFirst(
-                              '%s', localizedElementName(_rounds[_index])),
-                      style: const TextStyle(
-                          fontSize: 22, fontWeight: FontWeight.bold),
-                      textAlign: TextAlign.center,
+                // Botoncito de teclado (fix5, punto B, corrección
+                // 00:26): también en el quiz de la tabla, a un
+                // ladito de la tarjeta de la pregunta; al tocarlo se
+                // abre la PANTALLA de la calculadora normal (página
+                // completa, no un panel inline) y al cerrarla se
+                // vuelve a la pregunta intacta.
+                QuestionCalculatorButton(
+                  question: Card(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .primary
+                        .withValues(alpha: 0.12),
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        _symbolToName
+                            ? tr('tableQuizQSym')
+                                .replaceFirst('%s', _rounds[_index].symbol)
+                            : tr('tableQuizQName').replaceFirst(
+                                '%s', localizedElementName(_rounds[_index])),
+                        style: const TextStyle(
+                            fontSize: 22, fontWeight: FontWeight.bold),
+                        textAlign: TextAlign.center,
+                      ),
                     ),
                   ),
+                  scientific: false,
                 ),
                 const SizedBox(height: 16),
                 for (var i = 0; i < 4; i++)

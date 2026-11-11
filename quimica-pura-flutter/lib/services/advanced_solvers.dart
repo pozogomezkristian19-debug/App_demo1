@@ -3,8 +3,10 @@
 // Las fórmulas son las aproximaciones estándar de los libros de texto:
 // el pH poliprótico resuelve la primera disociación con la cuadrática y
 // suma la contribución de la segunda (y tercera) etapa; las mezclas
-// suman las contribuciones de [H⁺] o [OH⁻] de cada componente; la
-// solubilidad usa s = (Ksp / (a^a · b^b))^(1/(a+b)); las valoraciones
+// suman las contribuciones de [H⁺] o [OH⁻] de cada componente, SALVO
+// dos débiles, que comparten el ion y se resuelven juntas (efecto del
+// ion común: sumarlas por separado sobreestima [H⁺] en ~0.15 de pH);
+// la solubilidad usa s = (Ksp / (a^a · b^b))^(1/(a+b)); las valoraciones
 // usan los balances de moles y, para el ácido débil, Henderson-
 // Hasselbalch e hidrólisis en el punto de equivalencia.
 
@@ -106,6 +108,25 @@ class MixtureComponent {
   final double? k; // Ka (ácido débil) o Kb (base débil)
 }
 
+/// [H⁺] (o [OH⁻]) de una mezcla de dos ácidos (o bases) débiles con
+/// efecto del ion común: [H⁺] = Σ Kᵢ·Cᵢ / (Kᵢ + [H⁺]). Se resuelve
+/// por bisección (la función es decreciente en [H⁺]); [H⁺] nunca
+/// supera la concentración total C₁ + C₂.
+double _weakMixtureIon(double c1, double k1, double c2, double k2) {
+  var lo = 0.0;
+  var hi = c1 + c2;
+  for (var i = 0; i < 200; i++) {
+    final mid = (lo + hi) / 2;
+    final f = k1 * c1 / (k1 + mid) + k2 * c2 / (k2 + mid) - mid;
+    if (f > 0) {
+      lo = mid;
+    } else {
+      hi = mid;
+    }
+  }
+  return (lo + hi) / 2;
+}
+
 SolverResult mixturePh(MixtureComponent a, MixtureComponent b) {
   final aAcid = a.kind == MixtureKind.strongAcid || a.kind == MixtureKind.weakAcid;
   final bAcid = b.kind == MixtureKind.strongAcid || b.kind == MixtureKind.weakAcid;
@@ -152,6 +173,49 @@ SolverResult mixturePh(MixtureComponent a, MixtureComponent b) {
 
   final ca = contribution(a);
   final cb = contribution(b);
+
+  // Dos débiles comparten el ion (ion común): sumar las [H⁺] de cada
+  // uno por separado sobreestima el resultado (p. ej. dos ácidos
+  // 0.1 M con Ka = 1×10⁻⁵ darían pH 2.70 en vez de 2.85). Se resuelven
+  // juntos; con un fuerte la supresión del débil es despreciable y
+  // vale la suma.
+  final bothWeakAcid =
+      a.kind == MixtureKind.weakAcid && b.kind == MixtureKind.weakAcid;
+  final bothWeakBase =
+      a.kind == MixtureKind.weakBase && b.kind == MixtureKind.weakBase;
+  if ((bothWeakAcid || bothWeakBase) &&
+      a.k != null &&
+      a.k! > 0 &&
+      b.k != null &&
+      b.k! > 0) {
+    final ion = _weakMixtureIon(a.c, a.k!, b.c, b.k!);
+    if (bothWeakAcid) {
+      final ph = -_log10(ion);
+      return SolverResult(
+        lines: [
+          'Componente 1: ácido débil ${fmtNum(a.c)} M (Ka = ${fmtNum(a.k!)}).',
+          'Componente 2: ácido débil ${fmtNum(b.c)} M (Ka = ${fmtNum(b.k!)}).',
+          'Los dos ácidos comparten el H⁺ (efecto del ion común): NO se suman las [H⁺] de cada uno por separado.',
+          '[H⁺] se halla resolviendo [H⁺] = Ka₁·C₁/(Ka₁ + [H⁺]) + Ka₂·C₂/(Ka₂ + [H⁺]) → [H⁺] = ${fmtNum(ion)} mol/L.',
+          'pH = −log(${fmtNum(ion)}) = ${fmtPh(ph)}.',
+        ],
+        summary: 'pH ≈ ${fmtPh(ph)}  ([H⁺] ≈ ${fmtNum(ion)} mol/L)',
+      );
+    }
+    final poh = -_log10(ion);
+    final ph = 14 - poh;
+    return SolverResult(
+      lines: [
+        'Componente 1: base débil ${fmtNum(a.c)} M (Kb = ${fmtNum(a.k!)}).',
+        'Componente 2: base débil ${fmtNum(b.c)} M (Kb = ${fmtNum(b.k!)}).',
+        'Las dos bases comparten el OH⁻ (efecto del ion común): NO se suman las [OH⁻] de cada una por separado.',
+        '[OH⁻] se halla resolviendo [OH⁻] = Kb₁·C₁/(Kb₁ + [OH⁻]) + Kb₂·C₂/(Kb₂ + [OH⁻]) → [OH⁻] = ${fmtNum(ion)} mol/L.',
+        'pOH = −log(${fmtNum(ion)}) = ${fmtPh(poh)}; pH = 14 − pOH = ${fmtPh(ph)}.',
+      ],
+      summary: 'pH ≈ ${fmtPh(ph)}  ([OH⁻] ≈ ${fmtNum(ion)} mol/L)',
+    );
+  }
+
   final total = ca + cb;
   if (aAcid) {
     final ph = -_log10(total);
@@ -234,13 +298,14 @@ SolverResult kspFromSolubility({
 // pH de disoluciones de sales (con o sin hidrólisis)
 // ---------------------------------------------------------------------------
 
-enum SaltKind { neutral, acidic, basic, amphoteric }
+enum SaltKind { neutral, acidic, basic, amphoteric, amphiproticAnion }
 
 SolverResult saltPh({
   required SaltKind kind,
   required double c,
   double? ka,
   double? kb,
+  double? ka2,
 }) {
   if (c <= 0) {
     return const SolverResult(
@@ -332,6 +397,30 @@ SolverResult saltPh({
         ],
         summary: 'pH ≈ ${fmtPh(ph)}  (disolución $verdict)',
       );
+    case SaltKind.amphiproticAnion:
+      // Anión anfiprótico (HCO₃⁻, H₂PO₄⁻): puede ceder un protón
+      // (como ácido) y aceptar uno (como base). Ka₁ es la del ácido
+      // conjugado (p. ej. H₂CO₃) y Ka₂ la del propio anión.
+      if (ka == null || ka <= 0 || ka2 == null || ka2 <= 0) {
+        return const SolverResult(
+          lines: [],
+          summary: '',
+          error:
+              'Faltan Ka₁ y Ka₂ del anión anfiprótico (por ejemplo, HCO₃⁻: Ka₁ = 4.5×10⁻⁷, Ka₂ = 4.7×10⁻¹¹).',
+        );
+      }
+      final pka1 = -_log10(ka);
+      final pka2 = -_log10(ka2);
+      final ph = 0.5 * (pka1 + pka2);
+      return SolverResult(
+        lines: [
+          'El anión anfiprótico (HCO₃⁻, H₂PO₄⁻) puede ceder un protón (como ácido) y aceptar uno (como base).',
+          'El pH no depende de la concentración: pH = ½(pKa₁ + pKa₂).',
+          'pKa₁ = ${fmtPh(pka1)}; pKa₂ = ${fmtPh(pka2)}.',
+          'pH = ½(${fmtPh(pka1)} + ${fmtPh(pka2)}) = ${fmtPh(ph)}.',
+        ],
+        summary: 'pH ≈ ${fmtPh(ph)}  (anión anfiprótico)',
+      );
   }
 }
 
@@ -354,7 +443,7 @@ SolverResult titrationStrongStrong({
   }
   final veq = ca * vaMl / cb;
   final lines = <String>[
-    'Moles de ácido: n = Cₐ·Vₐ = ${fmtNum(ca)} × ${fmtNum(vaMl)} mL = ${fmtNum(ca * vaMl / 1000)} mol.',
+    'Moles de ácido: n = Cₐ·Vₐ = ${fmtNum(ca)} mol/L × ${fmtNum(vaMl)} mL ÷ 1000 = ${fmtNum(ca * vaMl / 1000)} mol.',
     'Volumen de equivalencia: Veq = Cₐ·Vₐ / C_b = ${fmtNum(veq)} mL.',
   ];
   String summary;
@@ -444,7 +533,7 @@ SolverResult titrationRedox({
   final veq = (nFe / 5) / cMnO4 * 1000;
   final lines = <String>[
     'Reacción: MnO₄⁻ + 5 Fe²⁺ + 8 H⁺ → Mn²⁺ + 5 Fe³⁺ + 4 H₂O (1 mol de MnO₄⁻ oxida 5 mol de Fe²⁺).',
-    'Moles de Fe²⁺: n = ${fmtNum(cFe)} × ${fmtNum(vFeMl)} mL = ${fmtNum(nFe)} mol.',
+    'Moles de Fe²⁺: n = ${fmtNum(cFe)} mol/L × ${fmtNum(vFeMl)} mL ÷ 1000 = ${fmtNum(nFe)} mol.',
     'Moles de MnO₄⁻ en la equivalencia: ${fmtNum(nFe)} / 5 = ${fmtNum(nFe / 5)} mol.',
     'Volumen de equivalencia: Veq = ${fmtNum(nFe / 5)} / ${fmtNum(cMnO4)} = ${fmtNum(veq)} mL.',
   ];
@@ -500,16 +589,22 @@ SolverResult backTitration({
   final nAnalyte = nHclReacted / hclPerAnalyte;
   final massAnalyte = nAnalyte * molarMass;
   final percent = massAnalyte / sampleMassG * 100;
+  final lines = <String>[
+    'HCl añadido (en exceso): n = ${fmtNum(cHcl)} mol/L × ${fmtNum(vHclMl)} mL ÷ 1000 = ${fmtNum(nHclAdded)} mol.',
+    'HCl sobrante (lo que gasta el NaOH): n = ${fmtNum(cNaoh)} mol/L × ${fmtNum(vNaohMl)} mL ÷ 1000 = ${fmtNum(nNaoh)} mol.',
+    'HCl que reaccionó con la muestra: ${fmtNum(nHclAdded)} − ${fmtNum(nNaoh)} = ${fmtNum(nHclReacted)} mol.',
+    'Moles de analito: ${fmtNum(nHclReacted)} / $hclPerAnalyte = ${fmtNum(nAnalyte)} mol.',
+    'Masa de analito: ${fmtNum(nAnalyte)} × ${fmtNum(molarMass)} g/mol = ${fmtNum(massAnalyte)} g.',
+    'Porcentaje en la muestra: ${fmtNum(massAnalyte)} / ${fmtNum(sampleMassG)} × 100 = ${percent.toStringAsFixed(1)} %.',
+  ];
+  if (percent > 100) {
+    lines.add(
+        'Aviso: más del 100 % es imposible (la masa de analito no puede superar la masa de la muestra). Revisa los datos.');
+  }
   return SolverResult(
-    lines: [
-      'HCl añadido (en exceso): n = ${fmtNum(cHcl)} × ${fmtNum(vHclMl)} mL = ${fmtNum(nHclAdded)} mol.',
-      'HCl sobrante (lo que gasta el NaOH): n = ${fmtNum(cNaoh)} × ${fmtNum(vNaohMl)} mL = ${fmtNum(nNaoh)} mol.',
-      'HCl que reaccionó con la muestra: ${fmtNum(nHclAdded)} − ${fmtNum(nNaoh)} = ${fmtNum(nHclReacted)} mol.',
-      'Moles de analito: ${fmtNum(nHclReacted)} / $hclPerAnalyte = ${fmtNum(nAnalyte)} mol.',
-      'Masa de analito: ${fmtNum(nAnalyte)} × ${fmtNum(molarMass)} g/mol = ${fmtNum(massAnalyte)} g.',
-      'Porcentaje en la muestra: ${fmtNum(massAnalyte)} / ${fmtNum(sampleMassG)} × 100 = ${percent.toStringAsFixed(1)} %.',
-    ],
-    summary: 'La muestra contiene ${percent.toStringAsFixed(1)} % de analito (${fmtNum(massAnalyte)} g)',
+    lines: lines,
+    summary:
+        'La muestra contiene ${percent.toStringAsFixed(1)} % de analito (${fmtNum(massAnalyte)} g)${percent > 100 ? '. Revisa los datos: más del 100 % es imposible.' : ''}',
   );
 }
 
@@ -525,10 +620,10 @@ SolverResult potentiometric({
     );
   }
   final lines = <String>[
-    'El punto de equivalencia es donde el pH cambia más rápido: se busca el máximo de ΔpH/ΔV (primera derivada).',
+    'El punto de equivalencia es donde el pH cambia más rápido: se busca el máximo de |ΔpH/ΔV| (primera derivada, en valor absoluto: el salto vale igual suba o baje el pH).',
   ];
   var bestIndex = 0;
-  var bestSlope = -1.0;
+  var bestSlopeAbs = -1.0;
   for (var i = 0; i < volumesMl.length - 1; i++) {
     final dv = volumesMl[i + 1] - volumesMl[i];
     if (dv <= 0) {
@@ -541,14 +636,14 @@ SolverResult potentiometric({
     final slope = (ph[i + 1] - ph[i]) / dv;
     lines.add(
         'Entre ${fmtNum(volumesMl[i])} y ${fmtNum(volumesMl[i + 1])} mL: ΔpH/ΔV = ${slope.toStringAsFixed(2)} por mL.');
-    if (slope > bestSlope) {
-      bestSlope = slope;
+    if (slope.abs() > bestSlopeAbs) {
+      bestSlopeAbs = slope.abs();
       bestIndex = i;
     }
   }
   final veq = (volumesMl[bestIndex] + volumesMl[bestIndex + 1]) / 2;
   lines.add(
-      'El salto mayor está entre ${fmtNum(volumesMl[bestIndex])} y ${fmtNum(volumesMl[bestIndex + 1])} mL.');
+      'El salto mayor (|ΔpH/ΔV| = ${bestSlopeAbs.toStringAsFixed(2)} por mL) está entre ${fmtNum(volumesMl[bestIndex])} y ${fmtNum(volumesMl[bestIndex + 1])} mL.');
   return SolverResult(
     lines: lines,
     summary: 'Punto de equivalencia ≈ ${fmtNum(veq)} mL',

@@ -112,15 +112,19 @@ class ProgressService {
   /// Búsquedas recientes (v6): las últimas 5 consultas, en orden.
   static const _kRecentSearches = 'melli_progress_recent_searches';
 
-  /// Día en que se mostró el elemento del día como popup (v6): solo
-  /// una vez al día, al abrir la app.
-  static const _kElementDayShown = 'melli_progress_element_day_shown';
 
   SharedPreferences? _prefs;
 
   final Set<String> masteredTopics = <String>{};
   final Map<String, int> bestScores = <String, int>{}; // testId -> mejor %
   final Map<String, int> unlockedLevels = <String, int>{}; // tema -> nivel
+
+  /// Suma y conteo de notas APROBADAS por nivel (fix5, punto 15):
+  /// la puntuación del nivel es el PROMEDIO de todas las veces que
+  /// se pasó, no la mejor ni la primera. testId ('level:tema:nivel')
+  /// -> (suma de notas sobre 5, pases). Se guarda como JSON
+  /// {"testId": {"s": suma, "c": pases}} con clave por pista.
+  final Map<String, ({double sum, int count})> levelNotes = {};
   final Map<String, int> _topicCorrect = <String, int>{};
   final Map<String, int> _topicTotal = <String, int>{};
   final List<FailedEntry> _failed = <FailedEntry>[];
@@ -231,18 +235,6 @@ class ProgressService {
     _save();
   }
 
-  // ---- Elemento del día como popup (v6) ----
-
-  /// ¿Ya se mostró el popup del elemento del día hoy?
-  bool get elementDayShownToday {
-    final shown = _prefs?.getString(_kElementDayShown);
-    return shown == dateKey(DateTime.now());
-  }
-
-  void markElementDayShown() {
-    _prefs?.setString(_kElementDayShown, dateKey(DateTime.now()));
-  }
-
   /// Carga el progreso guardado. Llamar en main() antes de runApp.
   static Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -267,18 +259,12 @@ class ProgressService {
     bestScores
       ..clear()
       ..addAll(_readIntMap(prefs.getString(_key('best'))));
-    // Migración v6 (una sola vez): con la regla vieja (4/5 = 80 %) un
-    // nivel pasado guardaba 80; con la nueva (nota sobre 5 > 4,0) el
-    // aprobado empieza en 81. Sin esto, un nivel pasado con 80 se
-    // vería como suspendido.
-    for (final k in bestScores.keys.toList()) {
-      if (k.startsWith('level:') && bestScores[k] == 80) {
-        bestScores[k] = 81;
-      }
-    }
     unlockedLevels
       ..clear()
       ..addAll(_readIntMap(prefs.getString(_key('levels'))));
+    levelNotes
+      ..clear()
+      ..addAll(_readLevelNotes(prefs.getString(_key('levelnotes'))));
     _topicCorrect.clear();
     _topicTotal.clear();
     final stats = _readJson(prefs.getString(_key('stats')));
@@ -328,6 +314,21 @@ class ProgressService {
     return out;
   }
 
+  static Map<String, ({double sum, int count})> _readLevelNotes(
+      String? raw) {
+    final out = <String, ({double sum, int count})>{};
+    _readJson(raw).forEach((k, v) {
+      if (v is Map) {
+        final sum = (v['s'] as num?)?.toDouble();
+        final count = (v['c'] as num?)?.toInt();
+        if (sum != null && count != null && count > 0) {
+          out[k] = (sum: sum, count: count);
+        }
+      }
+    });
+    return out;
+  }
+
   static List<FailedEntry> _readFailed(String? raw) {
     if (raw == null || raw.isEmpty) return <FailedEntry>[];
     try {
@@ -348,6 +349,10 @@ class ProgressService {
     prefs.setStringList(_key('mastered'), masteredTopics.toList());
     prefs.setString(_key('best'), jsonEncode(bestScores));
     prefs.setString(_key('levels'), jsonEncode(unlockedLevels));
+    prefs.setString(
+        _key('levelnotes'),
+        jsonEncode(levelNotes.map(
+            (k, v) => MapEntry(k, {'s': v.sum, 'c': v.count}))));
     final stats = <String, Map<String, int>>{};
     for (final topic in _topicTotal.keys) {
       stats[topic] = {
@@ -455,6 +460,41 @@ class ProgressService {
       _save();
     }
   }
+
+  // ---- Puntuación del nivel: PROMEDIO de los pases (fix5, punto 15) ----
+
+  /// Registra una nota APROBADA de un nivel: suma al promedio de
+  /// todas las veces que se pasó. Un replay fallido NO llama aquí:
+  /// no entra en el promedio, no quita el pase y no re-bloquea el
+  /// nivel siguiente. [prevBestPercent] es el mejor % ANTES del
+  /// intento actual: si el nivel se pasó en una versión anterior a
+  /// este registro, solo quedó su mejor % y se toma como primera
+  /// nota (nota = % / 20, con el redondeo que ya trae el % guardado).
+  void recordLevelNote(String testId, double note,
+      {int prevBestPercent = 0}) {
+    var entry = levelNotes[testId];
+    if (entry == null && prevBestPercent > 0) {
+      entry = (sum: prevBestPercent / 20.0, count: 1);
+    }
+    levelNotes[testId] = (
+      sum: (entry?.sum ?? 0.0) + note,
+      count: (entry?.count ?? 0) + 1,
+    );
+    _save();
+  }
+
+  /// Promedio de las notas con las que se pasó el nivel, o null si
+  /// nunca se pasó con este registro (un pase anterior a esta
+  /// versión solo dejó su mejor % en bestScores).
+  double? levelNoteAverage(String testId) {
+    final entry = levelNotes[testId];
+    if (entry == null || entry.count <= 0) return null;
+    return entry.sum / entry.count;
+  }
+
+  /// Cuántas veces se ha pasado el nivel (con registro de promedio).
+  int levelNotePassCount(String testId) =>
+      levelNotes[testId]?.count ?? 0;
 
   // ---- Niveles por tema ----
 

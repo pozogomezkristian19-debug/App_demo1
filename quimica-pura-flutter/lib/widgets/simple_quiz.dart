@@ -23,7 +23,7 @@ import '../services/numeric_answer.dart';
 import '../services/points.dart';
 import '../services/progress.dart';
 import '../services/sound_service.dart';
-import 'numeric_keypad.dart';
+import '../screens/calculator_screen.dart';
 import 'twin_avatars.dart';
 
 /// Tokens claros (paleta propia de Melli-Qui, sin verde Duolingo):
@@ -43,6 +43,7 @@ class SimpleQuizRunner extends StatefulWidget {
     this.onRepeat,
     this.itemIds,
     this.trackProgress = true,
+    this.shuffleSeed,
   });
 
   final String title;
@@ -67,6 +68,14 @@ class SimpleQuizRunner extends StatefulWidget {
   /// punto 5). Los puntos del Reto son solo los del jugador 1 (tú).
   final bool trackProgress;
 
+  /// Semilla para el orden de las opciones: solo la usan las previews
+  /// (goldens deterministas). null (por defecto, en la app) = orden
+  /// aleatorio como siempre, distinto en cada intento; con semilla,
+  /// el orden es estable por pregunta (semilla + índice) y distinto
+  /// entre preguntas. Sin ella, un golden que captura opciones
+  /// acierta el orden aleatorio solo 1 de cada 24 veces.
+  final int? shuffleSeed;
+
   @override
   State<SimpleQuizRunner> createState() => _SimpleQuizRunnerState();
 }
@@ -87,16 +96,22 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
     super.initState();
     _remaining = widget.durationSeconds ?? 0;
     _shuffleOptions();
-    if (widget.durationSeconds != null) {
-      _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-        if (_remaining <= 1) {
-          _timer?.cancel();
-          if (!_finished) _finish();
-        } else {
-          setState(() => _remaining--);
-        }
-      });
-    }
+    _startTimer();
+  }
+
+  /// Cuenta atrás del examen con tiempo: al llegar a cero se
+  /// entrega solo. Extraída de initState porque didUpdateWidget
+  /// también la necesita al resetear (fix5, punto Repetir).
+  void _startTimer() {
+    if (widget.durationSeconds == null) return;
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (_remaining <= 1) {
+        _timer?.cancel();
+        if (!_finished) _finish();
+      } else {
+        setState(() => _remaining--);
+      }
+    });
   }
 
   @override
@@ -105,8 +120,37 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(covariant SimpleQuizRunner oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Cambio de cuestionario con el mismo State reutilizado: el
+    // Reto pasa del jugador 1 al 2 con otro lote de preguntas, y
+    // un Repetir futuro haría lo mismo. Sin resetear TODO el
+    // estado interno, el segundo turno arrancaba en la pantalla
+    // de resultado del primero (fix5, punto Repetir; mismo bug
+    // que en _QuizRunner de Niveles). La lista es la identidad
+    // del cuestionario (el Reto pasa _q1 y luego _q2); el examen
+    // con tiempo no se ve afectado: su Repetir desmonta el runner
+    // y vuelve a la elección de duración.
+    if (widget.items != oldWidget.items ||
+        widget.durationSeconds != oldWidget.durationSeconds) {
+      _timer?.cancel();
+      _index = 0;
+      _score = 0;
+      _answered = 0;
+      _points = 0;
+      _finished = false;
+      _remaining = widget.durationSeconds ?? 0;
+      _shuffleOptions();
+      _startTimer();
+    }
+  }
+
   void _shuffleOptions() {
-    _order = [0, 1, 2, 3]..shuffle(Random());
+    final seed = widget.shuffleSeed;
+    _order = [0, 1, 2, 3]
+      ..shuffle(
+          seed == null ? Random() : Random(seed * 7919 + _index));
     _selected = null;
   }
 
@@ -437,23 +481,28 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
                         companionForTurn(_index), MascotLine.console, _index))),
           ),
           const SizedBox(height: 16),
-          Text(_q.question,
-              style: TextStyle(
-                  fontSize: 19,
-                  fontWeight: FontWeight.w600,
-                  color: scheme.onSurface)),
+          // Botoncito de teclado (fix5, punto B, corrección 00:26):
+          // sale en (casi) todas las preguntas, a un ladito del
+          // texto; al tocarlo se abre la PANTALLA de la calculadora
+          // (página completa, no un panel inline) y al cerrarla se
+          // vuelve a la pregunta intacta. Científica en las de
+          // cálculo (al volver se responde con el valor), normal en
+          // las demás (solo para calcular a mano).
+          QuestionCalculatorButton(
+            question: Text(_q.question,
+                style: TextStyle(
+                    fontSize: 19,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.onSurface)),
+            scientific: _q.isNumeric,
+            unit: _q.numericUnit,
+            onResult: _q.isNumeric ? _answerNumeric : null,
+          ),
           const SizedBox(height: 16),
-          // Pregunta de cálculo (fix3, punto 7): las 4 opciones dejan
-          // paso al teclado numérico, abierto desde el principio. Las
+          // En las preguntas de cálculo las opciones dejan paso al
+          // teclado (que ahora se abre con el icono); las
           // conceptuales siguen con las opciones de siempre.
-          if (_q.isNumeric)
-            NumericKeypad(
-              key: ValueKey(_id),
-              unit: _q.numericUnit,
-              enabled: _selected == null,
-              onSubmit: _answerNumeric,
-            )
-          else
+          if (!_q.isNumeric)
             for (var i = 0; i < 4; i++)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),

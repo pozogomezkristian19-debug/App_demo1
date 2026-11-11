@@ -1,9 +1,10 @@
 // Diálogo "falta el permiso de notificaciones" (fix4, punto 3):
 // sale cuando activar los recordatorios (o probar un aviso) falla
-// porque el permiso está denegado: explica dónde se activa y ofrece
-// abrir los ajustes de notificaciones de la app. El botón para
-// cerrar es "Cerrar", no "Ahora no" (Kristian quitó el "Ahora no"
-// del flujo de notificaciones, 2026-11-10 20:43).
+// porque el permiso está denegado: ofrece abrir los ajustes de
+// notificaciones de la app DIRECTO (un toque, sin explicar la ruta
+// a mano: el texto es corto, fix5, punto 1). El botón para cerrar
+// es "Cerrar", no "Ahora no" (Kristian quitó el "Ahora no" del
+// flujo de notificaciones, 2026-11-10 20:43).
 
 import 'package:flutter/material.dart';
 

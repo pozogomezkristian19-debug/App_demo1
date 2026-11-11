@@ -14,15 +14,16 @@
 // Pregunta del día: acertar suma el valor de la pregunta; fallar RESTA
 // EL DOBLE de su valor (fácil −6, media −10, difícil −16).
 //
-// ## Pasar de nivel por puntos (sustituye al viejo 4/5 correctas)
-// Cada pregunta del nivel vale puntos según su dificultad:
+// ## Pasar de nivel por aciertos (fix5, punto 13)
+// Se pasa el nivel acertando 4 o más de 5 preguntas, sin importar la
+// dificultad: es lo que promete el mensaje de la app ("necesitas 4
+// de 5"). La nota ponderada por dificultad (abajo) se sigue mostrando
+// como nota, pero YA NO es la puerta: con la regla vieja (nota5 >
+// 4,0), 4 medias de 5 daban 4,0 exactos y NO pasaban, y la app le
+// decía al usuario que con 4 de 5 bastaba. Cada pregunta del nivel
+// sigue valiendo puntos según su dificultad para la nota:
 // fácil 4, media 5, difícil 6. Acertar suma ese máximo; fallar suma 0.
 //   nota5 = (puntos ganados / puntos máximos) × 5
-// Se pasa el nivel si nota5 > 4,0 (más del 80 % del máximo ponderado).
-// Por eso fallar una pregunta fácil se puede compensar (vale poco) y
-// fallar una difícil casi siempre suspende: como en un examen real, las
-// preguntas difíciles pesan más. Con 5 preguntas medias, 4 aciertos dan
-// 4,0 exactos y NO pasan: hay que sacar más de 4.
 //
 // ## Vidas
 // 5 vidas. Abandonar un nivel en curso (botón Salir o botón atrás del
@@ -83,7 +84,8 @@ int levelMaxPoints(int difficulty) {
 
 /// Nota de un nivel sobre 5, con las dificultades de sus preguntas.
 /// [earned] son los puntos ganados (0 o máximo por pregunta).
-/// Devuelve 0.0 si no hay preguntas.
+/// Devuelve 0.0 si no hay preguntas. Solo es la nota que se muestra:
+/// pasar ya no depende de ella (ver levelPassed).
 double levelScore5(List<int> difficulties, List<bool> correct) {
   if (difficulties.isEmpty) return 0.0;
   var max = 0;
@@ -97,8 +99,12 @@ double levelScore5(List<int> difficulties, List<bool> correct) {
   return earned / max * 5.0;
 }
 
-/// ¿La nota sobre 5 aprueba el nivel? Tiene que ser MÁS de 4.
-bool levelPassed(double score5) => score5 > 4.0;
+/// ¿Se pasa el nivel? Acertar 4 o más de 5 preguntas, por conteo de
+/// aciertos y sin importar la dificultad: 4/5 siempre pasa (falle la
+/// fácil, la media o la difícil) y 3/5 nunca pasa. [correct] aciertos,
+/// [total] preguntas del nivel.
+bool levelPassed(int correct, int total) =>
+    total > 0 && correct * 5 >= total * 4;
 
 /// Vidas: 5 como máximo, se reponen cada día nuevo.
 const int maxLives = 5;

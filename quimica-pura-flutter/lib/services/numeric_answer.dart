@@ -21,7 +21,9 @@
 // (0,02 está a 8 % del valor exacto, pero a 0,0018 del redondeo). El
 // suelo cubre el redondeo de la pantalla sin dejar pasar respuestas de
 // otro orden de magnitud (0,03 frente a 0,02176 sigue siendo fallo:
-// difiere en 0,0082 > 0,005).
+// difiere en 0,0082 > 0,005). Cuando el valor se muestra con 3
+// decimales (Qc menor que 0,1) el suelo es ±0,0005 (fix5 A15), porque
+// con ±0,005 un 0,012 pasaba como bueno frente a Qc = 0,015625.
 // Correcta = mismos puntos que una opción correcta; incorrecta = lo
 // mismo que fallar una opción (ver cada runner: la respuesta numérica
 // se traduce al índice de opción que le corresponde y pasa por el
@@ -39,11 +41,22 @@ const double numericToleranceRelative = 0.02;
 /// decimales con el que el generador muestra la respuesta correcta.
 const double numericToleranceAbsolute = 0.005;
 
+/// Suelo absoluto cuando el valor se muestra con 3 decimales (±0,0005,
+/// fix5 A15): el Qc menor que 0,1 se muestra con 3 decimales, y con el
+/// suelo de 2 decimales una respuesta de otro orden pasaba como buena
+/// (0,012 frente a Qc = 0,015625 difiere en 0,0036 < 0,005).
+const double numericToleranceAbsolute3Decimals = 0.0005;
+
 /// ¿La respuesta tecleada se acepta como correcta?
-bool isNumericAnswerCorrect(double typed, double correct) {
-  if (correct == 0) return typed.abs() <= numericToleranceAbsolute;
-  final allowed =
-      max(numericToleranceRelative * correct.abs(), numericToleranceAbsolute);
+/// [displayDecimals] es con cuántos decimales se muestra el valor
+/// correcto en pantalla (2 por defecto; 3 para el Qc menor que 0,1).
+bool isNumericAnswerCorrect(double typed, double correct,
+    {int displayDecimals = 2}) {
+  final floor = displayDecimals >= 3
+      ? numericToleranceAbsolute3Decimals
+      : numericToleranceAbsolute;
+  if (correct == 0) return typed.abs() <= floor;
+  final allowed = max(numericToleranceRelative * correct.abs(), floor);
   // El +1e-9 absorbe el ruido de la coma flotante justo en el límite
   // (0,51 − 0,50 da 0,010000000000000009 y no 0,01): sin él, teclear
   // el 2 % exacto fallaría por un pelo.
@@ -71,8 +84,28 @@ int displayedIndexForNumericAnswer({
   required QuizQuestion question,
   required List<int> order,
 }) {
-  final correct =
-      isNumericAnswerCorrect(typed, question.numericAnswer!);
+  final correct = isNumericAnswerCorrect(typed, question.numericAnswer!,
+      displayDecimals: _displayDecimals(question));
   if (correct) return order.indexOf(question.answer);
   return order.indexWhere((real) => real != question.answer);
+}
+
+/// Decimales con los que se muestra la opción correcta en pantalla
+/// (fix5 A15): el texto de la opción lleva el redondeo del generador
+/// ("0.016" -> 3 decimales, Qc; "18.02" -> 2). Los decimales se
+/// cuentan hasta el primer carácter que no es dígito, así que una
+/// unidad pegada ("342.14 g/mol") no estorba.
+int _displayDecimals(QuizQuestion question) {
+  final shown = question.options[question.answer];
+  final dot = shown.indexOf('.');
+  if (dot < 0) return 0;
+  var n = 0;
+  for (var i = dot + 1;
+      i < shown.length &&
+          shown.codeUnitAt(i) >= 48 &&
+          shown.codeUnitAt(i) <= 57;
+      i++) {
+    n++;
+  }
+  return n;
 }

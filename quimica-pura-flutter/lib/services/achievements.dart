@@ -95,8 +95,12 @@ bool achievementUnlocked(
     String id, ProgressService p, List<String> trackTopics) {
   switch (id) {
     case 'firstLevel':
-      return p.bestScores.keys
-          .any((k) => k.startsWith('level:') && (p.bestScores[k] ?? 0) >= 80);
+      // Pasado = desbloqueo (auditoría A5, fix5 ronda #5): la nota
+      // guardada es PONDERADA y un 4/5 fallando la difícil guarda
+      // 76 %, así que la nota no dice si se pasó; unlockedLevels
+      // sí (cualquier tema con el nivel 2 abierto = un nivel
+      // pasado por conteo, igual que el desbloqueo).
+      return p.unlockedLevels.values.any((u) => u > 1);
     case 'topicDone':
       return trackTopics.any(p.isTopicComplete);
     case 'mixedPass':

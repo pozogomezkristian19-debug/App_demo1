@@ -4,9 +4,13 @@
 // habitual y paréntesis:
 //
 //   expr  := term (('+' | '-') term)*
-//   term  := power (('*' | '/') power)*
-//   power := unary ('^' power)?            // la potencia asocia a la derecha
-//   unary := ('+' | '-') unary | primary
+//   term  := unary (('*' | '/') unary)*
+//   unary := ('+' | '-') unary | power
+//   power := primary ('^' unary)?          // la potencia asocia a la derecha
+//                                           // y liga MÁS que el menos unario:
+//                                           // −2² es −(2²) = −4 (A19, auditoría:
+//                                           // la convención matemática y la de
+//                                           // las calculadoras científicas)
 //   primary := número | 'e' | 'π' | func '(' expr ')' | '(' expr ')'
 //   func  := log (base 10) | ln | sqrt
 //
@@ -176,14 +180,14 @@ class _Parser {
   }
 
   double? _term() {
-    final first = _power();
+    final first = _unary();
     if (first == null) return null;
     var value = first;
     while (!_done &&
         _peek.kind == _TokKind.op &&
         (_peek.text == '*' || _peek.text == '/')) {
       final op = _take().text;
-      final rhs = _power();
+      final rhs = _unary();
       if (rhs == null) return null;
       if (op == '/' && rhs == 0) return null;
       value = op == '*' ? value * rhs : value / rhs;
@@ -192,11 +196,11 @@ class _Parser {
   }
 
   double? _power() {
-    final base = _unary();
+    final base = _primary();
     if (base == null) return null;
     if (!_done && _peek.kind == _TokKind.op && _peek.text == '^') {
       _take();
-      final exponent = _power();
+      final exponent = _unary();
       if (exponent == null) return null;
       final result = math.pow(base, exponent).toDouble();
       if (result.isNaN || result.isInfinite) return null;
@@ -214,7 +218,7 @@ class _Parser {
       if (value == null) return null;
       return op == '-' ? -value : value;
     }
-    return _primary();
+    return _power();
   }
 
   double? _primary() {

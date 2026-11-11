@@ -37,7 +37,6 @@ import '../services/sound_service.dart';
 import '../services/update_check.dart';
 import '../services/user_prefs.dart';
 import '../widgets/brand_logo.dart';
-import '../widgets/how_to_play.dart';
 import '../widgets/icon_animations.dart';
 import '../widgets/stats_card.dart';
 import '../widgets/twin_avatars.dart';
@@ -340,7 +339,7 @@ class _AccountScreenState extends State<AccountScreen> {
             iconColor: _blue,
             title: tr('howToPlayTitle'),
             subtitle: tr('howToPlaySub'),
-            onTap: () => showHowToPlayDialog(context),
+            onTap: () => widget.onOpenScreen('howToPlay'),
           ),
           _Row(
             icon: LucideIcons.star,

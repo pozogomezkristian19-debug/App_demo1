@@ -1011,6 +1011,19 @@ class LucideIcons {
     _SvgPath('M12 8h.01'),
   ]);
 
+  static const LucideIconData keyboard = LucideIconData([
+    _SvgRect(2, 4, 20, 16, 2, 0),
+    _SvgPath('M6 8h.01'),
+    _SvgPath('M10 8h.01'),
+    _SvgPath('M14 8h.01'),
+    _SvgPath('M18 8h.01'),
+    _SvgPath('M6 12h.01'),
+    _SvgPath('M10 12h.01'),
+    _SvgPath('M14 12h.01'),
+    _SvgPath('M18 12h.01'),
+    _SvgPath('M7 16h10'),
+  ]);
+
   static const LucideIconData landmark = LucideIconData([
     _SvgPath('M10 18v-7'),
     _SvgPath('M11.119 2.205a2 2 0 0 1 1.762 0l7.84 3.846A.5.5 0 0 1 20.5 7h-17a.5.5 0 0 1-.22-.949z'),

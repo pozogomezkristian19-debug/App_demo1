@@ -16,11 +16,11 @@ import '../widgets/lucide_icons.dart';
 import '../data/i18n/content_i18n.dart';
 import '../data/questions.dart';
 import '../models.dart';
+import '../screens/calculator_screen.dart';
 import '../services/localization.dart';
 import '../services/numeric_answer.dart';
 import '../services/points.dart';
 import '../services/progress.dart';
-import '../widgets/numeric_keypad.dart';
 
 class LabQuizPage extends StatefulWidget {
   const LabQuizPage({super.key});
@@ -248,21 +248,27 @@ class _LabQuizPageState extends State<LabQuizPage> {
                     style: const TextStyle(
                         fontSize: 16, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 16),
-                Text(_q.question,
-                    style: const TextStyle(
-                        fontSize: 19, fontWeight: FontWeight.w600)),
+                // Botoncito de teclado (fix5, punto B, corrección
+                // 00:26): sale en (casi) todas las preguntas, a un
+                // ladito del texto; al tocarlo se abre la PANTALLA
+                // de la calculadora (página completa, no un panel
+                // inline) y al cerrarla se vuelve a la pregunta
+                // intacta. Científica en las de cálculo (al volver
+                // se responde con el valor), normal en las demás
+                // (solo para calcular a mano).
+                QuestionCalculatorButton(
+                  question: Text(_q.question,
+                      style: const TextStyle(
+                          fontSize: 19, fontWeight: FontWeight.w600)),
+                  scientific: _q.isNumeric,
+                  unit: _q.numericUnit,
+                  onResult: _q.isNumeric ? _answerNumeric : null,
+                ),
                 const SizedBox(height: 16),
-                // Pregunta de cálculo (fix3, punto 7): las 4 opciones
-                // dejan paso al teclado numérico, abierto desde el
-                // principio. Las conceptuales siguen con las opciones.
-                if (_q.isNumeric)
-                  NumericKeypad(
-                    key: ValueKey('lab-$_index'),
-                    unit: _q.numericUnit,
-                    enabled: _selected == null,
-                    onSubmit: _answerNumeric,
-                  )
-                else
+                // En las preguntas de cálculo las opciones dejan paso
+                // al teclado (que ahora se abre con el icono); las
+                // conceptuales siguen con las opciones de siempre.
+                if (!_q.isNumeric)
                   for (var i = 0; i < 4; i++)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),

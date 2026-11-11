@@ -31,8 +31,15 @@ class GeneratedQuestion {
 // ---------------------------------------------------------------------------
 
 /// Formatea un número quitando ceros sobrantes: 2.50 -> '2.5', 3.00 -> '3'.
+/// Redondeo mitad hacia arriba: 2×1.008 + 15.999 es 18.015 en decimal,
+/// pero en coma flotante es 18.014999… y toStringAsFixed lo bajaría a
+/// 18.01; el agua debe salir 18.02 (auditoría A23). El +1e-9 absorbe
+/// solo el error de representación (≪ 1e-9), no cambia ningún valor
+/// que esté de verdad por debajo de la mitad.
 String fmtNum(double v, [int decimals = 2]) {
-  var s = v.toStringAsFixed(decimals);
+  final factor = pow(10, decimals).toDouble();
+  final rounded = ((v * factor) + 1e-9).round() / factor;
+  var s = rounded.toStringAsFixed(decimals);
   if (s.contains('.')) {
     s = s.replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
   }
@@ -152,6 +159,16 @@ class _Compound {
     return m;
   }
 
+  /// Masa ignorando TODOS los subíndices: cada elemento cuenta como 1.
+  /// Es otro error clásico, distinto del anterior cuando el compuesto
+  /// tiene varios elementos con subíndice (p. ej. H₂SO₄: 50.08 frente
+  /// a 49.07; en Ca(OH)₂: 58.1 frente a 57.09).
+  double get massIgnoringAllSubscripts {
+    var m = 0.0;
+    parts.forEach((el, _) => m += _atomicMass[el]!);
+    return m;
+  }
+
   String get massSteps {
     final bits = parts.entries.map((e) {
       final m = _atomicMass[e.key]!;
@@ -160,6 +177,17 @@ class _Compound {
           : '${e.value}×${fmtNum(m)} (${e.key})';
     }).join(' + ');
     return '$bits = ${fmtNum(molarMass)} g/mol';
+  }
+
+  /// Masas atómicas de los elementos del compuesto, SIN la suma:
+  /// para la pregunta de masa molar (la suma ES la respuesta, así
+  /// que el desglose con el total no vale ahí; fix5, punto 14).
+  String get atomicMassList {
+    final bits = parts.entries.map((e) {
+      final m = _atomicMass[e.key]!;
+      return '${e.key} = ${fmtNum(m)}';
+    }).join('; ');
+    return bits;
   }
 }
 
@@ -185,6 +213,51 @@ const List<_Compound> _compounds = [
 _Compound _compoundByFormula(String formula) =>
     _compounds.firstWhere((c) => c.formula == formula);
 
+/// Masas molares ERRÓNEAS de un compuesto, cada una de un error químico
+/// distinto (ignorar subíndices, omitir un elemento, contarlo de más),
+/// ordenadas del error más clásico al menos. Sirve para que los
+/// distractores de masa molar y de masa<->moles nunca colapsen con la
+/// correcta ni entre sí (auditoría A14): "ignorar el subíndice" vale lo
+/// mismo que la masa correcta cuando todos los subíndices son 1 (NaCl,
+/// HCl, NaOH…), y "restar un O" vale lo mismo que "ignorar el
+/// subíndice" en Ca(OH)₂ (58.1 en los dos casos). `numericOptions`
+/// elimina los duplicados y toma los 3 primeros distintos.
+List<double> _wrongMassPool(_Compound c) {
+  final m = c.molarMass;
+  var worstMass = 0.0;
+  var worstN = 1;
+  c.parts.forEach((el, n) {
+    if (n > worstN) {
+      worstN = n;
+      worstMass = _atomicMass[el]!;
+    }
+  });
+  final first = c.parts.entries.first;
+  final last = c.parts.entries.last;
+  return [
+    c.massIgnoringSubscript,
+    c.massIgnoringAllSubscripts,
+    if (c.parts.containsKey('O')) m - _atomicMass['O']!,
+    if (c.parts.containsKey('H'))
+      m - c.parts['H']! * _atomicMass['H']!,
+    m + worstMass, // contar de más el elemento mayoritario
+    m - first.value * _atomicMass[first.key]!, // omitir un elemento
+    m - last.value * _atomicMass[last.key]!,
+    m + first.value * _atomicMass[first.key]!, // contarlo dos veces
+    m + last.value * _atomicMass[last.key]!,
+  ];
+}
+
+/// Una masa molar errónea del compuesto, distinta de la correcta:
+/// el primer valor del pool que no coincide con ella.
+double _wrongMass(_Compound c) {
+  final m = c.molarMass;
+  for (final w in _wrongMassPool(c)) {
+    if (fmtNum(w) != fmtNum(m)) return w;
+  }
+  return m * 2;
+}
+
 // ---------------------------------------------------------------------------
 // 1. Masa molar
 // ---------------------------------------------------------------------------
@@ -194,17 +267,25 @@ GeneratedQuestion buildMolarMass(String formula) {
   final id = 'gen:molar-mass:direct:$formula';
   final rng = Random(id.hashCode);
   final m = c.molarMass;
-  final wrongs = <double>[
-    c.massIgnoringSubscript,
-    c.parts.containsKey('O') ? m - _atomicMass['O']! : m + 16.0,
-    m * 1.1,
-  ];
+  // Distractores: errores químicos distintos (ver _wrongMassPool).
+  // numericOptions elimina duplicados y toma los 3 primeros
+  // distintos, así que si dos errores clásicos dan el mismo número
+  // (Ca(OH)₂: ignorar el subíndice y restar un O valen 58.1),
+  // entra el siguiente error de la lista y no hay relleno ±5 %.
+  final wrongs = _wrongMassPool(c);
   final built = numericOptions(m, wrongs, (v) => '${fmtNum(v)} g/mol', rng);
   return GeneratedQuestion(
     id: id,
     question: QuizQuestion(
       topic: 'estequiometria',
-      question: gt('molarMassQ', {'name': genSubstanceName(c.name), 'formula': c.formula}),
+      // Fix5, punto 14: la pregunta da las masas atómicas (el dato
+      // que hace falta para sumar); el desglose con el total NO
+      // vale aquí porque ese total ES la respuesta.
+      question: gt('molarMassQ', {
+        'name': genSubstanceName(c.name),
+        'formula': c.formula,
+        'data': c.atomicMassList,
+      }),
       options: built.options,
       answer: built.answer,
       explanation:
@@ -228,6 +309,10 @@ GeneratedQuestion buildMassMoles(String form, String formula, double value) {
   value = norm2(value);
   final c = _compoundByFormula(formula);
   final m = c.molarMass;
+  // Fix5, punto 14: la masa molar con su desglose va EN la pregunta
+  // (n = m/M no se puede resolver sin ella, y en mitad de un nivel
+  // no se puede salir a buscarla). El desglose enseña, además.
+  final data = 'M(${c.formula}) = ${c.massSteps}';
   late final double correct;
   late final String question;
   late final String explanation;
@@ -236,18 +321,26 @@ GeneratedQuestion buildMassMoles(String form, String formula, double value) {
     // value = gramos (entero). ¿Cuántos moles hay en X g?
     final grams = value;
     correct = grams / m;
-    question =
-        gt('massMolesQ', {'g': fmtNum(grams, 0), 'name': genSubstanceName(c.name), 'formula': c.formula});
-    wrongs = [grams * m, grams / c.massIgnoringSubscript, correct * 10];
+    question = gt('massMolesQ', {
+      'g': fmtNum(grams, 0),
+      'name': genSubstanceName(c.name),
+      'formula': c.formula,
+      'data': data,
+    });
+    wrongs = [grams * m, grams / _wrongMass(c), correct * 10];
     explanation =
         gt('massMolesE', {'g': fmtNum(grams, 0), 'm': fmtNum(m), 'v': fmtNum(correct)});
   } else {
     // form == 'mass': value = moles. ¿Qué masa tienen n mol?
     final moles = value;
     correct = moles * m;
-    question =
-        gt('massMassQ', {'n': fmtNum(moles), 'name': genSubstanceName(c.name), 'formula': c.formula});
-    wrongs = [moles / m, moles * c.massIgnoringSubscript, correct * 10];
+    question = gt('massMassQ', {
+      'n': fmtNum(moles),
+      'name': genSubstanceName(c.name),
+      'formula': c.formula,
+      'data': data,
+    });
+    wrongs = [moles / m, moles * _wrongMass(c), correct * 10];
     explanation =
         gt('massMassE', {'n': fmtNum(moles), 'm': fmtNum(m), 'v': fmtNum(correct)});
   }
@@ -359,7 +452,18 @@ GeneratedQuestion buildDilution(String form, double a, double b, double c) {
     correct = a * b / c;
     question =
         gt('dilutionC2Q', {'c1': fmtNum(a), 'v1': fmtNum(b, 0), 'v2': fmtNum(c, 0)});
-    wrongs = [a * c / b, a * b / (b + c), a];
+    // Distractores: errores químicos distintos. "a" (responder con C₁,
+    // ignorando los volúmenes) colapsa con la correcta cuando V₁ = V₂,
+    // así que el pool sigue con otros dos errores y numericOptions
+    // toma los 3 primeros distintos (auditoría A14).
+    wrongs = [
+      a * c / b, // volúmenes al revés
+      a * b / (b + c), // usar el volumen total
+      a, // ignorar los volúmenes
+      a * c / (b + c), // V₂ sobre el volumen total
+      a * (b + c) / c, // volúmenes sumados en el numerador
+      a * b * 1000 / c, // desliz de unidades mL/L (solo si todo lo demás colapsa: V₁ = V₂)
+    ];
     explanation =
         gt('dilutionC2E', {'c1': fmtNum(a), 'v1': fmtNum(b, 0), 'v2': fmtNum(c, 0), 'c': fmtNum(correct)});
   } else {
@@ -367,7 +471,17 @@ GeneratedQuestion buildDilution(String form, double a, double b, double c) {
     correct = b * c / a;
     question =
         gt('dilutionV1Q', {'v2': fmtNum(c, 0), 'c2': fmtNum(b), 'c1': fmtNum(a)});
-    wrongs = [b * c * a, a * c / b, c];
+    // Distractores: errores químicos distintos. "c" (responder con V₂,
+    // ignorando las concentraciones) colapsa con la correcta cuando
+    // C₁ = C₂, así que el pool sigue con otros dos errores y
+    // numericOptions toma los 3 primeros distintos (auditoría A14).
+    wrongs = [
+      b * c * a, // multiplicar en vez de dividir
+      a * c / b, // concentraciones al revés
+      c, // ignorar las concentraciones
+      b * c / (a + b), // C₂·V₂/(C₁+C₂)
+      c * (a + b) / b, // V₂·(C₁+C₂)/C₂
+    ];
     explanation =
         gt('dilutionV1E', {'c2': fmtNum(b), 'v2': fmtNum(c, 0), 'c1': fmtNum(a), 'v': fmtNum(correct)});
   }
@@ -434,15 +548,32 @@ GeneratedQuestion buildPh(String form, int mantissa, int exponent) {
   } else {
     // form == 'ph-from-oh': dan [OH-] y piden el pH.
     correct = 14 - p;
-    question =
-        gt('phFromOhQ', {'mant': '$mantissa', 'sup': sup(-exponent)});
+    question = gt('phFromOhQ', {
+      'mant': '$mantissa',
+      'sup': sup(-exponent),
+      // Fix5, punto 14: pH + pOH = 14 es el dato que hace falta
+      // para pasar del pOH al pH; sin él la pregunta no se puede
+      // resolver.
+      'data': 'pH + pOH = 14',
+    });
     explanation =
         gt('phFromOhE', {'mant': '$mantissa', 'sup': sup(-exponent), 'p': p.toStringAsFixed(2), 'c': correct.toStringAsFixed(2)});
   }
+  // Distractores: errores químicos distintos. Con mantisa 1 el "error
+  // de signo" (exponente + logM) y "14 − correcta" valen lo mismo que
+  // la correcta cuando p = 7 ([H⁺] = 1×10⁻⁷), así que el pool sigue
+  // con otros errores y numericOptions toma los 3 primeros distintos
+  // (auditoría A14). El orden conserva los 3 primeros de antes en
+  // todos los casos no degenerados.
   final wrongs = <double>[
     exponent + logM, // error de signo clásico
     14 - correct,
     correct + 1,
+    correct - 1,
+    -correct, // signo cambiado
+    p, // para 'ph-from-oh': responder con el pOH en vez del pH
+    exponent.toDouble(), // ignorar la mantisa
+    14 - (exponent + logM),
   ];
   final id = 'gen:ph:$form:${mantissa}_$exponent';
   final rng = Random(id.hashCode);
@@ -461,8 +592,11 @@ GeneratedQuestion buildPh(String form, int mantissa, int exponent) {
       answer: built.answer,
       explanation: explanation,
       // Pregunta de cálculo (fix3, punto 7): teclado numérico.
+      // En el formulario 'poh' lo que se pide es el pOH, así que la
+      // unidad/etiqueta es "pOH" (auditoría A7); en 'ph' y en
+      // 'ph-from-oh' el resultado pedido es el pH.
       numericAnswer: correct,
-      numericUnit: 'pH',
+      numericUnit: form == 'poh' ? 'pOH' : 'pH',
     ),
   );
 }
@@ -486,6 +620,10 @@ GeneratedQuestion buildGas(String form, double x, double tC, double y) {
   tC = norm2(tC);
   y = norm2(y);
   final tK = tC + 273.15;
+  // Fix5, punto 14: R es el dato que hace falta para PV = nRT;
+  // sin él la pregunta no se puede resolver. (_rGas.toString() da
+  // '0.08206'; fmtNum lo recortaría a 2 decimales.)
+  final data = 'R = ${_rGas.toString()} L·atm/(mol·K)';
   late final double correct;
   late final String question;
   late final String explanation;
@@ -493,8 +631,12 @@ GeneratedQuestion buildGas(String form, double x, double tC, double y) {
   if (form == 'volume') {
     // x = n (mol), y = P (atm). V = nRT/P.
     correct = x * _rGas * tK / y;
-    question =
-        gt('gasVolumeQ', {'n': fmtNum(x), 't': fmtNum(tC, 0), 'p': fmtNum(y)});
+    question = gt('gasVolumeQ', {
+      'n': fmtNum(x),
+      't': fmtNum(tC, 0),
+      'p': fmtNum(y),
+      'data': data,
+    });
     wrongs = [
       x * _rGas * tC / y, // usar °C en vez de K: el error clásico
       x * 8.314 * tK / y, // R equivocado para estas unidades
@@ -505,8 +647,12 @@ GeneratedQuestion buildGas(String form, double x, double tC, double y) {
   } else if (form == 'moles') {
     // x = P (atm), y = V (L). n = PV/RT.
     correct = x * y / (_rGas * tK);
-    question =
-        gt('gasMolesQ', {'v': fmtNum(y), 't': fmtNum(tC, 0), 'p': fmtNum(x)});
+    question = gt('gasMolesQ', {
+      'v': fmtNum(y),
+      't': fmtNum(tC, 0),
+      'p': fmtNum(x),
+      'data': data,
+    });
     wrongs = [
       x * y / (_rGas * tC),
       x * y * _rGas * tK,
@@ -517,8 +663,12 @@ GeneratedQuestion buildGas(String form, double x, double tC, double y) {
   } else {
     // form == 'pressure': x = n (mol), y = V (L). P = nRT/V.
     correct = x * _rGas * tK / y;
-    question =
-        gt('gasPressureQ', {'n': fmtNum(x), 'v': fmtNum(y), 't': fmtNum(tC, 0)});
+    question = gt('gasPressureQ', {
+      'n': fmtNum(x),
+      'v': fmtNum(y),
+      't': fmtNum(tC, 0),
+      'data': data,
+    });
     wrongs = [
       x * _rGas * tC / y,
       x * _rGas * tK * y,
@@ -592,14 +742,20 @@ class _Reaction {
 }
 
 const List<_Reaction> _reactions = [
-  _Reaction('2 H₂ + O₂ → 2 H₂O', 'H₂', 'H₂O', 2, 2),
+  // Auditoría A9: en 6 de 8 reacciones ca = cb y la respuesta era
+  // copiar el número dado. Ahora todas ejercitan la proporción
+  // (ca ≠ cb): se pregunta por la especie cuyo coeficiente difiere
+  // del de la dada. Las reacciones 1 (N₂+3H₂→2NH₃) y 4 (KClO₃) ya
+  // la ejercitaban y NO se tocan: mismas especies, mismos
+  // coeficientes y mismas respuestas correctas.
+  _Reaction('2 H₂ + O₂ → 2 H₂O', 'O₂', 'H₂O', 1, 2),
   _Reaction('N₂ + 3 H₂ → 2 NH₃', 'H₂', 'NH₃', 3, 2),
-  _Reaction('2 Mg + O₂ → 2 MgO', 'Mg', 'MgO', 2, 2),
-  _Reaction('CH₄ + 2 O₂ → CO₂ + 2 H₂O', 'CH₄', 'CO₂', 1, 1),
+  _Reaction('2 Mg + O₂ → 2 MgO', 'O₂', 'MgO', 1, 2),
+  _Reaction('CH₄ + 2 O₂ → CO₂ + 2 H₂O', 'CH₄', 'H₂O', 1, 2),
   _Reaction('2 KClO₃ → 2 KCl + 3 O₂', 'KClO₃', 'O₂', 2, 3),
-  _Reaction('CaCO₃ → CaO + CO₂', 'CaCO₃', 'CO₂', 1, 1),
-  _Reaction('2 Na + Cl₂ → 2 NaCl', 'Na', 'NaCl', 2, 2),
-  _Reaction('C + O₂ → CO₂', 'C', 'CO₂', 1, 1),
+  _Reaction('2 H₂O → 2 H₂ + O₂', 'H₂O', 'O₂', 2, 1),
+  _Reaction('2 Na + Cl₂ → 2 NaCl', 'Cl₂', 'NaCl', 1, 2),
+  _Reaction('4 Fe + 3 O₂ → 2 Fe₂O₃', 'Fe', 'Fe₂O₃', 4, 2),
 ];
 
 GeneratedQuestion buildStoichiometry(String form, int reaction, double moles) {
@@ -616,10 +772,20 @@ GeneratedQuestion buildStoichiometry(String form, int reaction, double moles) {
     question =
         gt('stoichReactantQ', {'eq': r.equation, 'a': r.a, 'n': fmtNum(moles), 'b': r.b});
   }
+  // Distractores: errores químicos distintos. Con ca ≠ cb la
+  // proporción al revés y "ignorar los coeficientes" ya no valen lo
+  // mismo que la correcta; pero "correcta × 2" colapsa con "ignorar
+  // los coeficientes" cuando cb = ca/2 (p. ej. 2:1), así que el pool
+  // sigue con "sumar los coeficientes" y numericOptions toma los 3
+  // primeros distintos (auditoría A9/A14).
+  final sumRatio = form == 'product'
+      ? moles * (r.ca + r.cb) / r.ca
+      : moles * (r.ca + r.cb) / r.cb;
   final wrongs = <double>[
     form == 'product' ? moles * r.ca / r.cb : moles * r.cb / r.ca, // proporción al revés
     moles, // ignorar los coeficientes
     correct * 2,
+    sumRatio, // sumar los coeficientes en vez de usar la proporción
   ];
   final id = 'gen:stoichiometry:$form:${reaction}_${moles.toStringAsFixed(2)}';
   final rng = Random(id.hashCode);
@@ -872,8 +1038,8 @@ const List<_Molecule> _molecules = [
   _Molecule('CH₄', 'metano', 'Tetraédrica', 'Covalente'),
   _Molecule('NH₃', 'amoníaco', 'Piramidal trigonal', 'Covalente polar'),
   _Molecule('H₂O', 'agua', 'Angular', 'Covalente polar'),
-  _Molecule('CO₂', 'dióxido de carbono', 'Lineal', 'Covalente'),
-  _Molecule('BF₃', 'trifluoruro de boro', 'Plana trigonal', 'Covalente'),
+  _Molecule('CO₂', 'dióxido de carbono', 'Lineal', 'Covalente polar'),
+  _Molecule('BF₃', 'trifluoruro de boro', 'Plana trigonal', 'Covalente polar'),
   _Molecule('NaCl', 'cloruro de sodio', null, 'Iónico'),
   _Molecule('HCl', 'cloruro de hidrógeno', 'Lineal', 'Covalente polar'),
   _Molecule('O₂', 'oxígeno', 'Lineal', 'Covalente'),

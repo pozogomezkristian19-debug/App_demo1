@@ -127,7 +127,9 @@ class StatsScreen extends StatefulWidget {
 }
 
 class _StatsScreenState extends State<StatsScreen> {
-  Map<String, int>? _otherBest;
+  /// Niveles desbloqueados de la otra pista (para su contador de
+  /// pasados): el contador usa el desbloqueo, no la nota (A2).
+  Map<String, int>? _otherLevels;
 
   /// La tarjeta de resumen que se convierte en imagen al compartir.
   final _shareKey = GlobalKey();
@@ -230,16 +232,25 @@ class _StatsScreenState extends State<StatsScreen> {
     final snap = await ProgressService.trackSnapshot(other);
     if (!mounted) return;
     setState(() {
-      _otherBest = snap.best;
+      _otherLevels = snap.levels;
     });
   }
 
-  int _passedLevels(Map<String, int> best, List<String> topics) {
+  /// Niveles pasados de una pista (auditoría A2, fix5 ronda #5):
+  /// "pasado" es LO MISMO que en el camino de Niveles — el nivel
+  /// siguiente está desbloqueado (`unlockedLevel > level`). La
+  /// mejor nota guardada es la nota PONDERADA y ya no es la puerta:
+  /// un 4/5 fallando la difícil guarda 76 % y antes no se contaba,
+  /// aunque el camino lo marcaba pasado (y el contador "Superado:
+  /// X / 55" de Niveles no coincidía con este). `unlocked` es tema
+  /// → nivel más alto desbloqueado (1 si el tema nunca se tocó).
+  int _passedLevels(Map<String, int> unlocked, List<String> topics) {
     var passed = 0;
     for (final topic in topics) {
       final count = ProgressService.levelCountForTopic(topic);
+      final unlockedLevel = unlocked[topic] ?? 1;
       for (var level = 1; level <= count; level++) {
-        if ((best['level:$topic:$level'] ?? 0) >= 81) passed++;
+        if (unlockedLevel > level) passed++;
       }
     }
     return passed;
@@ -302,13 +313,13 @@ class _StatsScreenState extends State<StatsScreen> {
       'racha_mejor': p.streakBest,
       'niveles_pasados_uni': _passedLevels(
           ProgressService.track == ProgressService.trackUni
-              ? p.bestScores
-              : (_otherBest ?? {}),
+              ? p.unlockedLevels
+              : (_otherLevels ?? {}),
           _topicsOf(ProgressService.trackUni)),
       'niveles_pasados_bach': _passedLevels(
           ProgressService.track == ProgressService.trackBach
-              ? p.bestScores
-              : (_otherBest ?? {}),
+              ? p.unlockedLevels
+              : (_otherLevels ?? {}),
           _topicsOf(ProgressService.trackBach)),
       'mejores_puntuaciones': {
         for (final e in p.bestScores.entries) _prettyScoreKey(e.key): e.value,
@@ -344,15 +355,16 @@ class _StatsScreenState extends State<StatsScreen> {
     final c = _StatsColors.of(context);
     final p = ProgressService.instance;
     final topics = widget.trackTopics;
-    final passed = _passedLevels(p.bestScores, topics);
+    final passed = _passedLevels(p.unlockedLevels, topics);
     final total = _totalLevels(topics);
     final weakest = p.weakestTopics(topics).take(3).toList();
     final otherTrack = ProgressService.track == ProgressService.trackUni
         ? ProgressService.trackBach
         : ProgressService.trackUni;
     final otherTopics = _topicsOf(otherTrack);
-    final otherPassed =
-        _otherBest == null ? null : _passedLevels(_otherBest!, otherTopics);
+    final otherPassed = _otherLevels == null
+        ? null
+        : _passedLevels(_otherLevels!, otherTopics);
     final otherTotal = _totalLevels(otherTopics);
     return Scaffold(
       backgroundColor: c.bg,

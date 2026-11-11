@@ -1,9 +1,17 @@
 // Recordatorio de estudio (v6): avisos REALES del sistema con
 // flutter_local_notifications, a intervalos aleatorios siempre de más
 // de 1 hora entre uno y otro (61-180 min), con mensajes que rotan.
-// Al activarlo se pide el permiso de notificaciones (Android 13+);
-// si no se da, los avisos no llegan. El botón de prueba manda un
-// aviso ahora mismo, para comprobar que funciona en el teléfono.
+// Al activarlo se pide el permiso de notificaciones con el diálogo
+// del sistema DIRECTO (Android 13+); si no se da, los avisos no
+// llegan. El botón de prueba manda un aviso ahora mismo, para
+// comprobar que funciona en el teléfono.
+//
+// Fix5, punto 1: el interruptor refleja el permiso REAL (si se
+// revoca en Ajustes, queda apagado aunque la preferencia guardada
+// diga que sí) y la pantalla muestra el estado del permiso
+// (concedido/denegado) junto al próximo aviso. Al concederse el
+// permiso, enable() dispara UNA notificación inmediata de
+// confirmación para que se VEA que funciona.
 //
 // Lo que NO se puede comprobar aquí: que el aviso llegue con la app
 // cerrada depende del permiso y de que el sistema no mate la app en
@@ -31,6 +39,13 @@ class _ReminderScreenState extends State<ReminderScreen>
   /// vuelve a comprobar y, si ya está dado, se activan los
   /// recordatorios (fix4, punto 3).
   var _waitingForPermission = false;
+
+  /// Estado REAL del permiso (fix5, punto 1): null mientras no se ha
+  /// comprobado. El interruptor refleja la realidad: si no hay
+  /// permiso, queda apagado aunque la preferencia guardada diga que
+  /// sí (p. ej. permiso revocado en Ajustes).
+  bool? _granted;
+
   late Future<DateTime?> _nextFuture;
 
   @override
@@ -38,6 +53,7 @@ class _ReminderScreenState extends State<ReminderScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _refreshNext();
+    _refreshPermission();
   }
 
   @override
@@ -48,10 +64,36 @@ class _ReminderScreenState extends State<ReminderScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _waitingForPermission) {
+    if (state != AppLifecycleState.resumed) return;
+    if (_waitingForPermission) {
       _waitingForPermission = false;
       _recheckPermission();
     }
+    // Aunque no se viniera de Ajustes, el permiso puede haber
+    // cambiado fuera: se vuelve a comprobar siempre (fix5).
+    _refreshPermission();
+  }
+
+  /// Comprueba el permiso de verdad y actualiza la pantalla. Si los
+  /// recordatorios estaban encendidos y el permiso se revocó en
+  /// Ajustes, se apagan (se borra el próximo aviso): el interruptor
+  /// no puede seguir en ON si ningún aviso puede llegar. El próximo
+  /// aviso solo se relee cuando se apagó (si no, se invalidaría el
+  /// FutureBuilder y la fila desaparecería hasta el siguiente
+  /// frame).
+  Future<void> _refreshPermission() async {
+    final granted = await NotificationService.isPermissionGranted;
+    if (!mounted) return;
+    var disabled = false;
+    if (UserPrefs.reminderOn && !granted) {
+      await NotificationService.disable();
+      if (!mounted) return;
+      disabled = true;
+    }
+    setState(() {
+      _granted = granted;
+      if (disabled) _refreshNext();
+    });
   }
 
   Future<void> _recheckPermission() async {
@@ -59,7 +101,10 @@ class _ReminderScreenState extends State<ReminderScreen>
     if (!granted || !mounted) return;
     final ok = await NotificationService.enable();
     if (!mounted) return;
-    setState(() => _refreshNext());
+    setState(() {
+      _granted = true;
+      _refreshNext();
+    });
     if (ok) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(tr('notifOn'))),
@@ -74,6 +119,11 @@ class _ReminderScreenState extends State<ReminderScreen>
   @override
   Widget build(BuildContext context) {
     final on = UserPrefs.reminderOn;
+    // El interruptor refleja la realidad (fix5): sin permiso,
+    // apagado. Mientras no se ha comprobado (_granted null), se
+    // muestra la preferencia guardada.
+    final effectiveOn = on && (_granted ?? true);
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(title: Text(tr('notifTitle'))),
       body: ListView(
@@ -82,8 +132,8 @@ class _ReminderScreenState extends State<ReminderScreen>
           Text(tr('notifExplain')),
           const SizedBox(height: 16),
           SwitchListTile(
-            title: Text(on ? tr('notifOn') : tr('notifOff')),
-            value: on,
+            title: Text(effectiveOn ? tr('notifOn') : tr('notifOff')),
+            value: effectiveOn,
             onChanged: _busy
                 ? null
                 : (v) async {
@@ -97,6 +147,10 @@ class _ReminderScreenState extends State<ReminderScreen>
                     if (!mounted) return;
                     setState(() {
                       _busy = false;
+                      // Al activar, el permiso queda como enable()
+                      // lo dejó (concedido o denegado): la fila de
+                      // estado se actualiza en el acto (fix5).
+                      if (v) _granted = ok;
                       // Al activar se programa la tanda: releer el
                       // próximo aviso; al apagar se borra.
                       _refreshNext();
@@ -120,16 +174,55 @@ class _ReminderScreenState extends State<ReminderScreen>
                   },
           ),
           const SizedBox(height: 12),
+          // Estado REAL del permiso (fix5, punto 1): que se vea si
+          // los avisos pueden llegar o no, junto al próximo aviso.
+          if (_granted != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: (_granted! ? scheme.primary : Colors.orange)
+                      .withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    LucideIcon(
+                      LucideIcons.bellRing,
+                      size: 18,
+                      color:
+                          _granted! ? scheme.primary : Colors.orange,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        tr(_granted!
+                            ? 'notifPermGranted'
+                            : 'notifPermDenied'),
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           // Próximo aviso programado (fix3): para que se vea que el
           // recordatorio de verdad está armado y a qué hora llega.
           // Solo con recordatorios activos y un aviso aún futuro;
           // si no hay ninguno no se muestra nada (sin texto vacío).
+          // La clave es necesaria (fix5): la fila de estado del
+          // permiso se inserta ANTES que este FutureBuilder cuando
+          // se conoce el permiso; sin clave, al insertarse el
+          // FutureBuilder se remontaba (perdía su snapshot) y la
+          // fila del próximo aviso desaparecía un frame.
           FutureBuilder<DateTime?>(
+            key: const ValueKey('nextReminder'),
             future: _nextFuture,
             builder: (context, snapshot) {
               final at = snapshot.data;
-              if (!on || at == null) return const SizedBox.shrink();
-              final scheme = Theme.of(context).colorScheme;
+              if (!effectiveOn || at == null) return const SizedBox.shrink();
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Container(
@@ -177,15 +270,15 @@ class _ReminderScreenState extends State<ReminderScreen>
           ),
           ElevatedButton.icon(
             onPressed: () async {
-              // Primero el permiso: sin él el aviso no sale y el
-              // "enviado" mentiría (fix4, punto 3). Se pide el
-              // permiso y, si sigue denegado, sale el diálogo con
-              // "Ir a Ajustes".
-              var granted = await NotificationService.isPermissionGranted;
-              if (!granted) {
-                granted = await NotificationService.requestPermission();
-              }
+              // El permiso se pide DIRECTO (fix5): requestPermission()
+              // es la respuesta autorizada (sin diálogo si ya está
+              // dado) y no depende de isPermissionGranted, que solo
+              // consulta. Pedirlo aquí evita el "enviado" mentiroso
+              // si la consulta dijera que sí con el permiso negado.
+              final granted =
+                  await NotificationService.requestPermission();
               if (!mounted) return;
+              setState(() => _granted = granted);
               if (!granted) {
                 final went = await showNotificationSettingsDialog(context);
                 if (went && mounted) _waitingForPermission = true;

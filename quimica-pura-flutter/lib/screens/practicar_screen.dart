@@ -19,23 +19,28 @@ import '../services/user_prefs.dart';
 import '../widgets/brand_logo.dart';
 import '../widgets/celebration.dart';
 import '../widgets/icon_animations.dart';
-import '../widgets/numeric_keypad.dart';
+import '../screens/calculator_screen.dart';
 import '../widgets/twin_avatars.dart';
-import '../widgets/how_to_play.dart';
 
 // Practicar estilo Duolingo: niveles por tema, repaso de errores y memoria
 // que no se borra al cerrar la app (todo vive en ProgressService, que
 // guarda en SharedPreferences).
 //
-// - Cada tema se parte en niveles de 5 preguntas. Para pasar de nivel la
-//   NOTA sobre 5 (por puntos según la dificultad) tiene que ser MÁS DE 4
-//   (v6: ya no vale el viejo 4/5 correctas; 4 medias de 5 dan 4,0 exactos
-//   y NO pasan). Al pasarlo se desbloquea el siguiente.
+// - Cada tema se parte en niveles de 5 preguntas. Para pasar de nivel
+//   hay que acertar 4 o más de 5 preguntas (fix5, punto 13: por conteo
+//   de aciertos, sin importar la dificultad — es lo que promete el
+//   mensaje "necesitas 4 de 5"). La nota ponderada sobre 5 se sigue
+//   mostrando, pero ya no es la puerta: con la regla vieja (nota > 4,0)
+//   4 medias de 5 daban 4,0 exactos y NO pasaban. Al pasarlo se
+//   desbloquea el siguiente.
 //   Cada respuesta suma o resta puntos del saldo total (ver points.dart).
 // - Abandonar un nivel en curso (Salir o atrás) cuesta 1 vida; hay 5 al
 //   día y se reponen cada día nuevo. Con 0 vidas no se puede empezar.
-//   Ganar un nivel completo devuelve 1 vida (hasta 5). La primera vez
-//   que se entra a Niveles tras la v6 sale una ventanita con las reglas.
+//   Ganar un nivel completo devuelve 1 vida (hasta 5). Las reglas
+//   ("¿Cómo se juega?") viven como PANTALLA COMPLETA en Cuenta
+//   (ronda fix5, punto 1): el auto-show de la primera entrada a
+//   Niveles ya no existe, al abrir la app lo primero que se ve son
+//   los niveles.
 // - El repaso es POR NIVEL y con VARIANTES (v6): no se repite la misma
 //   pregunta, sino el mismo concepto con otros datos, y hacen falta 3
 //   aciertos seguidos para dar un error por superado.
@@ -53,10 +58,10 @@ import '../widgets/how_to_play.dart';
 
 const int _levelSize = 5;
 
-/// Con la nota por puntos, el aprobado es nota5 > 4,0.
-/// En porcentaje guardado (nota5 x 20), el aprobado empieza en 81:
-/// 4,0 exactos son 80 y NO pasan (ver points.dart y la migración en
-/// ProgressService._readAll).
+/// Umbral del porcentaje guardado (nota5 x 20) para la etiqueta
+/// "Excelente" en los quizzes que NO son de nivel (fix5, punto 13:
+/// ya NO es la puerta de los niveles: pasar es acertar 4 de 5, y si
+/// un nivel está pasado se sabe por unlockedLevel, no por la nota).
 const int _passPercent = 81;
 const int _mixedSize = 24; // examen mixto de Universidad
 const int _mixedSizeBach = 16; // examen mixto de Bachillerato
@@ -186,28 +191,17 @@ class _PracticarScreenState extends State<PracticarScreen> {
   /// abandonar ANTES de terminar cuesta una vida.
   var _finishedQuiz = false;
 
+  /// Contador de inicios de quiz: cada _start() lo sube, y el
+  /// _QuizRunner lleva un ValueKey con él, así que Repetir crea un
+  /// State nuevo y limpio en vez de reutilizar el del intento
+  /// anterior (fix5, punto Repetir: el resultado viejo se quedaba
+  /// y el confeti volvía a caer).
+  var _runId = 0;
+
   // Para volver al punto donde va el usuario al abrir el camino.
   final _currentKey = GlobalKey();
   var _scrolledToCurrent = false;
   var _backRegistered = false;
-
-  @override
-  void initState() {
-    super.initState();
-    // Primera vez en Niveles tras la v6: ventanita corta con las reglas
-    // (vidas, puntos, cómo se pasa de nivel). Solo una vez.
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) return;
-      if (UserPrefs.rulesSeenV6) return;
-      // Un respiro para no pisar el popup del elemento del día, que
-      // sale al abrir la app desde HomeScreen.
-      await Future.delayed(const Duration(milliseconds: 900));
-      if (!mounted) return;
-      await UserPrefs.saveRulesSeenV6();
-      if (!mounted) return;
-      await showHowToPlayDialog(context);
-    });
-  }
 
   @override
   void dispose() {
@@ -289,7 +283,10 @@ class _PracticarScreenState extends State<PracticarScreen> {
     var passed = 0;
     for (final topic in _byTopic.keys) {
       for (var level = 1; level <= _levelCount(topic); level++) {
-        if (progress.bestScore('level:$topic:$level') >= _passPercent) {
+        // Pasado = desbloqueado el siguiente (fix5, punto 13): con la
+        // regla por conteo, un 4/5 puede guardar 73-80 % de nota y la
+        // nota ya no dice si se pasó; unlockedLevel sí, siempre.
+        if (progress.unlockedLevel(topic) > level) {
           passed++;
         }
       }
@@ -544,15 +541,27 @@ class _PracticarScreenState extends State<PracticarScreen> {
       BackNav.register(_closeQuiz);
       _backRegistered = true;
     }
+    // Replay de un nivel ya pasado (fix5, A3): "ya pasado" es
+    // unlockedLevel > level — el mismo listón que usa el nodo del
+    // camino —, NO la mejor nota: un 4/5 fallando la difícil
+    // guarda 76 % (< 81) y con la nota como listón la protección
+    // no saltaba. El snapshot es el saldo de antes de empezar.
+    final progress = ProgressService.instance;
+    final replayOfPassed = spec.kind == 'level' &&
+        progress.unlockedLevel(spec.topic!) > spec.level;
+    final pointsSnapshot = progress.points;
     setState(() {
       _spec = spec;
       _finishedQuiz = false;
+      _runId++;
       _quiz = _QuizState(
         testId: spec.kind == 'level'
             ? 'level:${spec.topic}:${spec.level}'
             : spec.kind,
         title: _titleFor(spec),
         items: questions,
+        replayOfPassed: replayOfPassed,
+        pointsSnapshot: pointsSnapshot,
       );
     });
     widget.onSessionChanged?.call(true);
@@ -607,6 +616,16 @@ class _PracticarScreenState extends State<PracticarScreen> {
     if (_spec != null) _start(_spec!);
   }
 
+  /// Salta al nivel siguiente del mismo tema (fix5, punto 13): usa
+  /// el mismo arranque que Repetir, así el nivel nuevo empieza de
+  /// verdad (pregunta 1, marcador a cero).
+  void _nextLevel() {
+    if (_spec != null && _spec!.kind == 'level') {
+      _start(_QuizSpec(
+          kind: 'level', topic: _spec!.topic, level: _spec!.level + 1));
+    }
+  }
+
   bool _mixedUnlocked() {
     final progress = ProgressService.instance;
     // Desbloqueado cuando el Nivel 1 está pasado en todos los temas:
@@ -625,11 +644,19 @@ class _PracticarScreenState extends State<PracticarScreen> {
   Widget build(BuildContext context) {
     if (_quiz != null) {
       return _QuizRunner(
+        key: ValueKey('quiz-run-$_runId'),
         quiz: _quiz!,
         spec: _spec!,
         onExit: _requestExitQuiz,
         onRepeat: _repeat,
         onFinished: () => _finishedQuiz = true,
+        // "Pasar de nivel" (fix5, punto 13): solo en niveles y solo
+        // si hay uno después; en el último nivel del tema no hay
+        // botón (el resultado solo ofrece Repetir y Volver).
+        onNextLevel: _spec!.kind == 'level' &&
+                _spec!.level < _levelCount(_spec!.topic!)
+            ? _nextLevel
+            : null,
       );
     }
     final progress = ProgressService.instance;
@@ -650,19 +677,54 @@ class _PracticarScreenState extends State<PracticarScreen> {
     final mixedSize = ProgressService.track == ProgressService.trackBach
         ? _mixedSizeBach
         : _mixedSize;
+    // Una sección del camino (tema + sus niveles). Es un cierre para
+    // poder poner el PRIMER tema antes de la pregunta del día y de
+    // "Practicar de otra forma" y el resto después (fix5, punto 2):
+    // el camino es lo primero que se ve al abrir Niveles.
+    Widget topicSection(int i) {
+      return _TopicPathSection(
+        topic: topics[i],
+        bankCount: byTopic[topics[i]]!.length,
+        levelCount: _levelCount(topics[i]),
+        locked: !_topicUnlocked(i),
+        currentLevel:
+            current != null && current.topicIndex == i ? current.level : 0,
+        currentKey:
+            current != null && current.topicIndex == i ? _currentKey : null,
+        onLevelTap: (level, unlocked) {
+          if (!_topicUnlocked(i)) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(tr('topicLocked'))),
+            );
+            return;
+          }
+          if (unlocked) {
+            _start(_QuizSpec(kind: 'level', topic: topics[i], level: level));
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                    '${tr('quizLevelFailed')} (${tr('levelWord')} ${level - 1})'),
+              ),
+            );
+          }
+        },
+      );
+    }
+
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // Cabecera compacta (fix2, item 3): título + progreso en
-          // una sola fila, sin el párrafo de introducción, para que
-          // la pantalla principal quepa sin deslizar: gemela del
-          // día, pregunta del día, practicar de otra forma y el
-          // camino se ven en la primera pantalla. Los dos textos
-          // son flexibles con puntos suspensivos (auditoría): sin
-          // eso, en otro idioma o con fuente grande se desbordaba
-          // la fila 42 px a la derecha.
+          // una sola fila, sin el párrafo de introducción. El
+          // camino va justo debajo (fix5, punto 2): al abrir
+          // Niveles lo primero que se ve es el primer tema con su
+          // nodo 1, sin deslizar. Los dos textos son flexibles con
+          // puntos suspensivos (auditoría): sin eso, en otro idioma
+          // o con fuente grande se desbordaba la fila 42 px a la
+          // derecha.
           Row(
             children: [
               Flexible(
@@ -693,6 +755,17 @@ class _PracticarScreenState extends State<PracticarScreen> {
           // racha/meta) ya NO está en Niveles: vive en Cuenta (fix 3),
           // así el camino empieza más arriba y se ve más.
           const _ReminderCard(),
+          // EL CAMINO PRIMERO (fix5, punto 2): el primer tema con su
+          // nodo 1 va justo debajo de la cabecera, antes de la
+          // pregunta del día y de "Practicar de otra forma". Así, al
+          // abrir Niveles, el camino domina la primera pantalla y el
+          // nodo 1 se ve sin deslizar (a 393x852 el nodo 1 queda a
+          // ~215 dp, con los nodos 1-5 visibles). La pregunta del
+          // día y "Practicar de otra forma" NO se quitan: quedan
+          // después del primer tema, a un desliz corto, y al
+          // contestar la pregunta todo lo de abajo sigue subiendo.
+          topicSection(0),
+          const SizedBox(height: 20),
           // Pregunta del día (fix4, punto 13 REVISADO): la fila lado
           // a lado NO — vuelve la tarjeta ANCHA de antes (título,
           // puntos, botón "Responder"), pero con la FOTO del
@@ -737,38 +810,9 @@ class _PracticarScreenState extends State<PracticarScreen> {
             onOpen: widget.onOpenScreen ?? (_) {},
           ),
           const SizedBox(height: 20),
-          for (var i = 0; i < topics.length; i++)
-            _TopicPathSection(
-              topic: topics[i],
-              bankCount: byTopic[topics[i]]!.length,
-              levelCount: _levelCount(topics[i]),
-              locked: !_topicUnlocked(i),
-              currentLevel: current != null && current.topicIndex == i
-                  ? current.level
-                  : 0,
-              currentKey: current != null && current.topicIndex == i
-                  ? _currentKey
-                  : null,
-              onLevelTap: (level, unlocked) {
-                if (!_topicUnlocked(i)) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(tr('topicLocked'))),
-                  );
-                  return;
-                }
-                if (unlocked) {
-                  _start(
-                      _QuizSpec(kind: 'level', topic: topics[i], level: level));
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                          '${tr('quizLevelFailed')} (${tr('levelWord')} ${level - 1})'),
-                    ),
-                  );
-                }
-              },
-            ),
+          // El resto de temas del camino, después de la pregunta del
+          // día y de "Practicar de otra forma".
+          for (var i = 1; i < topics.length; i++) topicSection(i),
           // Examen mixto: trofeo final del camino, bloqueado hasta pasar
           // el Nivel 1 de todos los temas de la pista.
           _FinalExamSection(
@@ -1194,7 +1238,19 @@ class _LevelNodeRowState extends State<_LevelNodeRow>
     final progress = ProgressService.instance;
     final scheme = Theme.of(context).colorScheme;
     final best = progress.bestScore('level:${widget.topic}:${widget.level}');
-    final passed = best >= _passPercent;
+    // La etiqueta es la PUNTUACIÓN del nivel (fix5, punto 15):
+    // el promedio de todos los pases, no la mejor; sin registro
+    // de promedio (pase anterior a esta versión) se sigue viendo
+    // la mejor de antes.
+    final avgNote =
+        progress.levelNoteAverage('level:${widget.topic}:${widget.level}');
+    final labelPercent =
+        avgNote == null ? best : (avgNote * 20).round();
+    // Pasado = desbloqueado el siguiente (fix5, punto 13): con la
+    // regla por conteo, un 4/5 puede guardar 73-80 % de nota y la
+    // nota ya no dice si se pasó; unlockedLevel sí, siempre. El
+    // best solo se usa para la etiqueta "Nivel N · X %".
+    final passed = progress.unlockedLevel(widget.topic) > widget.level;
     // Niveles sin preguntas del banco: solo preguntas nuevas generadas.
     final generatedOnly = (widget.level - 1) * _levelSize >= widget.bankCount;
     final offset = _pathOffsets[(widget.level - 1) % _pathOffsets.length];
@@ -1310,7 +1366,7 @@ class _LevelNodeRowState extends State<_LevelNodeRow>
                 width: 100,
                 child: Text(
                   passed
-                      ? '${tr('levelWord')} ${widget.level} · $best%'
+                      ? '${tr('levelWord')} ${widget.level} · $labelPercent%'
                       : generatedOnly && widget.unlocked
                           ? '${tr('levelWord')} ${widget.level} · ${tr('newWord')}'
                           : '${tr('levelWord')} ${widget.level}',
@@ -1523,19 +1579,45 @@ class _QuestionOfTheDayChipState extends State<_QuestionOfTheDayChip> {
                     text: tr(mascotLineKey(companionOfTheDay(), MascotLine.ask,
                         DateTime.now().day)),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    tr(companionOfDayKey(companionOfTheDay())),
-                    style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.primary),
-                  ),
                   const SizedBox(height: 12),
-                  Text(
-                    _q.question,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w600, fontSize: 16),
+                  // Botoncito de teclado (fix5, punto B, corrección
+                  // 00:26): también en el diálogo de la pregunta
+                  // del día, a un ladito del texto. Al tocarlo se
+                  // abre la PANTALLA de la calculadora (página
+                  // completa) encima del diálogo; al cerrarla se
+                  // vuelve al diálogo intacto. La pregunta del día
+                  // siempre es de opción múltiple (banco), así que
+                  // la calculadora es la normal: solo para calcular
+                  // a mano.
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _q.question,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w600, fontSize: 16),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      IconButton(
+                        key: const Key('calculator-toggle'),
+                        onPressed: () {
+                          CalculatorScreen.open(
+                            context,
+                            scientific: false,
+                          );
+                        },
+                        icon: LucideIcon(
+                          LucideIcons.keyboard,
+                          size: 22,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurfaceVariant,
+                          threeD: true,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 10),
                   Text(tr('qotdWorth')
@@ -1726,27 +1808,48 @@ class _QuizState {
   _QuizState(
       {required this.testId,
       required this.title,
-      required List<_QuizItem> items})
+      required List<_QuizItem> items,
+      this.replayOfPassed = false,
+      this.pointsSnapshot = 0})
       : items = List<_QuizItem>.of(items);
 
   final String testId;
   final String title;
   final List<_QuizItem> items;
+
+  /// Replay de un nivel ya pasado (fix5, A3): "ya pasado" es
+  /// unlockedLevel > level — el mismo listón que usa el nodo del
+  /// camino —, NO la mejor nota: con la vieja condición (mejor %
+  /// >= 81) un 4/5 fallando la difícil guardaba 76 % y la
+  /// protección no saltaba. Si el replay se falla, los puntos
+  /// vuelven al saldo de antes de empezar (ver _next()).
+  final bool replayOfPassed;
+
+  /// Saldo de puntos al empezar el quiz: a él se vuelve si un
+  /// replay de un nivel ya pasado se falla (A3).
+  final int pointsSnapshot;
 }
 
 class _QuizRunner extends StatefulWidget {
   const _QuizRunner({
+    super.key,
     required this.quiz,
     required this.spec,
     required this.onExit,
     required this.onRepeat,
     required this.onFinished,
+    this.onNextLevel,
   });
 
   final _QuizState quiz;
   final _QuizSpec spec;
   final VoidCallback onExit;
   final VoidCallback onRepeat;
+
+  /// "Pasar de nivel" (fix5, punto 13): salta al nivel siguiente
+  /// del mismo tema, solo tras pasarlo y solo si hay un nivel
+  /// siguiente; null si es el último nivel del tema.
+  final VoidCallback? onNextLevel;
 
   /// Avisa de que el quiz terminó (resultado en pantalla): salir
   /// después ya no cuesta una vida.
@@ -1783,7 +1886,22 @@ class _QuizRunnerState extends State<_QuizRunner> {
   @override
   void didUpdateWidget(covariant _QuizRunner oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.quiz != oldWidget.quiz) _lifeRestored = false;
+    // Repetir (o empezar otro quiz) con el mismo State reutilizado:
+    // hay que resetear TODO el estado interno, no solo la vida
+    // devuelta (fix5, punto Repetir). Sin esto, _finished seguía en
+    // true y la pantalla de resultado (con su confeti) se quedaba.
+    // Normalmente el ValueKey por ejecución ya crea un State nuevo
+    // y limpio, pero esto cubre cualquier reutilización del widget.
+    if (widget.quiz != oldWidget.quiz) {
+      _index = 0;
+      _score = 0;
+      _finished = false;
+      _correct.clear();
+      _quizPoints = 0;
+      _lifeRestored = false;
+      _clearedReview.clear();
+      _shuffleOptions();
+    }
   }
 
   void _shuffleOptions() {
@@ -1866,18 +1984,37 @@ class _QuizRunnerState extends State<_QuizRunner> {
       // pregunta (fix4, punto 5): aquí no se añade nada más.
       final progress = ProgressService.instance;
       // Nota por puntos (v6): cada pregunta vale según su dificultad
-      // (fácil 4, media 5, difícil 6) y se pasa con nota > 4,0.
+      // (fácil 4, media 5, difícil 6). La nota se guarda como mejor
+      // puntuación, pero pasar ya NO depende de ella (fix5, punto 13):
+      // se pasa acertando 4 o más de 5 preguntas.
       final nota5 = levelScore5(
         widget.quiz.items.map((it) => it.question.difficulty).toList(),
         _correct,
       );
       final percent = (nota5 * 20).round();
+      // Mejor % ANTES de este intento (fix5, punto 15): si el nivel
+      // ya se pasó en una versión anterior a la del promedio, solo
+      // quedó su mejor %; recordLevelNote lo toma como primera nota
+      // del promedio. Se lee antes de recordScore porque este ya
+      // incluye el intento actual.
+      final prevBest = progress.bestScore(widget.quiz.testId);
       progress.recordScore(widget.quiz.testId, percent);
-      if (widget.spec.kind == 'level' && levelPassed(nota5)) {
+      if (widget.spec.kind == 'level' &&
+          levelPassed(_score, widget.quiz.items.length)) {
         final wasGoalDone = progress.dailyGoalDone;
         // Ganar el nivel completo devuelve 1 vida (hasta 5).
         _lifeRestored = progress.restoreLifeOnPass();
         progress.recordLevelPass(widget.spec.topic!, widget.spec.level);
+        // Puntuación del nivel (fix5, punto 15, CORREGIDO): el
+        // PROMEDIO de todas las notas con las que se pasó, no la
+        // mejor ni la primera. Un replay fallido no llama aquí:
+        // no entra en el promedio, no quita el pase y no re-bloquea
+        // nada. Los puntos del monedero de un replay que PASA se
+        // quedan como cualquier intento (sus puntos suman); los de
+        // un replay FALLIDO se neutralizan en el else-if de abajo
+        // (A3: no mueven el saldo).
+        progress.recordLevelNote(widget.quiz.testId, nota5,
+            prevBestPercent: prevBest);
         SoundService.levelUp();
         // Meta del día recién cumplida: campana de racha después de la
         // fanfarria (la fanfarria dura 0,74 s).
@@ -1885,6 +2022,19 @@ class _QuizRunnerState extends State<_QuizRunner> {
           Future.delayed(
               const Duration(milliseconds: 900), SoundService.streak);
         }
+      } else if (widget.quiz.replayOfPassed) {
+        // Replay FALLIDO de un nivel ya pasado (fix5, A3): el
+        // intento es neutro en puntos — el saldo vuelve al de
+        // antes de empezar el replay. La nota NO se toca (el
+        // promedio solo suma pases: este fallo no llama a
+        // recordLevelNote), el pase y el desbloqueo tampoco (aquí
+        // no se llama a recordLevelPass). Los errores fallados SÍ
+        // quedan para repasarlos (eso es útil, no es puntuación).
+        // La línea de puntos del resultado muestra +0: el intento
+        // no sumó nada al saldo.
+        final delta = widget.quiz.pointsSnapshot - progress.points;
+        if (delta != 0) progress.addPoints(delta);
+        _quizPoints = 0;
       }
       widget.onFinished();
       // El widget de inicio muestra los puntos, vidas y racha nuevos.
@@ -1905,13 +2055,25 @@ class _QuizRunnerState extends State<_QuizRunner> {
       final total = widget.quiz.items.length;
       final percent = ((100 * _score) / total).round();
       final isLevel = widget.spec.kind == 'level';
-      // Nota por puntos (v6): se pasa con más de 4,0 sobre 5.
+      // Nota por puntos (v6): solo se muestra; pasar es acertar 4
+      // o más de 5 preguntas (fix5, punto 13).
       final nota5 = levelScore5(
         widget.quiz.items.map((it) => it.question.difficulty).toList(),
         _correct,
       );
-      final passedLevel = isLevel && levelPassed(nota5);
+      final passedLevel = isLevel && levelPassed(_score, total);
       final remaining = ProgressService.instance.failedCount;
+      // Puntuación del nivel (fix5, punto 15, CORREGIDO): el
+      // promedio de todas las notas con las que se pasó. Se lee en
+      // vivo del servicio (ya se registró en _next() antes de
+      // llegar aquí) y vale también tras un replay fallido: la
+      // puntuación registrada no se movió con el fallo.
+      final noteAvg = isLevel
+          ? ProgressService.instance.levelNoteAverage(widget.quiz.testId)
+          : null;
+      final notePasses = isLevel
+          ? ProgressService.instance.levelNotePassCount(widget.quiz.testId)
+          : 0;
       // Celebración al pasar de nivel: confeti cayendo sobre el
       // resultado durante unos segundos.
       final resultBody = Padding(
@@ -1939,6 +2101,28 @@ class _QuizRunnerState extends State<_QuizRunner> {
                 'Nota: ${nota5.toStringAsFixed(1)} / 5',
                 style:
                     const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+            // A4: la nota no es la puerta; se pasa con 4 de 5 aciertos.
+            if (isLevel && passedLevel)
+              Text(
+                tr('quizPassNote'),
+                style: const TextStyle(fontSize: 14),
+                textAlign: TextAlign.center,
+              ),
+            // Puntuación del nivel (fix5, punto 15): solo a partir
+            // del segundo pase; en el primero el promedio es la
+            // nota de este intento y ya está arriba en 'Nota:'.
+            if (isLevel && noteAvg != null && notePasses >= 2)
+              Text(
+                tr('quizLevelAvg')
+                    .replaceAll(
+                        '{avg}',
+                        noteAvg
+                            .toStringAsFixed(1)
+                            .replaceAll('.', ','))
+                    .replaceAll('{n}', '$notePasses'),
+                style: const TextStyle(fontSize: 16),
                 textAlign: TextAlign.center,
               ),
             Text(
@@ -1982,13 +2166,32 @@ class _QuizRunnerState extends State<_QuizRunner> {
                   passedLevel ? MascotLine.praise : MascotLine.console, total)),
             ),
             const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: widget.onRepeat,
-              child: Text(tr('quizRepeat')),
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton(
-                onPressed: widget.onExit, child: Text(tr('quizBack'))),
+            // Botones tras GANAR un nivel (fix5, punto 13 + punto
+            // 15.1, en este orden): [Pasar de nivel] [Volver]
+            // [Repetir]. "Pasar de nivel" arranca el N+1 directo,
+            // sin preguntar nada.
+            if (passedLevel && widget.onNextLevel != null) ...[
+              ElevatedButton(
+                onPressed: widget.onNextLevel,
+                child: Text(tr('quizPassLevel')),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton(
+                  onPressed: widget.onExit, child: Text(tr('quizBack'))),
+              const SizedBox(height: 8),
+              ElevatedButton(
+                onPressed: widget.onRepeat,
+                child: Text(tr('quizRepeat')),
+              ),
+            ] else ...[
+              ElevatedButton(
+                onPressed: widget.onRepeat,
+                child: Text(tr('quizRepeat')),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton(
+                  onPressed: widget.onExit, child: Text(tr('quizBack'))),
+            ],
           ],
         ),
       );
@@ -2046,20 +2249,28 @@ class _QuizRunnerState extends State<_QuizRunner> {
                       companionForTurn(_index), MascotLine.console, _index))),
         ),
         const SizedBox(height: 16),
-        Text(_q.question,
-            style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w600)),
+        // Botoncito de teclado (fix5, punto B, corrección 00:26):
+        // sale en (casi) todas las preguntas, a un ladito del
+        // texto; al tocarlo se abre la PANTALLA de la calculadora
+        // (página completa, no un panel inline) y al cerrarla se
+        // vuelve a la pregunta intacta. Científica en las de
+        // cálculo (al volver se responde con el valor), normal en
+        // las demás (solo para calcular a mano). Este runner es el
+        // mismo para niveles, repaso de errores y examen mixto,
+        // así que el icono llega a los tres.
+        QuestionCalculatorButton(
+          question: Text(_q.question,
+              style:
+                  const TextStyle(fontSize: 19, fontWeight: FontWeight.w600)),
+          scientific: _q.isNumeric,
+          unit: _q.numericUnit,
+          onResult: _q.isNumeric ? _answerNumeric : null,
+        ),
         const SizedBox(height: 16),
-        // Pregunta de cálculo (fix3, punto 7): las 4 opciones dejan
-        // paso al teclado numérico, abierto desde el principio. Las
+        // En las preguntas de cálculo las opciones dejan paso al
+        // teclado (que ahora se abre con el icono); las
         // conceptuales siguen con las opciones de siempre.
-        if (_q.isNumeric)
-          NumericKeypad(
-            key: ValueKey(_item.id),
-            unit: _q.numericUnit,
-            enabled: _selected == null,
-            onSubmit: _answerNumeric,
-          )
-        else
+        if (!_q.isNumeric)
           for (var i = 0; i < 4; i++)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),

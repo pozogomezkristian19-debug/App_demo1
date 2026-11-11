@@ -62,7 +62,7 @@ const Map<int, TranslatedQuestion> bankIt = {
   ),
   11: TranslatedQuestion(
     question: "Massa molare del Al₂(SO₄)₃ (Al 26.98, S 32.06, O 16.00):",
-    options: ["342.15 g/mol", "150.14 g/mol", "278.02 g/mol", "98.08 g/mol"],
+    options: ["342.14 g/mol", "150.14 g/mol", "278.02 g/mol", "98.08 g/mol"],
     explanation: "2(26.98) + 3(32.06) + 12(16.00) = 53.96 + 96.18 + 192.00 = 342.14 g/mol.",
   ),
   12: TranslatedQuestion(
@@ -601,9 +601,9 @@ const Map<int, TranslatedQuestion> bankIt = {
     explanation: "A pressione costante, V / T = costante.",
   ),
   119: TranslatedQuestion(
-    question: "Quanti litri occupa 1 mol di gas ideale a TPE (0 °C e 1 atm)?",
+    question: "Quanti litri occupa 1 mol di gas ideale a TPS (0 °C e 1 atm)?",
     options: ["11.2 L", "22.4 L", "24 L", "44.8 L"],
-    explanation: "Il volume molare a TPE è 22.4 L/mol.",
+    explanation: "Il volume molare a TPS è 22.41 L/mol.",
   ),
   120: TranslatedQuestion(
     question: "Se la temperatura assoluta raddoppia a pressione costante, il volume:",

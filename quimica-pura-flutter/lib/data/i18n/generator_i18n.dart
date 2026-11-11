@@ -3,7 +3,10 @@
 // {name}, {formula}, {v}... se sustituyen por los datos de cada pregunta.
 // El español reproduce EXACTAMENTE los textos que el generador usaba
 // antes, para que las preguntas guardadas (falladas) se reconstruyan
-// idénticas. Dart puro, sin Flutter, para que el generador siga siéndolo.
+// idénticas — salvo la línea de datos que añade la ronda fix5
+// (punto 14): toda pregunta que necesita un dato lo muestra en la
+// propia pregunta ("Datos: {data}"), visible sin tocar nada.
+// Dart puro, sin Flutter, para que el generador siga siéndolo.
 //
 // El idioma activo se fija con `genLang` (main.dart lo sincroniza con
 // AppLang.code). Por defecto español.
@@ -64,13 +67,14 @@ String genBond(String esName) {
 const Map<String, Map<String, String>> _genTemplates = {
   'es': {
     'molarMassQ':
-        '¿Cuál es la masa molar del {name} ({formula})?',
+        '¿Cuál es la masa molar del {name} ({formula})?\nDatos: {data}',
     'molarMassE':
         'M = {steps}. Suma cada elemento multiplicado por su subíndice.',
     'massMolesQ':
-        '¿Cuántos moles hay en {g} g de {name} ({formula})?',
+        '¿Cuántos moles hay en {g} g de {name} ({formula})?\nDatos: {data}',
     'massMolesE': 'n = m/M = {g} g ÷ {m} g/mol = {v} mol.',
-    'massMassQ': '¿Qué masa tienen {n} mol de {name} ({formula})?',
+    'massMassQ':
+        '¿Qué masa tienen {n} mol de {name} ({formula})?\nDatos: {data}',
     'massMassE': 'm = n × M = {n} mol × {m} g/mol = {v} g.',
     'molarityQ':
         'Disuelves {n} mol de un soluto y aforas a {v} mL. ¿Cuál es la molaridad?',
@@ -95,19 +99,19 @@ const Map<String, Map<String, String>> _genTemplates = {
     'pohE':
         'pOH = −log[OH⁻] = −log({mant}×10{sup}) = {exp} − log {mant} = {p}.',
     'phFromOhQ':
-        'Una disolución tiene [OH⁻] = {mant}×10{sup} M. Su pH a 25 °C es:',
+        'Una disolución tiene [OH⁻] = {mant}×10{sup} M. Su pH a 25 °C es:\nDatos: {data}',
     'phFromOhE':
         'Primero pOH = −log({mant}×10{sup}) = {p}. A 25 °C, pH + pOH = 14, así que pH = 14 − {p} = {c}.',
     'gasVolumeQ':
-        '¿Qué volumen ocupan {n} mol de un gas ideal a {t} °C y {p} atm?',
+        '¿Qué volumen ocupan {n} mol de un gas ideal a {t} °C y {p} atm?\nDatos: {data}',
     'gasVolumeE':
         'La temperatura va en kelvin: T = {t} + 273.15 = {tk} K. V = nRT/P = {n} × 0.08206 × {tk} ÷ {p} = {v} L.',
     'gasMolesQ':
-        '¿Cuántos moles hay en {v} L de un gas ideal a {t} °C y {p} atm?',
+        '¿Cuántos moles hay en {v} L de un gas ideal a {t} °C y {p} atm?\nDatos: {data}',
     'gasMolesE':
         'La temperatura va en kelvin: T = {t} + 273.15 = {tk} K. n = PV/RT = {p} × {v} ÷ (0.08206 × {tk}) = {n} mol.',
     'gasPressureQ':
-        '¿Qué presión ejerce {n} mol de un gas ideal en {v} L a {t} °C?',
+        '¿Qué presión ejerce {n} mol de un gas ideal en {v} L a {t} °C?\nDatos: {data}',
     'gasPressureE':
         'La temperatura va en kelvin: T = {t} + 273.15 = {tk} K. P = nRT/V = {n} × 0.08206 × {tk} ÷ {v} = {p} atm.',
     'stoichProductQ':
@@ -148,11 +152,14 @@ const Map<String, Map<String, String>> _genTemplates = {
         'En el {name} ({formula}) predomina el enlace {bond}.',
   },
   'en': {
-    'molarMassQ': 'What is the molar mass of {name} ({formula})?',
+    'molarMassQ':
+        'What is the molar mass of {name} ({formula})?\nData: {data}',
     'molarMassE': 'M = {steps}. Add each element multiplied by its subscript.',
-    'massMolesQ': 'How many moles are in {g} g of {name} ({formula})?',
+    'massMolesQ':
+        'How many moles are in {g} g of {name} ({formula})?\nData: {data}',
     'massMolesE': 'n = m/M = {g} g ÷ {m} g/mol = {v} mol.',
-    'massMassQ': 'What mass do {n} mol of {name} ({formula}) have?',
+    'massMassQ':
+        'What mass do {n} mol of {name} ({formula}) have?\nData: {data}',
     'massMassE': 'm = n × M = {n} mol × {m} g/mol = {v} g.',
     'molarityQ':
         'You dissolve {n} mol of a solute and make the volume up to {v} mL. What is the molarity?',
@@ -177,19 +184,19 @@ const Map<String, Map<String, String>> _genTemplates = {
     'pohE':
         'pOH = −log[OH⁻] = −log({mant}×10{sup}) = {exp} − log {mant} = {p}.',
     'phFromOhQ':
-        'A solution has [OH⁻] = {mant}×10{sup} M. Its pH at 25 °C is:',
+        'A solution has [OH⁻] = {mant}×10{sup} M. Its pH at 25 °C is:\nData: {data}',
     'phFromOhE':
         'First pOH = −log({mant}×10{sup}) = {p}. At 25 °C, pH + pOH = 14, so pH = 14 − {p} = {c}.',
     'gasVolumeQ':
-        'What volume do {n} mol of an ideal gas occupy at {t} °C and {p} atm?',
+        'What volume do {n} mol of an ideal gas occupy at {t} °C and {p} atm?\nData: {data}',
     'gasVolumeE':
         'Temperature must be in kelvin: T = {t} + 273.15 = {tk} K. V = nRT/P = {n} × 0.08206 × {tk} ÷ {p} = {v} L.',
     'gasMolesQ':
-        'How many moles are in {v} L of an ideal gas at {t} °C and {p} atm?',
+        'How many moles are in {v} L of an ideal gas at {t} °C and {p} atm?\nData: {data}',
     'gasMolesE':
         'Temperature must be in kelvin: T = {t} + 273.15 = {tk} K. n = PV/RT = {p} × {v} ÷ (0.08206 × {tk}) = {n} mol.',
     'gasPressureQ':
-        'What pressure do {n} mol of an ideal gas exert in {v} L at {t} °C?',
+        'What pressure do {n} mol of an ideal gas exert in {v} L at {t} °C?\nData: {data}',
     'gasPressureE':
         'Temperature must be in kelvin: T = {t} + 273.15 = {tk} K. P = nRT/V = {n} × 0.08206 × {tk} ÷ {v} = {p} atm.',
     'stoichProductQ':
@@ -226,13 +233,15 @@ const Map<String, Map<String, String>> _genTemplates = {
     'bondingBondE': 'In {name} ({formula}) the {bond} bond predominates.',
   },
   'fr': {
-    'molarMassQ': 'Quelle est la masse molaire du composé {formula} ? (nom : {name})',
+    'molarMassQ':
+        'Quelle est la masse molaire du composé {formula} ? (nom : {name})\nDonnées : {data}',
     'molarMassE':
         'M = {steps}. Additionne chaque élément multiplié par son indice.',
-    'massMolesQ': 'Combien de moles y a-t-il dans {g} g du composé {formula} ({name}) ?',
+    'massMolesQ':
+        'Combien de moles y a-t-il dans {g} g du composé {formula} ({name}) ?\nDonnées : {data}',
     'massMolesE': 'n = m/M = {g} g ÷ {m} g/mol = {v} mol.',
-    'massMassQ': 'Quelle masse ont {n} mol du composé {formula} ({name}) ?',
-    'massMassE': 'm = n × M = {n} mol × {m} g/mol = {v} g.',
+    'massMassQ':
+        'Quelle masse ont {n} mol du composé {formula} ({name}) ?\nDonnées : {data}',    'massMassE': 'm = n × M = {n} mol × {m} g/mol = {v} g.',
     'molarityQ':
         'Tu dissous {n} mol d\'un soluté et tu complètes à {v} mL. Quelle est la molarité ?',
     'molarityE':
@@ -256,19 +265,19 @@ const Map<String, Map<String, String>> _genTemplates = {
     'pohE':
         'pOH = −log[OH⁻] = −log({mant}×10{sup}) = {exp} − log {mant} = {p}.',
     'phFromOhQ':
-        'Une solution a [OH⁻] = {mant}×10{sup} M. Son pH à 25 °C est :',
+        'Une solution a [OH⁻] = {mant}×10{sup} M. Son pH à 25 °C est :\nDonnées : {data}',
     'phFromOhE':
         'D\'abord pOH = −log({mant}×10{sup}) = {p}. À 25 °C, pH + pOH = 14, donc pH = 14 − {p} = {c}.',
     'gasVolumeQ':
-        'Quel volume occupent {n} mol d\'un gaz parfait à {t} °C et {p} atm ?',
+        'Quel volume occupent {n} mol d\'un gaz parfait à {t} °C et {p} atm ?\nDonnées : {data}',
     'gasVolumeE':
         'La température doit être en kelvin : T = {t} + 273,15 = {tk} K. V = nRT/P = {n} × 0,08206 × {tk} ÷ {p} = {v} L.',
     'gasMolesQ':
-        'Combien de moles y a-t-il dans {v} L d\'un gaz parfait à {t} °C et {p} atm ?',
+        'Combien de moles y a-t-il dans {v} L d\'un gaz parfait à {t} °C et {p} atm ?\nDonnées : {data}',
     'gasMolesE':
         'La température doit être en kelvin : T = {t} + 273,15 = {tk} K. n = PV/RT = {p} × {v} ÷ (0,08206 × {tk}) = {n} mol.',
     'gasPressureQ':
-        'Quelle pression exercent {n} mol d\'un gaz parfait dans {v} L à {t} °C ?',
+        'Quelle pression exercent {n} mol d\'un gaz parfait dans {v} L à {t} °C ?\nDonnées : {data}',
     'gasPressureE':
         'La température doit être en kelvin : T = {t} + 273,15 = {tk} K. P = nRT/V = {n} × 0,08206 × {tk} ÷ {v} = {p} atm.',
     'stoichProductQ':
@@ -306,11 +315,14 @@ const Map<String, Map<String, String>> _genTemplates = {
     'bondingBondE': 'Dans {name} ({formula}), c\'est la liaison {bond} qui prédomine.',
   },
   'it': {
-    'molarMassQ': 'Qual è la massa molare di {name} ({formula})?',
+    'molarMassQ':
+        'Qual è la massa molare di {name} ({formula})?\nDati: {data}',
     'molarMassE': 'M = {steps}. Somma ogni elemento moltiplicato per il suo indice.',
-    'massMolesQ': 'Quante moli ci sono in {g} g di {name} ({formula})?',
+    'massMolesQ':
+        'Quante moli ci sono in {g} g di {name} ({formula})?\nDati: {data}',
     'massMolesE': 'n = m/M = {g} g ÷ {m} g/mol = {v} mol.',
-    'massMassQ': 'Che massa hanno {n} mol di {name} ({formula})?',
+    'massMassQ':
+        'Che massa hanno {n} mol di {name} ({formula})?\nDati: {data}',
     'massMassE': 'm = n × M = {n} mol × {m} g/mol = {v} g.',
     'molarityQ':
         'Sciogli {n} mol di un soluto e porti a volume {v} mL. Qual è la molarità?',
@@ -335,19 +347,19 @@ const Map<String, Map<String, String>> _genTemplates = {
     'pohE':
         'pOH = −log[OH⁻] = −log({mant}×10{sup}) = {exp} − log {mant} = {p}.',
     'phFromOhQ':
-        'Una soluzione ha [OH⁻] = {mant}×10{sup} M. Il suo pH a 25 °C è:',
+        'Una soluzione ha [OH⁻] = {mant}×10{sup} M. Il suo pH a 25 °C è:\nDati: {data}',
     'phFromOhE':
         'Prima pOH = −log({mant}×10{sup}) = {p}. A 25 °C, pH + pOH = 14, quindi pH = 14 − {p} = {c}.',
     'gasVolumeQ':
-        'Che volume occupano {n} mol di un gas ideale a {t} °C e {p} atm?',
+        'Che volume occupano {n} mol di un gas ideale a {t} °C e {p} atm?\nDati: {data}',
     'gasVolumeE':
         'La temperatura va in kelvin: T = {t} + 273,15 = {tk} K. V = nRT/P = {n} × 0,08206 × {tk} ÷ {p} = {v} L.',
     'gasMolesQ':
-        'Quante moli ci sono in {v} L di un gas ideale a {t} °C e {p} atm?',
+        'Quante moli ci sono in {v} L di un gas ideale a {t} °C e {p} atm?\nDati: {data}',
     'gasMolesE':
         'La temperatura va in kelvin: T = {t} + 273,15 = {tk} K. n = PV/RT = {p} × {v} ÷ (0,08206 × {tk}) = {n} mol.',
     'gasPressureQ':
-        'Che pressione esercitano {n} mol di un gas ideale in {v} L a {t} °C?',
+        'Che pressione esercitano {n} mol di un gas ideale in {v} L a {t} °C?\nDati: {data}',
     'gasPressureE':
         'La temperatura va in kelvin: T = {t} + 273,15 = {tk} K. P = nRT/V = {n} × 0,08206 × {tk} ÷ {v} = {p} atm.',
     'stoichProductQ':
@@ -385,11 +397,14 @@ const Map<String, Map<String, String>> _genTemplates = {
     'bondingBondE': 'In {name} ({formula}) predomina il legame {bond}.',
   },
   'pt': {
-    'molarMassQ': 'Qual é a massa molar de {name} ({formula})?',
+    'molarMassQ':
+        'Qual é a massa molar de {name} ({formula})?\nDados: {data}',
     'molarMassE': 'M = {steps}. Some cada elemento multiplicado pelo seu índice.',
-    'massMolesQ': 'Quantos mols há em {g} g de {name} ({formula})?',
+    'massMolesQ':
+        'Quantos mols há em {g} g de {name} ({formula})?\nDados: {data}',
     'massMolesE': 'n = m/M = {g} g ÷ {m} g/mol = {v} mol.',
-    'massMassQ': 'Que massa têm {n} mol de {name} ({formula})?',
+    'massMassQ':
+        'Que massa têm {n} mol de {name} ({formula})?\nDados: {data}',
     'massMassE': 'm = n × M = {n} mol × {m} g/mol = {v} g.',
     'molarityQ':
         'Você dissolve {n} mol de um soluto e completa até {v} mL. Qual é a molaridade?',
@@ -414,19 +429,19 @@ const Map<String, Map<String, String>> _genTemplates = {
     'pohE':
         'pOH = −log[OH⁻] = −log({mant}×10{sup}) = {exp} − log {mant} = {p}.',
     'phFromOhQ':
-        'Uma solução tem [OH⁻] = {mant}×10{sup} M. Seu pH a 25 °C é:',
+        'Uma solução tem [OH⁻] = {mant}×10{sup} M. Seu pH a 25 °C é:\nDados: {data}',
     'phFromOhE':
         'Primeiro pOH = −log({mant}×10{sup}) = {p}. A 25 °C, pH + pOH = 14, então pH = 14 − {p} = {c}.',
     'gasVolumeQ':
-        'Que volume ocupam {n} mol de um gás ideal a {t} °C e {p} atm?',
+        'Que volume ocupam {n} mol de um gás ideal a {t} °C e {p} atm?\nDados: {data}',
     'gasVolumeE':
         'A temperatura vai em kelvin: T = {t} + 273,15 = {tk} K. V = nRT/P = {n} × 0,08206 × {tk} ÷ {p} = {v} L.',
     'gasMolesQ':
-        'Quantos mols há em {v} L de um gás ideal a {t} °C e {p} atm?',
+        'Quantos mols há em {v} L de um gás ideal a {t} °C e {p} atm?\nDados: {data}',
     'gasMolesE':
         'A temperatura vai em kelvin: T = {t} + 273,15 = {tk} K. n = PV/RT = {p} × {v} ÷ (0,08206 × {tk}) = {n} mol.',
     'gasPressureQ':
-        'Que pressão exercem {n} mol de um gás ideal em {v} L a {t} °C?',
+        'Que pressão exercem {n} mol de um gás ideal em {v} L a {t} °C?\nDados: {data}',
     'gasPressureE':
         'A temperatura vai em kelvin: T = {t} + 273,15 = {tk} K. P = nRT/V = {n} × 0,08206 × {tk} ÷ {v} = {p} atm.',
     'stoichProductQ':
@@ -464,11 +479,14 @@ const Map<String, Map<String, String>> _genTemplates = {
     'bondingBondE': 'Em {name} ({formula}) predomina a ligação {bond}.',
   },
   'ru': {
-    'molarMassQ': 'Чему равна молярная масса соединения {formula} ({name})?',
+    'molarMassQ':
+        'Чему равна молярная масса соединения {formula} ({name})?\nДанные: {data}',
     'molarMassE': 'M = {steps}. Сложите каждый элемент, умноженный на его индекс.',
-    'massMolesQ': 'Сколько моль содержится в {g} г соединения {formula} ({name})?',
+    'massMolesQ':
+        'Сколько моль содержится в {g} г соединения {formula} ({name})?\nДанные: {data}',
     'massMolesE': 'n = m/M = {g} г ÷ {m} г/моль = {v} моль.',
-    'massMassQ': 'Какую массу имеют {n} моль соединения {formula} ({name})?',
+    'massMassQ':
+        'Какую массу имеют {n} моль соединения {formula} ({name})?\nДанные: {data}',
     'massMassE': 'm = n × M = {n} моль × {m} г/моль = {v} г.',
     'molarityQ':
         'Вы растворяете {n} моль растворённого вещества и доводите объём до {v} мл. Чему равна молярность?',
@@ -493,19 +511,19 @@ const Map<String, Map<String, String>> _genTemplates = {
     'pohE':
         'pOH = −log[OH⁻] = −log({mant}×10{sup}) = {exp} − log {mant} = {p}.',
     'phFromOhQ':
-        'В растворе [OH⁻] = {mant}×10{sup} M. Чему равен его pH при 25 °C?',
+        'В растворе [OH⁻] = {mant}×10{sup} M. Чему равен его pH при 25 °C?\nДанные: {data}',
     'phFromOhE':
         'Сначала pOH = −log({mant}×10{sup}) = {p}. При 25 °C pH + pOH = 14, значит pH = 14 − {p} = {c}.',
     'gasVolumeQ':
-        'Какой объём занимают {n} моль идеального газа при {t} °C и {p} атм?',
+        'Какой объём занимают {n} моль идеального газа при {t} °C и {p} атм?\nДанные: {data}',
     'gasVolumeE':
         'Температура должна быть в кельвинах: T = {t} + 273,15 = {tk} K. V = nRT/P = {n} × 0,08206 × {tk} ÷ {p} = {v} л.',
     'gasMolesQ':
-        'Сколько моль содержится в {v} л идеального газа при {t} °C и {p} атм?',
+        'Сколько моль содержится в {v} л идеального газа при {t} °C и {p} атм?\nДанные: {data}',
     'gasMolesE':
         'Температура должна быть в кельвинах: T = {t} + 273,15 = {tk} K. n = PV/RT = {p} × {v} ÷ (0,08206 × {tk}) = {n} моль.',
     'gasPressureQ':
-        'Какое давление создают {n} моль идеального газа в объёме {v} л при {t} °C?',
+        'Какое давление создают {n} моль идеального газа в объёме {v} л при {t} °C?\nДанные: {data}',
     'gasPressureE':
         'Температура должна быть в кельвинах: T = {t} + 273,15 = {tk} K. P = nRT/V = {n} × 0,08206 × {tk} ÷ {v} = {p} атм.',
     'stoichProductQ':

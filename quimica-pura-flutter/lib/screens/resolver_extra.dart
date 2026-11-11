@@ -352,6 +352,9 @@ class _SaltPhSolverState extends State<SaltPhSolver> {
   final _c = TextEditingController(text: '0.1');
   final _ka = TextEditingController(text: '1.8e-5');
   final _kb = TextEditingController();
+  // Ka del HCO₃⁻ por defecto: dan pH 8.34, el ejemplo de los libros.
+  final _ka1Amp = TextEditingController(text: '4.5e-7');
+  final _ka2Amp = TextEditingController(text: '4.7e-11');
   SolverResult? _result;
 
   void _calc() {
@@ -364,8 +367,13 @@ class _SaltPhSolverState extends State<SaltPhSolver> {
     setState(() => _result = saltPh(
           kind: _kind,
           c: c,
-          ka: parseNum(_ka),
+          ka: _kind == SaltKind.amphiproticAnion
+              ? parseNum(_ka1Amp)
+              : parseNum(_ka),
           kb: parseNum(_kb),
+          ka2: _kind == SaltKind.amphiproticAnion
+              ? parseNum(_ka2Amp)
+              : null,
         ));
   }
 
@@ -393,11 +401,18 @@ class _SaltPhSolverState extends State<SaltPhSolver> {
               DropdownMenuItem(
                   value: SaltKind.amphoteric,
                   child: Text(localizedSolverString('Ácido débil + base débil (comparar Ka y Kb)'))),
+              DropdownMenuItem(
+                  value: SaltKind.amphiproticAnion,
+                  child: Text(localizedSolverString('Anión anfiprótico (HCO₃⁻, H₂PO₄⁻)'))),
             ],
             onChanged: (v) => setState(() => _kind = v ?? SaltKind.basic),
           ),
           const SizedBox(height: 6),
           NumField(controller: _c, label: 'Concentración de la sal (mol/L)'),
+          if (_kind == SaltKind.amphiproticAnion) ...[
+            NumField(controller: _ka1Amp, label: 'Ka₁ del ácido conjugado (H₂CO₃: 4.5×10⁻⁷)'),
+            NumField(controller: _ka2Amp, label: 'Ka₂ del anión (HCO₃⁻: 4.7×10⁻¹¹)'),
+          ],
           if (_kind == SaltKind.acidic || _kind == SaltKind.amphoteric)
             NumField(controller: _ka, label: 'Ka del catión ácido'),
           if (_kind == SaltKind.basic)
@@ -411,7 +426,7 @@ class _SaltPhSolverState extends State<SaltPhSolver> {
           if (_kind == SaltKind.amphoteric)
             NumField(controller: _kb, label: 'Kb del anión básico'),
           const Text(
-              'Ejemplos: NH₄Cl (ácida, Ka = 5.6×10⁻¹⁰) · CH₃COONa (básica, Ka del acético = 1.8×10⁻⁵) · NaCl (neutra).'),
+              'Ejemplos: NH₄Cl (ácida, Ka = 5.6×10⁻¹⁰) · CH₃COONa (básica, Ka del acético = 1.8×10⁻⁵) · NaCl (neutra) · NaHCO₃ (anfiprótico, Ka₁ = 4.5×10⁻⁷, Ka₂ = 4.7×10⁻¹¹).'),
           const SizedBox(height: 10),
           ElevatedButton(onPressed: _calc, child: Text(tr('calculate'))),
           if (_result != null) SolverResultView(result: _result!),
@@ -443,7 +458,7 @@ class _TitrationSolverState extends State<TitrationSolver> {
   final _cHcl = TextEditingController(text: '0.5');
   final _vHcl = TextEditingController(text: '50');
   final _cNaoh = TextEditingController(text: '0.5');
-  final _vNaoh = TextEditingController(text: '30');
+  final _vNaoh = TextEditingController(text: '31');
   int _hclPerAnalyte = 2;
   SolverResult? _result;
 
@@ -612,14 +627,23 @@ class _PotentiometricSolverState extends State<PotentiometricSolver> {
   final _ph = TextEditingController(text: '1.0, 1.2, 1.5, 2.0, 3.0, 7.0, 11.0, 11.5, 12.0');
   SolverResult? _result;
 
+  // Acepta punto o coma decimal ("24,9" es 24.9, no 24 y 9): se
+  // buscan los números y lo que queda solo pueden ser separadores
+  // (comas, punto y coma o espacios). Un carácter raro invalida la
+  // lista en vez de corromper los datos en silencio.
   List<double>? _parseList(TextEditingController c) {
-    final parts = c.text.split(',');
+    final text = c.text;
+    final number = RegExp(r'-?\d+(?:[.,]\d+)?(?:[eE][+-]?\d+)?');
     final out = <double>[];
-    for (final part in parts) {
-      final v = double.tryParse(part.trim().replaceAll(',', '.'));
+    for (final m in number.allMatches(text)) {
+      final v = double.tryParse(m.group(0)!.replaceAll(',', '.'));
       if (v == null) return null;
       out.add(v);
     }
+    final rest = text
+        .replaceAll(number, '')
+        .replaceAll(RegExp(r'[\s,;]+'), '');
+    if (out.isEmpty || rest.isNotEmpty) return null;
     return out;
   }
 
@@ -630,7 +654,7 @@ class _PotentiometricSolverState extends State<PotentiometricSolver> {
       setState(() => _result = const SolverResult(
           lines: [],
           summary: '',
-          error: 'Escribe los números separados por comas, con punto decimal.'));
+          error: 'Escribe los números separados por comas (vale punto o coma decimal, p. ej. 24,9).'));
       return;
     }
     setState(() => _result = potentiometric(volumesMl: volumes, ph: ph));
