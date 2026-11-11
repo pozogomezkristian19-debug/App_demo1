@@ -1,0 +1,102 @@
+# Build Quemia Admin APK — app de administración de Quemia.
+#
+# COPIA LOCAL SOLAMENTE: este archivo vive en
+# ~/workspace/melli-qui-workflow/.github/workflows/build-admin-apk.yml y
+# NO se pushea con el push normal (la app de GitHub no puede escribir
+# .github/workflows/). El agente principal lo crea en el repo por la web
+# de GitHub cuando llegue el momento.
+#
+# El Release que publica es PRIVADO: el enlace del APK de admin se entrega
+# por chat a Kristian y NO va en ninguna página pública (ni en la landing
+# de Firebase Hosting, que lleva solo el botón de Quemia). Por eso este
+# workflow NO tiene el fallback de "commit APK a docs/" de la app
+# principal: el APK de admin nunca debe acabar en GitHub Pages.
+#
+# google-services.json: el admin lo lleva como ARCHIVO PLANO en
+# quemia-admin/android/app/google-services.json (es JSON UTF-8, texto, y
+# su api_key es una clave pública de cliente, no un secreto: la seguridad
+# real está en las reglas de Firestore). Al pushear el proyecto, el
+# archivo viaja como texto normal y el workflow no tiene que hacer nada
+# especial con él. Si Firebase regenera el archivo, se sustituye en el
+# repo por el nuevo descargado de la consola.
+
+name: Build Quemia Admin APK
+
+on:
+  push:
+    paths:
+      - 'quemia-admin/**'
+      - '.github/workflows/build-admin-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Flutter 3.47.9
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.9'
+
+      - name: Restore binary assets from base64
+        run: |
+          cd quemia-admin
+          # El conector de GitHub sube los binarios como texto base64, asi
+          # que los assets binarios llegaron al repo como *.b64 (fuentes
+          # Nunito, avatar_default.png, google_g.png y el
+          # MaterialIcons-Regular.otf de los previews) y hay que
+          # convertirlos a binarios antes de compilar. Se decodifica
+          # CADA *.b64 bajo assets/ de forma generica.
+          find assets -name '*.b64' -print0 | while IFS= read -r -d '' f; do
+            base64 -d "$f" > "${f%.b64}"
+            echo "Restaurado: ${f%.b64}"
+          done
+          # El jar de Gradle y los iconos de la app pueden llegar al repo
+          # como texto base64 en su sitio y hay que convertirlos a
+          # binarios antes de compilar. Si un archivo ya es binario de
+          # verdad, se deja como esta.
+          for f in android/gradle/wrapper/gradle-wrapper.jar android/app/src/main/res/mipmap-*/ic_launcher.png; do
+            if file "$f" | grep -qE "Zip archive|PNG image"; then
+              echo "OK binario: $f"
+            else
+              base64 -d "$f" > /tmp/restore.bin && mv /tmp/restore.bin "$f"
+              echo "Restaurado: $f"
+            fi
+          done
+          # google-services.json viaja como archivo plano (JSON UTF-8) en
+          # android/app/google-services.json; nada que restaurar aquí.
+          ls -la android/app/google-services.json
+
+      - name: Install dependencies
+        run: flutter pub get
+        working-directory: quemia-admin
+
+      - name: Build release APK
+        run: flutter build apk --release
+        working-directory: quemia-admin
+
+      - name: Prepare APK asset
+        run: cp quemia-admin/build/app/outputs/flutter-apk/app-release.apk quemia-admin/quemia-admin-release.apk
+
+      - name: Publish APK as GitHub Release
+        # Sin continue-on-error: si la publicación falla, el job debe
+        # fallar a la vista (no hay fallback público: el APK de admin es
+        # privado y nunca va a docs/ ni a GitHub Pages).
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: quemia-admin-v1
+          name: Quemia Admin v1
+          files: quemia-admin/quemia-admin-release.apk
+          fail_on_unmatched_files: true
