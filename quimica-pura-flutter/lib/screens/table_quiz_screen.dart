@@ -70,9 +70,50 @@ class _TableQuizScreenState extends State<TableQuizScreen> {
     }
   }
 
+  /// Salir en medio del quiz (fix2, ronda 2): cuesta 1 vida, igual
+  /// que abandonar un nivel, así que se pide confirmación antes de
+  /// salir. Es el mismo aviso del quiz de Niveles.
+  void _requestExit() {
+    if (_finished) {
+      Navigator.of(context).pop();
+      return;
+    }
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(tr('exitLevelTitle')),
+        content: Text(tr('exitLevelBody')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(tr('exitLevelStay')),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              ProgressService.instance.loseLifeOnAbandon();
+              Navigator.of(context).pop();
+            },
+            child: Text(tr('exitLevelLeave')),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    // Bloqueo de sesión (fix2, ronda 2): mientras el quiz está en
+    // curso, ni el botón atrás ni la flecha de la barra pueden
+    // cerrarlo directamente: muestran el aviso de Salir con pérdida
+    // de vida. Terminado, se sale libre. Este quiz no tiene botón
+    // Salir propio: la única salida es la flecha o el botón atrás.
+    return PopScope(
+      canPop: _finished,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && !_finished) _requestExit();
+      },
+      child: Scaffold(
       appBar: AppBar(title: Text(tr('tableQuizTitle'))),
       body: _finished
           ? Padding(
@@ -168,6 +209,14 @@ class _TableQuizScreenState extends State<TableQuizScreen> {
                                     : Theme.of(context)
                                         .colorScheme
                                         .surfaceContainerHighest)),
+                        // Texto legible (capturas 2026-11-10): sobre
+                        // fondo claro va tinta oscura; sobre teal o
+                        // rojo, blanco. Sin esto heredaba blanco.
+                        foregroundColor: _selected != null &&
+                                (_options[_index][i] == _rounds[_index] ||
+                                    _selected == i)
+                            ? Colors.white
+                            : Theme.of(context).colorScheme.onSurface,
                         padding: const EdgeInsets.all(14),
                         alignment: Alignment.centerLeft,
                       ),
@@ -199,6 +248,7 @@ class _TableQuizScreenState extends State<TableQuizScreen> {
                 ],
               ],
             ),
+      ),
     );
   }
 }

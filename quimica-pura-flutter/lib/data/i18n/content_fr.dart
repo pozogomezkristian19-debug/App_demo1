@@ -938,6 +938,7 @@ const Map<String, TranslatedTopic> topicsFr = {
       TranslatedFormula(name: "Densité d'un gaz", expr: "d = P·M / (R·T)", note: "Utile pour identifier des gaz inconnus"),
       TranslatedFormula(name: "Dalton", expr: "P total = P₁ + P₂ + …", note: "Pᵢ = xᵢ · P totale (fraction molaire)"),
       TranslatedFormula(name: "Conditions normales", expr: "0 °C y 1 atm → 22.41 L/mol", note: "Volume molaire aux CNTP (0 °C, 1 atm)"),
+      TranslatedFormula(name: "Conditions standard (TPEA)", expr: "25 °C et 1 atm → 24.8 L/mol", note: "Volume molaire à TPEA (25 °C, 1 atm)"),
     ],
     exampleTitle: "Quel volume occupent 0.50 mol de N₂ à 27 °C et 1.2 atm ?",
     exampleSteps: [
@@ -1354,10 +1355,10 @@ const Map<String, TranslatedTopic> topicsFr = {
     tip: "À l'examen, dessine toujours le schéma du titrage et écris la réaction équilibrée avant de toucher à la calculatrice.",
   ),
   "fisicoquimica": TranslatedTopic(
-    title: "Physico-chimie : la physique derrière la chimie",
+    title: "Chimie physique : la physique derrière la chimie",
     level: "Branche de la chimie",
     summary: [
-      "La physico-chimie explique le pourquoi des phénomènes chimiques avec les lois de la physique : l'énergie, le mouvement des molécules et les probabilités. Ses trois piliers sont la thermodynamique, la cinétique et la structure de la matière.",
+      "La chimie physique explique le pourquoi des phénomènes chimiques avec les lois de la physique : l'énergie, le mouvement des molécules et les probabilités. Ses trois piliers sont la thermodynamique, la cinétique et la structure de la matière.",
       "La thermodynamique dit si un processus peut se produire et combien d'énergie il déplace : enthalpie (ΔH), entropie (ΔS) et énergie libre de Gibbs (ΔG = ΔH − TΔS). Si ΔG < 0, le processus est spontané ; si ΔG > 0, il ne l'est pas.",
       "La cinétique dit à quelle vitesse il se produit : la vitesse dépend des concentrations et de la température, et l'énergie d'activation est la barrière à franchir. Un catalyseur ne change pas l'équilibre, il y arrive seulement plus tôt.",
       "Les gaz sont le système modèle : PV = nRT décrit le comportement idéal et les écarts révèlent les forces entre molécules. La théorie cinétique moléculaire explique la pression comme des chocs de molécules contre les parois.",
@@ -1394,7 +1395,7 @@ const Map<String, String> topicNamesFr = {
   "acido-base": "Acide-base",
   "equilibrio": "Équilibre",
   "termo-cinetica": "Thermochimie et cinétique",
-  "tabla": "Tableau périodique",
+  "tabla": "Périodicité",
   "enlace": "Liaison chimique",
   "bach-estequiometria": "Stœchiométrie de base",
   "bach-gases": "Gaz",
@@ -1456,7 +1457,7 @@ const Map<String, TranslatedGlossaryTerm> glossaryFr = {
   "Polaridad": TranslatedGlossaryTerm(term: "Polarité", definition: "Répartition inégale de la charge dans une molécule, due aux différences d'électronégativité entre ses atomes."),
   "Tensión superficial": TranslatedGlossaryTerm(term: "Tension superficielle", definition: "Force qui maintient unie la surface d'un liquide ; c'est pourquoi certains insectes marchent sur l'eau."),
   "Presión parcial": TranslatedGlossaryTerm(term: "Pression partielle", definition: "Pression qu'exercerait un gaz d'un mélange s'il occupait à lui seul tout le volume (loi de Dalton)."),
-  "Volumen molar": TranslatedGlossaryTerm(term: "Volume molaire", definition: "Volume qu'occupe une mole de gaz : 22.4 L dans les conditions normales (0 °C et 1 atm)."),
+  "Volumen molar": TranslatedGlossaryTerm(term: "Volume molaire", definition: "Volume qu'occupe une mole de gaz : 22.4 L dans les conditions normales (0 °C et 1 atm) ; 24.8 L à TPEA (25 °C et 1 atm)."),
   "Reactivo limitante": TranslatedGlossaryTerm(term: "Réactif limitant", definition: "Réactif qui s'épuise en premier dans une réaction et détermine la quantité maximale de produit qui peut se former."),
   "Rendimiento": TranslatedGlossaryTerm(term: "Rendement", definition: "Pourcentage du produit théorique qu'on obtient réellement dans une réaction. Il ne dépasse jamais 100 %."),
 };
@@ -1884,6 +1885,7 @@ const Map<String, String> constantNotesFr = {
   "Constante de Planck": "Constante de Planck",
   "Velocidad de la luz en el vacío": "Vitesse de la lumière dans le vide",
   "Volumen molar en condiciones normales": "Volume molaire dans les conditions normales",
+  "Volumen molar a TPEA (25 °C y 1 atm)": "Volume molaire à TPEA (25 °C et 1 atm)",
   "Cero de la escala Celsius en kelvin": "Zéro de l'échelle Celsius en kelvins",
   "Presión atmosférica estándar": "Pression atmosphérique standard",
   "Masa del electrón": "Masse de l'électron",
@@ -1942,7 +1944,7 @@ const List<List<String>> generalTipsFr = [
 /// descriptions de la série d'activité, colonnes et noms de lignes de la
 /// table de solubilité, et les 6 règles de solubilité.
 /// (30 entrées : 8 réactions, 5 colonnes, 10 noms de lignes, 6 règles,
-/// plus le nom « Hidrógeno (referencia) » de l'entrée de référence H₂.)
+/// plus le nom « Hidrógeno (referencia) » de l'entrée de référence H.)
 const Map<String, String> referenceStringsFr = {
   "Reacciona violentamente con agua fría": "Réagit violemment avec l'eau froide",
   "Reacciona con agua fría": "Réagit avec l'eau froide",
@@ -1950,7 +1952,7 @@ const Map<String, String> referenceStringsFr = {
   "Reacciona con vapor de agua y con ácidos diluidos": "Réagit avec la vapeur d'eau et avec les acides dilués",
   "Reacciona con ácidos diluidos": "Réagit avec les acides dilués",
   "Reacciona con ácidos diluidos (lentamente)": "Réagit avec les acides dilués (lentement)",
-  "Límite: los metales de arriba desplazan al H₂ de los ácidos": "Limite : les métaux du dessus déplacent H₂ des acides",
+  "Límite: los metales de arriba desplazan al H de los ácidos": "Limite : les métaux du dessus déplacent H des acides",
   "No reacciona con agua ni con ácidos diluidos": "Ne réagit ni avec l'eau ni avec les acides dilués",
   "Hidrógeno (referencia)": "Hydrogène (référence)",
   "Alcalinos\n(Na⁺, K⁺) y NH₄⁺": "Alcalins\n(Na⁺, K⁺) et NH₄⁺",

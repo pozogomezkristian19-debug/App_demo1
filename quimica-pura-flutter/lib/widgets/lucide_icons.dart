@@ -12,6 +12,18 @@
 // El widget acepta los mismos parámetros habituales de Icon
 // (size, color) y además `filled: true` para rellenar la forma
 // (estrella rellena, corazón relleno...).
+//
+// Iconos 3D (fix3, punto 6): `threeD: true` aplica el degradado
+// de su propio color (en el relleno si el icono ya es `filled`,
+// en el trazo si no — para conservar el detalle interno) y un
+// brillito blanco arriba a la izquierda — el mismo tratamiento del
+// corazón de las vidas (coral #FF6B6B → #EF4444 + brillo),
+// generalizado a cualquier color de acento con
+// [LucideIcon.threeDGradient]. Cada icono mantiene SU color (teal,
+// violeta, ámbar...); solo cambia el render, nunca el path. Los
+// iconos 3D son los más visibles (barra inferior, menú, tarjetas,
+// estadísticas, quiz); los de campos de texto, la AppBar y los
+// glifos blancos sobre disco de color siguen planos, a propósito.
 
 import 'dart:math' as math;
 
@@ -109,6 +121,14 @@ class LucideIconData {
 /// [filled] rellena las formas con [color] (o con [fillGradient])
 /// en vez de dibujar solo el contorno: para el corazón de las vidas
 /// y la estrella de los puntos.
+///
+/// [threeD] es el tratamiento 3D del corazón de las vidas aplicado
+/// a cualquier icono: degradado de su propio color
+/// ([threeDGradient]) + brillito blanco. El icono sigue siendo el
+/// mismo path Lucide; solo cambia el render. Con [filled] el
+/// degradado va en el relleno (estrella, llama); sin él, va en el
+/// TRAZO, para no tapar el detalle interno (el reloj conserva sus
+/// manecillas, el trofeo su copa, la gorra su ala...).
 class LucideIcon extends StatelessWidget {
   const LucideIcon(
     this.icon, {
@@ -118,7 +138,25 @@ class LucideIcon extends StatelessWidget {
     this.strokeWidth = 2,
     this.filled = false,
     this.fillGradient,
+    this.threeD = false,
   });
+
+  /// Degradado 3D para un color de acento: más claro arriba, el
+  /// color base abajo. Es el mismo par del corazón de las vidas
+  /// (coral claro #FF6B6B → coral base #EF4444) pero calculado
+  /// desde cualquier acento: se aclara el color un 12 % de
+  /// luminosidad (HSL) para la parte superior.
+  static LinearGradient threeDGradient(Color accent) {
+    final hsl = HSLColor.fromColor(accent);
+    final light = hsl
+        .withLightness((hsl.lightness + 0.12).clamp(0.0, 0.95))
+        .toColor();
+    return LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [light, accent],
+    );
+  }
 
   final LucideIconData icon;
   final double size;
@@ -126,6 +164,7 @@ class LucideIcon extends StatelessWidget {
   final double strokeWidth;
   final bool filled;
   final Gradient? fillGradient;
+  final bool threeD;
 
   @override
   Widget build(BuildContext context) {
@@ -133,14 +172,33 @@ class LucideIcon extends StatelessWidget {
         IconTheme.of(context).color ??
         DefaultTextStyle.of(context).style.color ??
         Colors.black;
-    return CustomPaint(
-      size: Size(size, size),
-      painter: _LucidePainter(
-        data: icon,
-        color: effectiveColor,
-        strokeWidth: strokeWidth,
-        filled: filled,
-        fillGradient: fillGradient,
+    // 3D (fix3, punto 6): el degradado es el de SU color (sin
+    // tocar el path) y el pintor añade el brillo. OJO: 3D no
+    // implica relleno — el relleno solo va cuando el icono ya era
+    // relleno (estrella, llama); los de trazo conservan su trazo
+    // con el degradado encima, para no perder su detalle interno.
+    final effectiveGradient =
+        threeD ? threeDGradient(effectiveColor) : fillGradient;
+    // SizedBox con el tamaño nominal (auditoría fix2): el CustomPaint
+    // solo respeta su `size` cuando el padre no le impone otras
+    // medidas; en un Column con stretch o en el prefixIcon de un
+    // TextField, el padre lo estiraba (la lupa de búsqueda salía
+    // gigante, y el mando del Reto también). Con el SizedBox, el
+    // icono mide SIEMPRE `size`, estire quien estire.
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(
+        size: Size(size, size),
+        painter: _LucidePainter(
+          data: icon,
+          color: effectiveColor,
+          strokeWidth: strokeWidth,
+          filled: filled,
+          fillGradient: effectiveGradient,
+          threeD: threeD,
+          nominalSize: size,
+        ),
       ),
     );
   }
@@ -153,6 +211,8 @@ class _LucidePainter extends CustomPainter {
     required this.strokeWidth,
     required this.filled,
     required this.fillGradient,
+    required this.threeD,
+    required this.nominalSize,
   });
 
   final LucideIconData data;
@@ -161,10 +221,28 @@ class _LucidePainter extends CustomPainter {
   final bool filled;
   final Gradient? fillGradient;
 
+  /// 3D (fix3, punto 6): tras rellenar, pinta el brillito blanco
+  /// del corazón de las vidas sobre el glifo.
+  final bool threeD;
+
+  /// El tamaño que el icono DEBE dibujar, venga el lienzo como
+  /// venga (el widget le pasa su `size`).
+  final double nominalSize;
+
   @override
   void paint(Canvas canvas, Size size) {
-    final scale = size.width / 24;
+    // Dibuja SIEMPRE al tamaño nominal, centrado en el lienzo
+    // (auditoría fix2): el padre puede estirar el CustomPaint
+    // (Column con stretch, prefixIcon de un TextField) y antes el
+    // glifo crecía con el lienzo (la lupa gigante, el mando gigante).
+    // Ahora el glifo mide `nominalSize` y queda centrado, estire
+    // quien estire el hueco.
+    final scale = nominalSize / 24;
     canvas.save();
+    canvas.translate(
+      (size.width - nominalSize) / 2,
+      (size.height - nominalSize) / 2,
+    );
     canvas.scale(scale, scale);
     final paths = data.paths;
     if (filled) {
@@ -188,8 +266,48 @@ class _LucidePainter extends CustomPainter {
         ..strokeWidth = strokeWidth
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round;
+      // 3D en trazo (fix3, punto 6): el degradado del color va en
+      // el trazo, no en un relleno — el icono conserva su forma y
+      // su detalle interno (manecillas del reloj, copa del trofeo).
+      if (threeD && fillGradient != null && paths.isNotEmpty) {
+        var bounds = paths.first.getBounds();
+        for (final p in paths.skip(1)) {
+          bounds = bounds.expandToInclude(p.getBounds());
+        }
+        strokePaint.shader = fillGradient!.createShader(bounds);
+      }
       for (final p in paths) {
         canvas.drawPath(p, strokePaint);
+      }
+    }
+    // Brillito 3D (fix3, punto 6): el mismo del corazón de las
+    // vidas (óvalo blanco girado, 55 % de opacidad), pero centrado
+    // en la parte superior-izquierda del glifo — no en un punto
+    // fijo, porque cada icono ocupa el viewBox de forma distinta
+    // (el mando es ancho y bajo, la llama alta y estrecha...).
+    // Así el brillo cae siempre SOBRE el relleno, nunca flotando
+    // en el vacío junto al icono.
+    if (threeD && paths.isNotEmpty) {
+      var bounds = paths.first.getBounds();
+      for (final p in paths.skip(1)) {
+        bounds = bounds.expandToInclude(p.getBounds());
+      }
+      if (bounds.width > 0 && bounds.height > 0) {
+        canvas.save();
+        canvas.translate(
+          bounds.left + bounds.width * 0.30,
+          bounds.top + bounds.height * 0.26,
+        );
+        canvas.rotate(-0.5);
+        canvas.drawOval(
+          Rect.fromCenter(
+            center: Offset.zero,
+            width: bounds.width * 0.30,
+            height: bounds.height * 0.14,
+          ),
+          Paint()..color = Colors.white.withValues(alpha: 0.55),
+        );
+        canvas.restore();
       }
     }
     canvas.restore();
@@ -201,7 +319,8 @@ class _LucidePainter extends CustomPainter {
         old.color != color ||
         old.strokeWidth != strokeWidth ||
         old.filled != filled ||
-        old.fillGradient != fillGradient;
+        old.fillGradient != fillGradient ||
+        old.threeD != threeD;
   }
 }
 

@@ -158,7 +158,15 @@ class _ConstantsScreenState extends State<ConstantsScreen> {
           TextField(
             decoration: const InputDecoration(
               labelText: 'Valor',
-              prefixIcon: LucideIcon(LucideIcons.logIn),
+              // Fix3, punto 6 (ampliación): el icono del campo Valor
+              // salía gigante en la captura (casi toda la altura del
+              // campo). La causa: en la APK instalada LucideIcon aún
+              // no llevaba el SizedBox de tamaño fijo y el
+              // prefixIcon estiraba el CustomPaint a la altura del
+              // campo. En el código actual el guard ya existe, pero
+              // el tamaño se fija aquí explícito (24 px, como el
+              // texto del campo) para que no vuelva a pasar.
+              prefixIcon: LucideIcon(LucideIcons.logIn, size: 24),
             ),
             keyboardType:
                 const TextInputType.numberWithOptions(decimal: true),
@@ -194,7 +202,9 @@ class _ConstantsScreenState extends State<ConstantsScreen> {
                 ),
               ),
               const SizedBox(width: 8),
-              const LucideIcon(LucideIcons.arrowRight),
+              // Flecha entre los desplegables De/A: 24 px explícitos,
+              // acorde al texto de los desplegables (fix3, punto 6).
+              const LucideIcon(LucideIcons.arrowRight, size: 24),
               const SizedBox(width: 8),
               Expanded(
                 child: DropdownButtonFormField<String>(

@@ -12,7 +12,6 @@ import 'screens/challenge_screen.dart';
 import 'screens/compare_screen.dart';
 import 'screens/constants_screen.dart';
 import 'screens/favorites_screen.dart';
-import 'screens/flashcards_screen.dart';
 import 'screens/formula_screen.dart';
 import 'screens/glossary_screen.dart';
 import 'screens/lab_screen.dart';
@@ -28,6 +27,7 @@ import 'screens/search_screen.dart';
 import 'screens/stats_screen.dart';
 import 'screens/tabla_screen.dart';
 import 'screens/table_quiz_screen.dart';
+import 'screens/theme_screen.dart';
 import 'screens/timed_exam_screen.dart';
 import 'screens/tips_screen.dart';
 import 'screens/topic_detail_screen.dart';
@@ -41,12 +41,12 @@ import 'services/nav_requests.dart';
 import 'services/notes.dart';
 import 'services/progress.dart';
 import 'services/sound_service.dart';
+import 'services/update_check.dart';
 import 'services/user_prefs.dart';
-import 'widgets/avatar.dart';
+import 'services/accent.dart';
 import 'widgets/brand_logo.dart';
 import 'widgets/element_sheet.dart';
 import 'widgets/lives_chip.dart';
-import 'widgets/support_button.dart';
 
 /// URL de la página de descarga de Melli-Qui (landing en GitHub Pages).
 const String kLandingUrl =
@@ -106,7 +106,12 @@ class _DuoPillBorder extends RoundedRectangleBorder {
   const _DuoPillBorder({
     super.borderRadius =
         const BorderRadius.all(Radius.circular(999)),
+    this.edgeColor = BrandColors.tealDark,
   });
+
+  /// Color del borde inferior (efecto 3D): teal oscuro en el tema
+  /// verde, violeta intenso en el tema violeta (fix2, item 12).
+  final Color edgeColor;
 
   @override
   void paint(Canvas canvas, Rect rect, {TextDirection? textDirection}) {
@@ -115,7 +120,7 @@ class _DuoPillBorder extends RoundedRectangleBorder {
     canvas.clipPath(Path()..addRRect(rrect));
     canvas.drawRect(
       Rect.fromLTRB(rect.left, rect.bottom - 4, rect.right, rect.bottom),
-      Paint()..color = BrandColors.tealDark,
+      Paint()..color = edgeColor,
     );
     canvas.restore();
   }
@@ -123,6 +128,7 @@ class _DuoPillBorder extends RoundedRectangleBorder {
   @override
   ShapeBorder scale(double t) => _DuoPillBorder(
         borderRadius: borderRadius * t,
+        edgeColor: edgeColor,
       );
 }
 
@@ -132,9 +138,51 @@ class MelliQuiApp extends StatefulWidget {
   State<MelliQuiApp> createState() => _MelliQuiAppState();
 }
 
-class _MelliQuiAppState extends State<MelliQuiApp> {
+class _MelliQuiAppState extends State<MelliQuiApp>
+    with WidgetsBindingObserver {
   bool _isDark = UserPrefs.isDark;
   bool _onboardingDone = UserPrefs.onboardingDone;
+
+  @override
+  void initState() {
+    super.initState();
+    // El modo de tema vive SOLO en Cuenta (fix3, punto 13): cuando
+    // cambia, este aviso reconstruye el tema en el acto, igual que
+    // hacía el icono de sol/luna de la AppBar. Sin este listener, el
+    // cambio en Cuenta no se vería hasta reiniciar la app.
+    WidgetsBinding.instance.addObserver(this);
+    UserPrefs.themeModeNotifier.addListener(_onThemeModeChanged);
+  }
+
+  @override
+  void dispose() {
+    UserPrefs.themeModeNotifier.removeListener(_onThemeModeChanged);
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// Cambió el modo de tema en Cuenta: el tema efectivo cambia y la
+  /// app entera se reconstruye con el modo nuevo.
+  void _onThemeModeChanged() {
+    setState(() => _isDark = UserPrefs.effectiveDark);
+  }
+
+  /// Con el modo 'sistema', el teléfono cambió de claro a oscuro (o
+  /// al revés) sin tocar a Cuenta: el tema efectivo cambia igual.
+  @override
+  void didChangePlatformBrightness() {
+    if (UserPrefs.themeMode == 'sistema') {
+      setState(() => _isDark = UserPrefs.effectiveDark);
+    }
+  }
+
+  /// ThemeMode real: 'sistema' sigue al teléfono; 'oscuro' y 'claro'
+  /// son fijos.
+  ThemeMode get _themeMode => switch (UserPrefs.themeMode) {
+        'oscuro' => ThemeMode.dark,
+        'sistema' => ThemeMode.system,
+        _ => ThemeMode.light,
+      };
 
   /// Cada vez que cambia la versión (Bachillerato/Universidad), este
   /// contador cambia y toda la pantalla principal se reconstruye desde
@@ -144,7 +192,11 @@ class _MelliQuiAppState extends State<MelliQuiApp> {
   // Nueva identidad visual (rediseño claro estilo Duolingo, con el
   // color propio de Melli-Qui: teal #00C2A8, nunca verde Duolingo).
   // Los colores de marca viven en BrandColors.
-  static const _deep = Color(0xFF171226);
+  // Modo oscuro VERDE, como al principio (fix2, item 8): fondo
+  // verde muy oscuro y acentos SOLO de la familia verde (teal/
+  // menta). Nada de violeta ni azul en el tema oscuro.
+  static const _deepGreen = Color(0xFF0A1F1A);
+  static const _surfaceGreen = Color(0xFF122B24);
 
   ThemeData _darkTheme() {
     return ThemeData(
@@ -157,30 +209,159 @@ class _MelliQuiAppState extends State<MelliQuiApp> {
           TargetPlatform.iOS: _FadeSlideTransitionsBuilder(),
         },
       ),
-      scaffoldBackgroundColor: _deep,
+      scaffoldBackgroundColor: _deepGreen,
       colorScheme: const ColorScheme.dark(
-        primary: BrandColors.violetLight,
-        secondary: BrandColors.mintLight,
-        surface: Color(0xFF241B3A),
-        onSurface: Color(0xFFF1EAFB),
+        primary: BrandColors.mintLight,
+        onPrimary: _deepGreen,
+        secondary: BrandColors.mint,
+        surface: _surfaceGreen,
+        onSurface: Color(0xFFE6F4EE),
+        surfaceContainerHighest: Color(0xFF1B3A31),
+        error: Color(0xFFEF4444),
+      ),
+      appBarTheme: const AppBarTheme(
+        backgroundColor: _deepGreen,
+        foregroundColor: Color(0xFFE6F4EE),
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        titleTextStyle: TextStyle(
+          fontFamily: 'Roboto',
+          fontSize: 20,
+          fontWeight: FontWeight.w800,
+          color: Color(0xFFE6F4EE),
+        ),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: _deepGreen,
+        elevation: 2,
+        shadowColor: Colors.black.withValues(alpha: 0.30),
+        indicatorColor: BrandColors.teal.withValues(alpha: 0.25),
+        iconTheme: WidgetStateProperty.resolveWith(
+          (states) => IconThemeData(
+            color: states.contains(WidgetState.selected)
+                ? BrandColors.mintLight
+                : const Color(0xFF8A9A93),
+            size: 26,
+          ),
+        ),
+        labelTextStyle: WidgetStateProperty.resolveWith(
+          (states) => TextStyle(
+            fontFamily: 'Roboto',
+            fontSize: 12,
+            fontWeight: states.contains(WidgetState.selected)
+                ? FontWeight.w800
+                : FontWeight.w600,
+            color: states.contains(WidgetState.selected)
+                ? BrandColors.mintLight
+                : const Color(0xFF8A9A93),
+          ),
+        ),
       ),
       cardTheme: const CardThemeData(
-        color: Color(0xFF241B3A),
+        color: _surfaceGreen,
         elevation: 0,
         margin: EdgeInsets.symmetric(vertical: 6),
       ),
+      dialogTheme: const DialogThemeData(
+        backgroundColor: _surfaceGreen,
+        elevation: 4,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(20)),
+        ),
+        titleTextStyle: TextStyle(
+          fontFamily: 'Roboto',
+          fontSize: 20,
+          fontWeight: FontWeight.w800,
+          color: Color(0xFFE6F4EE),
+        ),
+        contentTextStyle: TextStyle(
+          fontFamily: 'Roboto',
+          fontSize: 16,
+          height: 1.45,
+          color: Color(0xFFE6F4EE),
+        ),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: BrandColors.teal,
+          foregroundColor: Colors.white,
+          elevation: 2,
+          shadowColor: BrandColors.tealDark,
+          surfaceTintColor: Colors.transparent,
+          shape: const _DuoPillBorder(),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          textStyle: const TextStyle(
+              fontFamily: 'Roboto',
+              fontSize: 16, fontWeight: FontWeight.w800),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: BrandColors.teal,
+          foregroundColor: Colors.white,
+          elevation: 2,
+          shadowColor: BrandColors.tealDark,
+          surfaceTintColor: Colors.transparent,
+          shape: const _DuoPillBorder(),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          textStyle: const TextStyle(
+              fontFamily: 'Roboto',
+              fontSize: 16, fontWeight: FontWeight.w800),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: BrandColors.mintLight,
+          backgroundColor: _surfaceGreen,
+          side: const BorderSide(color: BrandColors.teal, width: 2),
+          shape: const StadiumBorder(),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          textStyle: const TextStyle(
+              fontFamily: 'Roboto',
+              fontSize: 16, fontWeight: FontWeight.w800),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: BrandColors.mintLight,
+          textStyle: const TextStyle(
+              fontFamily: 'Roboto',
+              fontSize: 15, fontWeight: FontWeight.w700),
+        ),
+      ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: const Color(0xFF1B1530),
+        fillColor: const Color(0xFF0F241E),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
         ),
       ),
+      snackBarTheme: const SnackBarThemeData(
+        backgroundColor: Color(0xFFE6F4EE),
+        contentTextStyle: TextStyle(
+            fontFamily: 'Roboto', color: _deepGreen, fontSize: 15),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(12)),
+        ),
+      ),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(
+        color: BrandColors.mintLight,
+        linearTrackColor: Color(0xFF1B3A31),
+      ),
       textTheme: const TextTheme(
-        bodyMedium: TextStyle(fontSize: 16, height: 1.45),
-        bodyLarge: TextStyle(fontSize: 17, height: 1.45),
-        titleMedium: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-        titleLarge: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+        bodyMedium:
+            TextStyle(fontSize: 16, height: 1.45, color: Color(0xFFE6F4EE)),
+        bodyLarge:
+            TextStyle(fontSize: 17, height: 1.45, color: Color(0xFFE6F4EE)),
+        titleMedium: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFFE6F4EE)),
+        titleLarge: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFFE6F4EE)),
       ).apply(fontFamily: 'Roboto'),
     );
   }
@@ -202,10 +383,14 @@ class _MelliQuiAppState extends State<MelliQuiApp> {
         },
       ),
       scaffoldBackgroundColor: Colors.white,
-      colorScheme: const ColorScheme.light(
-        primary: BrandColors.teal,
+      // Acento elegido en Ajustes (fix2, item 12): Verde (teal) o
+      // Violeta. El color principal del tema claro, los botones y el
+      // indicador de la barra inferior siguen al acento.
+      colorScheme: ColorScheme.light(
+        primary: AppAccent.primary,
         onPrimary: Colors.white,
-        secondary: BrandColors.violet,
+        secondary:
+            AppAccent.isViolet ? BrandColors.teal : BrandColors.violet,
         surface: Colors.white,
         onSurface: BrandColors.ink,
         surfaceContainerHighest: BrandColors.cardGray,
@@ -227,11 +412,11 @@ class _MelliQuiAppState extends State<MelliQuiApp> {
         backgroundColor: Colors.white,
         elevation: 2,
         shadowColor: Colors.black.withValues(alpha: 0.08),
-        indicatorColor: BrandColors.teal.withValues(alpha: 0.15),
+        indicatorColor: AppAccent.primary.withValues(alpha: 0.15),
         iconTheme: WidgetStateProperty.resolveWith(
           (states) => IconThemeData(
             color: states.contains(WidgetState.selected)
-                ? BrandColors.teal
+                ? AppAccent.primary
                 : const Color(0xFF9CA3AF),
             size: 26,
           ),
@@ -244,7 +429,7 @@ class _MelliQuiAppState extends State<MelliQuiApp> {
                 ? FontWeight.w800
                 : FontWeight.w600,
             color: states.contains(WidgetState.selected)
-                ? BrandColors.teal
+                ? AppAccent.primary
                 : const Color(0xFF9CA3AF),
           ),
         ),
@@ -279,14 +464,14 @@ class _MelliQuiAppState extends State<MelliQuiApp> {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: BrandColors.teal,
+          backgroundColor: AppAccent.primary,
           foregroundColor: Colors.white,
           disabledBackgroundColor:
-              BrandColors.teal.withValues(alpha: 0.40),
+              AppAccent.primary.withValues(alpha: 0.40),
           elevation: 2,
-          shadowColor: BrandColors.tealDark,
+          shadowColor: AppAccent.primaryDark,
           surfaceTintColor: Colors.transparent,
-          shape: const _DuoPillBorder(),
+          shape: _DuoPillBorder(edgeColor: AppAccent.primaryDark),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           textStyle: const TextStyle(
               fontFamily: 'Roboto',
@@ -295,14 +480,14 @@ class _MelliQuiAppState extends State<MelliQuiApp> {
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: BrandColors.teal,
+          backgroundColor: AppAccent.primary,
           foregroundColor: Colors.white,
           disabledBackgroundColor:
-              BrandColors.teal.withValues(alpha: 0.40),
+              AppAccent.primary.withValues(alpha: 0.40),
           elevation: 2,
-          shadowColor: BrandColors.tealDark,
+          shadowColor: AppAccent.primaryDark,
           surfaceTintColor: Colors.transparent,
-          shape: const _DuoPillBorder(),
+          shape: _DuoPillBorder(edgeColor: AppAccent.primaryDark),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           textStyle: const TextStyle(
               fontFamily: 'Roboto',
@@ -311,9 +496,9 @@ class _MelliQuiAppState extends State<MelliQuiApp> {
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: BrandColors.teal,
+          foregroundColor: AppAccent.primary,
           backgroundColor: Colors.white,
-          side: const BorderSide(color: BrandColors.teal, width: 2),
+          side: BorderSide(color: AppAccent.primary, width: 2),
           shape: const StadiumBorder(),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           textStyle: const TextStyle(
@@ -323,7 +508,7 @@ class _MelliQuiAppState extends State<MelliQuiApp> {
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: BrandColors.teal,
+          foregroundColor: AppAccent.primary,
           textStyle: const TextStyle(
               fontFamily: 'Roboto',
               fontSize: 15, fontWeight: FontWeight.w700),
@@ -337,18 +522,18 @@ class _MelliQuiAppState extends State<MelliQuiApp> {
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide(
-            color: BrandColors.teal.withValues(alpha: 0.40),
+            color: AppAccent.primary.withValues(alpha: 0.40),
           ),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide(
-            color: BrandColors.teal.withValues(alpha: 0.40),
+            color: AppAccent.primary.withValues(alpha: 0.40),
           ),
         ),
-        focusedBorder: const OutlineInputBorder(
-          borderRadius: BorderRadius.all(Radius.circular(16)),
-          borderSide: BorderSide(color: BrandColors.teal, width: 2),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: const BorderRadius.all(Radius.circular(16)),
+          borderSide: BorderSide(color: AppAccent.primary, width: 2),
         ),
       ),
       snackBarTheme: const SnackBarThemeData(
@@ -360,8 +545,8 @@ class _MelliQuiAppState extends State<MelliQuiApp> {
           borderRadius: BorderRadius.all(Radius.circular(12)),
         ),
       ),
-      progressIndicatorTheme: const ProgressIndicatorThemeData(
-        color: BrandColors.teal,
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        color: AppAccent.primary,
         linearTrackColor: BrandColors.cardGray,
       ),
       textTheme: const TextTheme(
@@ -392,15 +577,19 @@ class _MelliQuiAppState extends State<MelliQuiApp> {
   @override
   Widget build(BuildContext context) {
     // Al cambiar el idioma, AppLang.notifier avisa y se reconstruye toda
-    // la app con los textos nuevos, sin reiniciar.
+    // la app con los textos nuevos, sin reiniciar. Igual con el acento
+    // (Verde/Violeta, fix2 item 12): themeAccentNotifier avisa y el
+    // tema claro cambia de color principal en el acto.
     return ValueListenableBuilder<String>(
+      valueListenable: UserPrefs.themeAccentNotifier,
+      builder: (context, accent, _) => ValueListenableBuilder<String>(
       valueListenable: AppLang.notifier,
       builder: (context, lang, _) => MaterialApp(
-        title: 'Melli-Qui',
+        title: 'Quemia',
         debugShowCheckedModeBanner: false,
         theme: _lightTheme(),
         darkTheme: _darkTheme(),
-        themeMode: _isDark ? ThemeMode.dark : ThemeMode.light,
+        themeMode: _themeMode,
         home: _onboardingDone
             ? KeyedSubtree(
                 key: ValueKey('home-$_reloadToken'),
@@ -414,32 +603,52 @@ class _MelliQuiAppState extends State<MelliQuiApp> {
                 onFinished: () => setState(() => _onboardingDone = true),
               ),
       ),
+    ),
     );
   }
 }
 
-/// Botoncito de tema: lunita con nubes en modo oscuro, sol en modo claro.
-class _ThemeToggleIcon extends StatelessWidget {
-  const _ThemeToggleIcon({required this.isDark});
-  final bool isDark;
+/// Chip de repaso en la AppBar (fix2, item 2): icono de repaso +
+/// cantidad de errores por repasar, con el color del tema.
+/// Icono ARRIBA del texto no: en la barra va en línea, como el chip
+/// de vidas, para que quepa junto a la campana.
+class _ReviewChip extends StatelessWidget {
+  const _ReviewChip({required this.count, required this.onTap});
+  final int count;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    if (!isDark) {
-      // Modo claro: el sol.
-      return const LucideIcon(LucideIcons.sun, size: 24);
-    }
-    // Modo oscuro: lunita con nubes.
-    return const Stack(
-      clipBehavior: Clip.none,
-      children: [
-        LucideIcon(LucideIcons.moon, size: 24),
-        Positioned(
-          right: -3,
-          bottom: -2,
-          child: LucideIcon(LucideIcons.cloud, size: 14),
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+          decoration: BoxDecoration(
+            color: scheme.primary.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              LucideIcon(LucideIcons.rotateCcw,
+                  size: 17, color: scheme.primary),
+              const SizedBox(width: 4),
+              Text(
+                '$count',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  color: scheme.primary,
+                ),
+              ),
+            ],
+          ),
         ),
-      ],
+      ),
     );
   }
 }
@@ -462,11 +671,80 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _index = 0;
 
+  /// ¿Hay una sesión de juego en curso (quiz de nivel, repaso o
+  /// examen mixto en línea)? Mientras la hay, la barra de arriba,
+  /// el menú y la barra inferior se OCULTAN: la única salida es el
+  /// botón Salir del quiz (fix2, ronda 2). Lo avisa PracticarScreen.
+  bool _inSession = false;
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance
-        .addPostFrameCallback((_) => _maybeShowElementOfDay());
+    // Tocar una notificación (o su acción "Repasar ahora") pide el
+    // repaso de errores aunque la app ya estuviera abierta (fix3,
+    // punto 9): sin este aviso, Niveles ya montada no volvería a
+    // mirar el flag.
+    NavRequests.reviewRequested.addListener(_onNotificationReviewRequest);
+    // Recordatorio de actualización e instalación del APK (fix3,
+    // punto 20): tocar esas notificaciones con la app ya abierta
+    // pide el diálogo o la instalación, igual que el repaso.
+    NavRequests.updateRequested.addListener(_onNotificationUpdateRequest);
+    NavRequests.installRequested
+        .addListener(_onNotificationInstallRequest);
+    // Tras el primer frame: primero el elemento del día (si toca),
+    // luego el diálogo de actualización si la app se abrió desde su
+    // recordatorio, y si no, la comprobación normal vía GitHub
+    // (fix3, punto 20). En ese orden para que los diálogos no se
+    // pisen: el de actualización espera a que se cierre el del
+    // elemento.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _maybeShowElementOfDay();
+      if (!mounted) return;
+      if (NavRequests.showUpdateDialog) {
+        NavRequests.showUpdateDialog = false;
+        await UpdateCheckService.showPendingUpdateDialog(context);
+        return;
+      }
+      await UpdateCheckService.checkForUpdate(context);
+    });
+  }
+
+  @override
+  void dispose() {
+    NavRequests.reviewRequested
+        .removeListener(_onNotificationReviewRequest);
+    NavRequests.updateRequested
+        .removeListener(_onNotificationUpdateRequest);
+    NavRequests.installRequested
+        .removeListener(_onNotificationInstallRequest);
+    super.dispose();
+  }
+
+  /// Repaso pedido por una notificación: ir a Niveles y arrancar el
+  /// repaso de errores. Si hay una sesión en curso, la petición queda
+  /// guardada (NavRequests.startReview) y Niveles la consume al
+  /// terminar la sesión.
+  void _onNotificationReviewRequest() {
+    if (_inSession) return;
+    if (!mounted) return;
+    _goToTab(0, startReview: true);
+  }
+
+  /// Recordatorio de actualización tocado (fix3, punto 20): la app
+  /// se abre y sale el diálogo de actualización (con los datos
+  /// guardados al programar el recordatorio, incluso sin internet).
+  void _onNotificationUpdateRequest() {
+    if (!mounted) return;
+    NavRequests.showUpdateDialog = false;
+    UpdateCheckService.showPendingUpdateDialog(context);
+  }
+
+  /// "Descarga completa" o su acción "Instalar" (fix3, punto 20):
+  /// instala el APK ya descargado (o avisa si falta el permiso de
+  /// "Instalar apps desconocidas").
+  void _onNotificationInstallRequest() {
+    if (!mounted) return;
+    UpdateCheckService.installDownloadedApk(context);
   }
 
   /// Elemento del día como POPUP al abrir la app (v6, item 2): nombre,
@@ -514,21 +792,61 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 12),
             Text(localizedElementFact(element)),
+            // Fix3, punto 9: los botones iban en `actions` y el
+            // OverflowBar del diálogo los apilaba al no caber lado a
+            // lado — "Cerrar" quedaba como enlace de texto encima
+            // de la pastilla grande "Ver ficha completa". Ahora van
+            // en una fila limpia dentro del contenido: secundario
+            // con borde a la izquierda y primario teal relleno a la
+            // derecha, mismo ancho y mismo alto (stretch), sin que
+            // uno quede encima del otro.
+            const SizedBox(height: 20),
+            // IntrinsicHeight: la fila usa stretch para igualar el
+            // alto de los dos botones, y sin altura acotada el
+            // stretch pide altura infinita y rompe el diálogo
+            // (mismo patrón que el menú de Laboratorio).
+            IntrinsicHeight(
+              child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () =>
+                        Navigator.of(dialogContext).pop(),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 12),
+                      textStyle: const TextStyle(fontSize: 14),
+                    ),
+                    child: Text(
+                      tr('closeWord'),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: () {
+                      Navigator.of(dialogContext).pop();
+                      showElementSheet(context, element);
+                    },
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 12),
+                      textStyle: const TextStyle(fontSize: 14),
+                    ),
+                    child: Text(
+                      tr('elementDaySeeMore'),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+              ],
+              ),
+            ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: Text(tr('closeWord')),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.of(dialogContext).pop();
-              showElementSheet(context, element);
-            },
-            child: Text(tr('elementDaySeeMore')),
-          ),
-        ],
       ),
     );
   }
@@ -540,7 +858,12 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Widget> get _pages => [
         PracticarScreen(
             key: ValueKey(ProgressService.track),
-            onOpenScreen: _openScreenKey),
+            onOpenScreen: _openScreenKey,
+            onSessionChanged: (inSession) {
+              if (_inSession != inSession) {
+                setState(() => _inSession = inSession);
+              }
+            }),
         const ResolverScreen(),
         const AprenderScreen(),
         const TablaScreen(),
@@ -550,15 +873,6 @@ class _HomeScreenState extends State<HomeScreen> {
           onShowShareApp: () => _showShareApp(context),
           trackTopics: _trackTopics,
         ),
-      ];
-
-  /// Títulos de las 5 secciones, en el idioma actual.
-  List<String> get _titles => [
-        tr('tabLevels'),
-        tr('tabResolver'),
-        tr('tabLearn'),
-        tr('tableTitle'),
-        tr('accountTitle'),
       ];
 
   /// Temas de la pista actual, en orden (para Mis estadísticas).
@@ -582,6 +896,18 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _index = i);
   }
 
+  /// Repaso desde la barra de arriba (fix2, item 2): si hay errores,
+  /// va a Niveles y arranca el repaso; si no hay, avisa.
+  void _startReviewFromAppBar() {
+    if (ProgressService.instance.failedCount == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(tr('quizNoErrors'))),
+      );
+      return;
+    }
+    _goToTab(0, startReview: true);
+  }
+
   /// Abre una pantalla del menú o de la búsqueda por su clave.
   void _openScreenKey(String key) {
     Widget? page;
@@ -592,8 +918,6 @@ class _HomeScreenState extends State<HomeScreen> {
         page = const LabScreen();
       case 'stats':
         page = StatsScreen(trackTopics: _trackTopics);
-      case 'flashcards':
-        page = const FlashcardsScreen();
       case 'timed':
         page = const TimedExamScreen();
       case 'challenge':
@@ -622,6 +946,8 @@ class _HomeScreenState extends State<HomeScreen> {
         page = const LabSimScreen();
       case 'version':
         page = VersionScreen(onVersionChanged: widget.onTrackChanged);
+      case 'theme':
+        page = const ThemeScreen();
       case 'tips':
         page = const TipsScreen();
       case 'review':
@@ -732,7 +1058,7 @@ class _HomeScreenState extends State<HomeScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-                'Pásale Melli-Qui a otros estudiantes de química:'),
+                'Pásale Quemia a otros estudiantes de química:'),
             const SizedBox(height: 12),
             SelectableText(kLandingUrl),
           ],
@@ -753,7 +1079,7 @@ class _HomeScreenState extends State<HomeScreen> {
           TextButton(
             onPressed: () async {
               final uri = Uri.parse(
-                  'https://wa.me/?text=${Uri.encodeComponent('Descarga Melli-Qui, la app de química pura: $kLandingUrl')}');
+                  'https://wa.me/?text=${Uri.encodeComponent('Descarga Quemia, la app de química pura: $kLandingUrl')}');
               if (await canLaunchUrl(uri)) {
                 await launchUrl(uri, mode: LaunchMode.externalApplication);
               }
@@ -783,7 +1109,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Melli-Qui',
+                      const Text('Quemia',
                           style: TextStyle(
                               fontSize: 22, fontWeight: FontWeight.bold)),
                       Text(tr('appSubtitle')),
@@ -834,7 +1160,13 @@ class _HomeScreenState extends State<HomeScreen> {
     required VoidCallback onTap,
   }) {
     return ListTile(
-      leading: LucideIcon(icon, size: 24),
+      // Icono 3D (fix3, punto 6) con el acento de la app: relleno
+      // con degradado + brillito, como el corazón de las vidas.
+      // La flecha de la derecha sigue plana (es solo una pista).
+      leading: LucideIcon(icon,
+          size: 24,
+          color: Theme.of(context).colorScheme.primary,
+          threeD: true),
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
       subtitle: subtitle == null ? null : Text(subtitle),
       trailing: const LucideIcon(LucideIcons.chevronRight, size: 18),
@@ -865,7 +1197,14 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final greeting = AppLang.greeting();
+    // Color de la pestaña seleccionada (fix2, items 8 y 12): en modo
+    // oscuro, verde para las 5; en claro, el color propio de cada
+    // pestaña con el acento verde, o violeta para todas con el
+    // acento violeta.
+    final tabColors = List<Color>.generate(
+      5,
+      (i) => widget.isDark ? BrandColors.mintLight : AppAccent.tabColor(i),
+    );
     return PopScope(
       // Botón atrás: primero cierra lo abierto por dentro (quiz,
       // solucionador); si no hay nada, vuelve a Niveles; solo en
@@ -881,29 +1220,62 @@ class _HomeScreenState extends State<HomeScreen> {
         SystemNavigator.pop();
       },
       child: Scaffold(
-        // Botón flotante de WhatsApp, visible en las 5 secciones:
-        // lleva directo al chat del creador. Es un botón a mano
-        // (widgets/support_button.dart), SIN FloatingActionButton: el
-        // FAB dibujaba un borde negro grueso alrededor de la píldora
-        // verde, y este botón no tiene borde de ningún tipo.
-        floatingActionButton:
-            SupportButton(onPressed: () => _openWhatsApp(context)),
+        // Sin botón flotante de Soporte (fix2, ronda 2): el pill
+        // verde tapaba contenido en Niveles y en Tabla. Soporte
+        // vive ahora al pie del menú hamburguesa.
         // Menú hamburguesa: el organizador de la app. Cada fila abre su
         // propia pantalla; nada suelto ni repetido dentro del menú.
-        drawer: Drawer(
-          child: ListView(
-            padding: EdgeInsets.zero,
-            children: [
-              DrawerHeader(
+        // La barra de búsqueda va PRIMERA y FIJA (fix2, item 11): no
+        // se desplaza con el resto del menú. Tocar abre la búsqueda.
+        drawer: _inSession ? null : Drawer(
+          child: SafeArea(
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                  child: TextField(
+                    readOnly: true,
+                    showCursor: false,
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      _openSearch();
+                    },
+                    decoration: InputDecoration(
+                      hintText: tr('searchWord'),
+                      prefixIcon:
+                          const LucideIcon(LucideIcons.search, size: 18),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 10),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: ListView(
+                    padding: EdgeInsets.zero,
+                    children: [
+              // Cabecera del menú: altura LIBRE (fix2, auditoría).
+              // El DrawerHeader de Flutter tiene altura fija (160) y
+              // el subtítulo, si se parte en 2 líneas, lo desbordaba
+              // 11 px: con fuente grande o en otro idioma se cortaba
+              // el texto. Este Container crece con su contenido.
+              Container(
+                width: double.infinity,
                 decoration: BoxDecoration(
                   color: scheme.primary.withValues(alpha: 0.15),
+                  border: Border(
+                    bottom: Divider.createBorderSide(context),
+                  ),
                 ),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const BrandLogo(size: 56),
+                    // Fix3, punto 6: logo panorámico recortado a las
+                    // gemelas (ancho 60, alto ~24), no el cuadrado
+                    // marrón de 56 que dominaba la cabecera.
+                    const BrandLogo(size: 60),
                     const SizedBox(height: 10),
-                    const Text('Melli-Qui',
+                    const Text('Quemia',
                         style: TextStyle(
                             fontSize: 22, fontWeight: FontWeight.bold)),
                     Text(tr('appSubtitle')),
@@ -913,7 +1285,7 @@ class _HomeScreenState extends State<HomeScreen> {
               _drawerItem(
                 icon: LucideIcons.network,
                 title: tr('menuBranches'),
-                subtitle: 'Orgánica, Inorgánica, Analítica, Fisicoquímica',
+                subtitle: 'Orgánica, Inorgánica, Analítica, Química física',
                 onTap: () => _openScreenKey('branches'),
               ),
               _drawerItem(
@@ -922,13 +1294,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 subtitle: 'Seguridad, cuestionario y simulador',
                 onTap: () => _openScreenKey('lab'),
               ),
+              // Fix3 (segunda pasada): el simulador NO va como
+              // entrada aparte en el menú — ya estaba duplicado:
+              // "Laboratorio" dice "Seguridad, cuestionario y
+              // simulador" y el simulador es la PRIMERA tarjeta de
+              // la pantalla Laboratorio. La vía de acceso sigue
+              // siendo esa tarjeta (y la búsqueda y Resolver, que
+              // usan la ruta 'labSim', que se conserva).
               _drawerSection(tr('drawerPractice')),
-              _drawerItem(
-                icon: LucideIcons.layers,
-                title: tr('flashcardsTitle'),
-                subtitle: tr('flashcardsSub'),
-                onTap: () => _openScreenKey('flashcards'),
-              ),
               _drawerItem(
                 icon: LucideIcons.timer,
                 title: tr('timedTitle'),
@@ -984,23 +1357,50 @@ class _HomeScreenState extends State<HomeScreen> {
                 subtitle: 'Tus notas por tema',
                 onTap: () => _openScreenKey('notes'),
               ),
-              _drawerItem(
-                icon: LucideIcons.flaskConical,
-                title: tr('labSimTitle'),
-                subtitle: 'Mezcla ácidos, bases e indicadores',
-                onTap: () => _openScreenKey('labSim'),
-              ),
-              _drawerSection(tr('searchWord')),
-              _drawerItem(
-                icon: LucideIcons.search,
-                title: tr('searchWord'),
-                subtitle: 'Temas, elementos, fórmulas y pantallas',
-                onTap: _openSearch,
-              ),
-            ],
+                    ],
+                  ),
+                ),
+                // Soporte al PIE del menú (fix2, ronda 2): el botón
+                // flotante verde tapaba contenido en Niveles y en
+                // Tabla, así que vive aquí, fijo abajo, con el logo
+                // de WhatsApp. Abre lo mismo de siempre (wa.me con
+                // lanzamiento en dos pasos).
+                const Divider(height: 1),
+                ListTile(
+                  // El logo de WhatsApp es el glifo BLANCO (estaba
+                  // pensado para el pill verde): sobre el fondo
+                  // blanco del drawer era invisible. Va dentro de su
+                  // círculo verde #25D366, visible en claro y oscuro.
+                  leading: Container(
+                    width: 32,
+                    height: 32,
+                    alignment: Alignment.center,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF25D366),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Image(
+                      image: AssetImage('assets/whatsapp.png'),
+                      width: 20,
+                      height: 20,
+                    ),
+                  ),
+                  title: Text(tr('supportWord'),
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: Text(tr('writeWhatsApp')),
+                  trailing:
+                      const LucideIcon(LucideIcons.chevronRight, size: 18),
+                  onTap: () {
+                    SoundService.tap();
+                    Navigator.of(context).pop();
+                    _openWhatsApp(context);
+                  },
+                ),
+              ],
+            ),
           ),
         ),
-        appBar: AppBar(
+        appBar: _inSession ? null : AppBar(
           leading: Builder(
             builder: (context) => IconButton(
               icon: const LucideIcon(LucideIcons.menu),
@@ -1008,31 +1408,12 @@ class _HomeScreenState extends State<HomeScreen> {
               onPressed: () => Scaffold.of(context).openDrawer(),
             ),
           ),
-          title: Row(
-            children: [
-              const BrandLogo(size: 36),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(_titles[_index]),
-                    if (UserPrefs.userName.isNotEmpty)
-                      Text(
-                        greeting,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.normal,
-                          color: scheme.onSurface.withValues(alpha: 0.7),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+          // Sin título de texto en la barra (fix3, punto 6,
+          // ampliación): el nombre de la pantalla ("Niveles",
+          // "Tabla"...) se recortaba ("Ni...") y ya está como
+          // título grande dentro del contenido de cada pestaña.
+          // La barra queda solo con sus controles: menú, vidas,
+          // repaso y campana.
           actions: [
             // Chip de vidas junto al saludo (corazón + número, fix 1):
             // siempre visible en las 5 pestañas. Se actualiza solo
@@ -1048,31 +1429,31 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
-            // Tu avatar junto al saludo: toca para abrir tu Cuenta.
-            if (UserPrefs.userName.isNotEmpty)
-              IconButton(
-                tooltip: tr('accountTitle'),
-                onPressed: () => _goToTab(4),
-                icon: MelliAvatar(
-                  avatarId: UserPrefs.avatar.isNotEmpty &&
-                          MelliAvatar.isValidId(UserPrefs.avatar)
-                      ? UserPrefs.avatar
-                      : MelliAvatar.defaultForGender(UserPrefs.userGender),
-                  size: 30,
+            // Repasar mis errores (fix2, item 2): entrada visible en
+            // la barra de arriba, estilo Duolingo, junto a la campana
+            // de notificaciones. El numerito es la cantidad de errores
+            // por repasar; sin errores, avisa y no abre nada.
+            // El avatar del usuario ya NO está aquí (fix2, item 6).
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.only(right: 2),
+                child: ValueListenableBuilder<int>(
+                  valueListenable: ProgressService.failedNotifier,
+                  builder: (context, _, __) => _ReviewChip(
+                    count: ProgressService.instance.failedCount,
+                    onTap: _startReviewFromAppBar,
+                  ),
                 ),
               ),
-            IconButton(
-              tooltip: tr('searchWord'),
-              onPressed: _openSearch,
-              icon: const LucideIcon(LucideIcons.search),
             ),
+            // Campana de notificaciones (fix2, item 2): abre los
+            // recordatorios (avisos del sistema).
             IconButton(
-              tooltip: widget.isDark ? tr('lightWord') : tr('darkWord'),
-              onPressed: widget.onToggleTheme,
-              icon: _ThemeToggleIcon(isDark: widget.isDark),
+              tooltip: tr('notifTitle'),
+              onPressed: () => _openScreenKey('reminder'),
+              icon: const LucideIcon(LucideIcons.bell),
             ),
           ],
-          centerTitle: false,
         ),
         body: SafeArea(
           // Cambio de pestaña con fundido + deslizamiento suave.
@@ -1094,50 +1475,54 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
-        bottomNavigationBar: NavigationBar(
+        bottomNavigationBar: _inSession ? null : NavigationBar(
           selectedIndex: _index,
           onDestinationSelected: (i) {
             SoundService.tap();
             setState(() => _index = i);
           },
-          // Barra blanca; cada pestaña tiene su color al estar
-          // seleccionada (Niveles teal, Resolver violeta, Aprender
-          // ámbar, Tabla azul, Cuenta coral) y gris si no lo está.
-          indicatorColor: BrandColors.teal.withValues(alpha: 0.15),
+          // Barra blanca; la pestaña seleccionada lleva su color
+          // (fix2, items 8 y 12): verde en modo oscuro, el color
+          // propio de cada pestaña con el acento verde, o violeta
+          // para todas con el acento violeta; gris si no está.
+          indicatorColor: (widget.isDark
+                  ? BrandColors.mintLight
+                  : AppAccent.primary)
+              .withValues(alpha: 0.15),
           destinations: [
             NavigationDestination(
               icon: const LucideIcon(LucideIcons.route,
                   color: Color(0xFF9CA3AF)),
-              selectedIcon:
-                  const LucideIcon(LucideIcons.route, color: BrandColors.teal),
+              selectedIcon: LucideIcon(LucideIcons.route,
+                  color: tabColors[0], threeD: true),
               label: tr('tabLevels'),
             ),
             NavigationDestination(
               icon: const LucideIcon(LucideIcons.calculator,
                   color: Color(0xFF9CA3AF)),
-              selectedIcon:
-                  const LucideIcon(LucideIcons.calculator, color: BrandColors.violet),
+              selectedIcon: LucideIcon(LucideIcons.calculator,
+                  color: tabColors[1], threeD: true),
               label: tr('tabResolver'),
             ),
             NavigationDestination(
               icon: const LucideIcon(LucideIcons.bookOpen,
                   color: Color(0xFF9CA3AF)),
-              selectedIcon:
-                  const LucideIcon(LucideIcons.bookOpen, color: BrandColors.amber),
+              selectedIcon: LucideIcon(LucideIcons.bookOpen,
+                  color: tabColors[2], threeD: true),
               label: tr('tabLearn'),
             ),
             NavigationDestination(
               icon: const LucideIcon(LucideIcons.layoutGrid,
                   color: Color(0xFF9CA3AF)),
-              selectedIcon:
-                  const LucideIcon(LucideIcons.layoutGrid, color: BrandColors.blue),
+              selectedIcon: LucideIcon(LucideIcons.layoutGrid,
+                  color: tabColors[3], threeD: true),
               label: tr('tabTable'),
             ),
             NavigationDestination(
               icon: const LucideIcon(LucideIcons.userRound,
                   color: Color(0xFF9CA3AF)),
-              selectedIcon:
-                  const LucideIcon(LucideIcons.userRound, color: BrandColors.coral),
+              selectedIcon: LucideIcon(LucideIcons.userRound,
+                  color: tabColors[4], threeD: true),
               label: tr('accountTitle'),
             ),
           ],

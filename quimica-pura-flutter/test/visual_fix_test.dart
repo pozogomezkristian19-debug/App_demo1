@@ -57,7 +57,7 @@ void main() {
   });
 
   testWidgets(
-      'fix 3+4: Niveles sin tarjeta de estadísticas y 3 tarjetas iguales',
+      'fix 3+4: Niveles sin tarjeta de estadísticas y 2 tarjetas iguales',
       (tester) async {
     tester.view.physicalSize = const Size(800, 1800);
     tester.view.devicePixelRatio = 1.0;
@@ -86,7 +86,7 @@ void main() {
     // Quedan el banner de la gemela y la pregunta del día.
     expect(find.textContaining('Hoy te acompaña'), findsOneWidget);
     expect(find.text('Pregunta del día'), findsOneWidget);
-    // Las tres tarjetas miden exactamente lo mismo.
+    // Las dos tarjetas miden exactamente lo mismo.
     Size cardSize(String title) {
       final card = find.ancestor(
         of: find.text(title),
@@ -95,13 +95,10 @@ void main() {
       return tester.getSize(card);
     }
 
-    final a = cardSize('Tarjetas de memoria');
-    final b = cardSize('Examen con tiempo');
-    final c = cardSize('Reto');
+    final a = cardSize('Examen con tiempo');
+    final b = cardSize('Reto');
     expect(a.width, moreOrLessEquals(b.width, epsilon: 0.5));
-    expect(a.width, moreOrLessEquals(c.width, epsilon: 0.5));
     expect(a.height, moreOrLessEquals(b.height, epsilon: 0.5));
-    expect(a.height, moreOrLessEquals(c.height, epsilon: 0.5));
   });
 
   testWidgets('fix 3: Cuenta tiene UNA tarjeta de estadísticas, sin duplicar',

@@ -1,6 +1,12 @@
 // Pantalla Cuenta (v6, rediseño claro 2026-11-10): el perfil del usuario.
-// - Avatar de la gemela del día (Brenda/Britany, ilustrado), nombre,
-//   saludo y selector del avatar propio del usuario.
+// - Cabecera con la FOTO de la compañera del día (48 px, con su aro
+//   de color, junto a la línea "Hoy te acompaña [nombre]") + título
+//   "Cuenta" y saludo con el nombre. Sin etiqueta de nombre bajo la
+//   foto: el nombre ya está en la línea, no se repite.
+// - El avatar del USUARIO (su foto y el selector) sigue QUITADO
+//   (fix2, item 6): eso fue lo único que Kristian pidió quitar. La
+//   foto de la compañera del día NO es el avatar del usuario y se
+//   queda (corrección fix3: un agente anterior la quitó por error).
 // - La tarjeta de estadísticas (Vidas/Puntos/Racha/Meta del día/
 //   Logros) vive AHORA aquí, debajo de la cabecera (fix 3): antes
 //   estaba en Niveles, y la cabecera tenía su propia fila de
@@ -24,12 +30,12 @@ import '../services/localization.dart';
 import '../services/progress.dart';
 import '../services/sound_service.dart';
 import '../services/user_prefs.dart';
-import '../widgets/avatar.dart';
 import '../widgets/brand_logo.dart';
 import '../widgets/how_to_play.dart';
 import '../widgets/icon_animations.dart';
 import '../widgets/stats_card.dart';
 import '../widgets/twin_avatars.dart';
+import 'theme_screen.dart';
 
 /// Tokens claros (paleta propia de Melli-Qui, sin verde Duolingo):
 /// teal #00C2A8 como color principal, teal oscuro #00A18D.
@@ -42,6 +48,47 @@ const _violet = Color(0xFF8B5CF6);
 const _blue = Color(0xFF3B82F6);
 const _amber = Color(0xFFF59E0B);
 
+/// Colores de Cuenta según el tema (auditoría fix2): en claro son los
+/// de siempre (fondo blanco, tarjeta #F7F7F7, tinta oscura); en oscuro
+/// son verdes oscuros, para que Cuenta no se quede blanca en modo
+/// oscuro (item 8: oscuro verde, sin violeta/azul/ámbar). Las
+/// gemelas (Brenda violeta, Britany azul) NO cambian: son las
+/// mascotas, no el acento del tema.
+class _CuentaColors {
+  const _CuentaColors({
+    required this.bg,
+    required this.card,
+    required this.ink,
+    required this.inkSoft,
+    required this.border,
+  });
+
+  factory _CuentaColors.of(BuildContext context) {
+    if (Theme.of(context).brightness == Brightness.dark) {
+      return const _CuentaColors(
+        bg: Color(0xFF0A1F1A),
+        card: Color(0xFF122B24),
+        ink: Colors.white,
+        inkSoft: Color(0xFFB8CFC8),
+        border: Color(0xFF1E4D42),
+      );
+    }
+    return const _CuentaColors(
+      bg: Colors.white,
+      card: _card,
+      ink: _ink,
+      inkSoft: _inkSoft,
+      border: _border,
+    );
+  }
+
+  final Color bg;
+  final Color card;
+  final Color ink;
+  final Color inkSoft;
+  final Color border;
+}
+
 class AccountScreen extends StatefulWidget {
   const AccountScreen({
     super.key,
@@ -52,7 +99,7 @@ class AccountScreen extends StatefulWidget {
   });
 
   /// Abre una pantalla por su clave ('language', 'stats', 'version',
-  /// 'review', 'favorites', 'reminder').
+  /// 'review', 'favorites', 'reminder', 'theme').
   final void Function(String key) onOpenScreen;
   final VoidCallback onShowAbout;
   final VoidCallback onShowShareApp;
@@ -75,26 +122,40 @@ class _AccountScreenState extends State<AccountScreen> {
   @override
   Widget build(BuildContext context) {
     final p = ProgressService.instance;
-    // La gemela del día: su avatar ilustrado preside la cabecera.
-    final twinA = twinOfTheDay();
-    final twinAccent = twinA ? _violet : _blue;
+    // Colores según el tema (auditoría fix2): en oscuro, Cuenta es
+    // verde oscura, no blanca.
+    final c = _CuentaColors.of(context);
+    // La compañera del día (API nueva: los tres, incluido Kristian):
+    // su foto de 48 px con el aro de su color, junto a la línea
+    // "Hoy te acompaña…". El avatar del USUARIO y su selector siguen
+    // quitados (fix2, item 6: eso fue lo único que pidió quitar);
+    // la foto de la compañera no es el avatar del usuario.
+    final companion = companionOfTheDay();
+    final accent = companionAccent(companion);
     final genderLabel = UserPrefs.userGender.isEmpty
         ? ''
         : ' · ${UserPrefs.userGender}';
 
     return Container(
-      color: Colors.white,
+      color: c.bg,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 90),
         children: [
-          // Cabecera del perfil: avatar + nombre + saludo + selector
-          // de avatar. Compacta: las estadísticas ya no van aquí
-          // dentro, van en la tarjeta de abajo (fix 3).
+          // Cabecera del perfil: foto de la compañera del día (48 px,
+          // con su aro de color, auditoría de tamaños: como el
+          // banner de Niveles 36 y la burbuja 52, 48 es la foto de
+          // cabecera de perfil) JUNTO A los textos — título
+          // "Cuenta", saludo con el nombre ("Bienvenido/a [nombre]"
+          // o "Hola" sin nombre) y la línea "Hoy te acompaña…".
+          // Sin nombre bajo la foto: el nombre ya está en la línea.
+          // El avatar del usuario y su selector NO están aquí
+          // (quitados en fix2, item 6). Las estadísticas van en la
+          // tarjeta de abajo (fix 3).
           Container(
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: c.bg,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: _border),
+              border: Border.all(color: c.border),
               boxShadow: const [
                 BoxShadow(
                   color: Color(0x14000000),
@@ -104,73 +165,40 @@ class _AccountScreenState extends State<AccountScreen> {
               ],
             ),
             padding: const EdgeInsets.all(16),
-            child: Column(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Row(
-                  children: [
-                    Column(
-                      children: [
-                        Container(
-                          width: 84,
-                          height: 84,
-                          decoration: BoxDecoration(
-                            color: twinAccent.withValues(alpha: 0.12),
-                            shape: BoxShape.circle,
-                          ),
-                          alignment: Alignment.center,
-                          child: twinA
-                              ? const TwinAvatarA(size: 72)
-                              : const TwinAvatarB(size: 72),
+                CompanionAvatar(companion: companion, size: 48),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        tr('accountTitle'),
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: c.ink,
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          twinName(twinA),
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: twinAccent,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            UserPrefs.userName.isEmpty
-                                ? tr('accountTitle')
-                                : UserPrefs.userName,
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: _ink,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '${UserPrefs.greeting}$genderLabel',
-                            style: const TextStyle(color: _inkSoft),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            tr(twinOfDayKey(twinA)),
-                            style: TextStyle(
-                              color: twinAccent,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 2),
+                      Text(
+                        '${UserPrefs.greeting}$genderLabel',
+                        style: TextStyle(color: c.inkSoft),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        tr(companionOfDayKey(companion)),
+                        style: TextStyle(
+                          color: accent,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 12),
-                const Divider(height: 1, color: _border),
-                const SizedBox(height: 12),
-                _AvatarPickerRow(onChanged: () => setState(() {})),
               ],
             ),
           ),
@@ -183,6 +211,27 @@ class _AccountScreenState extends State<AccountScreen> {
             child: StatsCard(
               achievementsLabel:
                   '$_achievementsUnlocked/${allAchievements.length}',
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Tema (fix3, último cambio de la ronda): ya NO es una
+          // tarjeta inline en Cuenta. Es una fila táctil como las
+          // demás, con el subtítulo de la selección actual (p. ej.
+          // "Verde · Claro"), que abre su propia pantalla dedicada
+          // (ThemeScreen) con el color y el modo. El subtítulo se
+          // reconstruye solo al cambiar el tema (los dos notifiers)
+          // sin falta de volver a entrar a Cuenta.
+          ListenableBuilder(
+            listenable: Listenable.merge([
+              UserPrefs.themeAccentNotifier,
+              UserPrefs.themeModeNotifier,
+            ]),
+            builder: (context, _) => _Row(
+              icon: LucideIcons.sparkles,
+              iconColor: _violet,
+              title: tr('themeTitle'),
+              subtitle: themeSelectionSubtitle(),
+              onTap: () => widget.onOpenScreen('theme'),
             ),
           ),
           const SizedBox(height: 16),
@@ -270,14 +319,14 @@ class _AccountScreenState extends State<AccountScreen> {
               children: [
                 const BrandLogo(size: 28),
                 const SizedBox(width: 8),
-                const Text(
-                  'Melli-Qui',
+                Text(
+                  'Quemia',
                   style:
-                      TextStyle(fontWeight: FontWeight.bold, color: _ink),
+                      TextStyle(fontWeight: FontWeight.bold, color: c.ink),
                 ),
                 Text(
                   ' · ${tr('creatorWord')}: CraigKamer',
-                  style: const TextStyle(color: _inkSoft),
+                  style: TextStyle(color: c.inkSoft),
                 ),
               ],
             ),
@@ -305,8 +354,15 @@ class _Row extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = _CuentaColors.of(context);
+    // En modo oscuro, los iconos son verdes (item 8): nada de
+    // violeta, azul ni ámbar en oscuro.
+    final iconColor =
+        Theme.of(context).brightness == Brightness.dark
+            ? BrandColors.mintLight
+            : this.iconColor;
     return Card(
-      color: _card,
+      color: c.card,
       elevation: 0,
       margin: const EdgeInsets.only(bottom: 10),
       shape: RoundedRectangleBorder(
@@ -327,83 +383,16 @@ class _Row extends StatelessWidget {
           child: LucideIcon(icon, color: iconColor, size: 22),
         ),
         title: Text(title,
-            style: const TextStyle(
-                fontWeight: FontWeight.w600, color: _ink)),
-        subtitle: Text(subtitle, style: const TextStyle(color: _inkSoft)),
-        trailing: const LucideIcon(LucideIcons.chevronRight, size: 18, color: _inkSoft),
+            style: TextStyle(
+                fontWeight: FontWeight.w600, color: c.ink)),
+        subtitle: Text(subtitle, style: TextStyle(color: c.inkSoft)),
+        trailing: LucideIcon(LucideIcons.chevronRight, size: 18, color: c.inkSoft),
         onTap: () {
           SoundService.tap();
           onTap();
         },
         ),
       ),
-    );
-  }
-}
-
-/// Selector del avatar propio del usuario (3 estilos por género,
-/// guardado en UserPrefs.avatar). Se muestra en línea dentro de la
-/// cabecera de Cuenta, para que el avatar por género siga teniendo
-/// entrada visible: el elegido queda marcado con el anillo teal.
-class _AvatarPickerRow extends StatelessWidget {
-  const _AvatarPickerRow({required this.onChanged});
-
-  final VoidCallback onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final styles = MelliAvatar.stylesForGender(UserPrefs.userGender);
-    final current = MelliAvatar.isValidId(UserPrefs.avatar)
-        ? UserPrefs.avatar
-        : MelliAvatar.defaultForGender(UserPrefs.userGender);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          tr('accountAvatarTitle'),
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.bold,
-            color: _ink,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            for (final id in styles)
-              Padding(
-                padding: const EdgeInsets.only(right: 12),
-                child: GestureDetector(
-                  onTap: () {
-                    SoundService.tap();
-                    UserPrefs.saveAvatar(id);
-                    onChanged();
-                  },
-                  child: Container(
-                    width: 52,
-                    height: 52,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: id == current ? _teal : _border,
-                        width: id == current ? 3 : 1.5,
-                      ),
-                    ),
-                    child: ClipOval(
-                      child: MelliAvatar(avatarId: id, size: 48),
-                    ),
-                  ),
-                ),
-              ),
-            Expanded(
-              child: Text(
-                tr('accountChangeAvatar'),
-                style: const TextStyle(fontSize: 13, color: _inkSoft),
-              ),
-            ),
-          ],
-        ),
-      ],
     );
   }
 }

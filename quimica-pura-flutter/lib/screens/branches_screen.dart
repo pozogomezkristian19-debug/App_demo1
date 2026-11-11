@@ -62,7 +62,7 @@ const List<Branch> branches = [
   ),
   Branch(
     slug: 'fisicoquimica',
-    title: 'Fisicoquímica',
+    title: 'Química física',
     body: 'La física detrás de la química: energía, gases y velocidad.',
     icon: LucideIcons.thermometer,
     color: Color(0xFFEF4444),
@@ -80,8 +80,9 @@ class BranchesScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Text(
+          Text(
             'La química se divide en ramas. Cada una tiene sus temas, sus fórmulas y sus ejemplos.',
+            style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 12),
           for (final b in branches)
@@ -97,6 +98,20 @@ class BranchesScreen extends StatelessWidget {
                 subtitle: Text(b.body),
                 trailing: const LucideIcon(LucideIcons.chevronRight),
                 onTap: () {
+                  // Ronda #3, punto 17: si la rama tiene un solo tema,
+                  // se abre el detalle de ese tema directamente, sin
+                  // la pantalla intermedia de la rama (que solo
+                  // repetiría el mismo nombre en una tarjeta).
+                  if (b.topicSlugs.length == 1) {
+                    final topic = findTopic(b.topicSlugs.first);
+                    if (topic != null) {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                            builder: (_) => TopicDetailScreen(topic: topic)),
+                      );
+                      return;
+                    }
+                  }
                   Navigator.of(context).push(
                     MaterialPageRoute(
                         builder: (_) => BranchDetailScreen(branch: b)),
@@ -134,7 +149,9 @@ class BranchDetailScreen extends StatelessWidget {
                 child: LucideIcon(branch.icon, color: branch.color, size: 28),
               ),
               const SizedBox(width: 12),
-              Expanded(child: Text(branch.body)),
+              Expanded(
+                  child: Text(branch.body,
+                      style: Theme.of(context).textTheme.bodyMedium)),
             ],
           ),
           const SizedBox(height: 16),

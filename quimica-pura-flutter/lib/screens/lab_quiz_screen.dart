@@ -13,7 +13,9 @@ import '../data/i18n/content_i18n.dart';
 import '../data/questions.dart';
 import '../models.dart';
 import '../services/localization.dart';
+import '../services/numeric_answer.dart';
 import '../services/progress.dart';
+import '../widgets/numeric_keypad.dart';
 
 class LabQuizPage extends StatefulWidget {
   const LabQuizPage({super.key});
@@ -74,6 +76,17 @@ class _LabQuizPageState extends State<LabQuizPage> {
     }
   }
 
+  /// Respuesta de una pregunta de cálculo (fix3, punto 7): el valor
+  /// tecleado en el teclado numérico se traduce al índice de opción
+  /// que le corresponde y pasa por el mismo `_answer` de siempre.
+  /// Hoy el cuestionario es solo del banco (ninguna pregunta es de
+  /// cálculo), pero si una generada llegara aquí, ya funcionaría.
+  void _answerNumeric(double value) {
+    if (_selected != null) return;
+    _answer(displayedIndexForNumericAnswer(
+        typed: value, question: _q, order: _order));
+  }
+
   void _next() {
     if (_index + 1 >= _questions.length) {
       setState(() => _finished = true);
@@ -83,6 +96,37 @@ class _LabQuizPageState extends State<LabQuizPage> {
         _shuffleOptions();
       });
     }
+  }
+
+  /// Salir en medio del cuestionario (fix2, ronda 2): cuesta 1 vida,
+  /// igual que abandonar un nivel, así que se pide confirmación
+  /// antes de salir. Es el mismo aviso del quiz de Niveles.
+  void _requestExit() {
+    if (_finished) {
+      Navigator.of(context).pop();
+      return;
+    }
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(tr('exitLevelTitle')),
+        content: Text(tr('exitLevelBody')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(tr('exitLevelStay')),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              ProgressService.instance.loseLifeOnAbandon();
+              Navigator.of(context).pop();
+            },
+            child: Text(tr('exitLevelLeave')),
+          ),
+        ],
+      ),
+    );
   }
 
   void _repeat() {
@@ -100,7 +144,16 @@ class _LabQuizPageState extends State<LabQuizPage> {
   @override
   Widget build(BuildContext context) {
     final total = _questions.length;
-    return Scaffold(
+    // Bloqueo de sesión (fix2, ronda 2): mientras el cuestionario
+    // está en curso, ni el botón atrás ni la flecha de la barra
+    // pueden cerrarlo directamente: muestran el aviso de Salir con
+    // pérdida de vida. Terminado, se sale libre.
+    return PopScope(
+      canPop: _finished,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && !_finished) _requestExit();
+      },
+      child: Scaffold(
       appBar: AppBar(title: Text(tr('labQuizButton'))),
       body: _finished
           ? Padding(
@@ -147,8 +200,11 @@ class _LabQuizPageState extends State<LabQuizPage> {
                     ),
                     const SizedBox(width: 8),
                     OutlinedButton.icon(
-                      onPressed: () => Navigator.of(context).pop(),
-                      icon: const LucideIcon(LucideIcons.logOut, size: 20),
+                      onPressed: _requestExit,
+                      // Icono 3D (fix3, punto 6): degradado del
+                      // color del botón, glifo sin cambiar.
+                      icon: const LucideIcon(LucideIcons.logOut,
+                          size: 20, threeD: true),
                       label: Text(tr('quizExit'),
                           style: const TextStyle(fontSize: 16)),
                       style: OutlinedButton.styleFrom(
@@ -165,7 +221,18 @@ class _LabQuizPageState extends State<LabQuizPage> {
                     style: const TextStyle(
                         fontSize: 19, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 16),
-                for (var i = 0; i < 4; i++)
+                // Pregunta de cálculo (fix3, punto 7): las 4 opciones
+                // dejan paso al teclado numérico, abierto desde el
+                // principio. Las conceptuales siguen con las opciones.
+                if (_q.isNumeric)
+                  NumericKeypad(
+                    key: ValueKey('lab-$_index'),
+                    unit: _q.numericUnit,
+                    enabled: _selected == null,
+                    onSubmit: _answerNumeric,
+                  )
+                else
+                  for (var i = 0; i < 4; i++)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: ElevatedButton(
@@ -181,6 +248,13 @@ class _LabQuizPageState extends State<LabQuizPage> {
                                     : Theme.of(context)
                                         .colorScheme
                                         .surfaceContainerHighest)),
+                        // Texto legible (capturas 2026-11-10): sobre
+                        // fondo claro va tinta oscura; sobre teal o
+                        // rojo, blanco. Sin esto heredaba blanco.
+                        foregroundColor: _selected != null &&
+                                (_order[i] == _q.answer || _selected == i)
+                            ? Colors.white
+                            : Theme.of(context).colorScheme.onSurface,
                         alignment: Alignment.centerLeft,
                         padding: const EdgeInsets.all(14),
                       ),
@@ -223,6 +297,7 @@ class _LabQuizPageState extends State<LabQuizPage> {
                 ],
               ],
             ),
+      ),
     );
   }
 }

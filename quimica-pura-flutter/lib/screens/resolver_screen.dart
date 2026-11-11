@@ -212,6 +212,20 @@ class _ResolverScreenState extends State<ResolverScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _consumeNavRequests();
+  }
+
+  @override
+  void didUpdateWidget(ResolverScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _consumeNavRequests();
+  }
+
+  /// Consume la petición de abrir un solucionador (NavRequests).
+  /// Antes solo se miraba en didChangeDependencies: si ya estabas
+  /// en Resolver al pedirlo desde la búsqueda, no se abría nada
+  /// (auditoría fix2).
+  void _consumeNavRequests() {
     // Petición de la búsqueda: abrir un solucionador por su título.
     final title = NavRequests.openSolverTitle;
     if (title != null) {
@@ -338,10 +352,12 @@ class _LogoHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Column(
       children: [
-        BrandLogo(size: 96),
+        // Fix3, punto 6: logo panorámico recortado a las gemelas
+        // (ancho 80, alto ~32), no el cuadrado marrón de 96.
+        BrandLogo(size: 80),
         SizedBox(height: 8),
         Text(
-          'Melli-Qui',
+          'Quemia',
           style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
         ),
         Text('Química Pura — Universidad'),

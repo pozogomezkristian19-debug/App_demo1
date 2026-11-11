@@ -83,9 +83,9 @@ const List<ActivityEntry> metalActivitySeries = [
     reaction: 'Reacciona con ácidos diluidos (lentamente)',
   ),
   ActivityEntry(
-    symbol: 'H₂',
+    symbol: 'H',
     name: 'Hidrógeno (referencia)',
-    reaction: 'Límite: los metales de arriba desplazan al H₂ de los ácidos',
+    reaction: 'Límite: los metales de arriba desplazan al H de los ácidos',
   ),
   ActivityEntry(
     symbol: 'Cu',

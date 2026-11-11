@@ -2,8 +2,19 @@
     <!-- Permiso para las notificaciones locales (Android 13+ lo pide
          al activar el recordatorio; en versiones viejas no hace falta). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Alarmas exactas (Android 12+): sin este permiso, Doze
+         retrasa las alarmas inexactas horas. En Android 14+ el
+         usuario lo concede en ajustes (lo pide la app al activar los
+         recordatorios); sin él se usan alarmas inexactas. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- Instalar actualizaciones descargadas por la propia app
+         (fix3, punto 20): sin Google Play, Melli-Qui descarga el APK
+         y pide instalarlo con el instalador del sistema. En Android
+         8+ el usuario concede "Instalar apps desconocidas" para
+         Melli-Qui; sin ese ajuste, el sistema bloquea la instalación. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <application
-        android:label="Melli-Qui"
+        android:label="Quemia"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -33,13 +44,26 @@
              Lo pinta MelliQuiWidgetProvider (Kotlin, RemoteViews). -->
         <receiver android:name=".MelliQuiWidgetProvider"
             android:exported="true"
-            android:label="Melli-Qui">
+            android:label="Quemia">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data android:name="android.appwidget.provider"
                 android:resource="@xml/melli_qui_widget" />
         </receiver>
+        <!-- FileProvider para el instalador de actualizaciones
+             (fix3, punto 20): el APK descargado se abre con el
+             instalador del sistema. La autoridad es
+             <applicationId>.fileprovider. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

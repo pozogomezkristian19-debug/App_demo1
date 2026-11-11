@@ -31,7 +31,7 @@ class MelliQuiWidgetProvider : HomeWidgetProvider() {
 
             setTextViewText(
                 R.id.widget_qotd,
-                widgetData.getString("qotd", null) ?: "Melli-Qui",
+                widgetData.getString("qotd", null) ?: "Quemia",
             )
             setTextViewText(
                 R.id.widget_streak,

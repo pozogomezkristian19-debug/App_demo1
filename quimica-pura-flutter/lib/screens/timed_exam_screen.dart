@@ -1,7 +1,7 @@
 // Examen con tiempo (v6): el usuario elige cuánto dura antes de
 // empezar — 5, 10, 15, 20, 25 o 30 minutos — y responde LA MAYOR
 // CANTIDAD de preguntas posible en ese tiempo. No hay un número fijo
-// de preguntas: la lista es el banco entero (175) más preguntas nuevas
+// de preguntas: la lista es el banco entero (210) más preguntas nuevas
 // generadas, para que no se acabe nunca antes que el tiempo. Cuando se
 // acaba el tiempo, se entrega solo y el resultado muestra cuántas
 // respondió, cuántas correctas y los puntos (sistema de la v6, por
@@ -91,8 +91,12 @@ class _TimedExamScreenState extends State<TimedExamScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Fix3, punto 4: la AppBar ya no lleva título — el encabezado
+    // del contenido ("Examen con tiempo") es el único título, para
+    // que no salga dos veces.
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(title: Text(tr('timedTitle'))),
+      appBar: AppBar(),
       body: _started
           ? SimpleQuizRunner(
               title: tr('timedTitle'),
@@ -112,7 +116,24 @@ class _TimedExamScreenState extends State<TimedExamScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const LucideIcon(LucideIcons.timer, size: 64, color: Colors.teal),
+                // El temporizador, en su propio círculo tintado
+                // (auditoría): un LucideIcon suelto en una Column
+                // con stretch se estira a todo el ancho y se dibuja
+                // gigante detrás del texto (lo mismo que el mando
+                // del Reto y el trofeo del resultado).
+                Center(
+                  child: Container(
+                    width: 96,
+                    height: 96,
+                    decoration: BoxDecoration(
+                      color: Colors.teal.withValues(alpha: 0.14),
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: const LucideIcon(LucideIcons.timer,
+                        size: 48, color: Colors.teal),
+                  ),
+                ),
                   const SizedBox(height: 16),
                   Text(
                     tr('timedTitle'),
@@ -155,9 +176,26 @@ class _TimedExamScreenState extends State<TimedExamScreen> {
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 24),
-                  ElevatedButton(
+                  // Fix3, punto 4: acción principal como pastilla
+                  // teal RELLENA, como los demás CTAs. Antes era un
+                  // ElevatedButton sin estilo propio: fuera del tema
+                  // de la app (y en el preview) se veía como una
+                  // pastilla con borde, débil para ser el botón
+                  // principal. El color sale del tema (teal/violeta
+                  // en claro, menta en oscuro) con su onPrimary.
+                  FilledButton(
                     onPressed: () => setState(() => _started = true),
-                    child: Text(tr('timedStart')),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: scheme.primary,
+                      foregroundColor: scheme.onPrimary,
+                      shape: const StadiumBorder(),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 14),
+                    ),
+                    child: Text(
+                      tr('timedStart'),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ],
               ),

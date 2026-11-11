@@ -4,10 +4,10 @@ import '../data/i18n/content_i18n.dart';
 import '../data/topics.dart';
 import '../services/localization.dart';
 import '../services/progress.dart';
-import '../widgets/molecule_diagrams.dart';
 import 'glossary_screen.dart';
 import 'notes_screen.dart';
 import 'tips_screen.dart';
+import 'topic_detail_screen.dart';
 
 class AprenderScreen extends StatefulWidget {
   const AprenderScreen({super.key});
@@ -19,15 +19,20 @@ class _AprenderScreenState extends State<AprenderScreen> {
   @override
   Widget build(BuildContext context) {
     final progress = ProgressService.instance;
+    // Título e introducción con el estilo explícito del tema (igual
+    // que en Tips): sin estilo, el texto depende del DefaultTextStyle
+    // ambiente y puede pintarse roto; con bodyMedium/titleLarge es
+    // siempre el cuerpo normal de la app, en claro y en oscuro.
+    final theme = Theme.of(context);
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         Text(
           tr('learnTitle'),
-          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          style: theme.textTheme.titleLarge,
         ),
         const SizedBox(height: 6),
-        Text(tr('learnIntro')),
+        Text(tr('learnIntro'), style: theme.textTheme.bodyMedium),
         const SizedBox(height: 12),
         // Glosario y cuaderno: antes solo se llegaba desde la búsqueda.
         Row(
@@ -79,7 +84,7 @@ class _AprenderScreenState extends State<AprenderScreen> {
         const SizedBox(height: 12),
         Text(
           tr('formulary'),
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          style: theme.textTheme.titleMedium,
         ),
         const SizedBox(height: 8),
         Card(
@@ -113,79 +118,52 @@ class _AprenderScreenState extends State<AprenderScreen> {
         // Aprender guarda los temas de estudio principales. Orgánica y
         // Laboratorio viven en el menú de hamburguesa (Ramas y
         // Laboratorio), no aquí, para que nada esté escondido.
+        // Cada tema es una tarjeta limpia (título, nivel y marca de
+        // dominado): al tocarla se abre su pantalla propia completa
+        // (TopicDetailScreen, la misma que usan las Ramas y la
+        // búsqueda). Nada se despliega dentro de la tarjeta.
+        // Pulido: mismo aire que las tarjetas de Ramas (margen
+        // inferior de 8), tarjeta alta con respiración vertical y el
+        // chevron suave para que la marca de dominado sea el ancla.
         for (final topic in topics
             .where((t) => t.slug != 'organica' && t.slug != 'laboratorio')
             .map(localizedTopic))
           Card(
-            child: ExpansionTile(
-              title: Text(topic.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+            margin: const EdgeInsets.only(bottom: 8),
+            child: ListTile(
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              title: Text(topic.title,
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
               subtitle: Text(topic.level),
-              trailing: LucideIcon(
-                progress.isMastered(topic.slug)
-                    ? LucideIcons.circleCheck
-                    : LucideIcons.circle,
-                color: progress.isMastered(topic.slug)
-                    ? Theme.of(context).colorScheme.primary
-                    : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.35),
-              ),
-              childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              children: [
-                for (final p in topic.summary)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Text(p),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  LucideIcon(
+                    progress.isMastered(topic.slug)
+                        ? LucideIcons.circleCheck
+                        : LucideIcons.circle,
+                    color: progress.isMastered(topic.slug)
+                        ? Theme.of(context).colorScheme.primary
+                        : Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withValues(alpha: 0.35),
                   ),
-                const SizedBox(height: 8),
-                Text(tr('formulasWord'),
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
-                for (final f in topic.formulas)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text('• ${f.name}: ${f.expr} — ${f.note}'),
-                  ),
-                // Diagramas 3D de moléculas (tema de química orgánica).
-                if (topic.molecules.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Text(tr('moleculesWord'),
-                      style: const TextStyle(fontWeight: FontWeight.bold)),
-                  for (final key in topic.molecules)
-                    MoleculeCard(moleculeKey: key),
+                  const SizedBox(width: 8),
+                  LucideIcon(LucideIcons.chevronRight,
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withValues(alpha: 0.45)),
                 ],
-                const SizedBox(height: 12),
-                Text('${tr('exampleWord')}: ${topic.exampleTitle}',
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
-                for (var i = 0; i < topic.exampleSteps.length; i++)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text('${i + 1}. ${topic.exampleSteps[i]}'),
-                  ),
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(topic.exampleAnswer,
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.primary)),
-                ),
-                const SizedBox(height: 12),
-                Text(tr('errorsWord'),
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
-                for (final e in topic.errors)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text('• $e'),
-                  ),
-                const SizedBox(height: 12),
-                Text('${tr('tipWord')}: ${topic.tip}',
-                    style: const TextStyle(fontStyle: FontStyle.italic)),
-                const SizedBox(height: 12),
-                ElevatedButton.icon(
-                  onPressed: () => setState(() => progress.toggleMastered(topic.slug)),
-                  icon: LucideIcon(progress.isMastered(topic.slug) ? LucideIcons.check : LucideIcons.circle),
-                  label: Text(progress.isMastered(topic.slug)
-                      ? tr('mastered')
-                      : tr('markMastered')),
-                ),
-              ],
+              ),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                      builder: (_) => TopicDetailScreen(topic: topic)),
+                );
+              },
             ),
           ),
       ],

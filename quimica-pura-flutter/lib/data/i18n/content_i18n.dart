@@ -175,7 +175,7 @@ List<List<String>>? get _generalTipsList => switch (_lang) {
 List<QuizQuestion>? _cachedBank;
 String? _cachedBankLang;
 
-/// El banco completo (175) en el idioma activo. Se cachea por idioma.
+/// El banco completo (210) en el idioma activo. Se cachea por idioma.
 List<QuizQuestion> localizedAllQuestions() {
   final bank = _bank;
   if (bank == null) return allQuestions;
@@ -225,13 +225,52 @@ StudyTopic localizedTopic(StudyTopic t) {
 }
 
 /// Nombre corto de un tema (para chips y títulos).
+/// En español (_lang == null) el mapa traducido es null: hay que
+/// consultar también el mapa base `topicNames` (español), que es
+/// el único que conoce los temas de Bachillerato ('bach-...').
+/// Sin este paso, el título del quiz mostraba el id interno
+/// ('bach-estequiometria') en vez del nombre bonito.
+/// El usuario nunca ve un slug: si el id no tiene nombre conocido,
+/// se muestra un nombre legible derivado de él (ver
+/// [humanizeTopicId]), sin prefijos ni guiones.
 String localizedTopicName(String slug) {
-  final name = _topicNames?[slug];
+  final name = _topicNames?[slug] ?? topicNames[slug];
   if (name != null) return name;
   for (final t in topics) {
     if (t.slug == slug) return t.title;
   }
-  return slug;
+  return humanizeTopicId(slug);
+}
+
+/// Nombre legible derivado de un id de tema sin nombre conocido:
+/// quita el prefijo de pista ('bach-' / 'uni-'), cambia los guiones
+/// por espacios y pone la primera letra en mayúscula. Último recurso
+/// de [localizedTopicName] y [localizedTopicTitle]: sirve para que un
+/// id nuevo o un dato viejo nunca llegue crudo a la pantalla.
+String humanizeTopicId(String slug) {
+  var s = slug;
+  for (final prefix in ['bach-', 'uni-']) {
+    if (s.startsWith(prefix)) s = s.substring(prefix.length);
+  }
+  s = s.replaceAll(RegExp(r'[-_]'), ' ').trim();
+  if (s.isEmpty) return 'Tema';
+  return s[0].toUpperCase() + s.substring(1);
+}
+
+/// Título completo de un tema (el de Aprender, en topics.dart), en el
+/// idioma activo. Para los temas de Bachillerato ('bach-X') se usa el
+/// título del tema base ('X'): 'bach-disoluciones' →
+/// 'Disoluciones y concentración'. Es el nombre que se muestra en la
+/// cabecera del camino de Niveles (también en las tarjetas
+/// bloqueadas). Los temas del camino sin ficha en Aprender ('tabla',
+/// 'enlace') usan el nombre corto de [localizedTopicName].
+String localizedTopicTitle(String slug) {
+  var base = slug;
+  if (base.startsWith('bach-')) base = base.substring('bach-'.length);
+  for (final t in topics) {
+    if (t.slug == base) return localizedTopic(t).title;
+  }
+  return localizedTopicName(slug);
 }
 
 // ---- Elementos, categorías y curiosidades ----

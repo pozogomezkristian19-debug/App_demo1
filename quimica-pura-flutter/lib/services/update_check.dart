@@ -1,0 +1,1069 @@
+// Aviso de actualización vía GitHub (fix3, punto 20).
+//
+// Kristian anuncia una actualización editando version.json en la raíz
+// del repo (App_demo1): versión + notas + enlace al APK. Al abrirse
+// la app, este servicio descarga ese archivo y, si la versión remota
+// es mayor que la instalada, muestra el diálogo de actualización.
+//
+// El flujo NO pasa por el navegador (la app no está en Google Play,
+// es sideloaded desde GitHub):
+//   diálogo "Hay una nueva actualización"
+//     → "Actualizar ahora": la app descarga el APK en SEGUNDO PLANO
+//       (notificación bonita con barra de progreso, icono pequeño
+//       blanco, acento teal) y al terminar salta el instalador del
+//       sistema; la notificación también ofrece "Instalar".
+//     → "Más tarde" (solo si force es false): pospone la descarga y
+//       programa un RECORDATORIO por notificación para mañana (una vez
+//       al día como máximo, hasta actualizar); al tocarlo, la app se
+//       abre y vuelve a salir el diálogo. No molesta en cada apertura.
+//     → Si el APK de esa versión ya está descargado, el botón es
+//       "Instalar" en vez de descargar de nuevo.
+//
+// Sin internet o si la descarga falla: SILENCIO en la comprobación
+// (la app sigue normal, sin diálogo ni error visible). Como mucho una
+// comprobación cada 4 horas (fix3, punto 20b). Si el teléfono no tiene
+// activado "Instalar apps desconocidas" para Melli-Qui, al intentar
+// instalar sale un aviso claro y lleva a Ajustes para activarlo.
+//
+// El permiso de instalar y el instalador del sistema solo se pueden
+// confirmar en el teléfono real de Kristian, no en pruebas.
+
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../widgets/brand_logo.dart';
+import '../widgets/lucide_icons.dart';
+import 'localization.dart';
+import 'notification_service.dart';
+
+/// Versión actual de la app: ÚNICA fuente de verdad en el código.
+/// Debe coincidir con `latest` de version.json en la build que se
+/// publica, para que no salga un aviso falso nada más instalar.
+const String kAppVersion = '6.0';
+
+/// Cadencia de la comprobación (fix3, punto 20b): como mucho una vez
+/// cada 4 horas. La app mira version.json al abrirse y al volver a
+/// primer plano, pero solo si pasaron ≥ 4 h desde la última mirada.
+/// El archivo es un JSON diminuto: no gasta casi nada de datos ni de
+/// batería. Esto NO hace que el diálogo vuelva a salir en cada
+/// comprobación: si el usuario tocó "Más tarde", esa versión queda
+/// registrada como pospuesta y solo avisa su recordatorio por
+/// notificación (una vez al día como máximo) o una versión aún más
+/// nueva. Así el aviso les llega en horas, no al día siguiente.
+const Duration kUpdateCheckInterval = Duration(hours: 4);
+
+/// version.json en la raíz del repo, servido en crudo por GitHub.
+const String kUpdateCheckUrl =
+    'https://raw.githubusercontent.com/pozogomezkristian19-debug/App_demo1/main/version.json';
+
+/// Claves guardadas en el teléfono (SharedPreferences).
+const String kUpdateLastCheckKey = 'melli_update_last_check_ms';
+const String kUpdateDismissedKey = 'melli_update_dismissed_version';
+const String kUpdatePendingKey = 'melli_update_pending_json';
+const String kUpdateReminderVersionKey = 'melli_update_reminder_version';
+const String kUpdateReminderAtKey = 'melli_update_reminder_at_ms';
+const String kUpdateApkPathKey = 'melli_update_apk_path';
+const String kUpdateApkVersionKey = 'melli_update_apk_version';
+
+/// Comparación de versiones por componentes numéricos:
+/// "6.0" < "6.1", "6.0" < "6.0.1", "6.10" > "6.9". Devuelve < 0 si
+/// [a] es menor que [b], 0 si son iguales y > 0 si [a] es mayor.
+/// Los componentes no numéricos se tratan como 0 ("6.0-beta" == "6.0").
+int compareVersions(String a, String b) {
+  final aParts = a.split('.');
+  final bParts = b.split('.');
+  final len = aParts.length > bParts.length ? aParts.length : bParts.length;
+  for (var i = 0; i < len; i++) {
+    final aNum = i < aParts.length ? int.tryParse(aParts[i]) ?? 0 : 0;
+    final bNum = i < bParts.length ? int.tryParse(bParts[i]) ?? 0 : 0;
+    if (aNum != bNum) return aNum.compareTo(bNum);
+  }
+  return 0;
+}
+
+/// Lo que dice version.json en GitHub.
+class UpdateInfo {
+  const UpdateInfo({
+    required this.latest,
+    required this.apkUrl,
+    required this.notes,
+    required this.force,
+  });
+
+  /// Si el archivo trae algo raro (sin versión), no hay nada que
+  /// avisar: se devuelve null y la app sigue en silencio.
+  static UpdateInfo? fromJson(Map<String, dynamic> json) {
+    final latest = json['latest'];
+    if (latest is! String || latest.isEmpty) return null;
+    final apkUrl = json['apk_url'];
+    final notes = json['notes'];
+    return UpdateInfo(
+      latest: latest,
+      apkUrl: apkUrl is String ? apkUrl : '',
+      notes: notes is String ? notes : '',
+      force: json['force'] == true,
+    );
+  }
+
+  /// Para guardar la actualización pendiente en el teléfono: al tocar
+  /// el recordatorio, el diálogo se muestra con estos datos incluso
+  /// sin internet (ver showPendingUpdateDialog).
+  Map<String, dynamic> toJson() => {
+        'latest': latest,
+        'apk_url': apkUrl,
+        'notes': notes,
+        'force': force,
+      };
+
+  final String latest;
+  final String apkUrl;
+  final String notes;
+  final bool force;
+}
+
+/// ¿Toca mostrar el diálogo de actualización?
+///
+/// - La versión remota debe ser mayor que la instalada.
+/// - Con `force` no se puede posponer: el aviso sale en cada apertura
+///   (pero como mucho una vez cada 4 horas, como todo lo demás).
+/// - Sin `force`, si el usuario ya pulsó "Más tarde" para ESA versión,
+///   no se le vuelve a preguntar por ella (el recordatorio por
+///   notificación es lo que avisa).
+/// - En cualquier caso, como mucho una comprobación cada 4 horas.
+bool shouldShowUpdate({
+  required String latest,
+  required bool force,
+  required String? dismissedVersion,
+  required DateTime? lastCheck,
+  required DateTime now,
+}) {
+  if (compareVersions(latest, kAppVersion) <= 0) return false;
+  if (lastCheck != null &&
+      now.difference(lastCheck) < kUpdateCheckInterval) {
+    return false;
+  }
+  if (!force && dismissedVersion == latest) return false;
+  return true;
+}
+
+/// ¿Toca programar (o reprogramar) el recordatorio de mañana?
+/// No se duplica si ya hay uno para ESTA versión y aún no ha llegado;
+/// si salió una versión más nueva, se actualiza a esa.
+bool shouldScheduleReminder({
+  required String latest,
+  required String? scheduledVersion,
+  required DateTime? scheduledAt,
+  required DateTime now,
+}) {
+  if (scheduledVersion == latest &&
+      scheduledAt != null &&
+      scheduledAt.isAfter(now)) {
+    return false;
+  }
+  return true;
+}
+
+/// Descarga el contenido de una URL como texto, o null si falla.
+/// Inyectable en los tests; en la app usa HttpClient (sin dependencia
+/// nueva). Timeout de ~5 s: sin internet no se queda colgada.
+typedef UpdateJsonFetcher = Future<String?> Function(Uri url);
+
+Future<String?> _defaultFetcher(Uri url) async {
+  final client = HttpClient()..connectionTimeout = const Duration(seconds: 5);
+  try {
+    final request =
+        await client.getUrl(url).timeout(const Duration(seconds: 5));
+    final response =
+        await request.close().timeout(const Duration(seconds: 5));
+    if (response.statusCode != 200) return null;
+    return await response
+        .transform(utf8.decoder)
+        .join()
+        .timeout(const Duration(seconds: 5));
+  } catch (_) {
+    return null;
+  } finally {
+    client.close();
+  }
+}
+
+/// Fuente de un APK para descargar: tamaño total (puede ser -1 si el
+/// servidor no lo dice) y el flujo de bytes.
+class ApkDownloadSource {
+  const ApkDownloadSource({required this.totalBytes, required this.stream});
+  final int totalBytes;
+  final Stream<List<int>> stream;
+}
+
+/// Descarga un APK por streaming: `fetcher` es inyectable (en la app,
+/// HttpClient; en los tests, un flujo falso).
+typedef ApkStreamFetcher = Future<ApkDownloadSource> Function(Uri url);
+
+Future<ApkDownloadSource> _httpApkSource(Uri url) async {
+  final client = HttpClient()..connectionTimeout = const Duration(seconds: 15);
+  final request = await client.getUrl(url);
+  final response = await request.close();
+  if (response.statusCode != 200) {
+    client.close();
+    throw HttpException('HTTP ${response.statusCode}');
+  }
+  return ApkDownloadSource(
+    totalBytes: response.contentLength,
+    // El cliente se cierra cuando el flujo termina (o falla): si se
+    // cerrara aquí, el flujo se cortaría.
+    stream: response.transform<List<int>>(
+      StreamTransformer.fromHandlers(
+        handleDone: (sink) {
+          client.close();
+          sink.close();
+        },
+        handleError: (error, stackTrace, sink) {
+          client.close();
+          sink.addError(error, stackTrace);
+        },
+      ),
+    ),
+  );
+}
+
+/// Máquina de estados de la descarga del APK:
+/// idle → downloading → downloaded → installing.
+enum UpdateDownloadState { idle, downloading, downloaded, installing }
+
+/// Descarga del APK a un archivo, con progreso. No toca notificaciones
+/// ni permisos: eso lo orquesta UpdateCheckService.
+class UpdateDownloader {
+  UpdateDownloader();
+
+  final ValueNotifier<UpdateDownloadState> state =
+      ValueNotifier(UpdateDownloadState.idle);
+  final ValueNotifier<double> progress = ValueNotifier(0);
+
+  String? downloadedPath;
+  String? downloadedVersion;
+
+  /// Nombre del APK de una versión: estable, para saber si ya está
+  /// descargado sin volver a bajarlo.
+  static String apkFileName(String version) => 'quemia-$version.apk';
+
+  /// Descarga [info] en [dir] y devuelve el archivo, o null si falla.
+  /// Si el APK de esa versión ya está descargado y no está vacío, no
+  /// vuelve a descargarlo: devuelve el archivo que ya hay.
+  Future<File?> download({
+    required UpdateInfo info,
+    required Directory dir,
+    ApkStreamFetcher? fetcher,
+    void Function(int received, int total)? onProgress,
+  }) async {
+    final target = File('${dir.path}/${apkFileName(info.latest)}');
+    if (await target.exists() && await target.length() > 0) {
+      state.value = UpdateDownloadState.downloaded;
+      progress.value = 1;
+      downloadedPath = target.path;
+      downloadedVersion = info.latest;
+      return target;
+    }
+    state.value = UpdateDownloadState.downloading;
+    progress.value = 0;
+    final tmp = File('${target.path}.part');
+    try {
+      final source = await (fetcher ?? _httpApkSource)(Uri.parse(info.apkUrl));
+      var received = 0;
+      final sink = tmp.openWrite();
+      await for (final chunk in source.stream) {
+        sink.add(chunk);
+        received += chunk.length;
+        if (source.totalBytes > 0) {
+          progress.value = received / source.totalBytes;
+        }
+        onProgress?.call(received, source.totalBytes);
+      }
+      await sink.flush();
+      await sink.close();
+      if (source.totalBytes > 0 && received < source.totalBytes) {
+        throw const HttpException('descarga incompleta');
+      }
+      await tmp.rename(target.path);
+      state.value = UpdateDownloadState.downloaded;
+      progress.value = 1;
+      downloadedPath = target.path;
+      downloadedVersion = info.latest;
+      return target;
+    } catch (_) {
+      state.value = UpdateDownloadState.idle;
+      progress.value = 0;
+      try {
+        if (await tmp.exists()) await tmp.delete();
+      } catch (_) {
+        // Borrar el parcial es opcional.
+      }
+      return null;
+    }
+  }
+}
+
+/// Instalador del sistema (Android): abre el instalador con el APK
+/// ya descargado. Habla con MainActivity por MethodChannel; el
+/// FileProvider y el permiso REQUEST_INSTALL_PACKAGES viven en el
+/// AndroidManifest. En los tests el canal se simula (mock).
+class UpdateInstaller {
+  UpdateInstaller._();
+
+  static const _channel = MethodChannel('com.melliqui/update_installer');
+
+  /// ¿Puede la app pedir instalar APKs? En Android 8+ es el permiso
+  /// "Instalar apps desconocidas" para Melli-Qui. Si el canal falla,
+  /// se asume que sí y decide el sistema.
+  static Future<bool> canInstallUnknownSources() async {
+    try {
+      final ok =
+          await _channel.invokeMethod<bool>('canInstallUnknownSources');
+      return ok ?? true;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  /// Abre el instalador del sistema con el APK de [path].
+  static Future<bool> installApk(String path) async {
+    try {
+      final ok =
+          await _channel.invokeMethod<bool>('installApk', {'path': path});
+      return ok ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Abre los ajustes del sistema en "Instalar apps desconocidas"
+  /// para Melli-Qui, para que el usuario active el permiso.
+  static Future<void> openUnknownSourcesSettings() async {
+    try {
+      await _channel.invokeMethod<void>('openUnknownSourcesSettings');
+    } catch (_) {
+      // Sin canal (pruebas), no hay ajustes que abrir.
+    }
+  }
+}
+
+/// Textos del flujo de actualización en el idioma del usuario.
+/// `{v}` es la versión. Español por defecto.
+Map<String, String> updateTexts(String lang) {
+  switch (lang) {
+    case 'en':
+      return {
+        'dialogTitle': 'A new update is available',
+        'versionAvailable': 'Version {v} is available',
+        'updateNow': 'Update now',
+        'install': 'Install',
+        'later': 'Later',
+        'forceNote': 'This update is required to keep using the app.',
+        'downloadingTitle': 'Downloading Quemia',
+        'downloadingBody': 'Version {v}',
+        'downloadReadyTitle': 'Download complete',
+        'downloadReadyBody': 'Version {v} is ready. Tap to install it.',
+        'downloadFailedTitle': 'Could not download',
+        'downloadFailedBody': 'Check your connection and try again later.',
+        'reminderBody': 'There is a pending update',
+        'unknownSourcesTitle': 'Allow installing apps',
+        'unknownSourcesBody':
+            'To install the update, turn on "Install unknown apps" for Quemia in your phone settings.',
+        'goToSettings': 'Go to Settings',
+        'notNow': 'Not now',
+      };
+    case 'fr':
+      return {
+        'dialogTitle': 'Une nouvelle mise à jour est disponible',
+        'versionAvailable': 'Version {v} disponible',
+        'updateNow': 'Mettre à jour',
+        'install': 'Installer',
+        'later': 'Plus tard',
+        'forceNote':
+            'Cette mise à jour est obligatoire pour continuer à utiliser l’appli.',
+        'downloadingTitle': 'Téléchargement de Quemia',
+        'downloadingBody': 'Version {v}',
+        'downloadReadyTitle': 'Téléchargement terminé',
+        'downloadReadyBody':
+            'La version {v} est prête. Touchez pour l’installer.',
+        'downloadFailedTitle': 'Téléchargement impossible',
+        'downloadFailedBody':
+            'Vérifiez votre connexion et réessayez plus tard.',
+        'reminderBody': 'Une mise à jour est en attente',
+        'unknownSourcesTitle': 'Autoriser l’installation d’applis',
+        'unknownSourcesBody':
+            'Pour installer la mise à jour, activez « Installer des applis inconnues » pour Quemia dans les réglages du téléphone.',
+        'goToSettings': 'Aller aux réglages',
+        'notNow': 'Pas maintenant',
+      };
+    case 'it':
+      return {
+        'dialogTitle': 'È disponibile un nuovo aggiornamento',
+        'versionAvailable': 'Versione {v} disponibile',
+        'updateNow': 'Aggiorna ora',
+        'install': 'Installa',
+        'later': 'Più tardi',
+        'forceNote':
+            'Questo aggiornamento è obbligatorio per continuare a usare l’app.',
+        'downloadingTitle': 'Download di Quemia',
+        'downloadingBody': 'Versione {v}',
+        'downloadReadyTitle': 'Download completato',
+        'downloadReadyBody':
+            'La versione {v} è pronta. Tocca per installarla.',
+        'downloadFailedTitle': 'Download non riuscito',
+        'downloadFailedBody':
+            'Controlla la connessione e riprova più tardi.',
+        'reminderBody': 'C’è un aggiornamento in sospeso',
+        'unknownSourcesTitle': 'Consenti installazione app',
+        'unknownSourcesBody':
+            'Per installare l’aggiornamento, attiva «Installa app sconosciute» per Quemia nelle impostazioni del telefono.',
+        'goToSettings': 'Vai alle impostazioni',
+        'notNow': 'Non ora',
+      };
+    case 'pt':
+      return {
+        'dialogTitle': 'Há uma nova atualização disponível',
+        'versionAvailable': 'Versão {v} disponível',
+        'updateNow': 'Atualizar agora',
+        'install': 'Instalar',
+        'later': 'Mais tarde',
+        'forceNote':
+            'Esta atualização é obrigatória para continuar usando o app.',
+        'downloadingTitle': 'Baixando Quemia',
+        'downloadingBody': 'Versão {v}',
+        'downloadReadyTitle': 'Download concluído',
+        'downloadReadyBody':
+            'A versão {v} está pronta. Toque para instalar.',
+        'downloadFailedTitle': 'Não foi possível baixar',
+        'downloadFailedBody':
+            'Verifique sua conexão e tente novamente mais tarde.',
+        'reminderBody': 'Há uma atualização pendente',
+        'unknownSourcesTitle': 'Permitir instalar apps',
+        'unknownSourcesBody':
+            'Para instalar a atualização, ative "Instalar apps desconhecidos" para o Quemia nas configurações do telefone.',
+        'goToSettings': 'Ir para Ajustes',
+        'notNow': 'Agora não',
+      };
+    case 'ru':
+      return {
+        'dialogTitle': 'Доступно новое обновление',
+        'versionAvailable': 'Версия {v} доступна',
+        'updateNow': 'Обновить сейчас',
+        'install': 'Установить',
+        'later': 'Позже',
+        'forceNote':
+            'Это обновление обязательно, чтобы продолжать пользоваться приложением.',
+        'downloadingTitle': 'Скачивание Quemia',
+        'downloadingBody': 'Версия {v}',
+        'downloadReadyTitle': 'Скачивание завершено',
+        'downloadReadyBody':
+            'Версия {v} готова. Нажмите, чтобы установить.',
+        'downloadFailedTitle': 'Не удалось скачать',
+        'downloadFailedBody':
+            'Проверьте подключение и попробуйте позже.',
+        'reminderBody': 'Есть ожидающее обновление',
+        'unknownSourcesTitle': 'Разрешить установку приложений',
+        'unknownSourcesBody':
+            'Чтобы установить обновление, включите «Установка неизвестных приложений» для Quemia в настройках телефона.',
+        'goToSettings': 'Перейти в настройки',
+        'notNow': 'Не сейчас',
+      };
+    default:
+      return {
+        'dialogTitle': 'Hay una nueva actualización',
+        'versionAvailable': 'Versión {v} disponible',
+        'updateNow': 'Actualizar ahora',
+        'install': 'Instalar',
+        'later': 'Más tarde',
+        'forceNote':
+            'Esta actualización es obligatoria para seguir usando la app.',
+        'downloadingTitle': 'Descargando Quemia',
+        'downloadingBody': 'Versión {v}',
+        'downloadReadyTitle': 'Descarga completa',
+        'downloadReadyBody':
+            'La versión {v} ya está lista. Toca para instalarla.',
+        'downloadFailedTitle': 'No se pudo descargar',
+        'downloadFailedBody':
+            'Revisa tu conexión e inténtalo de nuevo más tarde.',
+        'reminderBody': 'Hay una actualización pendiente',
+        'unknownSourcesTitle': 'Permite instalar apps',
+        'unknownSourcesBody':
+            'Para instalar la actualización, activa "Instalar apps desconocidas" para Quemia en los ajustes del teléfono.',
+        'goToSettings': 'Ir a Ajustes',
+        'notNow': 'Ahora no',
+      };
+  }
+}
+
+/// Comprueba si hay actualización y, si toca, muestra el diálogo.
+/// La app la llama al abrirse (tras el primer frame); el servicio
+/// además se vuelve a comprobar solo al volver a primer plano
+/// (AppLifecycleListener, fix3 punto 20b), cada 4 h como mucho.
+/// En silencio total si no hay internet, si version.json no existe o
+/// si trae algo raro: la app sigue en silencio, sin avisar de nada.
+/// [fromReminder]: desde el recordatorio de actualización (el usuario
+/// tocó la notificación): se salta la regla de las 4 horas y la
+/// versión descartada, porque lo pidió él.
+class UpdateCheckService {
+  UpdateCheckService._();
+
+  /// Descargador compartido: su `state` es la máquina de estados de
+  /// la actualización (idle → downloading → downloaded → installing)
+  /// y su `progress` el progreso 0-1. Lo puede escuchar la UI.
+  static final UpdateDownloader downloader = UpdateDownloader();
+
+  /// Observador de ciclo de vida (fix3, punto 20b): al volver a
+  /// primer plano se vuelve a comprobar (cada 4 h como mucho). Se
+  /// arma DENTRO del servicio para no tocar main.dart: HomeScreen ya
+  /// llama a [checkForUpdate] al abrirse, y ese contexto vive toda
+  /// la sesión de la app (es el de la pantalla principal).
+  static AppLifecycleListener? _lifecycleListener;
+
+  /// Contexto guardado para abrir el diálogo al volver a primer
+  /// plano (el de HomeScreen, que no se desmonta en la sesión).
+  static BuildContext? _resumeContext;
+
+  /// Fetcher guardado para la re-comprobación al volver (en la app
+  /// es null y se usa HttpClient; en los tests, el falso inyectado).
+  static UpdateJsonFetcher? _resumeFetcher;
+
+  /// Para no solapar dos comprobaciones (p. ej. abrir y volver a
+  /// primer plano seguidos): la segunda se salta.
+  static bool _checkInFlight = false;
+
+  /// Arma el observador de ciclo de vida en la primera llamada a
+  /// [checkForUpdate]; las llamadas posteriores solo actualizan el
+  /// contexto guardado. Idempotente.
+  static void _armResumeCheck(
+    BuildContext context, {
+    UpdateJsonFetcher? fetcher,
+  }) {
+    _resumeContext = context;
+    _resumeFetcher = fetcher;
+    if (_lifecycleListener != null) return;
+    try {
+      _lifecycleListener = AppLifecycleListener(
+        onResume: _onForeground,
+      );
+    } catch (_) {
+      // Sin binding (algún test sin widgets): la comprobación al
+      // abrir sigue funcionando; solo no hay re-comprobación al
+      // volver a primer plano.
+      _lifecycleListener = null;
+    }
+  }
+
+  /// Al volver a primer plano: comprobar, con la misma cadencia de
+  /// 4 h (el servicio decide si toca o no; si el usuario pospuso
+  /// ESA versión, no hay diálogo: solo el recordatorio).
+  static void _onForeground() {
+    final context = _resumeContext;
+    if (context == null) return;
+    unawaited(
+      checkForUpdate(context, fetcher: _resumeFetcher),
+    );
+  }
+
+  /// Solo para tests: desarma el observador de ciclo de vida y
+  /// limpia el contexto guardado, para que los tests no se pisen
+  /// entre sí (el observador vive en el binding, que es global).
+  @visibleForTesting
+  static void resetForTests() {
+    _lifecycleListener?.dispose();
+    _lifecycleListener = null;
+    _resumeContext = null;
+    _resumeFetcher = null;
+    _checkInFlight = false;
+  }
+
+  static Future<void> checkForUpdate(
+    BuildContext context, {
+    UpdateJsonFetcher? fetcher,
+    DateTime? nowOverride,
+    bool fromReminder = false,
+  }) async {
+    // El observador queda armado desde la primera llamada (la de
+    // HomeScreen al abrirse) y vive toda la sesión de la app.
+    _armResumeCheck(context, fetcher: fetcher);
+    if (_checkInFlight) return;
+    _checkInFlight = true;
+    try {
+      await _performCheck(
+        context,
+        fetcher: fetcher,
+        nowOverride: nowOverride,
+        fromReminder: fromReminder,
+      );
+    } finally {
+      _checkInFlight = false;
+    }
+  }
+
+  static Future<void> _performCheck(
+    BuildContext context, {
+    UpdateJsonFetcher? fetcher,
+    DateTime? nowOverride,
+    bool fromReminder = false,
+  }) async {
+    final now = nowOverride ?? DateTime.now();
+    final prefs = await SharedPreferences.getInstance();
+    final lastCheckMs = prefs.getInt(kUpdateLastCheckKey);
+    final lastCheck = lastCheckMs == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(lastCheckMs);
+    // Como mucho una comprobación cada 4 horas: si ya se miró hace
+    // menos de 4 h, ni se descarga nada. Esto se revisa ANTES de
+    // tocar la red (salvo que venga del recordatorio, que lo pidió
+    // el usuario).
+    if (!fromReminder &&
+        lastCheck != null &&
+        now.difference(lastCheck) < kUpdateCheckInterval) {
+      return;
+    }
+
+    final raw = await (fetcher ?? _defaultFetcher)(Uri.parse(kUpdateCheckUrl));
+    // Se anota la comprobación aunque falle: sin internet, no tiene
+    // sentido reintentarlo en cada apertura durante las próximas
+    // 4 horas.
+    await prefs.setInt(kUpdateLastCheckKey, now.millisecondsSinceEpoch);
+    if (raw == null) return;
+    UpdateInfo? info;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) {
+        info = UpdateInfo.fromJson(decoded);
+      }
+    } catch (_) {
+      info = null;
+    }
+    if (info == null) return;
+
+    // Ya estamos al día (o por encima): se acabó el aviso y se
+    // limpian el recordatorio y el APK viejo.
+    if (compareVersions(info.latest, kAppVersion) <= 0) {
+      await _cleanupAfterUpdate();
+      return;
+    }
+
+    if (fromReminder) {
+      if (!context.mounted) return;
+      await showUpdateDialog(context, info);
+      return;
+    }
+
+    final dismissed = prefs.getString(kUpdateDismissedKey);
+    if (!info.force && dismissed == info.latest) {
+      // Pospuesta con "Más tarde": al abrir no hay diálogo; lo que
+      // avisa es el recordatorio por notificación de mañana.
+      await scheduleUpdateReminder(info, now);
+      return;
+    }
+    if (!shouldShowUpdate(
+      latest: info.latest,
+      force: info.force,
+      dismissedVersion: dismissed,
+      lastCheck: lastCheck,
+      now: now,
+    )) {
+      return;
+    }
+    if (!context.mounted) return;
+    await showUpdateDialog(context, info);
+  }
+
+  /// Muestra el diálogo de la actualización pendiente (la que guardó
+  /// el recordatorio). Al tocar el recordatorio, la app se abre y
+  /// sale este diálogo, incluso sin internet. Si ya no hay nada
+  /// pendiente guardado, se comprueba de nuevo vía GitHub.
+  static Future<void> showPendingUpdateDialog(BuildContext context) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(kUpdatePendingKey);
+    UpdateInfo? info;
+    if (raw != null) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map<String, dynamic>) {
+          info = UpdateInfo.fromJson(decoded);
+        }
+      } catch (_) {
+        info = null;
+      }
+    }
+    if (info == null) {
+      await checkForUpdate(context, fromReminder: true);
+      return;
+    }
+    if (compareVersions(info.latest, kAppVersion) <= 0) {
+      await _cleanupAfterUpdate();
+      return;
+    }
+    if (!context.mounted) return;
+    await showUpdateDialog(context, info);
+  }
+
+  /// El diálogo de actualización: FONDO BLANCO con el acento teal de
+  /// la app (fondo blanco y teal fijos, no del tema, para que se vea
+  /// igual en claro y en oscuro). Botón principal "Actualizar ahora"
+  /// (o "Instalar" si el APK de esa versión ya está descargado) y
+  /// "Más tarde" salvo que la actualización sea obligatoria.
+  static Future<void> showUpdateDialog(
+      BuildContext context, UpdateInfo info) async {
+    final t = updateTexts(AppLang.code);
+    final already = await _downloadedApkFile(info.latest) != null;
+    if (!context.mounted) return;
+    await showDialog<void>(
+      context: context,
+      // Con actualización obligatoria no se puede cerrar tocando
+      // fuera ni con el botón atrás: solo queda Actualizar.
+      barrierDismissible: !info.force,
+      builder: (dialogContext) => PopScope(
+        canPop: !info.force,
+        child: Dialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          insetPadding:
+              const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+            // Con desplazamiento: unas notas largas nunca desbordan el
+            // diálogo en un teléfono estrecho.
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: BrandColors.teal.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const LucideIcon(
+                        LucideIcons.download,
+                        size: 26,
+                        color: BrandColors.teal,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        t['dialogTitle']!,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: BrandColors.ink,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  t['versionAvailable']!.replaceAll('{v}', info.latest),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: BrandColors.teal,
+                  ),
+                ),
+                if (info.notes.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    info.notes,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      height: 1.45,
+                      color: BrandColors.ink,
+                    ),
+                  ),
+                ],
+                if (info.force) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    t['forceNote']!,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: BrandColors.ink,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    // Teal fijo (no el acento elegido en Cuenta): el
+                    // diálogo de actualización es siempre teal.
+                    style: FilledButton.styleFrom(
+                      backgroundColor: BrandColors.teal,
+                      foregroundColor: Colors.white,
+                      shadowColor: BrandColors.tealDark,
+                    ),
+                    onPressed: () async {
+                      Navigator.of(dialogContext).pop();
+                      if (already) {
+                        await installDownloadedApk(context);
+                      } else {
+                        await startDownload(context, info);
+                      }
+                    },
+                    child: Text(already ? t['install']! : t['updateNow']!),
+                  ),
+                ),
+                if (!info.force) ...[
+                  const SizedBox(height: 4),
+                  SizedBox(
+                    width: double.infinity,
+                    child: TextButton(
+                      style: TextButton.styleFrom(
+                        foregroundColor: BrandColors.teal,
+                      ),
+                      onPressed: () async {
+                        await _onLaterPressed(info);
+                        if (dialogContext.mounted) {
+                          Navigator.of(dialogContext).pop();
+                        }
+                      },
+                      child: Text(t['later']!),
+                    ),
+                  ),
+                ],
+              ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// "Más tarde": pospone la descarga. No vuelve a preguntar por ESA
+  /// versión al abrir la app; el aviso pasa al sistema de
+  /// notificaciones: un recordatorio para mañana (ver
+  /// scheduleUpdateReminder).
+  static Future<void> _onLaterPressed(UpdateInfo info) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(kUpdateDismissedKey, info.latest);
+    await scheduleUpdateReminder(info, DateTime.now());
+  }
+
+  /// Programa el recordatorio por notificación para mañana (al día
+  /// siguiente, una vez al día como máximo, hasta actualizar). Si
+  /// sale una versión aún más nueva, el recordatorio se actualiza a
+  /// esa (se cancela el viejo y se programa el nuevo). El recordatorio
+  /// usa el MISMO canal, icono y estilo que los recordatorios de
+  /// repaso (ver NotificationService.scheduleUpdateReminder).
+  static Future<void> scheduleUpdateReminder(
+      UpdateInfo info, DateTime now) async {
+    final prefs = await SharedPreferences.getInstance();
+    final scheduledVersion = prefs.getString(kUpdateReminderVersionKey);
+    final scheduledAtMs = prefs.getInt(kUpdateReminderAtKey);
+    final scheduledAt = scheduledAtMs == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(scheduledAtMs);
+    if (!shouldScheduleReminder(
+      latest: info.latest,
+      scheduledVersion: scheduledVersion,
+      scheduledAt: scheduledAt,
+      now: now,
+    )) {
+      return;
+    }
+    final at = now.add(const Duration(days: 1));
+    // Se guarda la info pendiente: al tocar el recordatorio el
+    // diálogo sale con estos datos aunque no haya internet.
+    await prefs.setString(kUpdatePendingKey, jsonEncode(info.toJson()));
+    await prefs.setString(kUpdateReminderVersionKey, info.latest);
+    await prefs.setInt(kUpdateReminderAtKey, at.millisecondsSinceEpoch);
+    await NotificationService.cancelUpdateReminder();
+    final t = updateTexts(AppLang.code);
+    await NotificationService.scheduleUpdateReminder(
+      body: t['reminderBody']!,
+      at: at,
+    );
+  }
+
+  /// Limpia el recordatorio y el APK viejo cuando ya estamos al día.
+  static Future<void> _cleanupAfterUpdate() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(kUpdateDismissedKey);
+    await prefs.remove(kUpdatePendingKey);
+    await prefs.remove(kUpdateReminderVersionKey);
+    await prefs.remove(kUpdateReminderAtKey);
+    await NotificationService.cancelUpdateReminder();
+    final path = prefs.getString(kUpdateApkPathKey);
+    final version = prefs.getString(kUpdateApkVersionKey);
+    if (path != null &&
+        version != null &&
+        compareVersions(version, kAppVersion) < 0) {
+      try {
+        // Síncrono (ver _downloadedApkFile): borrar un archivo local
+        // es inmediato, y la versión asíncrona se cuelga en los
+        // testWidgets cuando la limpieza corre tras una comprobación.
+        final file = File(path);
+        if (file.existsSync()) file.deleteSync();
+      } catch (_) {
+        // Borrar el APK viejo es opcional.
+      }
+      await prefs.remove(kUpdateApkPathKey);
+      await prefs.remove(kUpdateApkVersionKey);
+    }
+  }
+
+  /// APK ya descargado de una versión, si existe y no está vacío.
+  /// Comprobación SÍNCRONA (existsSync/lengthSync) a propósito: es
+  /// un stat local de microsegundos, y la versión asíncrona se
+  /// quedaría colgada en los testWidgets (la zona FakeAsync no
+  /// entrega la E/S de dart:io sin runAsync) justo cuando el diálogo
+  /// quiere saber si el botón es "Instalar" o "Actualizar ahora".
+  static Future<File?> _downloadedApkFile(String version) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final path = prefs.getString(kUpdateApkPathKey);
+      final storedVersion = prefs.getString(kUpdateApkVersionKey);
+      if (path == null || storedVersion != version) return null;
+      final file = File(path);
+      if (!file.existsSync()) return null;
+      if (file.lengthSync() == 0) return null;
+      return file;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Descarga el APK en SEGUNDO PLANO: el diálogo ya se cerró y lo
+  /// que el usuario ve es la notificación con la barra de progreso.
+  /// Al terminar, la notificación ofrece "Instalar" y salta el
+  /// instalador del sistema. Si la descarga falla, avisa con una
+  /// notificación (la comprobación silenciosa es solo para la
+  /// comprobación al abrir: aquí el usuario pidió actualizar).
+  /// [fetcher]/[directory] solo existen para los tests; en la app se
+  /// usan HttpClient y el almacenamiento externo propio.
+  static Future<void> startDownload(
+    BuildContext context,
+    UpdateInfo info, {
+    ApkStreamFetcher? fetcher,
+    Directory? directory,
+    UpdateDownloader? downloader,
+  }) async {
+    final t = updateTexts(AppLang.code);
+    Directory? dir = directory;
+    dir ??= await _downloadDir();
+    if (dir == null) return;
+    final dl = downloader ?? UpdateCheckService.downloader;
+    var lastShown = -1;
+    final file = await dl.download(
+      info: info,
+      dir: dir,
+      fetcher: fetcher,
+      onProgress: (received, total) {
+        if (total <= 0) return;
+        final pct = (received * 100 ~/ total);
+        if (pct != lastShown) {
+          lastShown = pct;
+          NotificationService.showUpdateProgress(
+            title: t['downloadingTitle']!,
+            body:
+                '${t['downloadingBody']!.replaceAll('{v}', info.latest)} · $pct%',
+            progress: pct,
+          );
+        }
+      },
+    );
+    if (file == null) {
+      await NotificationService.cancelUpdateProgress();
+      await NotificationService.showUpdateFailed(
+        title: t['downloadFailedTitle']!,
+        body: t['downloadFailedBody']!,
+      );
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(kUpdateApkPathKey, file.path);
+    await prefs.setString(kUpdateApkVersionKey, info.latest);
+    await NotificationService.showUpdateReady(
+      title: t['downloadReadyTitle']!,
+      body: t['downloadReadyBody']!.replaceAll('{v}', info.latest),
+      installLabel: t['install']!,
+    );
+    // Descarga completa: pide instalar (el instalador del sistema).
+    await installDownloadedApk(context);
+  }
+
+  /// Carpeta donde vive el APK descargado: el almacenamiento externo
+  /// propio de la app (no pide permiso de archivos y el FileProvider
+  /// lo puede compartir con el instalador).
+  static Future<Directory?> _downloadDir() async {
+    try {
+      return await getExternalStorageDirectory();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Instala el APK ya descargado. Si el teléfono no tiene activado
+  /// "Instalar apps desconocidas" para Melli-Qui, muestra el aviso
+  /// claro con el botón para ir a Ajustes (si la app no está en
+  /// primer plano, el aviso sale al tocar la notificación, que vuelve
+  /// a llamar aquí con contexto).
+  static Future<void> installDownloadedApk(BuildContext context) async {
+    final prefs = await SharedPreferences.getInstance();
+    final path = prefs.getString(kUpdateApkPathKey);
+    if (path == null) return;
+    final file = File(path);
+    // existsSync (ver _downloadedApkFile): un stat local, y la
+    // versión asíncrona se cuelga en los testWidgets.
+    if (!file.existsSync()) return;
+    final canInstall = await UpdateInstaller.canInstallUnknownSources();
+    if (!canInstall) {
+      if (!context.mounted) return;
+      await _showUnknownSourcesDialog(context);
+      return;
+    }
+    // El instalador del sistema se abre: la app pasa a "installing"
+    // (la instalación en sí la hace el sistema, fuera de la app).
+    UpdateCheckService.downloader.state.value =
+        UpdateDownloadState.installing;
+    final installed = await UpdateInstaller.installApk(path);
+    if (!installed) {
+      UpdateCheckService.downloader.state.value =
+          UpdateDownloadState.downloaded;
+    }
+  }
+
+  /// Aviso cuando falta el permiso de "Instalar apps desconocidas":
+  /// texto claro y botón para ir a Ajustes.
+  static Future<void> _showUnknownSourcesDialog(BuildContext context) async {
+    final t = updateTexts(AppLang.code);
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(t['unknownSourcesTitle']!),
+        content: Text(t['unknownSourcesBody']!),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(t['notNow']!),
+          ),
+          FilledButton(
+            onPressed: () async {
+              Navigator.of(dialogContext).pop();
+              await UpdateInstaller.openUnknownSourcesSettings();
+            },
+            child: Text(t['goToSettings']!),
+          ),
+        ],
+      ),
+    );
+  }
+}

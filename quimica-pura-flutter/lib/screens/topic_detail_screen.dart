@@ -78,7 +78,8 @@ class _TopicDetailViewState extends State<TopicDetailView> {
         for (final p in topic.summary)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: Text(p),
+            child: Text(p,
+                style: Theme.of(context).textTheme.bodyMedium),
           ),
         const SizedBox(height: 8),
         Text(tr('formulasWord'),
@@ -141,15 +142,21 @@ class _TopicDetailViewState extends State<TopicDetailView> {
               ),
             ),
           ),
-        ElevatedButton.icon(
-          onPressed: () =>
-              setState(() => progress.toggleMastered(topic.slug)),
-          icon: LucideIcon(progress.isMastered(topic.slug)
-              ? LucideIcons.check
-              : LucideIcons.circle),
-          label: Text(progress.isMastered(topic.slug)
-              ? tr('mastered')
-              : tr('markMastered')),
+        // Botón de dominado a todo el ancho, igual que el de
+        // cuestionario de laboratorio de arriba: a medio ancho y
+        // pegado a la izquierda se veía descuidado.
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: () =>
+                setState(() => progress.toggleMastered(topic.slug)),
+            icon: LucideIcon(progress.isMastered(topic.slug)
+                ? LucideIcons.check
+                : LucideIcons.circle),
+            label: Text(progress.isMastered(topic.slug)
+                ? tr('mastered')
+                : tr('markMastered')),
+          ),
         ),
       ],
     );

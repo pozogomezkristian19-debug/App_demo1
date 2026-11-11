@@ -159,6 +159,13 @@ class ProgressService {
 
   static void _bumpLives() => livesNotifier.value++;
 
+  /// Aviso de cambio de errores (fix2, item 2): la AppBar escucha
+  /// este notificador para actualizar el numerito del botón de
+  /// repaso sin reconstruir toda la pantalla.
+  static final ValueNotifier<int> failedNotifier = ValueNotifier<int>(0);
+
+  static void _bumpFailed() => failedNotifier.value++;
+
   int _livesLeft = 5;
   String? _livesDate;
 
@@ -546,13 +553,17 @@ class ProgressService {
       failedDate: entry.failedDate ?? dateKey(DateTime.now()),
       level: entry.level,
     ));
+    _bumpFailed();
     _save();
   }
 
   void removeFailed(String id) {
     final before = _failed.length;
     _failed.removeWhere((f) => f.id == id);
-    if (_failed.length != before) _save();
+    if (_failed.length != before) {
+      _bumpFailed();
+      _save();
+    }
   }
 
   /// Grupos de errores por (tema, nivel), para el repaso por niveles:
@@ -589,6 +600,7 @@ class ProgressService {
       final streak = _failed[i].reviewStreak + 1;
       if (streak >= 3) {
         _failed.removeAt(i);
+        _bumpFailed();
         _save();
         return true;
       }

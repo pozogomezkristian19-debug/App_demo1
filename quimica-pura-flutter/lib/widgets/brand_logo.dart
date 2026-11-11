@@ -55,9 +55,26 @@ class BrandColors {
 
 /// El logo de la app: la imagen assets/logo.png.
 ///
-/// [size] es el lado del cuadrado. [withBackground] y [color] se
-/// mantienen por compatibilidad con las llamadas existentes: la
-/// imagen ya trae su fondo marrón único, así que no cambian el dibujo.
+/// ENCUADRE (fix3, punto 6): la imagen es cuadrada (512x512) pero
+/// las gemelas ocupan solo la banda central (x 15-458, y 164-318,
+/// medido sobre el archivo: ~30% de la altura). Mostrarla entera
+/// en un cuadrado deja un cuadrado marrón gigante con las muñequitas
+/// diminutas en el centro: eso es lo que se veía "gigante, raro y
+/// cutre" en el menú, el onboarding y la cabecera de Resolver.
+/// Por eso el logo NO se muestra cuadrado: se recorta a la banda de
+/// las gemelas, en formato panorámico.
+///
+/// [size] es el ANCHO del logo; la altura es `size * 0.40` (la
+/// ventana visible cubre ~205 px de los 512 de la imagen, centrada
+/// en las gemelas con `Alignment(0, -0.10)`, así las dos muñecas
+/// entran enteras, sin estirar ni aplastar: BoxFit.cover con
+/// proporción fija, nunca un contenedor que imponga otra relación
+/// de aspecto. El arte no cambia; solo el encuadre. El icono
+/// lanzador sigue usando el archivo cuadrado tal cual.
+///
+/// [withBackground] y [color] se mantienen por compatibilidad con
+/// las llamadas existentes: la imagen ya trae su fondo marrón
+/// único, así que no cambian el dibujo.
 class BrandLogo extends StatelessWidget {
   const BrandLogo({
     super.key,
@@ -70,18 +87,27 @@ class BrandLogo extends StatelessWidget {
   final bool withBackground;
   final Color color;
 
+  /// Relación alto/ancho del encuadre recortado a las gemelas.
+  static const double aspectHeight = 0.40;
+
   @override
   Widget build(BuildContext context) {
+    final height = size * aspectHeight;
     return SizedBox(
       width: size,
-      height: size,
+      height: height,
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(size * 0.24),
+        borderRadius: BorderRadius.circular(size * 0.10),
         child: Image.asset(
           'assets/logo.png',
           width: size,
           height: size,
           fit: BoxFit.cover,
+          // Las gemelas están por encima del centro de la imagen
+          // (centro de la banda y~241 de 512): se sube un poco el
+          // encuadre para que queden centradas en el recorte.
+          alignment: const Alignment(0, -0.10),
+          filterQuality: FilterQuality.medium,
         ),
       ),
     );

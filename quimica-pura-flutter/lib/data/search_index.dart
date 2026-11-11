@@ -36,10 +36,9 @@ class SearchEntry {
 /// Pantallas de la app que se pueden abrir desde la búsqueda o el menú.
 const List<(String, String, String, String)> appScreens = [
   // (clave, título, subtítulo, icono)
-  ('branches', 'Ramas de la química', 'Orgánica, Inorgánica, Analítica y Fisicoquímica', 'hub'),
+  ('branches', 'Ramas de la química', 'Orgánica, Inorgánica, Analítica y Química física', 'hub'),
   ('lab', 'Laboratorio', 'Seguridad, material, cuestionario y simulador', 'biotech'),
   ('stats', 'Mis estadísticas', 'Racha, niveles, logros y progreso', 'bar_chart'),
-  ('flashcards', 'Tarjetas de memoria', 'Repasar fórmulas y elementos', 'style'),
   ('timed', 'Examen con tiempo', 'Elige el tiempo y responde todo lo que puedas', 'timer'),
   ('challenge', 'Reto', 'Duelo de dos jugadores en el mismo teléfono', 'sports_esports'),
   ('glossary', 'Glosario', 'Términos de química explicados', 'book'),

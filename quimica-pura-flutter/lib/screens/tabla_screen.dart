@@ -6,6 +6,7 @@ import '../data/reference_tables.dart';
 import '../models.dart';
 import '../services/localization.dart';
 import '../services/nav_requests.dart';
+import '../widgets/brand_logo.dart';
 import '../widgets/element_sheet.dart';
 import 'compare_screen.dart';
 import 'table_quiz_screen.dart';
@@ -37,6 +38,20 @@ class _TablaScreenState extends State<TablaScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _consumeNavRequests();
+  }
+
+  @override
+  void didUpdateWidget(TablaScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _consumeNavRequests();
+  }
+
+  /// Consume las peticiones de la búsqueda o del menú (NavRequests).
+  /// Antes solo se miraban en didChangeDependencies: si ya estabas
+  /// en Tabla al pedir un filtro desde la búsqueda, no se aplicaba
+  /// nada (auditoría fix2).
+  void _consumeNavRequests() {
     // Peticiones de la búsqueda o del menú: filtrar por texto o abrir
     // una pestaña concreta.
     if (NavRequests.tableQuery != null) {
@@ -75,6 +90,66 @@ class _TablaScreenState extends State<TablaScreen>
 
   void _showDetail(ChemicalElement e) {
     showElementSheet(context, e);
+  }
+
+  /// Tarjeta de acción superior (quiz / comparar): mismo patrón que
+  /// "Practicar de otra forma" — icono arriba en círculo tintado,
+  /// texto abajo centrado. El texto NO se recorta: sin maxLines ni
+  /// ellipsis, envuelve libremente ("Quiz de la tabla periódica"
+  /// ocupa 3 líneas en español) y el alto mínimo de 3 líneas
+  /// (51 px) más IntrinsicHeight + stretch hacen que ambas
+  /// tarjetas midan exactamente lo mismo.
+  Widget _actionCard(
+    BuildContext context, {
+    required LucideIconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    final accent = Theme.of(context).colorScheme.primary;
+    return Expanded(
+      child: Card(
+        margin: EdgeInsets.zero,
+        // Gris fijo en oscuro dejaba el texto (blanco) invisible:
+        // superficie oscura en modo oscuro (mismo bug que Niveles).
+        color: Theme.of(context).brightness == Brightness.dark
+            ? const Color(0xFF122B24)
+            : BrandColors.cardGray,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 6),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 54,
+                  height: 54,
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(27),
+                  ),
+                  alignment: Alignment.center,
+                  child: LucideIcon(icon, size: 28, color: accent),
+                ),
+                const SizedBox(height: 8),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 51),
+                  child: Center(
+                    child: Text(
+                      label,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _cell(BuildContext context, ChemicalElement? e) {
@@ -154,70 +229,118 @@ class _TablaScreenState extends State<TablaScreen>
           child: TextField(
             decoration: InputDecoration(
               labelText: tr('searchHint'),
-              prefixIcon: const LucideIcon(LucideIcons.search),
+              // Lupa pequeña (fix2, item 9): el tamaño por defecto
+              // (24) se veía enorme en la cajita de búsqueda.
+              prefixIcon: const LucideIcon(LucideIcons.search, size: 18),
             ),
             onChanged: (v) => setState(() => _query = v.trim()),
           ),
         ),
+        // Dos acciones superiores con el MISMO patrón que las tarjetas
+        // "Practicar de otra forma": icono ARRIBA en un círculo
+        // tintado, texto ABAJO centrado. El OutlinedButton.icon
+        // anterior ponía icono y texto en horizontal y el título
+        // "Quiz de la tabla periódica" se partía en 3 líneas feas
+        // ("Quiz de la / tabla / periódica"). IntrinsicHeight +
+        // stretch igualan ambas tarjetas a la altura de la más alta.
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-          child: Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () {
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _actionCard(
+                  context,
+                  icon: LucideIcons.circleHelp,
+                  label: tr('tableQuizTitle'),
+                  onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
                           builder: (_) => const TableQuizScreen()),
                     );
                   },
-                  icon: const LucideIcon(LucideIcons.circleHelp, size: 18),
-                  label: Text(tr('tableQuizTitle')),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () {
+                const SizedBox(width: 8),
+                _actionCard(
+                  context,
+                  icon: LucideIcons.arrowLeftRight,
+                  label: tr('compareTitle'),
+                  onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
                           builder: (_) => const CompareScreen()),
                     );
                   },
-                  icon: const LucideIcon(LucideIcons.arrowLeftRight, size: 18),
-                  label: Text(tr('compareTitle')),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          child: Row(
-            children: [
-              ChoiceChip(
-                label: Text(tr('allWord')),
-                selected: _filterCategory == null,
-                onSelected: (_) => setState(() => _filterCategory = null),
+        // Fila de chips con desplazamiento horizontal (fix3, punto 8):
+        // "Alcalinotérreo" quedaba cortado a mitad en el borde derecho
+        // y parecía un error. El degradado del borde derecho hace que
+        // el chip cortado se lea como "hay más", y el respiro final
+        // deja que el último chip entre entero en la vista. El fade
+        // es solo visual (IgnorePointer): no tapa los toques.
+        Stack(
+          children: [
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Row(
+                children: [
+                  ChoiceChip(
+                    label: Text(tr('allWord')),
+                    selected: _filterCategory == null,
+                    onSelected: (_) => setState(() => _filterCategory = null),
+                  ),
+                  for (var i = 0; i < categoryNames.length; i++)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 6),
+                      child: ChoiceChip(
+                        label: Text(categoryNames[i]),
+                        selected: _filterCategory == i,
+                        onSelected: (_) => setState(() =>
+                            _filterCategory = _filterCategory == i ? null : i),
+                      ),
+                    ),
+                  // Respiro final: el último chip puede deslizarse
+                  // entero dentro de la vista sin pegarse al borde.
+                  const SizedBox(width: 24),
+                ],
               ),
-              for (var i = 0; i < categoryNames.length; i++)
-                Padding(
-                  padding: const EdgeInsets.only(left: 6),
-                  child: ChoiceChip(
-                    label: Text(categoryNames[i]),
-                    selected: _filterCategory == i,
-                    onSelected: (_) => setState(
-                        () => _filterCategory = _filterCategory == i ? null : i),
+            ),
+            Positioned(
+              right: 0,
+              top: 0,
+              bottom: 0,
+              child: IgnorePointer(
+                child: Container(
+                  width: 36,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [
+                        Theme.of(context)
+                            .scaffoldBackgroundColor
+                            .withValues(alpha: 0),
+                        Theme.of(context).scaffoldBackgroundColor,
+                      ],
+                    ),
                   ),
                 ),
-            ],
-          ),
+              ),
+            ),
+          ],
         ),
         Expanded(
           child: searching
               ? ListView(
-                  padding: const EdgeInsets.all(12),
+                  // Padding inferior normal (24): al hacer scroll
+                  // hasta el final el último elemento se ve completo.
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
                   children: [
                     Text('${_visible.length} ${tr('elementsWord')}',
                         style: TextStyle(
@@ -242,109 +365,181 @@ class _TablaScreenState extends State<TablaScreen>
                       ),
                   ],
                 )
-              : Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: GridView.builder(
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 18,
-                      childAspectRatio: 0.85,
-                    ),
-                    itemCount: grid.length,
-                    itemBuilder: (context, i) {
-                      // Marcadores 57–71 y 89–103 en la rejilla principal.
-                      if (i == (6 - 1) * 18 + (3 - 1)) {
-                        return Container(
-                          margin: const EdgeInsets.all(1),
-                          decoration: BoxDecoration(
-                            color: _catColors[8],
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: const FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text('57–71',
-                                style: TextStyle(
-                                    fontSize: 7,
-                                    color: Colors.black,
-                                    fontWeight: FontWeight.bold)),
-                          ),
-                        );
-                      }
-                      if (i == (7 - 1) * 18 + (3 - 1)) {
-                        return Container(
-                          margin: const EdgeInsets.all(1),
-                          decoration: BoxDecoration(
-                            color: _catColors[9],
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: const FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text('89–103',
-                                style: TextStyle(
-                                    fontSize: 7,
-                                    color: Colors.black,
-                                    fontWeight: FontWeight.bold)),
-                          ),
-                        );
-                      }
-                      return _cell(context, grid[i]);
-                    },
-                  ),
-                ),
-        ),
-        // Leyenda de colores debajo de la tabla.
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-          child: Column(
-            children: [
-              Text(tr('legendWord'),
-                  style: const TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                alignment: WrapAlignment.center,
-                children: [
-                  for (var i = 0; i < categoryNames.length; i++)
-                    InkWell(
-                      onTap: () => setState(() => _filterCategory =
-                          _filterCategory == i ? null : i),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 12,
-                            height: 12,
-                            decoration: BoxDecoration(
-                              color: _catColors[i],
-                              borderRadius: BorderRadius.circular(3),
-                              border: Border.all(
-                                  color:
-                                      Colors.black.withValues(alpha: 0.2)),
+              : LayoutBuilder(
+                  builder: (context, constraints) {
+                    // Rejilla responsiva (fix3, punto 14; aclaración
+                    // 19:28): con 18 columnas fijas, en un teléfono
+                    // estrecho (~360 px) cada celda quedaba en ~20 px:
+                    // símbolo ilegible y todo apretado y feo. Paso
+                    // mínimo de celda 40 px (contenido ~38 px con los
+                    // márgenes de 1 px). La regla final es explícita:
+                    // si el ancho alcanza para celdas legibles
+                    // (18 × 40 = 720 px), la tabla se muestra ENTERA
+                    // sin scroll horizontal — sin SingleChildScrollView,
+                    // sin física ni barra de desplazamiento — y llena
+                    // todo el ancho disponible. SOLO en teléfono
+                    // angosto la rejilla mide 720 px, se desplaza en
+                    // horizontal y un degradado en el borde derecho
+                    // avisa de que hay más tabla a la derecha. El
+                    // desplazamiento vertical sigue siendo el del
+                    // propio GridView.
+                    const minCellPitch = 40.0;
+                    const minGridWidth = 18 * minCellPitch;
+                    final available = constraints.maxWidth.isFinite
+                        ? constraints.maxWidth - 16
+                        : minGridWidth;
+                    final fits = available >= minGridWidth;
+                    final gridWidth = fits ? available : minGridWidth;
+                    final gridView = SizedBox(
+                      width: gridWidth,
+                      child: GridView.builder(
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 18,
+                          childAspectRatio: 0.85,
+                        ),
+                        itemCount: grid.length,
+                        itemBuilder: (context, i) {
+                          // Marcadores 57–71 y 89–103 en la rejilla principal.
+                          if (i == (6 - 1) * 18 + (3 - 1)) {
+                            return Container(
+                              margin: const EdgeInsets.all(1),
+                              decoration: BoxDecoration(
+                                color: _catColors[8],
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text('57–71',
+                                    style: TextStyle(
+                                        fontSize: 7,
+                                        color: Colors.black,
+                                        fontWeight: FontWeight.bold)),
+                              ),
+                            );
+                          }
+                          if (i == (7 - 1) * 18 + (3 - 1)) {
+                            return Container(
+                              margin: const EdgeInsets.all(1),
+                              decoration: BoxDecoration(
+                                color: _catColors[9],
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text('89–103',
+                                    style: TextStyle(
+                                        fontSize: 7,
+                                        color: Colors.black,
+                                        fontWeight: FontWeight.bold)),
+                              ),
+                            );
+                          }
+                          return _cell(context, grid[i]);
+                        },
+                      ),
+                    );
+                    // Padding inferior (16): la última fila de la
+                    // rejilla no queda pegada al borde inferior.
+                    if (fits) {
+                      return Padding(
+                        padding: const EdgeInsets.fromLTRB(8, 8, 8, 16),
+                        child: gridView,
+                      );
+                    }
+                    return Stack(
+                      children: [
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.fromLTRB(8, 8, 8, 16),
+                          child: gridView,
+                        ),
+                        Positioned(
+                          right: 0,
+                          top: 0,
+                          bottom: 0,
+                          child: IgnorePointer(
+                            child: Container(
+                              key: const Key('gridScrollFade'),
+                              width: 36,
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.centerLeft,
+                                  end: Alignment.centerRight,
+                                  colors: [
+                                    Theme.of(context)
+                                        .scaffoldBackgroundColor
+                                        .withValues(alpha: 0),
+                                    Theme.of(context)
+                                        .scaffoldBackgroundColor,
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
-                          const SizedBox(width: 4),
-                          Text(categoryNames[i],
-                              style: const TextStyle(fontSize: 12)),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Text(
-                '118 ${tr('elementsWord')}.',
-                style: TextStyle(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onSurface
-                      .withValues(alpha: 0.7),
+                        ),
+                      ],
+                    );
+                  },
                 ),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
         ),
+        // Leyenda (fix2, item 10; fix3 punto 2 REVISADO): solo con
+        // el filtro "Todos" (_filterCategory == null). Con cualquier
+        // filtro de categoría activo no se muestra. En flujo normal,
+        // debajo de la rejilla/lista — sin Stack ni Positioned, sin
+        // flotar ni tapar nada — con padding inferior para que la
+        // línea "118 elementos" no quede pegada al borde ni la tape
+        // la barra de navegación inferior.
+        if (_filterCategory == null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  tr('legendWord'),
+                  style: const TextStyle(
+                      fontSize: 17, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  children: [
+                    for (var i = 0; i < categoryNames.length; i++)
+                      InkWell(
+                        onTap: () => setState(() => _filterCategory = i),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 12,
+                              height: 12,
+                              decoration: BoxDecoration(
+                                color: _catColors[i],
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(localizedCategoryName(i)),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '118 ${tr('elementsWord')}.',
+                  style: TextStyle(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.7),
+                  ),
+                ),
+              ],
+            ),
+          ),
       ],
     );
   }
@@ -356,6 +551,42 @@ class _TablaScreenState extends State<TablaScreen>
       children: [
         Text(tr('activityIntro'),
             style: TextStyle(color: scheme.onSurface.withValues(alpha: 0.8))),
+        const SizedBox(height: 12),
+        // Nota al principio (fix3): el hidrógeno es la referencia de
+        // la serie; antes estaba al final de la lista y se perdía.
+        // Aviso suave con icono, no texto gris suelto entre la intro
+        // y la lista: así se lee como lo que es, la clave de la serie.
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Theme.of(context)
+                .colorScheme
+                .primary
+                .withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              LucideIcon(
+                LucideIcons.info,
+                size: 18,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  tr('activityNote'),
+                  style: TextStyle(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withValues(alpha: 0.85)),
+                ),
+              ),
+            ],
+          ),
+        ),
         const SizedBox(height: 12),
         for (var i = 0; i < metalActivitySeries.length; i++)
           Card(
@@ -378,11 +609,6 @@ class _TablaScreenState extends State<TablaScreen>
                   metalActivitySeries[i].reaction)),
             ),
           ),
-        const SizedBox(height: 8),
-        Text(
-          'El hidrógeno (H₂) es la referencia: los metales de arriba lo desplazan de los ácidos; los de abajo, no.',
-          style: TextStyle(color: scheme.onSurface.withValues(alpha: 0.7)),
-        ),
       ],
     );
   }

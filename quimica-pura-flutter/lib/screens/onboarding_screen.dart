@@ -9,6 +9,7 @@ import '../widgets/lucide_icons.dart';
 import '../services/localization.dart';
 import '../widgets/brand_logo.dart';
 import '../services/user_prefs.dart';
+import 'onboarding_notifications_page.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key, required this.onFinished});
@@ -37,7 +38,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       );
       return;
     }
-    if (_page < 5) {
+    if (_page < 6) {
       await _pageController.nextPage(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
@@ -108,6 +109,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     gender: _gender,
                     onGenderChanged: (g) => setState(() => _gender = g),
                   ),
+                  // Fix3, punto 9: permiso de notificaciones, después
+                  // del nombre y antes del idioma ("Finalizar"). Tiene
+                  // sus propios botones; el "Siguiente" de abajo no
+                  // sale en esta página.
+                  OnboardingNotificationsPage(onNext: _next),
                   _LanguagePage(onFinish: _finish),
                 ],
               ),
@@ -119,7 +125,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: List.generate(
-                      6,
+                      7,
                       (i) => Container(
                         margin: const EdgeInsets.symmetric(horizontal: 4),
                         width: _page == i ? 22 : 8,
@@ -165,19 +171,14 @@ class _WelcomePage extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Marca nueva (molécula) y, debajo, la ilustración de las
-          // gemelas como decoración del regalo.
-          const BrandLogo(size: 76),
-          const SizedBox(height: 20),
-          const ClipRRect(
-            borderRadius: BorderRadius.all(Radius.circular(32)),
-            child: Image(
-              image: AssetImage('assets/twins.png'),
-              width: 170,
-              height: 170,
-              fit: BoxFit.cover,
-            ),
-          ),
+          // Marca nueva (molécula) arriba. La imagen de las gemelas
+          // de la primera pantalla se quitó (fix2, item 5): queda el
+          // logo, el "Bienvenidos" grande y el botón Siguiente, para
+          // que la pantalla se vea ya como la final.
+          // Fix3, punto 6: el logo ya es panorámico y recortado a
+          // las gemelas (BrandLogo: ancho 104, alto ~42), así las
+          // muñecas se ven grandes sin el cuadrado marrón gigante.
+          const BrandLogo(size: 104),
           const SizedBox(height: 24),
           Text(
             tr('obWelcome'),

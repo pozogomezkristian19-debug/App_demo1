@@ -30,6 +30,18 @@ class StatsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = ProgressService.instance;
     final scheme = Theme.of(context).colorScheme;
+    // En modo oscuro, los iconos son verdes (item 8: oscuro verde,
+    // sin violeta/azul/ámbar): la estrella, la llama y el trofeo
+    // cambian a menta; en claro siguen ámbar, naranja y violeta.
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final starColor =
+        isDark ? const Color(0xFF2DD4BF) : const Color(0xFFF59E0B);
+    final flameColor =
+        isDark ? const Color(0xFF2DD4BF) : Colors.deepOrange;
+    final trophyColor =
+        isDark ? const Color(0xFF2DD4BF) : const Color(0xFF8B5CF6);
+    final goalColor =
+        isDark ? const Color(0xFF2DD4BF) : const Color(0xFF00C2A8);
     Widget cell(Widget icon, Widget value, String label) {
       return Expanded(
         child: Column(
@@ -65,22 +77,24 @@ class StatsCard extends StatelessWidget {
               tr('livesTitle'),
             ),
             cell(
-              const LucideIcon(
+              LucideIcon(
                 LucideIcons.star,
                 size: 22,
-                color: Color(0xFFF59E0B),
+                color: starColor,
                 filled: true,
+                threeD: true,
               ),
               AnimatedNumber(value: p.points, style: valueStyle),
               tr('pointsTitle'),
             ),
             cell(
-              const FlickerWidget(
+              FlickerWidget(
                 child: LucideIcon(
                   LucideIcons.flame,
                   size: 22,
-                  color: Colors.deepOrange,
+                  color: flameColor,
                   filled: true,
+                  threeD: true,
                 ),
               ),
               AnimatedNumber(value: p.streakNow, style: valueStyle),
@@ -88,33 +102,39 @@ class StatsCard extends StatelessWidget {
             ),
             cell(
               p.dailyGoalDone
-                  ? const LucideIcon(
+                  ? LucideIcon(
                       LucideIcons.circleCheck,
                       size: 22,
-                      color: Color(0xFF00C2A8),
+                      color: goalColor,
+                      threeD: true,
                     )
                   : const LucideIcon(
                       LucideIcons.target,
                       size: 22,
                       color: Color(0xFF9CA3AF),
                     ),
-              // "Pendiente" es largo para una celda estrecha: se
-              // encoge solo si hace falta, sin romper la fila.
+              // Fix3, punto 10: "Pendiente" (y "En attente" en
+              // francés, aún más larga) pesaba más que los números
+              // de las demás celdas. El icono de objetivo ya está
+              // arriba: la palabra va en tamaño menor (13 frente a
+              // 16), y el FittedBox sigue de seguridad por si en
+              // algún idioma no cabe.
               FittedBox(
                 fit: BoxFit.scaleDown,
                 child: Text(
                   p.dailyGoalDone ? tr('doneWord') : tr('pendingWord'),
-                  style: valueStyle,
+                  style: valueStyle.copyWith(fontSize: 13),
                 ),
               ),
               tr('dailyGoalTitle'),
             ),
             if (achievementsLabel != null)
               cell(
-                const LucideIcon(
+                LucideIcon(
                   LucideIcons.trophy,
                   size: 22,
-                  color: Color(0xFF8B5CF6),
+                  color: trophyColor,
+                  threeD: true,
                 ),
                 Text(achievementsLabel!, style: valueStyle),
                 tr('accountAchievements'),

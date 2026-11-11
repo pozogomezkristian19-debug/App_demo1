@@ -15,18 +15,17 @@ import 'lucide_icons.dart';
 
 import '../models.dart';
 import '../services/localization.dart';
+import '../services/numeric_answer.dart';
 import '../services/points.dart';
 import '../services/progress.dart';
 import '../services/sound_service.dart';
+import 'numeric_keypad.dart';
 import 'twin_avatars.dart';
 
 /// Tokens claros (paleta propia de Melli-Qui, sin verde Duolingo):
 /// teal #00C2A8 como color principal, teal oscuro #00A18D.
 const _teal = Color(0xFF00C2A8);
 const _tealDark = Color(0xFF00A18D);
-const _ink = Color(0xFF3C3C3C);
-const _card = Color(0xFFF7F7F7);
-const _border = Color(0xFFE8E8E8);
 
 class SimpleQuizRunner extends StatefulWidget {
   const SimpleQuizRunner({
@@ -118,8 +117,7 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
 
   void _answer(int displayedIndex) {
     if (_selected != null) return;
-    final realIndex = _order[displayedIndex];
-    final correct = realIndex == _q.answer;
+    final realIndex = _order[displayedIndex];    final correct = realIndex == _q.answer;
     final progress = ProgressService.instance;
     progress.recordAnswer(_q.topic, correct);
     // Puntos por dificultad (v6): el acierto suma, el fallo resta más
@@ -148,6 +146,16 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
     }
   }
 
+  /// Respuesta de una pregunta de cálculo (fix3, punto 7): el valor
+  /// tecleado en el teclado numérico se traduce al índice de opción
+  /// que le corresponde y pasa por el mismo `_answer` de siempre, con
+  /// los mismos puntos, vidas y repaso de errores.
+  void _answerNumeric(double value) {
+    if (_selected != null) return;
+    _answer(displayedIndexForNumericAnswer(
+        typed: value, question: _q, order: _order));
+  }
+
   void _next() {
     if (_index + 1 >= widget.items.length) {
       _finish();
@@ -167,6 +175,38 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
     setState(() => _finished = true);
   }
 
+  /// Salir en medio de una partida (fix2, ronda 2): cuesta 1 vida,
+  /// igual que abandonar un nivel, así que se pide confirmación
+  /// antes de salir. Es el mismo aviso del quiz de Niveles. De un
+  /// quiz ya terminado se sale directo (sin aviso ni vida).
+  void _requestExit() {
+    if (_finished) {
+      widget.onExit();
+      return;
+    }
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(tr('exitLevelTitle')),
+        content: Text(tr('exitLevelBody')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(tr('exitLevelStay')),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              ProgressService.instance.loseLifeOnAbandon();
+              widget.onExit();
+            },
+            child: Text(tr('exitLevelLeave')),
+          ),
+        ],
+      ),
+    );
+  }
+
   String get _timeText {
     final m = _remaining ~/ 60;
     final s = _remaining % 60;
@@ -175,6 +215,10 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
 
   @override
   Widget build(BuildContext context) {
+    // Colores del tema (no fijos): en claro onSurface es la tinta
+    // #3C3C3C de siempre y en oscuro es casi blanco, así el título,
+    // el botón Salir y la pregunta se leen en los dos temas.
+    final scheme = Theme.of(context).colorScheme;
     if (_finished) {
       // En el examen con tiempo, "total" es lo respondido (la lista no
       // tiene fin); en los demás quizzes es el total de la lista.
@@ -190,22 +234,22 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(tr('quizResult'),
-                style: const TextStyle(
+                style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
-                    color: _ink),
+                    color: scheme.onSurface),
                 textAlign: TextAlign.center),
             const SizedBox(height: 12),
             if (timed) ...[
               Text('${tr('timedAnswered')}: $total',
-                  style: const TextStyle(fontSize: 20, color: _ink),
+                  style: TextStyle(fontSize: 20, color: scheme.onSurface),
                   textAlign: TextAlign.center),
               Text('${tr('quizScore')}: $_score ${tr('quizOf')} $total',
-                  style: const TextStyle(fontSize: 20, color: _ink),
+                  style: TextStyle(fontSize: 20, color: scheme.onSurface),
                   textAlign: TextAlign.center),
             ] else
               Text('$_score ${tr('quizOf')} $total ${tr('quizScore')}',
-                  style: const TextStyle(fontSize: 20, color: _ink),
+                  style: TextStyle(fontSize: 20, color: scheme.onSurface),
                   textAlign: TextAlign.center),
             Text('$percent%',
                 style: const TextStyle(
@@ -215,20 +259,23 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
                 textAlign: TextAlign.center),
             const SizedBox(height: 4),
             Text('${tr('pointsWord')}: $pointsText',
-                style: const TextStyle(
+                style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
-                    color: _ink),
+                    color: scheme.onSurface),
                 textAlign: TextAlign.center),
             const SizedBox(height: 16),
             MascotBubble(
-              twinA: _index % 2 != 0,
+              companion: companionForTurn(_index),
               mood: (total > 0 && _score * 5 >= total * 3)
                   ? TwinMood.happy
                   : TwinMood.soft,
-              text: tr(total > 0 && _score * 5 >= total * 3
-                  ? mascotPraiseKey(_answered)
-                  : mascotConsoleKey(_answered)),
+              text: tr(mascotLineKey(
+                  companionForTurn(_index),
+                  total > 0 && _score * 5 >= total * 3
+                      ? MascotLine.praise
+                      : MascotLine.console,
+                  _answered)),
             ),
             const SizedBox(height: 24),
             if (widget.onRepeat != null)
@@ -262,7 +309,17 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
     }
 
     final timed = widget.durationSeconds != null;
-    return ListView(
+    // Bloqueo de sesión (fix2, ronda 2): mientras la partida está
+    // en curso, ni el botón atrás del sistema ni la flecha de la
+    // barra pueden cerrar la partida directamente: muestran el
+    // aviso de Salir con pérdida de vida. Terminada la partida,
+    // se sale libre.
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _requestExit();
+      },
+      child: ListView(
       padding: const EdgeInsets.all(16),
       children: [
         Row(
@@ -276,30 +333,36 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
                         ? '${widget.title} · ${tr('quizQuestion')} ${_index + 1}'
                         : '${widget.title} · ${tr('quizQuestion')} ${_index + 1} ${tr('quizOf')} ${widget.items.length}')
                     : '${widget.playerName} · ${tr('quizQuestion')} ${_index + 1} ${tr('quizOf')} ${widget.items.length}',
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold, color: _ink),
+                style: TextStyle(
+                    fontWeight: FontWeight.bold, color: scheme.onSurface),
                 maxLines: 2,
               ),
             ),
             if (widget.durationSeconds != null) ...[
               const SizedBox(width: 8),
               Chip(
-                backgroundColor: _card,
-                side: const BorderSide(color: _border),
-                avatar: const LucideIcon(LucideIcons.timer, size: 18, color: _tealDark),
+                backgroundColor: scheme.surfaceContainerHighest,
+                side: BorderSide(color: scheme.outlineVariant),
+                avatar: const LucideIcon(LucideIcons.timer,
+                    size: 18, color: _tealDark, threeD: true),
                 label: Text(_timeText,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold, color: _ink)),
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: scheme.onSurface)),
               ),
             ],
             const SizedBox(width: 8),
             OutlinedButton.icon(
-              onPressed: widget.onExit,
-              icon: const LucideIcon(LucideIcons.logOut, size: 20),
+              onPressed: _requestExit,
+              // Icono 3D (fix3, punto 6): el degradado sale del
+              // color del botón (onSurface del tema) heredado; el
+              // glifo conserva su forma (puerta + flecha).
+              icon: const LucideIcon(LucideIcons.logOut,
+                  size: 20, threeD: true),
               label: Text(tr('quizExit'), style: const TextStyle(fontSize: 16)),
               style: OutlinedButton.styleFrom(
-                foregroundColor: _ink,
-                side: const BorderSide(color: _border),
+                foregroundColor: scheme.onSurface,
+                side: BorderSide(color: scheme.outlineVariant),
                 shape: const StadiumBorder(),
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -311,52 +374,68 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
         if (timed)
           Text(
             '${tr('timedAnswered')}: $_answered · ${tr('quizScore')}: $_score · ${tr('pointsWord')}: ${_points >= 0 ? '+$_points' : '$_points'}',
-            style: const TextStyle(
-                fontWeight: FontWeight.bold, color: _ink),
+            style: TextStyle(
+                fontWeight: FontWeight.bold, color: scheme.onSurface),
           )
         else
           LinearProgressIndicator(
             value: (_index + 1) / widget.items.length,
             color: _teal,
-            backgroundColor: const Color(0xFFE8E8E8),
+            backgroundColor: scheme.surfaceContainerHighest,
             minHeight: 8,
             borderRadius: const BorderRadius.all(Radius.circular(8)),
           ),
         const SizedBox(height: 16),
         MascotBubble(
-          twinA: _index % 2 == 0,
+          companion: companionForTurn(_index),
           mood: _selected == null
               ? TwinMood.happy
               : (_order[_selected!] == _q.answer
                   ? TwinMood.happy
                   : TwinMood.soft),
           text: tr(_selected == null
-              ? mascotCheerKey(_index)
+              ? mascotLineKey(
+                  companionForTurn(_index), MascotLine.ask, _index)
               : (_order[_selected!] == _q.answer
-                  ? mascotPraiseKey(_index)
-                  : mascotConsoleKey(_index))),
+                  ? mascotLineKey(companionForTurn(_index),
+                      MascotLine.praise, _index)
+                  : mascotLineKey(companionForTurn(_index),
+                      MascotLine.console, _index))),
         ),
         const SizedBox(height: 16),
         Text(_q.question,
-            style: const TextStyle(
+            style: TextStyle(
                 fontSize: 19,
                 fontWeight: FontWeight.w600,
-                color: _ink)),
+                color: scheme.onSurface)),
         const SizedBox(height: 16),
-        for (var i = 0; i < 4; i++)
+        // Pregunta de cálculo (fix3, punto 7): las 4 opciones dejan
+        // paso al teclado numérico, abierto desde el principio. Las
+        // conceptuales siguen con las opciones de siempre.
+        if (_q.isNumeric)
+          NumericKeypad(
+            key: ValueKey(_id),
+            unit: _q.numericUnit,
+            enabled: _selected == null,
+            onSubmit: _answerNumeric,
+          )
+        else
+          for (var i = 0; i < 4; i++)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: _selected == null
-                    ? _card
+                    ? scheme.surfaceContainerHighest
                     : (_order[i] == _q.answer
                         ? _teal
-                        : (_selected == i ? Colors.redAccent : _card)),
+                        : (_selected == i
+                            ? Colors.redAccent
+                            : scheme.surfaceContainerHighest)),
                 foregroundColor: _selected != null &&
                         (_order[i] == _q.answer || _selected == i)
                     ? Colors.white
-                    : _ink,
+                    : scheme.onSurface,
                 alignment: Alignment.centerLeft,
                 padding: const EdgeInsets.all(14),
                 elevation: 0,
@@ -388,12 +467,13 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
                     _order[_selected!] == _q.answer
                         ? tr('quizCorrect')
                         : '${tr('quizIncorrect')}. ${tr('quizCorrectIs')} ${_q.options[_q.answer]}',
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold, color: _ink),
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: scheme.onSurface),
                   ),
                   const SizedBox(height: 6),
                   Text(_q.explanation,
-                      style: const TextStyle(color: _ink)),
+                      style: TextStyle(color: scheme.onSurface)),
                 ],
               ),
             ),
@@ -415,6 +495,7 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
           ),
         ],
       ],
+      ),
     );
   }
 }

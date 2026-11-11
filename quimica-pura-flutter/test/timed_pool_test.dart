@@ -1,5 +1,11 @@
 // Prueba del examen con tiempo (v6): la lista no se acaba nunca
 // antes que el tiempo y los ids van en paralelo a las preguntas.
+// Tamaño 275 (fix3): el banco sigue siendo 210 (verificado en
+// lib/data/questions.dart) y el generador completa hasta el tope
+// _poolSize = 275 de timed_exam_screen.dart — 210 de banco + 65
+// generadas. La expectativa anterior (310 = 210 + 100) quedó
+// desactualizada cuando el tope bajó a 275; 275 sigue sobrando
+// para 30 minutos (nadie responde 275 preguntas en media hora).
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -14,8 +20,8 @@ void main() {
     for (final id in pool.ids) {
       expect(id.startsWith('bank:') || id.startsWith('gen:'), isTrue);
     }
-    expect(pool.ids.where((i) => i.startsWith('bank:')).length, 175);
-    expect(pool.ids.where((i) => i.startsWith('gen:')).length, 100);
+    expect(pool.ids.where((i) => i.startsWith('bank:')).length, 210);
+    expect(pool.ids.where((i) => i.startsWith('gen:')).length, 65);
     for (var i = 0; i < pool.questions.length; i++) {
       final q = pool.questions[i];
       if (pool.ids[i].startsWith('bank:')) {

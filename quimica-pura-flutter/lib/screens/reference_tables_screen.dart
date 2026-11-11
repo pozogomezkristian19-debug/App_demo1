@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../data/reference_tables.dart';
 import '../services/localization.dart';
+import '../widgets/lucide_icons.dart';
 
 class ReferenceTablesScreen extends StatelessWidget {
   const ReferenceTablesScreen({super.key, this.initialTab = 0});
@@ -49,6 +50,35 @@ class _ActivityTab extends StatelessWidget {
         Text(tr('activityIntro'),
             style: TextStyle(color: scheme.onSurface.withValues(alpha: 0.8))),
         const SizedBox(height: 12),
+        // Nota al principio (fix3): el hidrógeno (H) es la referencia
+        // de la serie; antes estaba al final de la lista y se perdía.
+        // Mismo aviso suave con icono que en la pestaña Actividad.
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: scheme.primary.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              LucideIcon(
+                LucideIcons.info,
+                size: 18,
+                color: scheme.primary,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  tr('activityNote'),
+                  style: TextStyle(
+                      color: scheme.onSurface.withValues(alpha: 0.85)),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
         for (var i = 0; i < metalActivitySeries.length; i++)
           Card(
             margin: const EdgeInsets.only(bottom: 8),
@@ -69,11 +99,6 @@ class _ActivityTab extends StatelessWidget {
               subtitle: Text(metalActivitySeries[i].reaction),
             ),
           ),
-        const SizedBox(height: 8),
-        Text(
-          'El hidrógeno (H₂) es la referencia: los metales de arriba lo desplazan de los ácidos; los de abajo, no.',
-          style: TextStyle(color: scheme.onSurface.withValues(alpha: 0.7)),
-        ),
       ],
     );
   }

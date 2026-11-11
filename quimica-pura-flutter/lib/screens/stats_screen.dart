@@ -12,6 +12,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import '../widgets/brand_logo.dart';
 import '../widgets/lives_chip.dart';
 import '../widgets/lucide_icons.dart';
 import 'package:share_plus/share_plus.dart';
@@ -33,6 +34,84 @@ const _card = Color(0xFFF7F7F7);
 const _border = Color(0xFFE8E8E8);
 const _edgeGray = Color(0xFFDDDDDD);
 
+/// Colores de esta pantalla según el tema (igual patrón que
+/// _CuentaColors en account_screen.dart).
+///
+/// BUG 12: toda la pantalla usaba colores claros fijos (fondo blanco,
+/// tarjetas #F7F7F7, texto #3C3C3C). En modo oscuro quedaban
+/// rectángulos blancos/claros sobre el fondo verde oscuro, y las
+/// tarjetas de logros bloqueadas eran gris sobre gris. En claro los
+/// valores son los mismos de antes; en oscuro solo verdes/menta
+/// (fondo #0A1F1A, superficie #122B24, sin violeta/azul/ámbar).
+class _StatsColors {
+  const _StatsColors({
+    required this.bg,
+    required this.card,
+    required this.surface,
+    required this.ink,
+    required this.inkSoft,
+    required this.border,
+    required this.edgeGray,
+    required this.accent,
+    required this.accentDark,
+    required this.unlockedBg,
+    required this.unlockedIcon,
+    required this.flameBg,
+    required this.flameIcon,
+  });
+
+  factory _StatsColors.of(BuildContext context) {
+    if (Theme.of(context).brightness == Brightness.dark) {
+      return const _StatsColors(
+        bg: Color(0xFF0A1F1A),
+        card: Color(0xFF122B24),
+        surface: Color(0xFF122B24),
+        ink: Color(0xFFE6F4EE),
+        inkSoft: Color(0xFFB8CFC8),
+        border: Color(0xFF1E4D42),
+        edgeGray: Color(0xFF1E4D42),
+        accent: BrandColors.mintLight,
+        accentDark: BrandColors.mint,
+        // Logro desbloqueado: tinte menta, nunca ámbar en oscuro.
+        unlockedBg: Color(0x2614B8A6),
+        unlockedIcon: BrandColors.mintLight,
+        flameBg: Color(0x2614B8A6),
+        flameIcon: BrandColors.mintLight,
+      );
+    }
+    return const _StatsColors(
+      bg: Colors.white,
+      card: _card,
+      surface: Colors.white,
+      ink: _ink,
+      inkSoft: _inkSoft,
+      border: _border,
+      edgeGray: _edgeGray,
+      accent: _teal,
+      accentDark: _tealDark,
+      // Igual que antes: Colors.amber con alpha 0.15 y amber.shade800.
+      unlockedBg: Color(0x26FFC107),
+      unlockedIcon: Color(0xFFFF8F00),
+      flameBg: Color(0x26FFC107),
+      flameIcon: Colors.deepOrange,
+    );
+  }
+
+  final Color bg;
+  final Color card;
+  final Color surface;
+  final Color ink;
+  final Color inkSoft;
+  final Color border;
+  final Color edgeGray;
+  final Color accent;
+  final Color accentDark;
+  final Color unlockedBg;
+  final Color unlockedIcon;
+  final Color flameBg;
+  final Color flameIcon;
+}
+
 class StatsScreen extends StatefulWidget {
   const StatsScreen({super.key, required this.trackTopics});
   final List<String> trackTopics;
@@ -47,21 +126,79 @@ class _StatsScreenState extends State<StatsScreen> {
   /// La tarjeta de resumen que se convierte en imagen al compartir.
   final _shareKey = GlobalKey();
 
+  /// Scroll de la lista: hace falta para el arreglo del BUG 7.
+  final _scrollController = ScrollController();
+
+  /// Evita dos capturas a la vez si se toca el botón dos veces.
+  bool _isSharing = false;
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
   /// Renderiza la tarjeta de progreso a PNG y la comparte con la hoja
   /// del sistema (WhatsApp, galería, correo...). La imagen se genera
   /// en memoria y no se guarda ningún archivo.
+  ///
+  /// BUG 7 — causa raíz: la tarjeta a capturar está arriba del todo
+  /// de la lista y el botón "Compartir progreso" está abajo. Al bajar
+  /// hasta el botón, ListView ya ha desmontado la tarjeta (queda fuera
+  /// del cacheExtent de 250 px), así que `_shareKey.currentContext`
+  /// es null y el `!` del código anterior lanzaba siempre en el
+  /// teléfono real: de ahí el toast "No se pudo crear la imagen".
+  /// El arreglo es volver arriba y esperar a que la tarjeta esté
+  /// montada y pintada ANTES de capturar, y comprobarlo todo (contexto
+  /// no nulo, boundary no nulo, tamaño no vacío, bytes no nulos) en
+  /// vez de usar `!`. El pixelRatio se limita a 2.0 (imagen sobrada
+  /// para compartir y menos memoria que 3.0).
   Future<void> _shareImage() async {
+    if (_isSharing) return;
+    _isSharing = true;
     try {
-      final boundary = _shareKey.currentContext!.findRenderObject()
-          as RenderRepaintBoundary;
-      final image = await boundary.toImage(pixelRatio: 3.0);
+      // 1. Llevar la tarjeta a pantalla: si estaba desmontada, el
+      // scroll la vuelve a montar; si ya estaba arriba, no se mueve.
+      if (_scrollController.hasClients && _scrollController.offset > 0) {
+        await _scrollController.animateTo(
+          0,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+        );
+      }
+      // 2. Esperar a que el frame con la tarjeta montada se pinte.
+      // Dos intentos: si tras el primer frame sigue sin estar lista,
+      // se espera un poco más en vez de fallar de inmediato.
+      RenderRepaintBoundary? boundary;
+      for (var attempt = 0; attempt < 2; attempt++) {
+        await WidgetsBinding.instance.endOfFrame;
+        await Future.delayed(const Duration(milliseconds: 120));
+        final context = _shareKey.currentContext;
+        final object = context?.findRenderObject();
+        if (object is RenderRepaintBoundary && object.size != Size.zero) {
+          boundary = object;
+          break;
+        }
+      }
+      if (boundary == null) {
+        throw StateError('summary card not mounted');
+      }
+      final pixelRatio =
+          MediaQuery.of(context).devicePixelRatio.clamp(1.0, 2.0);
+      final image = await boundary.toImage(pixelRatio: pixelRatio);
       final byteData =
           await image.toByteData(format: ui.ImageByteFormat.png);
-      final bytes = byteData!.buffer.asUint8List();
+      if (byteData == null) {
+        throw StateError('could not encode image');
+      }
+      final bytes = byteData.buffer.asUint8List();
+      if (bytes.isEmpty) {
+        throw StateError('empty image');
+      }
       await SharePlus.instance.share(ShareParams(
         files: [
           XFile.fromData(bytes,
-              name: 'melli-qui-progreso.png', mimeType: 'image/png')
+              name: 'quemia-progreso.png', mimeType: 'image/png')
         ],
         text: tr('shareProgress'),
       ));
@@ -70,6 +207,8 @@ class _StatsScreenState extends State<StatsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(tr('shareImageFail'))),
       );
+    } finally {
+      _isSharing = false;
     }
   }
 
@@ -132,11 +271,28 @@ class _StatsScreenState extends State<StatsScreen> {
     ];
   }
 
+  /// Etiqueta legible de una clave de puntuación guardada, solo para
+  /// la exportación (fix3): las claves internas ('level:bach-…:2',
+  /// 'mixto', 'timed') nunca se muestran al usuario tal cual. Las
+  /// claves guardadas no cambian; solo se traduce lo que se exporta.
+  String _prettyScoreKey(String key) {
+    final parts = key.split(':');
+    if (parts.length == 3 && parts[0] == 'level') {
+      final level = int.tryParse(parts[2]) ?? 0;
+      return '${localizedTopicTitle(parts[1])} · ${tr('levelWord')} $level';
+    }
+    if (key == 'mixto') return tr('mixedTitle');
+    if (key == 'timed') return tr('timedTitle');
+    return humanizeTopicId(key);
+  }
+
   String _exportText() {
     final p = ProgressService.instance;
     final data = <String, dynamic>{
-      'app': 'Melli-Qui',
-      'version': ProgressService.track,
+      'app': 'Quemia',
+      'version': ProgressService.track == ProgressService.trackBach
+          ? tr('trackBach')
+          : tr('trackUni'),
       'racha_actual': p.streakNow,
       'racha_mejor': p.streakBest,
       'niveles_pasados_uni': _passedLevels(
@@ -149,11 +305,15 @@ class _StatsScreenState extends State<StatsScreen> {
               ? p.bestScores
               : (_otherBest ?? {}),
           _topicsOf(ProgressService.trackBach)),
-      'mejores_puntuaciones': p.bestScores,
+      'mejores_puntuaciones': {
+        for (final e in p.bestScores.entries)
+          _prettyScoreKey(e.key): e.value,
+      },
       'respuestas_correctas': p.totalCorrect,
       'respuestas_totales': p.totalAnswered,
       'errores_pendientes': p.failedCount,
-      'temas_dominados': p.masteredTopics.toList(),
+      'temas_dominados':
+          p.masteredTopics.map(localizedTopicTitle).toList(),
       'dias_practica': p.practiceDays.toList(),
     };
     return const JsonEncoder.withIndent('  ').convert(data);
@@ -163,7 +323,7 @@ class _StatsScreenState extends State<StatsScreen> {
     final text = _exportText();
     if (viaWhatsApp) {
       final uri = Uri.parse(
-          'https://wa.me/?text=${Uri.encodeComponent('Mi progreso en Melli-Qui:\n$text')}');
+          'https://wa.me/?text=${Uri.encodeComponent('Mi progreso en Quemia:\n$text')}');
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
       }
@@ -178,6 +338,7 @@ class _StatsScreenState extends State<StatsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final c = _StatsColors.of(context);
     final p = ProgressService.instance;
     final topics = widget.trackTopics;
     final passed = _passedLevels(p.bestScores, topics);
@@ -192,20 +353,21 @@ class _StatsScreenState extends State<StatsScreen> {
         : _passedLevels(_otherBest!, otherTopics);
     final otherTotal = _totalLevels(otherTopics);
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: c.bg,
       appBar: AppBar(
         title: Text(tr('statsTitle')),
-        backgroundColor: Colors.white,
-        foregroundColor: _ink,
+        backgroundColor: c.bg,
+        foregroundColor: c.ink,
         elevation: 0,
-        titleTextStyle: const TextStyle(
+        titleTextStyle: TextStyle(
           fontFamily: 'Roboto',
           fontSize: 20,
           fontWeight: FontWeight.bold,
-          color: _ink,
+          color: c.ink,
         ),
       ),
       body: ListView(
+        controller: _scrollController,
         padding: const EdgeInsets.all(16),
         children: [
           // Tarjeta de resumen: es la que se comparte como imagen (v6).
@@ -213,9 +375,9 @@ class _StatsScreenState extends State<StatsScreen> {
             key: _shareKey,
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: c.surface,
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: _border),
+                border: Border.all(color: c.border),
                 boxShadow: const [
                   BoxShadow(
                     color: Color(0x14000000),
@@ -228,32 +390,31 @@ class _StatsScreenState extends State<StatsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Melli-Qui · ${tr('statsTitle')}',
-                      style: const TextStyle(
+                  Text('Quemia · ${tr('statsTitle')}',
+                      style: TextStyle(
                           fontSize: 19,
                           fontWeight: FontWeight.bold,
-                          color: _teal)),
+                          color: c.accent)),
                   const SizedBox(height: 8),
                   Text('${tr('streakWord')}: ${p.streakNow}',
-                      style: const TextStyle(color: _ink, height: 1.5)),
+                      style: TextStyle(color: c.ink, height: 1.5)),
                   Text('${tr('levelsTitle')}: $passed / $total',
-                      style: const TextStyle(color: _ink, height: 1.5)),
+                      style: TextStyle(color: c.ink, height: 1.5)),
                   Text('${tr('pointsTitle')}: ${p.points}',
-                      style: const TextStyle(color: _ink, height: 1.5)),
+                      style: TextStyle(color: c.ink, height: 1.5)),
                   Row(
                     children: [
                       Text('${tr('livesTitle')}: ',
-                          style:
-                              const TextStyle(color: _ink, height: 1.5)),
+                          style: TextStyle(color: c.ink, height: 1.5)),
                       LivesChip(
                           lives: p.livesLeft, showMax: true, pulse: false),
                     ],
                   ),
                   Text(
                       'Respuestas correctas: ${p.totalCorrect} de ${p.totalAnswered}',
-                      style: const TextStyle(color: _ink, height: 1.5)),
+                      style: TextStyle(color: c.ink, height: 1.5)),
                   Text('Errores por repasar: ${p.failedCount}',
-                      style: const TextStyle(color: _ink, height: 1.5)),
+                      style: TextStyle(color: c.ink, height: 1.5)),
                 ],
               ),
             ),
@@ -262,9 +423,9 @@ class _StatsScreenState extends State<StatsScreen> {
           // Racha.
           Container(
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: c.surface,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: _border),
+              border: Border.all(color: c.border),
               boxShadow: const [
                 BoxShadow(
                   color: Color(0x14000000),
@@ -280,29 +441,40 @@ class _StatsScreenState extends State<StatsScreen> {
                   width: 56,
                   height: 56,
                   decoration: BoxDecoration(
-                    color: Colors.amber.withValues(alpha: 0.15),
+                    color: c.flameBg,
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: const LucideIcon(LucideIcons.flame,
-                      size: 32, color: Colors.deepOrange, filled: true),
+                  child: LucideIcon(LucideIcons.flame,
+                      size: 32, color: c.flameIcon, filled: true, threeD: true),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Fix3, punto 2 (segunda pasada): esta tarjeta
+                      // ya NO repite la racha actual — ya está en la
+                      // tarjeta de resumen de arriba ("Racha: N").
+                      // Solo muestra lo que el resumen no tiene: la
+                      // mejor racha y la meta del día.
                       Text(
-                        '${tr('streakWord')}: ${p.streakNow} ${p.streakNow == 1 ? 'día' : 'días'}',
-                        style: const TextStyle(
+                        tr('streakWord'),
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: c.accent),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Mejor racha: ${p.streakBest} días',
+                        style: TextStyle(
                             fontSize: 19,
                             fontWeight: FontWeight.bold,
-                            color: _ink),
+                            color: c.ink),
                       ),
-                      Text('Mejor racha: ${p.streakBest} días',
-                          style: const TextStyle(color: _inkSoft)),
                       Text(
                         'Meta del día: ${p.dailyGoalDone ? 'hecha' : 'pasa 1 nivel hoy'}',
-                        style: const TextStyle(color: _inkSoft),
+                        style: TextStyle(color: c.inkSoft),
                       ),
                     ],
                   ),
@@ -311,10 +483,15 @@ class _StatsScreenState extends State<StatsScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          // Niveles por versión y totales.
+          // Detalle: SOLO lo que el resumen de arriba no tiene.
+          // Fix3, punto 2 (segunda pasada): antes esta lista repetía
+          // Respuestas correctas, Respuestas totales, Errores por
+          // repasar, Puntos y Vidas — cifras que ya están en la
+          // tarjeta de resumen. Quedan niveles por versión, el mejor
+          // del examen mixto, temas dominados y días practicando.
           Container(
             decoration: BoxDecoration(
-              color: _card,
+              color: c.card,
               borderRadius: BorderRadius.circular(16),
             ),
             padding: const EdgeInsets.all(16),
@@ -322,37 +499,33 @@ class _StatsScreenState extends State<StatsScreen> {
               children: [
                 _statRow(
                     'Niveles pasados (${ProgressService.track == ProgressService.trackUni ? tr('trackUni') : tr('trackBach')})',
-                    '$passed / $total'),
+                    '$passed / $total',
+                    c.ink),
                 _statRow(
                     'Niveles pasados (${otherTrack == ProgressService.trackUni ? tr('trackUni') : tr('trackBach')})',
-                    otherPassed == null ? '…' : '$otherPassed / $otherTotal'),
-                _statRow('Examen mixto (mejor)', '${p.bestScore('mixto')}%'),
-                _statRow('Respuestas correctas', '${p.totalCorrect}'),
-                _statRow('Respuestas totales', '${p.totalAnswered}'),
-                _statRow('Errores por repasar', '${p.failedCount}'),
-                _statRow(tr('pointsTitle'), '${p.points}'),
-                _statWidgetRow(
-                    '${tr('livesTitle')} (hoy)',
-                    LivesChip(
-                        lives: p.livesLeft, showMax: true, pulse: false)),
-                _statRow('Temas dominados', '${p.masteredTopics.length}'),
-                _statRow('Días practicando', '${p.practiceDays.length}'),
+                    otherPassed == null ? '…' : '$otherPassed / $otherTotal',
+                    c.ink),
+                _statRow('Examen mixto (mejor)', '${p.bestScore('mixto')}%',
+                    c.ink),
+                _statRow('Temas dominados', '${p.masteredTopics.length}',
+                    c.ink),
+                _statRow(
+                    'Días practicando', '${p.practiceDays.length}', c.ink),
               ],
             ),
           ),
           const SizedBox(height: 16),
-          const Text('Temas más débiles',
+          Text('Temas más débiles',
               style: TextStyle(
-                  fontSize: 18, fontWeight: FontWeight.bold, color: _ink)),
+                  fontSize: 18, fontWeight: FontWeight.bold, color: c.ink)),
           const SizedBox(height: 8),
           if (weakest.isEmpty)
-            const Text(
-                'Aún no hay datos: contesta algunas preguntas.',
-                style: TextStyle(color: _inkSoft))
+            Text('Aún no hay datos: contesta algunas preguntas.',
+                style: TextStyle(color: c.inkSoft))
           else
             for (final t in weakest)
               Card(
-                color: _card,
+                color: c.card,
                 elevation: 0,
                 margin: const EdgeInsets.only(bottom: 6),
                 shape: RoundedRectangleBorder(
@@ -360,32 +533,36 @@ class _StatsScreenState extends State<StatsScreen> {
                 ),
                 child: ListTile(
                   title: Text(localizedTopicName(t),
-                      style: const TextStyle(color: _ink)),
+                      style: TextStyle(color: c.ink)),
                   trailing: Text(
                     p.accuracy(t) == null
                         ? 'sin intentos'
                         : '${((p.accuracy(t) ?? 0) * 100).round()}%',
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold, color: _tealDark),
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold, color: c.accentDark),
                   ),
                 ),
               ),
           const SizedBox(height: 16),
           // Logros.
           Text(tr('achievementsWord'),
-              style: const TextStyle(
-                  fontSize: 18, fontWeight: FontWeight.bold, color: _ink)),
+              style: TextStyle(
+                  fontSize: 18, fontWeight: FontWeight.bold, color: c.ink)),
           const SizedBox(height: 8),
           GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
-              // Alto fijo con margen de sobra (nunca se corta por abajo):
-              // el contenido más largo (icono 24 + título a 2 líneas +
-              // cuerpo a 3 líneas + paddings) mide ~135 incluso en un
-              // teléfono estrecho de 320 px; 168 deja ~30 px de aire.
-              mainAxisExtent: 168,
+              // BUG 12: el alto era 168 pero el contenido mide ~135-140
+              // incluso en un teléfono estrecho de 320 px, así que cada
+              // tarjeta tenía ~30 px de gris vacío abajo. Al hacer scroll
+              // solo se veía esa franja vacía de la fila de arriba: los
+              // dos rectángulos grises vacíos de la captura. Con 152 y
+              // el contenido centrado verticalmente ya no queda banda
+              // vacía abajo (el peor caso — título a 2 líneas + cuerpo
+              // a 3 líneas + paddings — mide ~146).
+              mainAxisExtent: 152,
               crossAxisSpacing: 8,
               mainAxisSpacing: 8,
             ),
@@ -394,9 +571,7 @@ class _StatsScreenState extends State<StatsScreen> {
               final a = allAchievements[i];
               final unlocked = achievementUnlocked(a.id, p, topics);
               return Card(
-                color: unlocked
-                    ? Colors.amber.withValues(alpha: 0.15)
-                    : _card,
+                color: unlocked ? c.unlockedBg : c.card,
                 elevation: 0,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
@@ -405,26 +580,25 @@ class _StatsScreenState extends State<StatsScreen> {
                   padding: const EdgeInsets.all(12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       LucideIcon(a.icon,
-                          color: unlocked
-                              ? Colors.amber.shade800
-                              : Colors.grey),
+                          color: unlocked ? c.unlockedIcon : c.inkSoft),
                       const SizedBox(height: 6),
                       Text(a.title,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: unlocked ? _ink : _inkSoft,
+                            color: unlocked ? c.ink : c.inkSoft,
                           )),
                       const SizedBox(height: 2),
                       Text(a.body,
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: _inkSoft,
+                            color: c.inkSoft,
                           )),
                     ],
                   ),
@@ -436,7 +610,7 @@ class _StatsScreenState extends State<StatsScreen> {
           // Ajustes rápidos.
           Container(
             decoration: BoxDecoration(
-              color: _card,
+              color: c.card,
               borderRadius: BorderRadius.circular(16),
             ),
             child: Material(
@@ -444,8 +618,8 @@ class _StatsScreenState extends State<StatsScreen> {
               borderRadius: BorderRadius.circular(16),
               clipBehavior: Clip.antiAlias,
               child: SwitchListTile(
-              title: const Text('Sonido y vibración al contestar',
-                  style: TextStyle(color: _ink)),
+              title: Text('Sonido y vibración al contestar',
+                  style: TextStyle(color: c.ink)),
               value: UserPrefs.soundOn,
               activeThumbColor: _teal,
               onChanged: (v) async {
@@ -468,19 +642,19 @@ class _StatsScreenState extends State<StatsScreen> {
           _PillButton(
             icon: LucideIcons.copy,
             label: 'Exportar mi progreso (copiar)',
-            background: _card,
-            edge: _edgeGray,
-            foreground: _ink,
+            background: c.card,
+            edge: c.edgeGray,
+            foreground: c.ink,
             onPressed: () => _export(),
           ),
           const SizedBox(height: 12),
           _PillButton(
             icon: LucideIcons.share2,
             label: 'Compartir progreso por WhatsApp',
-            background: Colors.white,
-            edge: _edgeGray,
-            foreground: _tealDark,
-            border: _teal,
+            background: c.surface,
+            edge: c.edgeGray,
+            foreground: c.accentDark,
+            border: c.accent,
             onPressed: () => _export(viaWhatsApp: true),
           ),
           const SizedBox(height: 16),
@@ -489,29 +663,14 @@ class _StatsScreenState extends State<StatsScreen> {
     );
   }
 
-  Widget _statRow(String label, String value) {
+  Widget _statRow(String label, String value, Color ink) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
-          Expanded(child: Text(label, style: const TextStyle(color: _ink))),
+          Expanded(child: Text(label, style: TextStyle(color: ink))),
           Text(value,
-              style: const TextStyle(
-                  fontWeight: FontWeight.bold, color: _ink)),
-        ],
-      ),
-    );
-  }
-
-  /// Como _statRow, pero con un valor que es un widget (el chip de
-  /// vidas: corazón + número, nunca la fila de 5 corazones).
-  Widget _statWidgetRow(String label, Widget value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Expanded(child: Text(label, style: const TextStyle(color: _ink))),
-          value,
+              style: TextStyle(fontWeight: FontWeight.bold, color: ink)),
         ],
       ),
     );

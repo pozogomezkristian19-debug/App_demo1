@@ -49,6 +49,7 @@ const List<StudyTopic> topics = [
       Formula(name: 'Densidad de un gas', expr: 'd = P·M / (R·T)', note: 'Útil para identificar gases desconocidos'),
       Formula(name: 'Dalton', expr: 'P total = P₁ + P₂ + …', note: 'Pᵢ = xᵢ · P total (fracción molar)'),
       Formula(name: 'Condiciones normales', expr: '0 °C y 1 atm → 22.41 L/mol', note: 'Volumen molar a TPN (0 °C, 1 atm)'),
+      Formula(name: 'Condiciones estándar (TPEA)', expr: '25 °C y 1 atm → 24.8 L/mol', note: 'Volumen molar a TPEA (25 °C, 1 atm)'),
     ],
     exampleTitle: '¿Qué volumen ocupan 0.50 mol de N₂ a 27 °C y 1.2 atm?',
     exampleSteps: [
@@ -449,7 +450,7 @@ const List<StudyTopic> topics = [
 /// Temas de las ramas que no viven en Aprender: son la introducción de
 /// cada rama en el menú de hamburguesa (Ramas de la química).
 /// - 'analitica': panorama de la química analítica.
-/// - 'fisicoquimica': panorama de la fisicoquímica.
+/// - 'fisicoquimica': panorama de la química física.
 /// Las ramas también enlazan temas de Aprender relacionados (ver
 /// `branchTopics` en branches_screen.dart).
 const List<StudyTopic> branchTopics = [
@@ -487,10 +488,10 @@ const List<StudyTopic> branchTopics = [
   ),
   StudyTopic(
     slug: 'fisicoquimica',
-    title: 'Fisicoquímica: la física detrás de la química',
+    title: 'Química física: la física detrás de la química',
     level: 'Rama de la química',
     summary: [
-      'La fisicoquímica explica el porqué de los fenómenos químicos con las leyes de la física: la energía, el movimiento de las moléculas y las probabilidades. Sus tres pilares son la termodinámica, la cinética y la estructura de la materia.',
+      'La química física explica el porqué de los fenómenos químicos con las leyes de la física: la energía, el movimiento de las moléculas y las probabilidades. Sus tres pilares son la termodinámica, la cinética y la estructura de la materia.',
       'La termodinámica dice si un proceso puede ocurrir y cuánta energía mueve: entalpía (ΔH), entropía (ΔS) y energía libre de Gibbs (ΔG = ΔH − TΔS). Si ΔG < 0, el proceso es espontáneo; si ΔG > 0, no lo es.',
       'La cinética dice a qué velocidad ocurre: la velocidad depende de las concentraciones y de la temperatura, y la energía de activación es la barrera que hay que superar. Un catalizador no cambia el equilibrio, solo llega antes.',
       'Los gases son el sistema modelo: PV = nRT describe el comportamiento ideal y las desviaciones revelan las fuerzas entre moléculas. La teoría cinético-molecular explica la presión como choques de moléculas contra las paredes.',

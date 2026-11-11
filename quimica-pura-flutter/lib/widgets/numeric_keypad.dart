@@ -1,0 +1,564 @@
+// Calculadora científica propia de Melli-Qui (ronda fix3, punto 7),
+// estilo Duolingo: teclas grandes y redondeadas, sin el teclado del
+// sistema. Se muestra ABIERTA junto a la pregunta de cálculo (no hay
+// que tocar nada para que aparezca); junto al campo se ve la unidad
+// esperada ('mol', 'g', 'L', 'pH'...) para que se sepa qué escribir.
+//
+// Flujo: el usuario escribe el cálculo (p. ej. pH = −log[H⁺]: escribe
+// "−log(0.01)"), ve la expresión y el resultado en vivo, pulsa '='
+// y el resultado queda en el campo de respuesta; luego "Comprobar"
+// es el equivalente a tocar una opción: llama a `onSubmit` con ese
+// valor y el runner pasa por su `_answer` de siempre (mismos puntos,
+// mismas vidas, misma explicación y mismo repaso de errores, con la
+// tolerancia ±2 % de services/numeric_answer.dart).
+//
+// Funciones: dígitos, punto decimal, + − × ÷, paréntesis, log (base
+// 10), ln, 10^x, e^x, x², √, π y notación científica (×10^). La
+// expresión se evalúa con el evaluador propio de
+// services/calculator.dart (sin dependencias nuevas): si la expresión
+// está incompleta o no es válida (paréntesis sin cerrar, log(0),
+// división entre cero...), la vista previa se queda en blanco y '='
+// no hace nada.
+//
+// Solo se usa cuando la pregunta es de cálculo
+// (`QuizQuestion.isNumeric`): las conceptuales siguen con las 4
+// opciones. El campo es de solo lectura a propósito: no es un
+// TextField, así que el teclado del sistema nunca se abre encima.
+
+import 'package:flutter/material.dart';
+
+import '../services/calculator.dart';
+import '../services/localization.dart';
+import '../services/numeric_answer.dart';
+
+/// Calculadora científica para responder una pregunta de cálculo.
+///
+/// [unit] es la etiqueta de unidad que se muestra junto al campo
+/// (null = la respuesta no lleva unidad, como el Qc).
+/// [enabled] false cuando la pregunta ya está contestada: las teclas
+/// se apagan pero el valor tecleado sigue visible.
+/// [onSubmit] recibe el número del campo de respuesta al pulsar
+/// "Comprobar" (solo se activa después de pulsar '=').
+class NumericKeypad extends StatefulWidget {
+  const NumericKeypad({
+    super.key,
+    required this.unit,
+    required this.enabled,
+    required this.onSubmit,
+  });
+
+  final String? unit;
+  final bool enabled;
+  final ValueChanged<double> onSubmit;
+
+  @override
+  State<NumericKeypad> createState() => _NumericKeypadState();
+}
+
+class _NumericKeypadState extends State<NumericKeypad> {
+  /// Expresión que se va escribiendo ("−log(0.01)").
+  var _expr = '';
+
+  /// Resultado de la última '=': lo que hay en el campo de respuesta.
+  var _answer = '';
+
+  /// Acabamos de pulsar '=': un dígito empieza un cálculo nuevo y
+  /// un operador sigue calculando desde el resultado.
+  var _justEvaluated = false;
+
+  double? get _liveResult =>
+      _expr.isEmpty ? null : evaluateExpression(_expr);
+
+  double? get _answerValue => parseNumericInput(_answer);
+
+  static bool _isDigit(String c) =>
+      c.codeUnitAt(0) >= 48 && c.codeUnitAt(0) <= 57;
+
+  bool get _endsWithValue {
+    if (_expr.isEmpty) return false;
+    final c = _expr[_expr.length - 1];
+    return _isDigit(c) || c == ')';
+  }
+
+  bool get _endsWithOperator {
+    if (_expr.isEmpty) return false;
+    return '+-×÷^'.contains(_expr[_expr.length - 1]);
+  }
+
+  bool get _endsWithOpenParen =>
+      _expr.isNotEmpty && _expr.endsWith('(');
+
+  int get _unclosedParens {
+    var n = 0;
+    for (var i = 0; i < _expr.length; i++) {
+      if (_expr[i] == '(') n++;
+      if (_expr[i] == ')') n--;
+    }
+    return n;
+  }
+
+  /// Empieza un cálculo nuevo si acabamos de pulsar '='.
+  void _freshStartIfEvaluated() {
+    if (_justEvaluated) {
+      _expr = '';
+      _justEvaluated = false;
+    }
+  }
+
+  void _pressDigit(String d) {
+    if (!widget.enabled) return;
+    setState(() {
+      _freshStartIfEvaluated();
+      _expr += d;
+    });
+  }
+
+  void _pressDot() {
+    if (!widget.enabled) return;
+    setState(() {
+      _freshStartIfEvaluated();
+      // ¿El número que se está escribiendo ya tiene punto?
+      var i = _expr.length - 1;
+      while (i >= 0 && (_isDigit(_expr[i]) || _expr[i] == '.')) {
+        i--;
+      }
+      final segment = _expr.substring(i + 1);
+      if (segment.contains('.')) return;
+      // Empezar por el punto escribe "0." para que siempre se vea
+      // un número válido.
+      _expr += segment.isEmpty ? '0.' : '.';
+    });
+  }
+
+  void _pressOperator(String op) {
+    if (!widget.enabled) return;
+    setState(() {
+      if (_expr.isEmpty) {
+        // Con la expresión vacía solo cabe el menos: al principio
+        // ("−log(0.01)") o para seguir desde el resultado.
+        if (op == '−') _expr = _answer.isEmpty ? '−' : '$_answer−';
+        return;
+      }
+      if (_justEvaluated) {
+        // Seguir calculando desde el resultado: "5×".
+        _expr = '$_answer$op';
+        _justEvaluated = false;
+        return;
+      }
+      if (_endsWithOpenParen) {
+        // Tras '(' solo cabe el menos unario: "(−3".
+        if (op == '−') _expr += op;
+        return;
+      }
+      if (_endsWithOperator) {
+        if (op == '−') {
+          // Menos unario tras un operador: "2×−3".
+          _expr += op;
+        } else {
+          // Cambiar el operador: "2+" y luego "×" deja "2×".
+          _expr = _expr.substring(0, _expr.length - 1) + op;
+        }
+        return;
+      }
+      _expr += op;
+    });
+  }
+
+  /// Función o constante que, escrita tras un número o ')', lleva una
+  /// multiplicación implícita delante ("2log(" es "2×log(").
+  void _pressOperandStart(String text) {
+    if (!widget.enabled) return;
+    setState(() {
+      _freshStartIfEvaluated();
+      if (_endsWithValue) _expr += '×';
+      _expr += text;
+    });
+  }
+
+  /// x²: eleva al cuadrado lo último escrito ("3" -> "3^2").
+  void _pressSquare() {
+    if (!widget.enabled) return;
+    if (!_endsWithValue) return;
+    setState(() {
+      if (_justEvaluated) {
+        _expr = _answer;
+        _justEvaluated = false;
+      }
+      _expr += '^2';
+    });
+  }
+
+  /// "×10^": notación científica, solo tras un número ("2×10^3").
+  void _pressTimesPow10() {
+    if (!widget.enabled) return;
+    if (!_endsWithValue) return;
+    setState(() {
+      if (_justEvaluated) {
+        _expr = _answer;
+        _justEvaluated = false;
+      }
+      _expr += '×10^';
+    });
+  }
+
+  void _pressOpenParen() => _pressOperandStart('(');
+
+  void _pressCloseParen() {
+    if (!widget.enabled) return;
+    if (_unclosedParens <= 0) return;
+    if (_endsWithOperator || _endsWithOpenParen) return;
+    setState(() => _expr += ')');
+  }
+
+  void _backspace() {
+    if (!widget.enabled) return;
+    setState(() {
+      if (_expr.isNotEmpty) {
+        // Borra el último token visible entero: 'log(' y '√(' no se
+        // borran letra a letra.
+        if (_expr.endsWith('×10^')) {
+          _expr = _expr.substring(0, _expr.length - 4);
+        } else if (_expr.endsWith('log(') || _expr.endsWith('ln(')) {
+          _expr = _expr.substring(0, _expr.length - 4);
+        } else if (_expr.endsWith('10^')) {
+          _expr = _expr.substring(0, _expr.length - 3);
+        } else if (_expr.endsWith('√(') || _expr.endsWith('e^')) {
+          _expr = _expr.substring(0, _expr.length - 2);
+        } else {
+          _expr = _expr.substring(0, _expr.length - 1);
+        }
+        _justEvaluated = false;
+      } else if (_answer.isNotEmpty) {
+        _answer = '';
+        _justEvaluated = false;
+      }
+    });
+  }
+
+  void _clear() {
+    if (!widget.enabled) return;
+    setState(() {
+      _expr = '';
+      _answer = '';
+      _justEvaluated = false;
+    });
+  }
+
+  /// '=': evalúa la expresión y pone el resultado en el campo de
+  /// respuesta. Sin resultado válido no hace nada.
+  void _equals() {
+    if (!widget.enabled) return;
+    final result = _liveResult;
+    if (result == null) return;
+    setState(() {
+      _answer = formatCalculatorResult(result);
+      _justEvaluated = true;
+    });
+  }
+
+  void _submit() {
+    final value = _answerValue;
+    if (!widget.enabled || value == null) return;
+    widget.onSubmit(value);
+  }
+
+  Widget _key({
+    required String label,
+    required VoidCallback onTap,
+    double height = 56,
+    double fontSize = 22,
+    bool accent = false,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      height: height,
+      child: FilledButton(
+        onPressed: widget.enabled ? onTap : null,
+        style: FilledButton.styleFrom(
+          backgroundColor: accent
+              ? scheme.primary.withValues(alpha: 0.14)
+              : scheme.surfaceContainerHighest,
+          foregroundColor:
+              accent ? scheme.primary : scheme.onSurface,
+          disabledBackgroundColor: scheme.surfaceContainerHighest
+              .withValues(alpha: 0.6),
+          // Borde fino: sobre fondo claro la tecla gris se distingue
+          // poco sin él y el teclado se ve "flojo".
+          side: BorderSide(color: scheme.outlineVariant),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          padding: EdgeInsets.zero,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.bold),
+        ),
+      ),
+    );
+  }
+
+  Widget _smallKey({
+    required String label,
+    required VoidCallback onTap,
+    bool primary = false,
+    bool enabled = true,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    final onPressed = widget.enabled && enabled ? onTap : null;
+    if (primary) {
+      return SizedBox(
+        height: 48,
+        child: FilledButton(
+          onPressed: onPressed,
+          style: FilledButton.styleFrom(
+            backgroundColor: scheme.primary,
+            foregroundColor: scheme.onPrimary,
+            disabledBackgroundColor:
+                scheme.primary.withValues(alpha: 0.45),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+          ),
+          child: Text(label,
+              style: const TextStyle(
+                  fontSize: 20, fontWeight: FontWeight.bold)),
+        ),
+      );
+    }
+    return SizedBox(
+      height: 48,
+      child: OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: scheme.onSurface,
+          side: BorderSide(color: scheme.outlineVariant),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+        child: Text(label,
+            style:
+                const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+      ),
+    );
+  }
+
+  Widget _row(List<Widget> children, {double gap = 8}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          for (var i = 0; i < children.length; i++) ...[
+            if (i > 0) SizedBox(width: gap),
+            Expanded(child: children[i]),
+          ],
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final canEquals = widget.enabled && _liveResult != null;
+    final canSubmit = widget.enabled && _answerValue != null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Campo de respuesta: el resultado de '=', grande, con la
+        // unidad al lado (solo el número, sin unidades ni fórmulas).
+        // Cuando tiene valor se tiñe suave de primario: es el dato
+        // que importa y tiene que saltar a la vista frente a la caja
+        // de la expresión.
+        Container(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: _answer.isEmpty
+                ? scheme.surfaceContainerHighest
+                : scheme.primary.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: _answer.isEmpty
+                  ? scheme.outlineVariant
+                  : scheme.primary.withValues(alpha: 0.45),
+            ),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _answer.isEmpty ? '0' : _answer,
+                  key: const Key('numeric-keypad-display'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: _answer.isEmpty
+                        ? scheme.onSurfaceVariant
+                        : scheme.onSurface,
+                  ),
+                ),
+              ),
+              if (widget.unit != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: scheme.primary.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    widget.unit!,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: scheme.primary,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        // Expresión que se va escribiendo y su resultado en vivo.
+        // Mismo radio y borde que el campo de respuesta, mismo
+        // padding vertical (12): las dos cajas van parejas.
+        Container(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: scheme.outlineVariant),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                reverse: true,
+                child: Text(
+                  _expr.isEmpty ? tr('calcHint') : _expr,
+                  key: const Key('calculator-expression'),
+                  style: TextStyle(
+                    fontSize: 20,
+                    color: _expr.isEmpty
+                        ? scheme.onSurfaceVariant
+                        : scheme.onSurface,
+                  ),
+                ),
+              ),
+              Text(
+                _liveResult == null
+                    ? ''
+                    : '= ${formatCalculatorResult(_liveResult!)}',
+                key: const Key('calculator-result'),
+                textAlign: TextAlign.right,
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: scheme.primary),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Fila científica (teclas compactas): log, ln, raíz, x², 10^x.
+        _row([
+          _key(label: 'log', onTap: () => _pressOperandStart('log('),
+              height: 44, fontSize: 16),
+          _key(label: 'ln', onTap: () => _pressOperandStart('ln('),
+              height: 44, fontSize: 16),
+          _key(label: '√', onTap: () => _pressOperandStart('√('),
+              height: 44, fontSize: 20),
+          _key(label: 'x²', onTap: _pressSquare,
+              height: 44, fontSize: 16),
+          _key(label: '10^x', onTap: () => _pressOperandStart('10^'),
+              height: 44, fontSize: 16),
+        ]),
+        // Segunda fila científica: e^x, paréntesis, notación
+        // científica y π. Cinco teclas como la fila de arriba: la
+        // retícula queda simétrica (antes eran cuatro, más anchas).
+        _row([
+          _key(label: 'e^x', onTap: () => _pressOperandStart('e^'),
+              height: 44, fontSize: 16),
+          _key(label: '(', onTap: _pressOpenParen,
+              height: 44, fontSize: 20),
+          _key(label: ')', onTap: _pressCloseParen,
+              height: 44, fontSize: 20),
+          _key(label: '×10^x', onTap: _pressTimesPow10,
+              height: 44, fontSize: 16),
+          _key(label: 'π', onTap: () => _pressOperandStart('π'),
+              height: 44, fontSize: 20),
+        ]),
+        // Teclas grandes: dígitos y operadores (no GridView: el grid
+        // fuerza celdas cuadradas y las teclas saldrían gigantes en
+        // pantallas anchas; aquí cada tecla mide 56 de alto siempre).
+        _row([
+          _key(label: '7', onTap: () => _pressDigit('7')),
+          _key(label: '8', onTap: () => _pressDigit('8')),
+          _key(label: '9', onTap: () => _pressDigit('9')),
+          _key(label: '÷', onTap: () => _pressOperator('÷'), accent: true),
+        ]),
+        _row([
+          _key(label: '4', onTap: () => _pressDigit('4')),
+          _key(label: '5', onTap: () => _pressDigit('5')),
+          _key(label: '6', onTap: () => _pressDigit('6')),
+          _key(label: '×', onTap: () => _pressOperator('×'), accent: true),
+        ]),
+        _row([
+          _key(label: '1', onTap: () => _pressDigit('1')),
+          _key(label: '2', onTap: () => _pressDigit('2')),
+          _key(label: '3', onTap: () => _pressDigit('3')),
+          _key(label: '−', onTap: () => _pressOperator('−'), accent: true),
+        ]),
+        _row([
+          _key(label: '0', onTap: () => _pressDigit('0')),
+          _key(label: '.', onTap: _pressDot),
+          _key(label: '^', onTap: () => _pressOperator('^'), accent: true),
+          _key(label: '+', onTap: () => _pressOperator('+'), accent: true),
+        ]),
+        Row(
+          children: [
+            Expanded(
+                child: _smallKey(
+                    label: tr('keypadDelete'), onTap: _backspace)),
+            const SizedBox(width: 8),
+            Expanded(
+                child:
+                    _smallKey(label: tr('keypadClear'), onTap: _clear)),
+            const SizedBox(width: 8),
+            Expanded(
+                child: _smallKey(
+                    label: '=', onTap: _equals, primary: true,
+                    // '=' solo se enciende con un resultado válido:
+                    // con la expresión incompleta no hace nada.
+                    enabled: canEquals)),
+          ],
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 56,
+          child: FilledButton(
+            onPressed: canSubmit ? _submit : null,
+            style: FilledButton.styleFrom(
+              backgroundColor: scheme.primary,
+              foregroundColor: scheme.onPrimary,
+              disabledBackgroundColor:
+                  scheme.primary.withValues(alpha: 0.45),
+              shape: const StadiumBorder(),
+            ),
+            child: Text(
+              tr('quizCheck'),
+              style:
+                  const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}

@@ -81,6 +81,8 @@ class QuizQuestion {
     required this.answer,
     required this.explanation,
     this.difficulty = 2,
+    this.numericAnswer,
+    this.numericUnit,
   });
 
   final String topic; // slug del tema, o "tabla" / "enlace" / "atomos"
@@ -93,6 +95,21 @@ class QuizQuestion {
   /// puntos que vale la pregunta y en la nota del nivel (ver points.dart).
   final int difficulty;
 
+  /// Respuesta numérica exacta (solo en preguntas de cálculo generadas,
+  /// ver question_generator.dart): si no es null, la pregunta se
+  /// contesta con el teclado numérico en vez de con las 4 opciones
+  /// (ver widgets/numeric_keypad.dart y services/numeric_answer.dart).
+  /// Las preguntas del banco y las conceptuales generadas lo dejan null
+  /// y siguen con opciones.
+  final double? numericAnswer;
+
+  /// Unidad que se muestra junto al campo del teclado ('mol', 'g', 'L',
+  /// 'M', 'pH', 'kJ'...). Null = sin unidad (p. ej. el Qc, adimensional).
+  final String? numericUnit;
+
+  /// ¿Esta pregunta se contesta con el teclado numérico?
+  bool get isNumeric => numericAnswer != null;
+
   QuizQuestion copyWith({
     String? topic,
     String? question,
@@ -100,6 +117,8 @@ class QuizQuestion {
     int? answer,
     String? explanation,
     int? difficulty,
+    double? numericAnswer,
+    String? numericUnit,
   }) =>
       QuizQuestion(
         topic: topic ?? this.topic,
@@ -108,6 +127,8 @@ class QuizQuestion {
         answer: answer ?? this.answer,
         explanation: explanation ?? this.explanation,
         difficulty: difficulty ?? this.difficulty,
+        numericAnswer: numericAnswer ?? this.numericAnswer,
+        numericUnit: numericUnit ?? this.numericUnit,
       );
 }
 

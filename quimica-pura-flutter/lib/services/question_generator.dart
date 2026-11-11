@@ -209,6 +209,10 @@ GeneratedQuestion buildMolarMass(String formula) {
       answer: built.answer,
       explanation:
           gt('molarMassE', {'steps': c.massSteps}),
+      // Pregunta de cálculo (fix3, punto 7): se contesta con el
+      // teclado numérico; la unidad se muestra junto al campo.
+      numericAnswer: m,
+      numericUnit: 'g/mol',
     ),
   );
 }
@@ -263,6 +267,9 @@ GeneratedQuestion buildMassMoles(String form, String formula, double value) {
       options: built.options,
       answer: built.answer,
       explanation: explanation,
+      // Pregunta de cálculo (fix3, punto 7): teclado numérico.
+      numericAnswer: correct,
+      numericUnit: form == 'moles' ? 'mol' : 'g',
     ),
   );
 }
@@ -318,6 +325,9 @@ GeneratedQuestion buildMolarity(String form, double a, double volMl) {
       options: built.options,
       answer: built.answer,
       explanation: explanation,
+      // Pregunta de cálculo (fix3, punto 7): teclado numérico.
+      numericAnswer: correct,
+      numericUnit: form == 'molarity' ? 'M' : 'mol',
     ),
   );
 }
@@ -378,6 +388,9 @@ GeneratedQuestion buildDilution(String form, double a, double b, double c) {
       options: built.options,
       answer: built.answer,
       explanation: explanation,
+      // Pregunta de cálculo (fix3, punto 7): teclado numérico.
+      numericAnswer: correct,
+      numericUnit: form == 'c2' ? 'M' : 'mL',
     ),
   );
 }
@@ -447,6 +460,9 @@ GeneratedQuestion buildPh(String form, int mantissa, int exponent) {
       options: built.options,
       answer: built.answer,
       explanation: explanation,
+      // Pregunta de cálculo (fix3, punto 7): teclado numérico.
+      numericAnswer: correct,
+      numericUnit: 'pH',
     ),
   );
 }
@@ -532,6 +548,13 @@ GeneratedQuestion buildGas(String form, double x, double tC, double y) {
       options: built.options,
       answer: built.answer,
       explanation: explanation,
+      // Pregunta de cálculo (fix3, punto 7): teclado numérico.
+      numericAnswer: correct,
+      numericUnit: form == 'volume'
+          ? 'L'
+          : form == 'moles'
+              ? 'mol'
+              : 'atm',
     ),
   );
 }
@@ -612,6 +635,9 @@ GeneratedQuestion buildStoichiometry(String form, int reaction, double moles) {
       options: built.options,
       answer: built.answer,
       explanation: ratio,
+      // Pregunta de cálculo (fix3, punto 7): teclado numérico.
+      numericAnswer: correct,
+      numericUnit: 'mol',
     ),
   );
 }
@@ -678,6 +704,9 @@ GeneratedQuestion buildEquilibrium(
       answer: built.answer,
       explanation:
           gt('equilibE', {'c': r.c, 'cc': '${r.cc}', 'a': r.a, 'ca': '${r.ca}', 'b': r.b, 'cb': '${r.cb}', 'qc1': fmtNum(_powInt(concC, r.cc)), 'qa': fmtNum(_powInt(concA, r.ca)), 'qb': fmtNum(_powInt(concB, r.cb)), 'q': fmtQ(q)}),
+      // Pregunta de cálculo (fix3, punto 7): teclado numérico. El Qc
+      // es adimensional, así que no lleva unidad.
+      numericAnswer: q,
     ),
   );
 }
@@ -731,6 +760,9 @@ GeneratedQuestion buildThermo(int mass, int substance, int dT) {
       answer: built.answer,
       explanation:
           gt('thermoE', {'m': '$mass', 'c': fmtNum(s.c), 'dt': '$dT', 'qj': fmtNum(qJ), 'qk': fmtNum(qKj)}),
+      // Pregunta de cálculo (fix3, punto 7): teclado numérico.
+      numericAnswer: qKj,
+      numericUnit: 'kJ',
     ),
   );
 }

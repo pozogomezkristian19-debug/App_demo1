@@ -130,7 +130,7 @@ const List<GlossaryTerm> glossary = [
   GlossaryTerm(term: 'Polaridad', definition: 'Distribución desigual de la carga en una molécula, por diferencias de electronegatividad entre sus átomos.'),
   GlossaryTerm(term: 'Tensión superficial', definition: 'Fuerza que mantiene unida la superficie de un líquido; por eso algunos insectos caminan sobre el agua.'),
   GlossaryTerm(term: 'Presión parcial', definition: 'Presión que ejercería un gas de una mezcla si ocupara él solo todo el volumen (ley de Dalton).'),
-  GlossaryTerm(term: 'Volumen molar', definition: 'Volumen que ocupa un mol de gas: 22.4 L en condiciones normales (0 °C y 1 atm).'),
+  GlossaryTerm(term: 'Volumen molar', definition: 'Volumen que ocupa un mol de gas: 22.4 L en condiciones normales (0 °C y 1 atm); 24.8 L a TPEA (25 °C y 1 atm).'),
   GlossaryTerm(term: 'Reactivo limitante', definition: 'Reactivo que se agota primero en una reacción y determina la cantidad máxima de producto que se puede formar.'),
   GlossaryTerm(term: 'Rendimiento', definition: 'Porcentaje del producto teórico que se obtiene realmente en una reacción. Nunca supera el 100 %.'),
 ];
@@ -154,6 +154,11 @@ const List<ChemConstant> chemConstants = [
   ChemConstant(symbol: 'h', value: '6.626 × 10⁻³⁴ J·s', note: 'Constante de Planck'),
   ChemConstant(symbol: 'c', value: '3.00 × 10⁸ m·s⁻¹', note: 'Velocidad de la luz en el vacío'),
   ChemConstant(symbol: 'Vm', value: '22.4 L·mol⁻¹', note: 'Volumen molar en condiciones normales'),
+  // TPEA = Temperatura y Presión Estándar Ambiente (25 °C y 1 atm).
+  // El cálculo ideal con R = 0.08206 da 24.47 ≈ 24.5 L/mol, pero la
+  // convención de los libros cubanos es 24.8 L/mol (EcuRed: Vm a TPEA
+  // = 24.8 L/mol); se usa ese valor.
+  ChemConstant(symbol: 'Vm', value: '24.8 L·mol⁻¹', note: 'Volumen molar a TPEA (25 °C y 1 atm)'),
   ChemConstant(symbol: '0 °C', value: '273.15 K', note: 'Cero de la escala Celsius en kelvin'),
   ChemConstant(symbol: '1 atm', value: '101325 Pa = 760 mmHg', note: 'Presión atmosférica estándar'),
   ChemConstant(symbol: 'me', value: '9.109 × 10⁻³¹ kg', note: 'Masa del electrón'),

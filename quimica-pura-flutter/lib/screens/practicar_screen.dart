@@ -8,6 +8,7 @@ import '../models.dart';
 import '../services/home_widget_service.dart';
 import '../services/localization.dart';
 import '../services/nav_requests.dart';
+import '../services/numeric_answer.dart';
 import '../services/points.dart';
 import '../services/progress.dart';
 import '../services/question_generator.dart';
@@ -16,6 +17,7 @@ import '../services/user_prefs.dart';
 import '../widgets/brand_logo.dart';
 import '../widgets/celebration.dart';
 import '../widgets/icon_animations.dart';
+import '../widgets/numeric_keypad.dart';
 import '../widgets/twin_avatars.dart';
 import '../widgets/how_to_play.dart';
 
@@ -78,6 +80,16 @@ const List<String> bachTopics = [
   'bach-gases',
   'bach-acido-base',
 ];
+
+// Color de las tarjetas de Niveles (pregunta del día, repaso,
+// practicar de otra forma): gris claro en modo claro, superficie
+// oscura en modo oscuro. Con el gris fijo, en oscuro el texto del
+// tema (blanco) quedaba invisible sobre tarjeta blanca (capturas
+// 2026-11-10, bug 2).
+Color _nivelesCardColor(BuildContext context) =>
+    Theme.of(context).brightness == Brightness.dark
+        ? const Color(0xFF122B24)
+        : BrandColors.cardGray;
 
 // ---- Camino de niveles (estilo Duolingo / Candy Crush) ----
 
@@ -148,11 +160,17 @@ class _QuizSpec {
 }
 
 class PracticarScreen extends StatefulWidget {
-  const PracticarScreen({super.key, this.onOpenScreen});
+  const PracticarScreen({super.key, this.onOpenScreen, this.onSessionChanged});
 
-  /// Abre una pantalla del menú por su clave (tarjetas, examen con
-  /// tiempo, reto…): lo resuelve HomeScreen con _openScreenKey.
+  /// Abre una pantalla del menú por su clave (examen con tiempo,
+  /// reto…): lo resuelve HomeScreen con _openScreenKey.
   final void Function(String key)? onOpenScreen;
+
+  /// Avisa a HomeScreen cuando empieza/termina una sesión de juego
+  /// (quiz de nivel, repaso o examen mixto en línea): mientras hay
+  /// sesión activa, la barra inferior y la barra de arriba se
+  /// ocultan, y la única salida es el botón Salir (fix2).
+  final void Function(bool inSession)? onSessionChanged;
 
   @override
   State<PracticarScreen> createState() => _PracticarScreenState();
@@ -207,6 +225,20 @@ class _PracticarScreenState extends State<PracticarScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _consumeNavRequests();
+  }
+
+  @override
+  void didUpdateWidget(PracticarScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _consumeNavRequests();
+  }
+
+  /// Consume la petición de repaso (NavRequests.startReview).
+  /// Antes solo se miraba en didChangeDependencies: si ya estabas
+  /// en Niveles al tocar "Repasar mis errores" en la barra, la
+  /// petición se perdía sin hacer nada (auditoría fix2).
+  void _consumeNavRequests() {
     // Petición del menú ("Repasar mis errores"): empieza el repaso.
     if (NavRequests.startReview) {
       NavRequests.startReview = false;
@@ -523,6 +555,7 @@ class _PracticarScreenState extends State<PracticarScreen> {
         items: questions,
       );
     });
+    widget.onSessionChanged?.call(true);
   }
 
   void _exitQuiz() {
@@ -536,6 +569,7 @@ class _PracticarScreenState extends State<PracticarScreen> {
       ProgressService.instance.loseLifeOnAbandon();
     }
     setState(() => _quiz = null);
+    widget.onSessionChanged?.call(false);
   }
 
   /// Salir de un quiz pidiendo confirmación cuando cuesta una vida:
@@ -616,9 +650,9 @@ class _PracticarScreenState extends State<PracticarScreen> {
     final mixedUnlocked = _mixedUnlocked();
     final level1Done = topics.length - _missingLevel1Topics().length;
     final current = _firstUnpassed();
-    // Gemela del día, una sola vez: el banner y el nodo actual
-    // usan la misma.
-    final twinA = twinOfTheDay();
+    // Compañero del día, una sola vez: el banner y el nodo actual
+    // usan el mismo.
+    final companion = companionOfTheDay();
     final passedCount = _passedLevelCount();
     final totalCount = _totalLevelCount();
     if (!_scrolledToCurrent) {
@@ -632,22 +666,49 @@ class _PracticarScreenState extends State<PracticarScreen> {
         ? _mixedSizeBach
         : _mixedSize;
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(tr('levelsTitle'),
-              style:
-                  const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 6),
-          Text(tr('levelsIntro')),
-          const SizedBox(height: 16),
+          // Cabecera compacta (fix2, item 3): título + progreso en
+          // una sola fila, sin el párrafo de introducción, para que
+          // la pantalla principal quepa sin deslizar: gemela del
+          // día, pregunta del día, practicar de otra forma y el
+          // camino se ven en la primera pantalla. Los dos textos
+          // son flexibles con puntos suspensivos (auditoría): sin
+          // eso, en otro idioma o con fuente grande se desbordaba
+          // la fila 42 px a la derecha.
+          Row(
+            children: [
+              Flexible(
+                child: Text(tr('levelsTitle'),
+                    style: const TextStyle(
+                        fontSize: 20, fontWeight: FontWeight.bold),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  '${tr('passedWord')}: $passedCount / $totalCount',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.right,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
           // El recordatorio ("es hora de practicar") sigue aquí arriba
           // cuando toca; la tarjeta de estadísticas (vidas/puntos/
           // racha/meta) ya NO está en Niveles: vive en Cuenta (fix 3),
           // así el camino empieza más arriba y se ve más.
           const _ReminderCard(),
-          // Gemela del día (v6): va rotando, una cada día.
+          // Compañero del día (v6): va rotando, uno cada día.
           FadeSlideIn(
             child: Card(
               child: Padding(
@@ -655,13 +716,11 @@ class _PracticarScreenState extends State<PracticarScreen> {
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 child: Row(
                   children: [
-                    twinA
-                        ? const TwinAvatarA(size: 36)
-                        : const TwinAvatarB(size: 36),
+                    CompanionAvatar(companion: companion, size: 36),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        tr(twinOfDayKey(twinA)),
+                        tr(companionOfDayKey(companion)),
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ),
@@ -670,26 +729,20 @@ class _PracticarScreenState extends State<PracticarScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
           FadeSlideIn(
             delay: const Duration(milliseconds: 80),
             child: _QuestionOfTheDayChip(onChanged: () => setState(() {})),
           ),
-          const SizedBox(height: 16),
-          Text(
-            '${tr('passedWord')}: $passedCount / $totalCount',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-          ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
           // Repaso inteligente: errores de días anteriores que resurgen.
           if (progress.dueFailed().isNotEmpty)
             Card(
               child: ListTile(
+                // Icono 3D (fix3, punto 6): ámbar con degradado +
+                // brillito, como el corazón de las vidas.
                 leading: const LucideIcon(LucideIcons.sparkles,
-                    size: 32, color: BrandColors.amber),
+                    size: 32, color: BrandColors.amber, threeD: true),
                 title: Text(tr('smartReviewTitle'),
                     style: const TextStyle(fontWeight: FontWeight.bold)),
                 subtitle: Text(
@@ -705,7 +758,7 @@ class _PracticarScreenState extends State<PracticarScreen> {
           if (progress.failedCount > 0)
             _ReviewGroupsCard(onGroupTap: _startReviewGroup),
           if (progress.failedCount > 0) const SizedBox(height: 8),
-          // Practicar de otra forma: tarjetas, examen con tiempo y
+          // Practicar de otra forma: examen con tiempo y
           // reto. Antes solo se llegaba desde la búsqueda, por eso
           // casi nadie los veía: ahora están aquí, en Niveles.
           _OtherWaysSection(
@@ -780,14 +833,15 @@ class _PracticarScreenState extends State<PracticarScreen> {
   }
 }
 
-/// Practicar de otra forma: tres tarjetas visibles en Niveles que
-/// abren las Tarjetas de memoria, el Examen con tiempo y el Reto con
-/// otra persona. Estas tres pantallas existen desde v5, pero solo se
-/// podían abrir desde la búsqueda sabiendo su nombre, así que casi
-/// nadie las encontraba.
+/// Practicar de otra forma: dos tarjetas visibles en Niveles que
+/// abren el Examen con tiempo y el Reto con otra persona. Estas dos
+/// pantallas existen desde v5, pero solo se podían abrir desde la
+/// búsqueda sabiendo su nombre, así que casi nadie las encontraba.
+/// (Antes había una tercera, Tarjetas de memoria, eliminada en la
+/// ronda fix3 a petición de Kristian: "Eso de memoria quítalo".)
 ///
-/// Las tres tarjetas miden EXACTAMENTE lo mismo (fix 4): la fila
-/// estira las tres a la altura de la más alta, los huecos entre
+/// Las dos tarjetas miden EXACTAMENTE lo mismo (fix 4): la fila
+/// estira las dos a la altura de la más alta, los huecos entre
 /// ellas son fijos (8 px) y el título tiene alto fijo de 2 líneas,
 /// así "Reto" (una sola línea) no encoge su tarjeta.
 class _OtherWaysSection extends StatelessWidget {
@@ -797,10 +851,11 @@ class _OtherWaysSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Widget card(String key, LucideIconData icon, String title) {
+      final accent = Theme.of(context).colorScheme.primary;
       return Expanded(
         child: Card(
           margin: EdgeInsets.zero,
-          color: BrandColors.cardGray,
+          color: _nivelesCardColor(context),
           child: InkWell(
             borderRadius: BorderRadius.circular(16),
             onTap: () {
@@ -813,10 +868,31 @@ class _OtherWaysSection extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  LucideIcon(icon, size: 30, color: BrandColors.teal),
+                  // Icono ARRIBA, en su propio círculo tintado
+                  // (fix2, items 1 y 7): el mando (ancho y bajo) ya
+                  // no se pega ni se distorsiona con el texto, porque
+                  // tiene su hueco definido y el texto va DEBAJO.
+                  Container(
+                    width: 54,
+                    height: 54,
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    alignment: Alignment.center,
+                    // Icono 3D (fix3, punto 6): relleno con el
+                    // degradado del acento + brillito, como el
+                    // corazón de las vidas.
+                    child: LucideIcon(icon,
+                        size: 28, color: accent, threeD: true),
+                  ),
                   const SizedBox(height: 8),
-                  SizedBox(
-                    height: 34,
+                  // Título DEBAJO, flexible (fix2, item 1): mínimo
+                  // 34 px para que las dos tarjetas midan igual,
+                  // pero crece si el texto necesita 2 líneas en otro
+                  // idioma, en vez de recortarse.
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 34),
                     child: Center(
                       child: Text(
                         title,
@@ -848,13 +924,11 @@ class _OtherWaysSection extends StatelessWidget {
         // (alto sin límite), y con CrossAxisAlignment.stretch la
         // fila intentaría estirar las tarjetas a un alto infinito.
         // IntrinsicHeight le da a la fila el alto de la tarjeta más
-        // alta, y stretch iguala las otras dos a ese alto.
+        // alta, y stretch iguala la otra a ese alto.
         IntrinsicHeight(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              card('flashcards', LucideIcons.layers, tr('flashcardsTitle')),
-              const SizedBox(width: 8),
               card('timed', LucideIcons.timer, tr('timedTitle')),
               const SizedBox(width: 8),
               card('challenge', LucideIcons.gamepad2, tr('challengeTitle')),
@@ -957,14 +1031,15 @@ class _TopicPathSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final progress = ProgressService.instance;
+    final scheme = Theme.of(context).colorScheme;
     final unlocked = locked ? 0 : progress.unlockedLevel(topic);
     var best = 0;
     for (var i = 1; i <= levelCount; i++) {
       final s = progress.bestScore('level:$topic:$i');
       if (s > best) best = s;
     }
-    // Cabecera y camino en el teal propio de Melli-Qui (gris si el
-    // tema está bloqueado): todos los temas comparten el color.
+    // Cabecera y camino en el color de acento (fix2, item 12; gris
+    // si el tema está bloqueado): todos los temas comparten el color.
     return SizedBox(
       height: _headerH + levelCount * _rowH,
       child: Stack(
@@ -975,7 +1050,7 @@ class _TopicPathSection extends StatelessWidget {
                 levelCount: levelCount,
                 color: locked
                     ? const Color(0xFFD1D5DB)
-                    : BrandColors.teal.withValues(alpha: 0.35),
+                    : scheme.primary.withValues(alpha: 0.35),
               ),
             ),
           ),
@@ -987,7 +1062,7 @@ class _TopicPathSection extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: locked
                         ? const Color(0xFFE5E7EB)
-                        : BrandColors.teal,
+                        : scheme.primary,
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
@@ -1009,7 +1084,7 @@ class _TopicPathSection extends StatelessWidget {
                                 : (_topicIcons[topic] ?? LucideIcons.circleHelp),
                             color: locked
                                 ? const Color(0xFF9CA3AF)
-                                : BrandColors.teal),
+                                : scheme.primary),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -1017,23 +1092,40 @@ class _TopicPathSection extends StatelessWidget {
                           mainAxisAlignment: MainAxisAlignment.center,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(localizedTopicName(topic),
+                            // Nombre del tema en MAYÚSCULAS (fix3,
+                            // punto 12): el nombre completo se lee
+                            // entero. La cabecera mide 76 px fijos:
+                            // con 16 px caben 2 líneas del título
+                            // más el subtítulo sin desbordar (antes
+                            // el título a 18 px en 1 línea se
+                            // recortaba con puntos suspensivos).
+                            // Cabecera del camino (fix3): el título
+                            // COMPLETO del tema (topics.dart), nunca
+                            // el id interno: 'bach-disoluciones' se
+                            // ve como 'Disoluciones y concentración',
+                            // también en la tarjeta bloqueada.
+                            Text(localizedTopicTitle(topic).toUpperCase(),
                                 style: TextStyle(
-                                    fontSize: 18,
+                                    fontSize: 16,
                                     fontWeight: FontWeight.w800,
                                     color: locked
                                         ? BrandColors.ink
                                             .withValues(alpha: 0.6)
-                                        : Colors.white)),
+                                        : Colors.white),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis),
                             Text(
-                              locked
-                                  ? tr('lockedWord')
-                                  : '${tr('levelWord')} ${unlocked > levelCount ? levelCount : unlocked} ${tr('quizOf')} $levelCount · ${tr('bestWord')}: $best%',
+                              (locked
+                                      ? tr('lockedWord')
+                                      : '${tr('levelWord')} ${unlocked > levelCount ? levelCount : unlocked} ${tr('quizOf')} $levelCount · ${tr('bestWord')}: $best%')
+                                  .toUpperCase(),
                               style: TextStyle(
                                 color: locked
                                     ? BrandColors.ink.withValues(alpha: 0.6)
                                     : Colors.white.withValues(alpha: 0.9),
                               ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ],
                         ),
@@ -1123,6 +1215,7 @@ class _LevelNodeRowState extends State<_LevelNodeRow>
   @override
   Widget build(BuildContext context) {
     final progress = ProgressService.instance;
+    final scheme = Theme.of(context).colorScheme;
     final best = progress.bestScore('level:${widget.topic}:${widget.level}');
     final passed = best >= _passPercent;
     // Niveles sin preguntas del banco: solo preguntas nuevas generadas.
@@ -1132,11 +1225,11 @@ class _LevelNodeRowState extends State<_LevelNodeRow>
     final Color bg;
     final Widget inner;
     if (passed) {
-      // Nivel pasado: teal con palomita blanca.
-      bg = BrandColors.teal;
+      // Nivel pasado: color de acento con palomita blanca.
+      bg = scheme.primary;
       inner = const LucideIcon(LucideIcons.check, color: Colors.white, size: 34);
     } else if (widget.unlocked) {
-      bg = BrandColors.teal;
+      bg = scheme.primary;
       inner = Text('${widget.level}',
           style: const TextStyle(
               fontSize: 26,
@@ -1170,22 +1263,27 @@ class _LevelNodeRowState extends State<_LevelNodeRow>
                       height: 76,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: BrandColors.teal.withValues(alpha: 0.18),
+                        color: scheme.primary.withValues(alpha: 0.18),
                       ),
                     ),
                   ),
                 ),
               // La gemela del día, junto al nodo actual, como en
-              // Duolingo: a un lado del camino, sin tapar el nodo.
+              // Duolingo: a un lado del camino, con aire de sobra
+              // (más de 20 dp hasta el halo incluso en su pulso
+              // máximo), para que la cara no tape ni roce el
+              // círculo del nivel ni su número. El hueco es el
+              // mismo a ambos lados y no se sale de la pantalla en
+              // ningún desplazamiento del camino: el nodo más a la
+              // izquierda lleva la mascota a la derecha y al revés.
               if (widget.isCurrent)
                 Positioned(
                   left: offset >= 0
-                      ? cx - _nodeSize / 2 - 56
-                      : cx + _nodeSize / 2 + 16,
+                      ? cx - _nodeSize / 2 - 72
+                      : cx + _nodeSize / 2 + 32,
                   top: _nodeCenterY - 20,
-                  child: twinOfTheDay()
-                      ? const TwinAvatarA(size: 40)
-                      : const TwinAvatarB(size: 40),
+                  child: CompanionAvatar(
+                      companion: companionOfTheDay(), size: 40),
                 ),
               Positioned(
                 left: cx - _nodeSize / 2,
@@ -1210,7 +1308,7 @@ class _LevelNodeRowState extends State<_LevelNodeRow>
                       boxShadow: [
                         BoxShadow(
                           color: widget.isCurrent
-                              ? BrandColors.teal.withValues(alpha: 0.35)
+                              ? scheme.primary.withValues(alpha: 0.35)
                               : Colors.black.withValues(alpha: 0.15),
                           blurRadius: widget.isCurrent ? 0 : 4,
                           spreadRadius: widget.isCurrent ? 2 : 0,
@@ -1240,7 +1338,7 @@ class _LevelNodeRowState extends State<_LevelNodeRow>
                         ? FontWeight.bold
                         : FontWeight.normal,
                     color: widget.isCurrent
-                        ? BrandColors.teal
+                        ? scheme.primary
                         : Theme.of(context)
                             .colorScheme
                             .onSurface
@@ -1289,7 +1387,8 @@ class _FinalExamSection extends StatelessWidget {
             CircleAvatar(
               radius: 22,
               backgroundColor: BrandColors.amber.withValues(alpha: 0.15),
-              child: const LucideIcon(LucideIcons.trophy, color: BrandColors.amber),
+              child: const LucideIcon(LucideIcons.trophy,
+                  color: BrandColors.amber, threeD: true),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -1316,7 +1415,7 @@ class _FinalExamSection extends StatelessWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: unlocked
-                  ? BrandColors.teal
+                  ? scheme.primary
                   : const Color(0xFFE5E7EB),
               boxShadow: [
                 BoxShadow(
@@ -1381,8 +1480,9 @@ class _ReminderCard extends StatelessWidget {
         Card(
           margin: EdgeInsets.zero,
           child: const ListTile(
+            // Icono 3D (fix3, punto 6): ámbar con degradado + brillo.
             leading: LucideIcon(LucideIcons.alarmClock,
-                color: BrandColors.amber),
+                color: BrandColors.amber, threeD: true),
             title: Text('Es hora de practicar',
                 style: TextStyle(fontWeight: FontWeight.bold)),
             subtitle:
@@ -1440,12 +1540,13 @@ class _QuestionOfTheDayChipState extends State<_QuestionOfTheDayChip> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   MascotBubble(
-                    twinA: twinOfTheDay(),
-                    text: tr(mascotCheerKey(DateTime.now().day)),
+                    companion: companionOfTheDay(),
+                    text: tr(mascotLineKey(companionOfTheDay(),
+                        MascotLine.ask, DateTime.now().day)),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    tr(twinOfDayKey(twinOfTheDay())),
+                    tr(companionOfDayKey(companionOfTheDay())),
                     style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
@@ -1518,11 +1619,14 @@ class _QuestionOfTheDayChipState extends State<_QuestionOfTheDayChip> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   MascotBubble(
-                    twinA: twinOfTheDay(),
+                    companion: companionOfTheDay(),
                     mood: wasCorrect ? TwinMood.happy : TwinMood.soft,
-                    text: tr(wasCorrect
-                        ? mascotPraiseKey(DateTime.now().day)
-                        : mascotConsoleKey(DateTime.now().day)),
+                    text: tr(mascotLineKey(
+                        companionOfTheDay(),
+                        wasCorrect
+                            ? MascotLine.praise
+                            : MascotLine.console,
+                        DateTime.now().day)),
                   ),
                   const SizedBox(height: 12),
                   Text(_q.explanation),
@@ -1548,28 +1652,65 @@ class _QuestionOfTheDayChipState extends State<_QuestionOfTheDayChip> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    // Tarjeta reequilibrada (fix3): el título ya no comparte su fila
+    // con el botón "Responder", que lo apretaba hasta partirlo en dos
+    // líneas ("Pregunta del / día"). Ahora el título tiene todo el
+    // ancho (icono aparte) y cabe en UNA línea en los 6 idiomas, y
+    // el botón va debajo, a todo lo ancho, estilo Duolingo. Nada se
+    // recorta: ni el título, ni el botón, ni el subtítulo.
     return Card(
-      color: BrandColors.cardGray,
-      child: ListTile(
-        leading: const LucideIcon(LucideIcons.calendar,
-            size: 22, color: BrandColors.teal),
-        title: Text(tr('qotdTitle'),
-            style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: _answered
-            ? Text(tr('qotdDone'))
-            : Text(tr('qotdWorth')
-                .replaceFirst('%d', '$_value')
-                .replaceFirst('%d', '${_value * 2}')),
-        trailing: _answered
-            ? const LucideIcon(LucideIcons.circleCheck,
-                color: BrandColors.teal, size: 24)
-            : FilledButton(
-                onPressed: () async {
-                  await _showDialog();
-                  HomeWidgetService.update();
-                },
-                child: Text(tr('qotdAnswer')),
+      color: _nivelesCardColor(context),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                LucideIcon(LucideIcons.calendar,
+                    size: 22, color: scheme.primary),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(tr('qotdTitle'),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 16),
+                          maxLines: 1),
+                      const SizedBox(height: 2),
+                      Text(_answered
+                          ? tr('qotdDone')
+                          : tr('qotdWorth')
+                              .replaceFirst('%d', '$_value')
+                              .replaceFirst('%d', '${_value * 2}')),
+                    ],
+                  ),
+                ),
+                if (_answered)
+                  LucideIcon(LucideIcons.circleCheck,
+                      color: scheme.primary, size: 24),
+              ],
+            ),
+            if (!_answered) ...[
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  onPressed: () async {
+                    await _showDialog();
+                    HomeWidgetService.update();
+                  },
+                  child: Text(tr('qotdAnswer')),
+                ),
               ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -1587,17 +1728,18 @@ class _ReviewGroupsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = ProgressService.instance;
+    final scheme = Theme.of(context).colorScheme;
     final groups = p.failedGroups();
     return Card(
-      color: BrandColors.cardGray,
+      color: _nivelesCardColor(context),
       child: Padding(
         padding: const EdgeInsets.all(8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ListTile(
-              leading: const LucideIcon(LucideIcons.rotateCcw,
-                  size: 32, color: BrandColors.teal),
+              leading: LucideIcon(LucideIcons.rotateCcw,
+                  size: 32, color: scheme.primary),
               title: Text(tr('reviewTitle'),
                   style: const TextStyle(fontWeight: FontWeight.bold)),
               subtitle: Text(
@@ -1607,10 +1749,11 @@ class _ReviewGroupsCard extends StatelessWidget {
               padding:
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               child: MascotBubble(
-                twinA: false,
+                companion: companionForTurn(p.failedCount),
                 mood: TwinMood.soft,
                 size: 44,
-                text: tr(mascotConsoleKey(p.failedCount)),
+                text: tr(mascotLineKey(companionForTurn(p.failedCount),
+                    MascotLine.console, p.failedCount)),
               ),
             ),
             for (final g in groups)
@@ -1751,6 +1894,17 @@ class _QuizRunnerState extends State<_QuizRunner> {
     }
   }
 
+  /// Respuesta de una pregunta de cálculo (fix3, punto 7): el valor
+  /// tecleado en el teclado numérico se traduce al índice de opción
+  /// que le corresponde y pasa por el mismo `_answer` de siempre, con
+  /// los mismos puntos, vidas y repaso de errores (incluida la racha
+  /// de variantes del repaso).
+  void _answerNumeric(double value) {
+    if (_selected != null) return;
+    _answer(displayedIndexForNumericAnswer(
+        typed: value, question: _q, order: _order));
+  }
+
   void _next() {
     if (_index + 1 >= widget.quiz.items.length) {
       // Los puntos del quiz van al saldo total (v6).
@@ -1791,6 +1945,7 @@ class _QuizRunnerState extends State<_QuizRunner> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     if (_finished) {
       final total = widget.quiz.items.length;
       final percent = ((100 * _score) / total).round();
@@ -1820,10 +1975,10 @@ class _QuizRunnerState extends State<_QuizRunner> {
                 style: const TextStyle(fontSize: 20),
                 textAlign: TextAlign.center),
             Text('$percent%',
-                style: const TextStyle(
+                style: TextStyle(
                     fontSize: 48,
                     fontWeight: FontWeight.bold,
-                    color: BrandColors.teal),
+                    color: scheme.primary),
                 textAlign: TextAlign.center),
             if (isLevel)
               Text(
@@ -1840,10 +1995,10 @@ class _QuizRunnerState extends State<_QuizRunner> {
             if (_lifeRestored)
               Text(
                 tr('livesRestored'),
-                style: const TextStyle(
+                style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: BrandColors.teal),
+                    color: scheme.primary),
                 textAlign: TextAlign.center,
               ),
             const SizedBox(height: 8),
@@ -1867,11 +2022,12 @@ class _QuizRunnerState extends State<_QuizRunner> {
             ),
             const SizedBox(height: 16),
             MascotBubble(
-              twinA: (total - 1) % 2 != 0,
+              companion: companionForTurn(total - 1),
               mood: passedLevel ? TwinMood.happy : TwinMood.soft,
-              text: tr(passedLevel
-                  ? mascotPraiseKey(total)
-                  : mascotConsoleKey(total)),
+              text: tr(mascotLineKey(
+                  companionForTurn(total - 1),
+                  passedLevel ? MascotLine.praise : MascotLine.console,
+                  total)),
             ),
             const SizedBox(height: 24),
             ElevatedButton(
@@ -1923,23 +2079,37 @@ class _QuizRunnerState extends State<_QuizRunner> {
         LinearProgressIndicator(value: (_index + 1) / total),
         const SizedBox(height: 16),
         MascotBubble(
-          twinA: _index % 2 == 0,
+          companion: companionForTurn(_index),
           mood: _selected == null
               ? TwinMood.happy
               : (_order[_selected!] == _q.answer
                   ? TwinMood.happy
                   : TwinMood.soft),
           text: tr(_selected == null
-              ? mascotCheerKey(_index)
+              ? mascotLineKey(
+                  companionForTurn(_index), MascotLine.ask, _index)
               : (_order[_selected!] == _q.answer
-                  ? mascotPraiseKey(_index)
-                  : mascotConsoleKey(_index))),
+                  ? mascotLineKey(companionForTurn(_index),
+                      MascotLine.praise, _index)
+                  : mascotLineKey(companionForTurn(_index),
+                      MascotLine.console, _index))),
         ),
         const SizedBox(height: 16),
         Text(_q.question,
             style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w600)),
         const SizedBox(height: 16),
-        for (var i = 0; i < 4; i++)
+        // Pregunta de cálculo (fix3, punto 7): las 4 opciones dejan
+        // paso al teclado numérico, abierto desde el principio. Las
+        // conceptuales siguen con las opciones de siempre.
+        if (_q.isNumeric)
+          NumericKeypad(
+            key: ValueKey(_item.id),
+            unit: _q.numericUnit,
+            enabled: _selected == null,
+            onSubmit: _answerNumeric,
+          )
+        else
+          for (var i = 0; i < 4; i++)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: ElevatedButton(
@@ -1947,12 +2117,20 @@ class _QuizRunnerState extends State<_QuizRunner> {
                 backgroundColor: _selected == null
                     ? Theme.of(context).colorScheme.surfaceContainerHighest
                     : (_order[i] == _q.answer
-                        ? BrandColors.teal
+                        ? scheme.primary
                         : (_selected == i
                             ? Colors.redAccent
                             : Theme.of(context)
                                 .colorScheme
                                 .surfaceContainerHighest)),
+                // El texto SIEMPRE legible (capturas 2026-11-10):
+                // antes heredaba el blanco del tema y sobre el
+                // fondo gris claro no se leía nada. Sobre fondo
+                // claro va tinta oscura; sobre teal/rojo, blanco.
+                foregroundColor: _selected != null &&
+                        (_order[i] == _q.answer || _selected == i)
+                    ? Colors.white
+                    : Theme.of(context).colorScheme.onSurface,
                 alignment: Alignment.centerLeft,
                 padding: const EdgeInsets.all(14),
               ),
@@ -1965,7 +2143,7 @@ class _QuizRunnerState extends State<_QuizRunner> {
           const SizedBox(height: 8),
           Card(
             color: _order[_selected!] == _q.answer
-                ? BrandColors.teal.withValues(alpha: 0.2)
+                ? scheme.primary.withValues(alpha: 0.2)
                 : Colors.redAccent.withValues(alpha: 0.15),
             child: Padding(
               padding: const EdgeInsets.all(14),
