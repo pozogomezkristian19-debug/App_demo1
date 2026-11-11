@@ -1,12 +1,12 @@
 // Progreso con memoria: todo se guarda en el teléfono con
 // SharedPreferences (igual que el nombre, el género y el tema claro/oscuro).
 // Al cerrar y volver a abrir la app, el progreso sigue ahí:
-// mejor puntuación por test y por nivel, temas dominados, nivel
-// desbloqueado por tema, aciertos por tema y la lista de errores.
+// mejor puntuación por test y por nivel, nivel desbloqueado
+// por tema, aciertos por tema y la lista de errores.
 //
 // v5: además guarda los días de práctica (para la racha), los días en
-// que se pasó un nivel (meta diaria), los días con pregunta del día
-// contestada, y la fecha de cada error (repaso inteligente: los errores
+// que se pasó un nivel (meta diaria) y la fecha de cada error
+// (repaso inteligente: los errores
 // de días anteriores resurgen solos al día siguiente).
 //
 // Se carga una vez en main() con ProgressService.load(), junto con
@@ -93,11 +93,10 @@ class ProgressService {
   static String _key(String suffix) =>
       track == trackBach ? 'melli_progress_bach_$suffix' : 'melli_progress_$suffix';
 
-  /// Claves sin pista: la racha, la meta diaria y la pregunta del día
-  /// son de la persona, no de la pista.
+  /// Claves sin pista: la racha y la meta diaria son de la persona,
+  /// no de la pista.
   static const _kPracticeDays = 'melli_progress_days';
   static const _kLevelPassDays = 'melli_progress_level_days';
-  static const _kQotdDays = 'melli_progress_qotd_days';
   static const _kEverFailed = 'melli_progress_ever_failed';
 
   /// Saldo total de puntos (sin pista: los puntos son de la persona,
@@ -115,7 +114,6 @@ class ProgressService {
 
   SharedPreferences? _prefs;
 
-  final Set<String> masteredTopics = <String>{};
   final Map<String, int> bestScores = <String, int>{}; // testId -> mejor %
   final Map<String, int> unlockedLevels = <String, int>{}; // tema -> nivel
 
@@ -134,9 +132,6 @@ class ProgressService {
 
   /// Días ('yyyy-MM-dd') en los que se pasó al menos un nivel.
   final Set<String> levelPassDays = <String>{};
-
-  /// Días ('yyyy-MM-dd') con la pregunta del día contestada.
-  final Set<String> qotdDays = <String>{};
 
   /// true desde la primera vez que se falla una pregunta (para el logro
   /// de "repaso al día": no vale empezar con cero errores).
@@ -253,9 +248,6 @@ class ProgressService {
   }
 
   void _readAll(SharedPreferences prefs) {
-    masteredTopics
-      ..clear()
-      ..addAll(prefs.getStringList(_key('mastered')) ?? <String>[]);
     bestScores
       ..clear()
       ..addAll(_readIntMap(prefs.getString(_key('best'))));
@@ -284,9 +276,6 @@ class ProgressService {
     levelPassDays
       ..clear()
       ..addAll(prefs.getStringList(_kLevelPassDays) ?? <String>[]);
-    qotdDays
-      ..clear()
-      ..addAll(prefs.getStringList(_kQotdDays) ?? <String>[]);
     everFailed = prefs.getBool(_kEverFailed) ?? false;
     _pointsBalance = prefs.getInt(_kPoints) ?? 0;
     _livesLeft = prefs.getInt(_kLives) ?? maxLives;
@@ -346,7 +335,6 @@ class ProgressService {
   void _save() {
     final prefs = _prefs;
     if (prefs == null) return; // aún no se cargó: nada que guardar
-    prefs.setStringList(_key('mastered'), masteredTopics.toList());
     prefs.setString(_key('best'), jsonEncode(bestScores));
     prefs.setString(_key('levels'), jsonEncode(unlockedLevels));
     prefs.setString(
@@ -365,7 +353,6 @@ class ProgressService {
         _key('failed'), jsonEncode(_failed.map((e) => e.toJson()).toList()));
     prefs.setStringList(_kPracticeDays, practiceDays.toList());
     prefs.setStringList(_kLevelPassDays, levelPassDays.toList());
-    prefs.setStringList(_kQotdDays, qotdDays.toList());
     prefs.setBool(_kEverFailed, everFailed);
     prefs.setInt(_kPoints, _pointsBalance);
     prefs.setInt(_kLives, _livesLeft);
@@ -436,19 +423,6 @@ class ProgressService {
   /// ¿El tema está completo? (todos sus niveles pasados).
   bool isTopicComplete(String topic) =>
       unlockedLevel(topic) > levelCountForTopic(topic);
-
-  // ---- Temas dominados (Aprender) ----
-
-  bool isMastered(String slug) => masteredTopics.contains(slug);
-
-  void toggleMastered(String slug) {
-    if (masteredTopics.contains(slug)) {
-      masteredTopics.remove(slug);
-    } else {
-      masteredTopics.add(slug);
-    }
-    _save();
-  }
 
   // ---- Mejor puntuación por test / nivel ----
 
@@ -554,14 +528,6 @@ class ProgressService {
     return sorted;
   }
 
-  // ---- Pregunta del día ----
-
-  bool qotdAnsweredOn(DateTime d) => qotdDays.contains(dateKey(d));
-
-  void recordQotd(DateTime d) {
-    qotdDays.add(dateKey(d));
-    _save();
-  }
 
   // ---- Errores para repasar ----
 

@@ -4,6 +4,8 @@
 // Al final se puede compartir el resultado por WhatsApp.
 // Puntos (fix4, punto 5): son solo del jugador 1 (tú); el jugador 2
 // es invitado y no tiene cuenta — su turno no toca el progreso.
+// Jugador 1 (fix6, ronda #6, ítem 6): es FIJO, el nombre del perfil
+// del onboarding + " (tú)": no se puede editar ni cambiar.
 
 import 'dart:math';
 
@@ -25,7 +27,10 @@ class ChallengeScreen extends StatefulWidget {
 }
 
 class _ChallengeScreenState extends State<ChallengeScreen> {
-  late final TextEditingController _p1;
+  // Nombre fijo del jugador 1 (fix6): el del perfil + " (tú)"
+  // (p. ej. "kristian (tú)"), calculado una sola vez en initState.
+  // Ya no hay controlador de texto para el jugador 1: no es editable.
+  late final String _p1Name;
   late final TextEditingController _p2;
   int _phase = 0; // 0 nombres, 1 juega P1, 2 juega P2, 3 resultado
   late final List<QuizQuestion> _q1;
@@ -40,14 +45,14 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
   @override
   void initState() {
     super.initState();
-    // Jugador 1: el nombre del perfil del usuario, con "(tú)" al lado
-    // (p. ej. "Kristian (tú)"). Es un campo editable: se puede cambiar.
+    // Jugador 1 (fix6, ronda #6, ítem 6): FIJO, el nombre del perfil
+    // del usuario con "(tú)" al lado (p. ej. "kristian (tú)"). No hay
+    // campo de texto: no se puede editar ni cambiar.
     // Jugador 2: empieza VACÍO, sin ningún nombre de ejemplo: la otra
     // persona escribe su propio nombre.
-    _p1 = TextEditingController(
-        text: UserPrefs.userName.isEmpty
-            ? ''
-            : '${UserPrefs.userName} ${tr('challengeYouSuffix')}');
+    _p1Name = UserPrefs.userName.isEmpty
+        ? ''
+        : '${UserPrefs.userName} ${tr('challengeYouSuffix')}';
     _p2 = TextEditingController();
     final pool = List<QuizQuestion>.of(allQuestions)..shuffle(Random());
     _q1 = [
@@ -68,7 +73,6 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
 
   @override
   void dispose() {
-    _p1.dispose();
     _p2.dispose();
     super.dispose();
   }
@@ -76,14 +80,14 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
   /// "¡Empate!" o "¡Ganó <nombre>!" (en el idioma de la app).
   String _winnerText() {
     if (_s1 == _s2) return tr('challengeDraw');
-    final name = _s1 > _s2 ? _p1.text : _p2.text;
+    final name = _s1 > _s2 ? _p1Name : _p2.text;
     return tr('challengeWon').replaceFirst('%s', name);
   }
 
   Future<void> _shareResult() async {
     final winner = _winnerText();
     final text =
-        '${tr('challengeTitle')}: ${_p1.text} $_s1 - $_s2 ${_p2.text}. $winner';
+        '${tr('challengeTitle')}: $_p1Name $_s1 - $_s2 ${_p2.text}. $winner';
     final uri = Uri.parse('https://wa.me/?text=${Uri.encodeComponent(text)}');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -102,7 +106,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                   title: tr('challengeTitle'),
                   items: _phase == 1 ? _q1 : _q2,
                   itemIds: _phase == 1 ? _ids1 : _ids2,
-                  playerName: _phase == 1 ? _p1.text : _p2.text,
+                  playerName: _phase == 1 ? _p1Name : _p2.text,
                   // Solo el jugador 1 tiene cuenta: el turno del
                   // invitado (jugador 2) no toca puntos, estadísticas
                   // ni errores (fix4, punto 5).
@@ -164,18 +168,28 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 24),
-          // Fix3, punto 4 (segunda pasada): cada campo tiene su
-          // icono de persona y un texto de ayuda (hint) visible
-          // mientras está vacío. El jugador 1 ya viene prellenado
-          // con el nombre del perfil + "(tú)" (ver initState); el
-          // jugador 2 empieza vacío.
-          TextField(
-            controller: _p1,
+          // Fix3, punto 4 (segunda pasada): el campo del jugador 2
+          // tiene su icono de persona y un texto de ayuda (hint)
+          // visible mientras está vacío. El jugador 1 (fix6) ya NO
+          // es un campo: es un texto fijo con el nombre del perfil
+          // + "(tú)", con el mismo aspecto de campo (icono, etiqueta
+          // y borde) pero sin poder editarse.
+          // Sin nombre de perfil (no debería pasar: el onboarding lo
+          // pide obligatorio), la fila fija muestra la ayuda.
+          InputDecorator(
             decoration: InputDecoration(
               labelText: tr('challengePlayer1Hint'),
-              hintText: tr('challengePlayer1Placeholder'),
               prefixIcon: LucideIcon(LucideIcons.userRound,
                   size: 20, color: scheme.primary),
+            ),
+            child: Text(
+              _p1Name.isEmpty
+                  ? tr('challengePlayer1Placeholder')
+                  : _p1Name,
+              style: TextStyle(
+                fontSize: 16,
+                color: _p1Name.isEmpty ? scheme.onSurfaceVariant : null,
+              ),
             ),
           ),
           const SizedBox(height: 12),
@@ -191,7 +205,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
           const SizedBox(height: 24),
           FilledButton(
             onPressed: () {
-              if (_p1.text.trim().isEmpty || _p2.text.trim().isEmpty) return;
+              if (_p1Name.trim().isEmpty || _p2.text.trim().isEmpty) return;
               setState(() => _phase = 1);
             },
             style: FilledButton.styleFrom(
@@ -242,7 +256,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                   const TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center),
           const SizedBox(height: 12),
-          Text('${_p1.text}: $_s1 de 5',
+          Text('${_p1Name}: $_s1 de 5',
               style: const TextStyle(fontSize: 19),
               textAlign: TextAlign.center),
           Text('${_p2.text}: $_s2 de 5',

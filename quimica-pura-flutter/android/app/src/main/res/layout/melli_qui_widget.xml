@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <!-- Tarjeta del widget de inicio (v6; fix4, punto 10: línea de tip):
-     título, pregunta del día, tip de estudio del día (ámbar claro,
-     3 líneas como mucho con elipsis) y racha / vidas / puntos.
+     título, tip de estudio del día (ámbar claro, 3 líneas como
+     mucho con elipsis) y racha / vidas / puntos.
      Colores literales (RemoteViews no admite atributos de tema):
      noche #0A1628, texto claro y acento menta. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
@@ -22,17 +22,6 @@
         android:textColor="#FFFFFF"
         android:textSize="18sp"
         android:textStyle="bold" />
-
-    <TextView
-        android:id="@+id/widget_qotd"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:ellipsize="end"
-        android:maxLines="3"
-        android:textColor="#D9D2F2"
-        android:textSize="14sp"
-        tools:text="¿Cuál es la masa molar del ácido sulfúrico?" />
 
     <!-- Tip de estudio del día (fix4, punto 10): rota cada día, con su
          propio TextView (widget_tip) y la etiqueta "Tip:". Si el texto

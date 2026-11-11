@@ -29,15 +29,18 @@ class UserPrefs {
   static bool onboardingDone = false;
   static String userName = '';
   static String userGender = '';
-  static bool isDark = false; // La app nace clara (tema claro por
-  // defecto); se puede cambiar con el botoncito.
+  static bool isDark = false; // Valor EFECTIVO ahora (con 'sistema',
+  // el brillo del teléfono en este momento).
   // Modo de tema (fix3, punto 13): 'claro' | 'oscuro' | 'sistema'.
   // 'sistema' sigue al brillo del teléfono. El cambio de tema vive
   // SOLO en Cuenta (sección "Tema"): al cambiar, themeModeNotifier
   // avisa y la app reconstruye el tema en el acto (ver main.dart).
-  static String themeMode = 'claro';
+  // Por defecto es 'sistema' (ronda fix6, ítem 3): quien no haya
+  // elegido nunca sigue al teléfono; quien guardó 'claro' u
+  // 'oscuro' lo mantiene, porque su valor guardado manda.
+  static String themeMode = 'sistema';
   static final ValueNotifier<String> themeModeNotifier =
-      ValueNotifier('claro');
+      ValueNotifier('sistema');
 
   /// ¿Está oscuro el tema AHORA? Con 'sistema', manda el brillo del
   /// teléfono en este momento. Con 'claro'/'oscuro', el modo elegido.
@@ -80,12 +83,16 @@ class UserPrefs {
     onboardingDone = prefs.getBool(_kOnboardingDone) ?? false;
     userName = prefs.getString(_kUserName) ?? '';
     userGender = prefs.getString(_kUserGender) ?? '';
-    isDark = prefs.getBool(_kDarkMode) ?? false; // Sin preferencia guardada: claro.
+    isDark = prefs.getBool(_kDarkMode) ?? false; // Booleano viejo
+    // (legado): sin guardar, false.
     // Modo de tema (fix3, punto 13): si no hay valor guardado
     // (versión anterior), se migra del booleano claro/oscuro de
-    // antes. Un valor raro se sanea a claro. isDark queda como el
+    // antes: isDark=true da 'oscuro'. Sin nada guardado, el defecto
+    // es 'sistema' (ronda fix6, ítem 3), que sigue al brillo del
+    // teléfono. Un valor raro se sanea a claro. isDark queda como el
     // valor EFECTIVO (con 'sistema', el brillo del teléfono ahora).
-    themeMode = prefs.getString(_kThemeMode) ?? (isDark ? 'oscuro' : 'claro');
+    themeMode =
+        prefs.getString(_kThemeMode) ?? (isDark ? 'oscuro' : 'sistema');
     if (themeMode != 'oscuro' && themeMode != 'sistema') {
       themeMode = 'claro';
     }

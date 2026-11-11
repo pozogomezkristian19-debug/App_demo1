@@ -1,5 +1,5 @@
 // Contenido extra de Melli-Qui v5: glosario, constantes, datos del día
-// (pregunta del día y elemento del día) y curiosidades de elementos.
+// (elemento del día) y curiosidades de elementos.
 // Todo en español y sin internet.
 
 import 'dart:math';
@@ -7,19 +7,11 @@ import 'dart:math';
 import '../data/periodic_table.dart';
 import '../models.dart';
 import 'element_details.dart';
-import 'questions.dart';
 
 // ---- Utilidades de fecha (deterministas por día) ----
 
 /// Semilla estable para un día: el mismo día siempre da el mismo número.
 int daySeed(DateTime d) => d.year * 10000 + d.month * 100 + d.day;
-
-/// Pregunta del día: la misma para todos durante todo el día, distinta
-/// cada día. Se elige del banco con la semilla del día.
-QuizQuestion questionOfTheDay(DateTime date) {
-  final rng = Random(daySeed(date));
-  return allQuestions[rng.nextInt(allQuestions.length)];
-}
 
 /// Elemento del día: uno distinto cada día, en orden por la semilla.
 ChemicalElement elementOfTheDay(DateTime date) {

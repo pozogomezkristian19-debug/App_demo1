@@ -32,8 +32,8 @@
 //   quita en el cierre.)
 //
 // En cada pregunta aparece uno de los tres (por turnos) y en los
-// demás momentos (pregunta del día, racha, repaso de errores,
-// celebración de nivel) aparece el compañero del día.
+// demás momentos (racha, repaso de errores, celebración de nivel)
+// aparece el compañero del día.
 
 import 'package:flutter/material.dart';
 
@@ -305,7 +305,7 @@ class CompanionAvatar extends StatelessWidget {
 /// etiquetita debajo de la foto ni firma al pie de la burbuja.
 /// Antes se repetía hasta 4 veces en el mismo sitio (nombre bajo
 /// la foto, saludo "¡Hola! Soy…", firma "— Nombre" y la línea
-/// "Hoy te acompaña…" del diálogo de la pregunta del día).
+/// "Hoy te acompaña…", ya eliminada).
 ///
 /// La burbuja muestra SIEMPRE el mensaje que le pasa el llamador
 /// ([text]): NUNCA un saludo. Los saludos no tienen que ver con

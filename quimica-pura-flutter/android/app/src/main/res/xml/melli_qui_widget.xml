@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Widget de inicio de Melli-Qui (v6): se actualiza desde Dart cada
-     vez que cambian la pregunta del día, la racha, las vidas o los
+     vez que cambian el tip del día, la racha, las vidas o los
      puntos; el sistema lo repinta además una vez al día. -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:minWidth="180dp"

@@ -280,6 +280,31 @@ class _AccountScreenState extends State<AccountScreen> {
             ),
           ),
           const SizedBox(height: 16),
+          // Orden de Cuenta (ronda fix6, ítem 4): las TRES primeras
+          // filas son Estadísticas, Mis errores y Cómo se juega. El
+          // resto sigue en su mismo orden de siempre (Tema, Idioma,
+          // Cambiar versión, Favoritos, Recordatorio, Compartir…).
+          _Row(
+            icon: LucideIcons.chartColumn,
+            iconColor: _violet,
+            title: tr('accountStats'),
+            subtitle: tr('accountStatsSub'),
+            onTap: () => widget.onOpenScreen('stats'),
+          ),
+          _Row(
+            icon: LucideIcons.rotateCcw,
+            iconColor: _teal,
+            title: tr('accountReview'),
+            subtitle: '${p.failedCount} ${tr('reviewTitle')}',
+            onTap: () => widget.onOpenScreen('review'),
+          ),
+          _Row(
+            icon: LucideIcons.circleHelp,
+            iconColor: _blue,
+            title: tr('howToPlayTitle'),
+            subtitle: tr('howToPlaySub'),
+            onTap: () => widget.onOpenScreen('howToPlay'),
+          ),
           // Tema (fix3, último cambio de la ronda): ya NO es una
           // tarjeta inline en Cuenta. Es una fila táctil como las
           // demás, con el subtítulo de la selección actual (p. ej.
@@ -312,13 +337,6 @@ class _AccountScreenState extends State<AccountScreen> {
             onTap: () => widget.onOpenScreen('language'),
           ),
           _Row(
-            icon: LucideIcons.chartColumn,
-            iconColor: _violet,
-            title: tr('accountStats'),
-            subtitle: tr('accountStatsSub'),
-            onTap: () => widget.onOpenScreen('stats'),
-          ),
-          _Row(
             icon: LucideIcons.refreshCw,
             iconColor: _amber,
             title: tr('accountVersion'),
@@ -326,20 +344,6 @@ class _AccountScreenState extends State<AccountScreen> {
                 ? tr('trackBach')
                 : tr('trackUni'),
             onTap: () => widget.onOpenScreen('version'),
-          ),
-          _Row(
-            icon: LucideIcons.rotateCcw,
-            iconColor: _teal,
-            title: tr('accountReview'),
-            subtitle: '${p.failedCount} ${tr('reviewTitle')}',
-            onTap: () => widget.onOpenScreen('review'),
-          ),
-          _Row(
-            icon: LucideIcons.circleHelp,
-            iconColor: _blue,
-            title: tr('howToPlayTitle'),
-            subtitle: tr('howToPlaySub'),
-            onTap: () => widget.onOpenScreen('howToPlay'),
           ),
           _Row(
             icon: LucideIcons.star,

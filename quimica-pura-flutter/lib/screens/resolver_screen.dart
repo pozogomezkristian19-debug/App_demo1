@@ -8,8 +8,6 @@ import '../services/nav_requests.dart';
 import '../services/sound_service.dart';
 import '../widgets/brand_logo.dart';
 import '../widgets/solver_widgets.dart';
-import 'formula_screen.dart';
-import 'lab_sim_screen.dart';
 import 'resolver_extra.dart';
 
 /// Un solucionador de la lista: su grupo, su título, su descripción,
@@ -273,40 +271,9 @@ class _ResolverScreenState extends State<ResolverScreen> {
           ),
         ),
         const SizedBox(height: 12),
-        // Formulario rápido: entrada propia y visible (v6), no al final.
-        Card(
-          child: ListTile(
-            leading: const LucideIcon(LucideIcons.sigma, size: 28),
-            title: Text(tr('menuFormulas'),
-                style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Text(tr('formulaCardSub')),
-            trailing: const LucideIcon(LucideIcons.chevronRight),
-            onTap: () {
-              SoundService.tap();
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const FormulaScreen()),
-              );
-            },
-          ),
-        ),
-        const SizedBox(height: 8),
-        // Simulador de laboratorio: entrada visible (v6), para que no
-        // haya que buscarlo en el menú.
-        Card(
-          child: ListTile(
-            leading: const LucideIcon(LucideIcons.flaskConical, size: 28),
-            title: Text(tr('labSimTitle'),
-                style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Text(tr('labSimCardSub')),
-            trailing: const LucideIcon(LucideIcons.chevronRight),
-            onTap: () {
-              SoundService.tap();
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const LabSimScreen()),
-              );
-            },
-          ),
-        ),
+        // Ronda #6: Resolver queda SOLO con los solvers. El Formulario
+        // rápido y el Simulador de laboratorio ya viven en el menú
+        // hamburguesa; aquí eran duplicados y se quitan.
         for (final group in _solverGroupOrder) ...[
           Padding(
             key: _groupKeys[group],

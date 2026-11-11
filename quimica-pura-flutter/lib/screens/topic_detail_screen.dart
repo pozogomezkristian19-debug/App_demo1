@@ -12,7 +12,6 @@ import '../data/topics.dart';
 import '../models.dart';
 import '../services/favorites.dart';
 import '../services/localization.dart';
-import '../services/progress.dart';
 import '../widgets/molecule_diagrams.dart';
 import 'lab_quiz_screen.dart';
 
@@ -65,7 +64,6 @@ class _TopicDetailViewState extends State<TopicDetailView> {
   @override
   Widget build(BuildContext context) {
     final topic = localizedTopic(widget.topic);
-    final progress = ProgressService.instance;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -142,22 +140,6 @@ class _TopicDetailViewState extends State<TopicDetailView> {
               ),
             ),
           ),
-        // Botón de dominado a todo el ancho, igual que el de
-        // cuestionario de laboratorio de arriba: a medio ancho y
-        // pegado a la izquierda se veía descuidado.
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: () =>
-                setState(() => progress.toggleMastered(topic.slug)),
-            icon: LucideIcon(progress.isMastered(topic.slug)
-                ? LucideIcons.check
-                : LucideIcons.circle),
-            label: Text(progress.isMastered(topic.slug)
-                ? tr('mastered')
-                : tr('markMastered')),
-          ),
-        ),
       ],
     );
   }

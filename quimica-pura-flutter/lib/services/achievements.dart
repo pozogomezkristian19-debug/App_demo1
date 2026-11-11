@@ -81,12 +81,6 @@ const List<Achievement> allAchievements = [
     body: 'Deja la lista de errores en cero.',
     icon: LucideIcons.rotateCcw,
   ),
-  Achievement(
-    id: 'qotd7',
-    title: 'Pregunta del día ×7',
-    body: 'Contesta la pregunta del día 7 días distintos.',
-    icon: LucideIcons.calendar,
-  ),
 ];
 
 /// ¿Está desbloqueado este logro? `trackTopics` son los temas de la
@@ -119,8 +113,6 @@ bool achievementUnlocked(
       return p.totalCorrect >= 1000;
     case 'reviewClear':
       return p.everFailed && p.failedCount == 0;
-    case 'qotd7':
-      return p.qotdDays.length >= 7;
     default:
       return false;
   }

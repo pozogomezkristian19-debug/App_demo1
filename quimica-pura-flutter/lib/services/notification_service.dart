@@ -7,10 +7,11 @@
 //    una y otra (61-180 minutos), nunca en avalancha, EXCEPTO la
 //    primera, que llega pronto (20-50 min) para que el usuario vea
 //    que funciona y no crea que no avisa nunca;
-//  - los mensajes rotan al azar (repaso, racha, pregunta del día,
-//    repaso de tu tema más débil), SIEMPRE con el nombre bonito del
-//    tema ("Estequiometría y el mol"), nunca con el id interno
-//    ("bach-estequiometria");
+//  - los mensajes rotan al azar (repaso, racha, repaso de tu tema
+//    más débil), SIEMPRE con el nombre bonito del tema
+//    ("Estequiometría y el mol"), nunca con el id interno
+//    ("bach-estequiometria"); la pregunta del día se eliminó de la
+//    app (ronda #6) y ya no sale en los mensajes.
 //  - se programan 3 seguidas por delante, para que lleguen aunque la
 //    app lleve días sin abrirse; al abrir la app (o al tocar una
 //    notificación) se vuelve a programar la tanda;
@@ -96,10 +97,91 @@
 //     REAL del permiso (concedido/denegado), no solo la preferencia
 //     guardada.
 
+// Ronda #6 (Quemia 6.3), punto 2 — por qué "las notificaciones
+// nunca funcionaron", TAMPOCO en la 6.2 (verificado en el código y
+// en el fuente del plugin flutter_local_notifications 23.0.0):
+//
+//  CAUSA PRINCIPAL (real, en AndroidManifest.xml): la app NO
+//  declaraba los receivers que el plugin exige para mostrar
+//  notificaciones PROGRAMADAS (README del plugin, sección
+//  "AndroidManifest.xml setup", y su ejemplo): faltaban
+//  ScheduledNotificationReceiver, ScheduledNotificationBootReceiver
+//  y RECEIVE_BOOT_COMPLETED (y ActionBroadcastReceiver, para que la
+//  acción "Repasar ahora" haga algo). El manifiesto del plugin solo
+//  declara POST_NOTIFICATIONS y VIBRATE: desde la v16 hay que
+//  declarar los receivers en el manifiesto de la app. El plugin
+//  programa la alarma en AlarmManager con un broadcast dirigido a
+//  ScheduledNotificationReceiver (FlutterLocalNotificationsPlugin
+//  .java, zonedScheduleNotification) y nunca registra receivers en
+//  runtime: sin el receiver declarado, al llegar la hora el sistema
+//  descarta el broadcast en silencio. La app sí guardaba las horas
+//  (melli_notif_next) y la pantalla decía "Próximo aviso", pero
+//  NADA podía mostrarse: ni exactas ni inexactas, llegaran cuando
+//  llegaran. Por eso la ronda #5 no lo arregló (sus causas eran
+//  reales pero secundarias): los avisos INMEDIATOS (confirmación
+//  9998, prueba 9999) sí pueden llegar, porque van directos al
+//  NotificationManager sin pasar por AlarmManager; los programados
+//  (toda la tanda de 3), nunca. Arreglo: receivers + permiso de
+//  arranque en AndroidManifest.xml (ver ese archivo).
+//  Tras un reinicio, el plugin reprograma solo los avisos
+//  guardados (ScheduledNotificationBootReceiver) al arrancar el
+//  teléfono; antes, tras reiniciar no llegaba nada hasta abrir la
+//  app (y abrirla reprogramaba, así que el hueco era invisible).
+//
+//  SECUNDARIAS (siguen vigentes, fuera del código): sin alarmas
+//  exactas concedidas, las inexactas + Doze retrasan los avisos
+//  horas (el repliegue ya existía); y en Xiaomi/MIUI, si el ahorro
+//  de batería está en agresivo o el inicio automático está
+//  denegado, el sistema puede seguir retrasando o bloqueando la
+//  entrega aunque el receiver exista. Eso ya no se puede arreglar
+//  desde el código: la pantalla de Recordatorios lo diagnostica y
+//  explica los pasos (ver screens/reminder_screen.dart y
+//  services/battery_settings.dart).
+//
+//  Diagnóstico nuevo (ronda #6): la pantalla de Recordatorios
+//  muestra el permiso real, el próximo aviso programado (o que no
+//  hay ninguno), el ÚLTIMO aviso enviado (de la bandeja y de los
+//  envíos inmediatos) y el estado del ahorro de batería. Si "Probar
+//  un aviso ahora" llega, el problema era la programación (los
+//  receivers); si ni esa llega, es permiso/canal o MIUI.
+//
+//  RUTA DE PETICIÓN (ronda #6, 02:18 — "la app nunca pide permiso"):
+//  la cadena del toque al diálogo está completa y los tests la
+//  prueban (fix5): botón → enable()/requestPermission() →
+//  resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+//  → requestNotificationsPermission() → canal nativo → Java
+//  requestNotificationsPermission → ActivityCompat.requestPermissions
+//  (POST_NOTIFICATIONS). No hay guardia en la UI que bloquee el
+//  toque (el botón llama directo, con la Activity viva) ni se piden
+//  las alarmas exactas antes (eso se quitó en la ronda #5).
+//  PERO había un retorno temprano que podía tragarse la petición:
+//  requestPermission() (y la confirmación 9998, y sendTest())
+//  exigían ANTES que init() tuviera éxito ("si !_ready, init(); si
+//  falla, return false SIN pedir nada"). Las llamadas nativas del
+//  permiso (requestNotificationsPermission, areNotificationsEnabled,
+//  show) NO necesitan el init() de Dart — el lado Java solo usa la
+//  Activity / el applicationContext — así que ese gate era un
+//  acoplamiento innecesario: si init() fallaba por cualquier motivo,
+//  el diálogo del sistema no se pedía nunca. Ahora la petición va
+//  DIRECTO al plugin y el init() solo se asegura DESPUÉS de
+//  concedido (para programar y para el handler de toques); el
+//  aviso inmediato se intenta siempre, aunque init() falle.
+//  Causa MÁS PROBABLE en el teléfono de Kristian: denegación
+//  PERMANENTE (negó en el onboarding de la 6.0/6.1; en Android 13+,
+//  tras dos negativas, el sistema ya NO muestra su diálogo y
+//  requestPermissions devuelve denegado en el acto). Eso NO lo
+//  puede arreglar ningún código: el único camino es Ajustes
+//  (el diálogo de la app lo abre de un toque y al volver se
+//  re-comprueba y se activa solo). En una instalación nueva, o
+//  después de concederlo en Ajustes, el diálogo SÍ aparece al
+//  tocar "Activar recordatorios", porque ahora la petición se
+//  intenta siempre.
+
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
@@ -124,6 +206,13 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
 
   static const _kLastNotif = 'melli_notif_last';
+
+  /// Hora ISO del ÚLTIMO aviso enviado de verdad (ronda #6, punto
+  /// 2): la anota cada envío inmediato (confirmación 9998 y prueba
+  /// 9999). La lee [lastReminderSentTime] junto con la bandeja para
+  /// el diagnóstico de Recordatorios. No se borra al apagar los
+  /// recordatorios: es historial, no estado.
+  static const _kLastSent = 'melli_notif_last_sent';
 
   /// Horas ISO de los 3 avisos programados, separadas por comas (la
   /// PRIMERA es el próximo aviso; se guardan las 3 para poder saltar
@@ -173,6 +262,15 @@ class NotificationService {
   static const _smallIcon = 'ic_notif_bell';
 
   static bool _ready = false;
+
+  /// Reinicia el estado estático (solo para tests): sin inicializar
+  /// y sin alarmas exactas. Permite probar la ruta de petición con
+  /// el servicio "frío", como al abrir la app por primera vez.
+  @visibleForTesting
+  static void resetForTests() {
+    _ready = false;
+    _exactAlarms = false;
+  }
 
   /// ¿Se pueden usar alarmas exactas? Se PRUEBAN al programar la
   /// tanda (fix5, punto 1): se intenta exacta y, si el plugin dice
@@ -299,18 +397,15 @@ class NotificationService {
 
   /// ¿Está dado el permiso de notificaciones? (Android 13+:
   /// POST_NOTIFICATIONS; antes: avisos activados.) Solo consulta,
-  /// no pide nada y no reprograma nada: si el servicio aún no está
-  /// inicializado, se inicializa SIN reprogramar la tanda (fix5,
-  /// punto 1; main() ya programa al arrancar). Si la plataforma no
-  /// responde, se asume que sí (en Android < 13 no hay permiso que
-  /// pedir). Si init() falló, en cambio, NO se puede afirmar que
-  /// esté dado: antes se devolvía true y el flujo decía lo
-  /// contrario que requestPermission().
+  /// no pide nada y no reprograma nada. La consulta va DIRECTO al
+  /// plugin (ronda #6): areNotificationsEnabled solo usa el
+  /// applicationContext y NO necesita que el servicio esté
+  /// inicializado; si init() fallara, la consulta no debe mentir
+  /// diciendo "denegado" ni impedir que se pida el permiso (antes
+  /// se inicializaba aquí y, si init() fallaba, se devolvía false
+  /// sin comprobar nada). Si la plataforma no responde, se asume
+  /// que sí (en Android < 13 no hay permiso que pedir).
   static Future<bool> get isPermissionGranted async {
-    if (!_ready) {
-      final ok = await _init(reschedule: false);
-      if (!ok) return false;
-    }
     try {
       // areNotificationsEnabled vive en la implementación de
       // Android (no en el plugin ni en la interfaz abstracta): en
@@ -335,6 +430,11 @@ class NotificationService {
   /// sistema la primera vez). Devuelve si quedó concedido. Extraído
   /// de [enable] para reutilizarlo en la pantalla de Recordatorios,
   /// en el botón de prueba y en el onboarding (fix4, punto 3).
+  /// La petición va DIRECTO al plugin, sin pasar por init()
+  /// (ronda #6, punto 2): el diálogo del sistema no necesita que
+  /// el servicio esté inicializado — el canal nativo solo necesita
+  /// la Activity viva del toque — y antes, si init() fallaba, la
+  /// petición se tragaba el diálogo ("la app nunca pide permiso").
   /// OJO: si el permiso está denegado de forma permanente, el
   /// sistema ya NO muestra su diálogo y devuelve false en el acto
   /// (fix5, punto 1): el único camino es entonces "Ir a Ajustes".
@@ -343,10 +443,6 @@ class NotificationService {
   /// los recordatorios como activos aunque ningún aviso pudiera
   /// llegar.
   static Future<bool> requestPermission() async {
-    if (!_ready) {
-      final ok = await init();
-      if (!ok) return false;
-    }
     try {
       final android = _plugin.resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>();
@@ -378,6 +474,13 @@ class NotificationService {
   /// no muestra su diálogo y devuelve false: la UI ofrece entonces
   /// "Ir a Ajustes" (fix4, punto 3).
   ///
+  /// Orden (ronda #6, punto 2): la petición va PRIMERO, y solo con
+  /// el permiso ya concedido se asegura la inicialización antes de
+  /// programar. Antes la petición exigía init() con éxito, así que
+  /// si init() fallaba el diálogo no se pedía nunca. El init() de
+  /// aquí es "lo mejor posible": si falla, la tanda se intenta
+  /// igual (sus errores se tragan) y la confirmación sale igual.
+  ///
   /// Las alarmas exactas YA NO se piden aquí: en Android 12+
   /// requestExactAlarmsPermission() abre los Ajustes del sistema
   /// ("Alarmas y recordatorios") justo después del diálogo del
@@ -389,6 +492,9 @@ class NotificationService {
   /// canal no responde, la activación no se queda colgada.
   static Future<bool> enable() async {
     if (!await requestPermission()) return false;
+    if (!_ready) {
+      await init();
+    }
     await UserPrefs.saveReminder(
         true, UserPrefs.reminderHour, UserPrefs.reminderMinute);
     await scheduleNext();
@@ -479,7 +585,60 @@ class NotificationService {
     }
   }
 
-  /// Registra en la bandeja de Notificaciones los recordatorios de
+  /// Hora a la que se envió el ÚLTIMO recordatorio de estudio, o
+  /// null si todavía no se envió ninguno (ronda #6, punto 2:
+  /// diagnóstico de Recordatorios). Dos fuentes, se toma la más
+  /// reciente:
+  ///  - la bandeja: cada aviso programado que se disparó deja una
+  ///    entrada de tipo recordatorio (la anota
+  ///    [reconcileFiredReminders] al abrir la app). La hora es la
+  ///    PROGRAMADA (va en el id, "reminder-<milisegundos>"), no la
+  ///    de la reconciliación, que puede ser horas después;
+  ///  - el último envío inmediato (confirmación 9998 o prueba
+  ///    9999), guardado en [_kLastSent] por [sendEnabledConfirmation]
+  ///    y [sendTest].
+  /// Solo lee: no programa nada.
+  static Future<DateTime?> lastReminderSentTime() async {
+    DateTime? last;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final sentRaw = prefs.getString(_kLastSent);
+      final sent = sentRaw == null ? null : DateTime.tryParse(sentRaw);
+      if (sent != null) last = sent;
+    } catch (_) {
+      // Sin preferencia, solo queda la bandeja.
+    }
+    try {
+      await NotificationInbox.load();
+      for (final entry in NotificationInbox.entries) {
+        if (entry.kind != InboxKind.reminder) continue;
+        var at = entry.createdAt;
+        final millis = int.tryParse(
+          entry.id.replaceFirst('reminder-', ''),
+        );
+        if (millis != null) {
+          at = DateTime.fromMillisecondsSinceEpoch(millis);
+        }
+        if (last == null || at.isAfter(last)) last = at;
+      }
+    } catch (_) {
+      // Sin bandeja, solo queda el envío inmediato.
+    }
+    return last;
+  }
+
+  /// Anota la hora del último aviso enviado de verdad (confirmación
+  /// o prueba). "Lo mejor posible": si no se puede guardar, el
+  /// diagnóstico simplemente no muestra ese envío.
+  static Future<void> _recordLastSent() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+          _kLastSent, DateTime.now().toIso8601String());
+    } catch (_) {
+      // Guardar la hora es opcional.
+    }
+  }
   /// estudio que ya se dispararon (fix4, punto 8): cada hora
   /// programada que ya pasó genera una entrada ("Hora de repasar"),
   /// por si el usuario no vio el aviso. Se llama al abrir la app
@@ -609,9 +768,13 @@ class NotificationService {
   /// Sin tope: en enable() se llama sin esperar (unawaited), así
   /// que un canal que no responda no puede colgar la activación.
   static Future<bool> sendEnabledConfirmation() async {
+    // La confirmación se intenta SIEMPRE (ronda #6, punto 2): si
+    // init() fallara, el aviso no debe perderse con él (antes se
+    // devolvía false sin mostrar nada). Mostrarlo no necesita que
+    // el servicio esté inicializado; el init() solo se intenta
+    // para que el toque abra la app con el handler correcto.
     if (!_ready) {
-      final ok = await init();
-      if (!ok) return false;
+      await init();
     }
     try {
       await _plugin.show(
@@ -620,6 +783,9 @@ class NotificationService {
         body: tr('notifEnabledConfirm'),
         notificationDetails: _confirmationDetails(),
       );
+      // Salió de verdad: queda anotado para el diagnóstico
+      // (ronda #6, punto 2).
+      await _recordLastSent();
       return true;
     } catch (_) {
       return false;
@@ -645,19 +811,31 @@ class NotificationService {
   /// Una notificación de prueba, ahora mismo (botón "Probar" del
   /// recordatorio). Sirve para comprobar en el teléfono que los avisos
   /// llegan y que el permiso está dado. Usa los mismos detalles que
-  /// los avisos programados (icono, gemela y acción).
+  /// los avisos programados (icono, gemela y acción). Si sale, queda
+  /// anotada la hora para el diagnóstico (ronda #6, punto 2): si
+  /// esta llega y los programados no, el problema era la
+  /// programación, no el permiso. "Lo mejor posible": si el canal
+  /// falla, no rompe la pantalla (antes la excepción subía).
   static Future<void> sendTest() async {
+    // El aviso de prueba se intenta SIEMPRE (ronda #6, punto 2):
+    // si init() fallara, la prueba no debe perderse con él (antes
+    // se salía sin mostrar nada). Mostrarlo no necesita que el
+    // servicio esté inicializado.
     if (!_ready) {
-      final ok = await init();
-      if (!ok) return;
+      await init();
     }
-    await _plugin.show(
-      id: 9999,
-      title: 'Quemia',
-      body: _pickMessage(Random()),
-      payload: reviewPayload,
-      notificationDetails: await _details(),
-    );
+    try {
+      await _plugin.show(
+        id: 9999,
+        title: 'Quemia',
+        body: _pickMessage(Random()),
+        payload: reviewPayload,
+        notificationDetails: await _details(),
+      );
+      await _recordLastSent();
+    } catch (_) {
+      // Sin plugin o sin permiso, no hay aviso que anotar.
+    }
   }
 
   /// Elige un mensaje al azar en el idioma actual. Una de cada tres
@@ -707,42 +885,36 @@ class NotificationService {
     'es': [
       '¿Ya repasaste hoy o lo dejamos para mañana?',
       'Tu racha te está esperando: un nivel y sigue viva.',
-      '¿Ya hiciste la pregunta del día?',
       'Cinco minutos de química: ¿te atreves con un nivel?',
       'Tu yo de mañana te lo va a agradecer: repasa un poco.',
     ],
     'en': [
       'Did you review today or shall we leave it for tomorrow?',
       'Your streak is waiting: one level and it stays alive.',
-      'Did you do today’s question yet?',
       'Five minutes of chemistry: fancy a level?',
       'Your tomorrow self will thank you: review a little.',
     ],
     'fr': [
       'As-tu déjà révisé aujourd’hui ou on remet à demain ?',
       'Ta série t’attend : un niveau et elle reste en vie.',
-      'As-tu fait la question du jour ?',
       'Cinq minutes de chimie : tu tentes un niveau ?',
       'Ton toi de demain te remerciera : révise un peu.',
     ],
     'it': [
       'Hai già ripassato oggi o rimandiamo a domani?',
       'La tua serie ti aspetta: un livello e resta viva.',
-      'Hai già fatto la domanda del giorno?',
       'Cinque minuti di chimica: ti va un livello?',
       'Il te di domani ti ringrazierà: ripassa un po’.',
     ],
     'pt': [
       'Você já revisou hoje ou deixamos para amanhã?',
       'Sua sequência está esperando: um nível e ela continua viva.',
-      'Você já fez a pergunta do dia?',
       'Cinco minutos de química: topa um nível?',
       'Você de amanhã vai agradecer: revise um pouco.',
     ],
     'ru': [
       'Ты уже повторил сегодня или оставим на завтра?',
       'Твоя серия ждёт: один уровень — и она жива.',
-      'Ты уже ответил на вопрос дня?',
       'Пять минут химии: рискнёшь пройти уровень?',
       'Ты завтрашний скажешь спасибо: повтори немного.',
     ],

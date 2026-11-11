@@ -327,7 +327,6 @@ class _StatsScreenState extends State<StatsScreen> {
       'respuestas_correctas': p.totalCorrect,
       'respuestas_totales': p.totalAnswered,
       'errores_pendientes': p.failedCount,
-      'temas_dominados': p.masteredTopics.map(localizedTopicTitle).toList(),
       'dias_practica': p.practiceDays.toList(),
     };
     return const JsonEncoder.withIndent('  ').convert(data);
@@ -502,7 +501,7 @@ class _StatsScreenState extends State<StatsScreen> {
           // Respuestas correctas, Respuestas totales, Errores por
           // repasar, Puntos y Vidas — cifras que ya están en la
           // tarjeta de resumen. Quedan niveles por versión, el mejor
-          // del examen mixto, temas dominados y días practicando.
+          // del examen mixto y días practicando.
           Container(
             decoration: BoxDecoration(
               color: c.card,
@@ -521,8 +520,6 @@ class _StatsScreenState extends State<StatsScreen> {
                     c.ink),
                 _statRow(
                     'Examen mixto (mejor)', '${p.bestScore('mixto')}%', c.ink),
-                _statRow(
-                    'Temas dominados', '${p.masteredTopics.length}', c.ink),
                 _statRow('Días practicando', '${p.practiceDays.length}', c.ink),
               ],
             ),

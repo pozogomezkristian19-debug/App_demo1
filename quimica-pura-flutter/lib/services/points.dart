@@ -11,9 +11,6 @@
 // un fallo no es un cero, es un castigo. El saldo total de puntos vive
 // en ProgressService y se guarda en el teléfono.
 //
-// Pregunta del día: acertar suma el valor de la pregunta; fallar RESTA
-// EL DOBLE de su valor (fácil −6, media −10, difícil −16).
-//
 // ## Pasar de nivel por aciertos (fix5, punto 13)
 // Se pasa el nivel acertando 4 o más de 5 preguntas, sin importar la
 // dificultad: es lo que promete el mensaje de la app ("necesitas 4
@@ -61,13 +58,6 @@ int pointsForWrong(int difficulty) {
     default:
       return -8;
   }
-}
-
-/// Puntos de la pregunta del día: acertar suma el valor; fallar resta
-/// EL DOBLE.
-int qotdPoints(int difficulty, bool correct) {
-  final v = pointsForCorrect(difficulty);
-  return correct ? v : -2 * v;
 }
 
 /// Puntos máximos de una pregunta de un nivel (para la nota sobre 5).

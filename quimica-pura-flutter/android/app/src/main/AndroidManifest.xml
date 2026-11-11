@@ -7,6 +7,12 @@
          usuario lo concede en ajustes (lo pide la app al activar los
          recordatorios); sin él se usan alarmas inexactas. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- Recibir el arranque (ronda #6, punto 2): sin este permiso el
+         plugin no puede reprogramar los avisos tras un reinicio del
+         teléfono (las alarmas de AlarmManager se pierden al
+         apagar). Lo exige el README de flutter_local_notifications
+         23.0.0 ("AndroidManifest.xml setup"). -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Instalar actualizaciones descargadas por la propia app
          (fix3, punto 20): sin Google Play, Melli-Qui descarga el APK
          y pide instalarlo con el instalador del sistema. En Android
@@ -44,8 +50,31 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <!-- Widget de la pantalla de inicio (v6): tarjeta con la
-             pregunta del día, la racha, las vidas y los puntos.
+        <!-- Receivers del plugin de notificaciones (ronda #6, punto 2).
+             Sin ellos, NINGÚN aviso programado llega nunca: zonedSchedule
+             programa la alarma en AlarmManager con un broadcast a
+             ScheduledNotificationReceiver, y si ese receiver no está
+             declarado en el manifiesto, el sistema descarta el
+             broadcast en silencio (la app guarda la hora y la
+             pantalla dice "Próximo aviso", pero nada se muestra).
+             El manifiesto del plugin solo declara POST_NOTIFICATIONS
+             y VIBRATE: desde la v16 hay que declarar los receivers
+             en el manifiesto de la app (README del plugin,
+             "AndroidManifest.xml setup", y su ejemplo). -->
+        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
+        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
+            </intent-filter>
+        </receiver>
+        <!-- Sin este receiver, la acción "Repasar ahora" de la
+             notificación no hace nada (README del plugin). -->
+        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver" />
+        <!-- Widget de la pantalla de inicio (v6): tarjeta con el
+             tip del día, la racha, las vidas y los puntos.
              Lo pinta MelliQuiWidgetProvider (Kotlin, RemoteViews). -->
         <receiver android:name=".MelliQuiWidgetProvider"
             android:exported="true"

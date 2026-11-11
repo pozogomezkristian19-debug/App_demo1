@@ -1,6 +1,6 @@
 // Widget de la pantalla de inicio (v6; fix4, punto 10: línea de tip):
-// tarjeta con la pregunta del día, un tip de estudio que rota cada
-// día, la racha, las vidas y los puntos. Al tocarla se abre la app.
+// tarjeta con un tip de estudio que rota cada día, la racha, las
+// vidas y los puntos. Al tocarla se abre la app.
 // Plantilla del paquete home_widget 0.10.0 (su ejemplo): extiende
 // HomeWidgetProvider y pinta un RemoteViews con los datos que Dart
 // guarda con HomeWidget.saveWidgetData. Sin interactividad de fondo:
@@ -30,10 +30,6 @@ class MelliQuiWidgetProvider : HomeWidgetProvider() {
                 HomeWidgetLaunchIntent.getActivity(context, MainActivity::class.java)
             setOnClickPendingIntent(R.id.widget_container, pendingIntent)
 
-            setTextViewText(
-                R.id.widget_qotd,
-                widgetData.getString("qotd", null) ?: "Quemia",
-            )
             // Tip de estudio del día (fix4, punto 10): si no hay
             // tip guardado, el TextView queda vacío y no ocupa sitio.
             setTextViewText(

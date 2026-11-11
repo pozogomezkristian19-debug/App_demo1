@@ -2,11 +2,9 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import '../widgets/lucide_icons.dart';
 import '../data/i18n/content_i18n.dart';
-import '../data/extra_content.dart';
 import '../data/questions.dart';
 import '../models.dart';
 import '../services/home_widget_service.dart';
-import '../services/accent.dart';
 
 import '../services/localization.dart';
 import '../services/nav_requests.dart';
@@ -18,7 +16,6 @@ import '../services/sound_service.dart';
 import '../services/user_prefs.dart';
 import '../widgets/brand_logo.dart';
 import '../widgets/celebration.dart';
-import '../widgets/icon_animations.dart';
 import '../screens/calculator_screen.dart';
 import '../widgets/twin_avatars.dart';
 
@@ -88,17 +85,6 @@ const List<String> bachTopics = [
   'bach-gases',
   'bach-acido-base',
 ];
-
-// Color de las tarjetas de Niveles (pregunta del día, repaso,
-// practicar de otra forma): gris claro en modo claro, superficie
-// oscura en modo oscuro (verde con Verde, violeta con Violeta:
-// AppAccent.darkCard). Con el gris fijo, en oscuro el texto del
-// tema (blanco) quedaba invisible sobre tarjeta blanca (capturas
-// 2026-11-10, bug 2).
-Color _nivelesCardColor(BuildContext context) =>
-    Theme.of(context).brightness == Brightness.dark
-        ? AppAccent.darkCard
-        : BrandColors.cardGray;
 
 // ---- Camino de niveles (estilo Duolingo / Candy Crush) ----
 
@@ -678,8 +664,7 @@ class _PracticarScreenState extends State<PracticarScreen> {
         ? _mixedSizeBach
         : _mixedSize;
     // Una sección del camino (tema + sus niveles). Es un cierre para
-    // poder poner el PRIMER tema antes de la pregunta del día y de
-    // "Practicar de otra forma" y el resto después (fix5, punto 2):
+    // poder poner el PRIMER tema antes que el resto (fix5, punto 2):
     // el camino es lo primero que se ve al abrir Niveles.
     Widget topicSection(int i) {
       return _TopicPathSection(
@@ -756,30 +741,15 @@ class _PracticarScreenState extends State<PracticarScreen> {
           // así el camino empieza más arriba y se ve más.
           const _ReminderCard(),
           // EL CAMINO PRIMERO (fix5, punto 2): el primer tema con su
-          // nodo 1 va justo debajo de la cabecera, antes de la
-          // pregunta del día y de "Practicar de otra forma". Así, al
-          // abrir Niveles, el camino domina la primera pantalla y el
-          // nodo 1 se ve sin deslizar (a 393x852 el nodo 1 queda a
-          // ~215 dp, con los nodos 1-5 visibles). La pregunta del
-          // día y "Practicar de otra forma" NO se quitan: quedan
-          // después del primer tema, a un desliz corto, y al
-          // contestar la pregunta todo lo de abajo sigue subiendo.
+          // nodo 1 va justo debajo de la cabecera. Así, al abrir
+          // Niveles, el camino domina la primera pantalla y el nodo
+          // 1 se ve sin deslizar (a 393x852 el nodo 1 queda a
+          // ~215 dp, con los nodos 1-5 visibles). (fix6, ronda #6:
+          // Niveles es SOLO el camino: la pregunta del día se
+          // eliminó por completo de la app y "Practicar de otra
+          // forma" ya no está aquí.)
           topicSection(0),
           const SizedBox(height: 20),
-          // Pregunta del día (fix4, punto 13 REVISADO): la fila lado
-          // a lado NO — vuelve la tarjeta ANCHA de antes (título,
-          // puntos, botón "Responder"), pero con la FOTO del
-          // acompañante del día DENTRO de la tarjeta. El banner
-          // "Hoy te acompaña…" ya no sale en Niveles (el acompañante
-          // sigue en su avatar junto al nodo y en los demás sitios).
-          // "Practicar de otra forma" queda debajo, como antes.
-          // El hueco de 10 px de debajo de la tarjeta vive DENTRO
-          // de la tarjeta (fix4, retoque final): al contestarla
-          // desaparece sin dejar hueco y todo sube.
-          FadeSlideIn(
-            child: _QuestionOfTheDayChip(
-                onChanged: () => setState(() {})),
-          ),
           // Repaso inteligente: errores de días anteriores que resurgen.
           if (progress.dueFailed().isNotEmpty)
             Card(
@@ -803,15 +773,11 @@ class _PracticarScreenState extends State<PracticarScreen> {
           // camino de niveles muy abajo. El repaso sigue en el chip
           // de la barra superior y en "Mis errores" de Cuenta (los
           // dos abren el repaso general, sin grupos por nivel).
-          // Practicar de otra forma: examen con tiempo y
-          // reto. Antes solo se llegaba desde la búsqueda, por eso
-          // casi nadie los veía: ahora están aquí, en Niveles.
-          _OtherWaysSection(
-            onOpen: widget.onOpenScreen ?? (_) {},
-          ),
-          const SizedBox(height: 20),
-          // El resto de temas del camino, después de la pregunta del
-          // día y de "Practicar de otra forma".
+          // (fix6, ronda #6): Niveles es SOLO el camino. La
+          // "Pregunta del día" se eliminó por completo de la app;
+          // "Practicar de otra forma" (Examen con tiempo y Reto)
+          // sigue existiendo y se abre desde la búsqueda.
+          // El resto de temas del camino.
           for (var i = 1; i < topics.length; i++) topicSection(i),
           // Examen mixto: trofeo final del camino, bloqueado hasta pasar
           // el Nivel 1 de todos los temas de la pista.
@@ -849,112 +815,6 @@ class _PracticarScreenState extends State<PracticarScreen> {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// Practicar de otra forma: dos tarjetas visibles en Niveles que
-/// abren el Examen con tiempo y el Reto con otra persona. Estas dos
-/// pantallas existen desde v5, pero solo se podían abrir desde la
-/// búsqueda sabiendo su nombre, así que casi nadie las encontraba.
-/// (Antes había una tercera, Tarjetas de memoria, eliminada en la
-/// ronda fix3 a petición de Kristian: "Eso de memoria quítalo".)
-///
-/// Las dos tarjetas miden EXACTAMENTE lo mismo (fix 4): la fila
-/// estira las dos a la altura de la más alta, los huecos entre
-/// ellas son fijos (8 px) y el título tiene alto fijo de 2 líneas,
-/// así "Reto" (una sola línea) no encoge su tarjeta.
-class _OtherWaysSection extends StatelessWidget {
-  const _OtherWaysSection({required this.onOpen});
-  final void Function(String key) onOpen;
-
-  @override
-  Widget build(BuildContext context) {
-    Widget card(String key, LucideIconData icon, String title) {
-      final accent = Theme.of(context).colorScheme.primary;
-      return Expanded(
-        child: Card(
-          margin: EdgeInsets.zero,
-          color: _nivelesCardColor(context),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(16),
-            onTap: () {
-              SoundService.tap();
-              onOpen(key);
-            },
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 6),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // Icono ARRIBA, en su propio círculo tintado
-                  // (fix2, items 1 y 7): el mando (ancho y bajo) ya
-                  // no se pega ni se distorsiona con el texto, porque
-                  // tiene su hueco definido y el texto va DEBAJO.
-                  Container(
-                    width: 54,
-                    height: 54,
-                    decoration: BoxDecoration(
-                      color: accent.withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    alignment: Alignment.center,
-                    // Icono 3D (fix3, punto 6): relleno con el
-                    // degradado del acento + brillito, como el
-                    // corazón de las vidas.
-                    child:
-                        LucideIcon(icon, size: 28, color: accent, threeD: true),
-                  ),
-                  const SizedBox(height: 8),
-                  // Título DEBAJO, flexible (fix2, item 1): mínimo
-                  // 34 px para que las dos tarjetas midan igual,
-                  // pero crece si el texto necesita 2 líneas en otro
-                  // idioma, en vez de recortarse.
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: 34),
-                    child: Center(
-                      child: Text(
-                        title,
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            fontSize: 13, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          tr('practiceOtherWays'),
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 10),
-        // IntrinsicHeight: la fila vive dentro de un scroll vertical
-        // (alto sin límite), y con CrossAxisAlignment.stretch la
-        // fila intentaría estirar las tarjetas a un alto infinito.
-        // IntrinsicHeight le da a la fila el alto de la tarjeta más
-        // alta, y stretch iguala la otra a ese alto.
-        IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              card('timed', LucideIcons.timer, tr('timedTitle')),
-              const SizedBox(width: 8),
-              card('challenge', LucideIcons.gamepad2, tr('challengeTitle')),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }
@@ -1523,279 +1383,6 @@ class _ReminderCard extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-      ],
-    );
-  }
-}
-
-/// Al contestarla, la ficha DESAPARECE de Niveles hasta el día
-/// siguiente (regla v6, restaurada en el retoque final de la #4):
-/// no se queda en estado "Ya respondiste" y todo lo de abajo sube.
-/// La foto del acompañante del día va DENTRO de la tarjeta, a la
-/// izquierda del título (fix4, punto 13 REVISADO): ya no hay banner
-/// "Hoy te acompaña…" en Niveles.
-class _QuestionOfTheDayChip extends StatefulWidget {
-  const _QuestionOfTheDayChip({required this.onChanged});
-  final VoidCallback onChanged;
-
-  @override
-  State<_QuestionOfTheDayChip> createState() => _QuestionOfTheDayChipState();
-}
-
-class _QuestionOfTheDayChipState extends State<_QuestionOfTheDayChip> {
-  late final QuizQuestion _q;
-  late final QuizQuestion _qEs;
-  late final int _value;
-  bool _answered = false;
-
-  @override
-  void initState() {
-    super.initState();
-    final spanish = questionOfTheDay(DateTime.now());
-    final index = allQuestions.indexOf(spanish);
-    _qEs = spanish;
-    _q = index >= 0 ? localizedQuestionAt(index) : spanish;
-    _value = pointsForCorrect(_q.difficulty);
-    _answered = ProgressService.instance.qotdAnsweredOn(DateTime.now());
-  }
-
-  Future<void> _showDialog() async {
-    var answeredInDialog = false;
-    var wasCorrect = false;
-    var delta = 0;
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          if (!answeredInDialog) {
-            return AlertDialog(
-              title: Text(tr('qotdTitle')),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  MascotBubble(
-                    companion: companionOfTheDay(),
-                    text: tr(mascotLineKey(companionOfTheDay(), MascotLine.ask,
-                        DateTime.now().day)),
-                  ),
-                  const SizedBox(height: 12),
-                  // Botoncito de teclado (fix5, punto B, corrección
-                  // 00:26): también en el diálogo de la pregunta
-                  // del día, a un ladito del texto. Al tocarlo se
-                  // abre la PANTALLA de la calculadora (página
-                  // completa) encima del diálogo; al cerrarla se
-                  // vuelve al diálogo intacto. La pregunta del día
-                  // siempre es de opción múltiple (banco), así que
-                  // la calculadora es la normal: solo para calcular
-                  // a mano.
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          _q.question,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w600, fontSize: 16),
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      IconButton(
-                        key: const Key('calculator-toggle'),
-                        onPressed: () {
-                          CalculatorScreen.open(
-                            context,
-                            scientific: false,
-                          );
-                        },
-                        icon: LucideIcon(
-                          LucideIcons.keyboard,
-                          size: 22,
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurfaceVariant,
-                          threeD: true,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Text(tr('qotdWorth')
-                      .replaceFirst('%d', '$_value')
-                      .replaceFirst('%d', '${_value * 2}')),
-                  const SizedBox(height: 12),
-                  for (var i = 0; i < 4; i++)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: () {
-                            final correct = i == _q.answer;
-                            delta = qotdPoints(_q.difficulty, correct);
-                            final p = ProgressService.instance;
-                            p.addPoints(delta);
-                            p.recordAnswer(_q.topic, correct);
-                            p.recordQotd(DateTime.now());
-                            final id = bankId(_qEs);
-                            if (correct) {
-                              p.removeFailed(id);
-                            } else {
-                              p.addFailed(FailedEntry(
-                                  id: id,
-                                  topic: _qEs.topic,
-                                  question: _qEs.question));
-                            }
-                            if (correct) {
-                              SoundService.correct();
-                            } else {
-                              SoundService.wrong();
-                            }
-                            setDialogState(() {
-                              answeredInDialog = true;
-                              wasCorrect = correct;
-                            });
-                          },
-                          child: Text(_q.options[i]),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: Text(tr('closeWord')),
-                ),
-              ],
-            );
-          }
-          return AlertDialog(
-            title: Text(wasCorrect
-                ? tr('qotdCorrect').replaceFirst('%d', '$delta')
-                : tr('qotdWrong').replaceFirst('%d', '${delta.abs()}')),
-            content: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  MascotBubble(
-                    companion: companionOfTheDay(),
-                    mood: wasCorrect ? TwinMood.happy : TwinMood.soft,
-                    text: tr(mascotLineKey(
-                        companionOfTheDay(),
-                        wasCorrect ? MascotLine.praise : MascotLine.console,
-                        DateTime.now().day)),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(_q.explanation),
-                ],
-              ),
-            ),
-            actions: [
-              FilledButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: Text(tr('closeWord')),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-    if (mounted) {
-      setState(() =>
-          _answered = ProgressService.instance.qotdAnsweredOn(DateTime.now()));
-    }
-    widget.onChanged();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // Regla v6, restaurada (fix4, retoque final de Kristian): una
-    // vez contestada, la tarjeta DESAPARECE de Niveles hasta el día
-    // siguiente — no se queda en estado "Ya respondiste". El hueco
-    // de 10 px de debajo va dentro de la tarjeta, para que al
-    // desaparecer no quede un hueco vacío y todo lo de abajo
-    // (Practicar de otra forma, el camino) suba.
-    if (_answered) return const SizedBox.shrink();
-    final scheme = Theme.of(context).colorScheme;
-    // Ancha (fix4, punto 13 REVISADO): a todo lo ancho, con la foto
-    // del acompañante del día a la izquierda del título y los puntos
-    // (la foto es de 44 px, igual que el avatar del nodo). El botón
-    // "Responder" va debajo, a todo lo ancho, y NO comparte fila con
-    // el título (la lección fix3: compartir fila lo apretaba hasta
-    // partirlo en dos).
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Card(
-          color: _nivelesCardColor(context),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    CompanionAvatar(
-                        companion: companionOfTheDay(), size: 44),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              LucideIcon(LucideIcons.calendar,
-                                  size: 18, color: scheme.primary),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(tr('qotdTitle'),
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            tr('qotdWorth')
-                                .replaceFirst('%d', '$_value')
-                                .replaceFirst('%d', '${_value * 2}'),
-                            style: const TextStyle(fontSize: 13),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      textStyle: const TextStyle(
-                          fontSize: 15, fontFamily: 'Roboto'),
-                    ),
-                    onPressed: () async {
-                      await _showDialog();
-                      HomeWidgetService.update();
-                    },
-                    child: Text(tr('qotdAnswer')),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 10),
       ],
     );
   }

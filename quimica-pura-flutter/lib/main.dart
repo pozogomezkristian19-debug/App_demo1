@@ -1101,21 +1101,58 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Una fila del menú de hamburguesa: solo abre su pantalla. Nada de
   /// listas sueltas dentro del menú: cada cosa tiene su pantalla propia.
+  /// Ronda #6, ítem 5: la fila vive dentro de una tarjeta de sección
+  /// (_drawerCard); el icono va en un chip redondeado con tinte del
+  /// acento y el subtítulo se envuelve en tantas líneas como necesite
+  /// (sin ellipsis: ningún subtítulo se corta, p. ej. el del simulador).
+  /// Sigue siendo un ListTile, para que el cableado de navegación y los
+  /// tests que invocan su onTap no cambien.
   Widget _drawerItem({
     required LucideIconData icon,
     required String title,
     String? subtitle,
     required VoidCallback onTap,
   }) {
+    final scheme = Theme.of(context).colorScheme;
     return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      // Tres líneas de alto cuando hay subtítulo: así un subtítulo de
+      // dos líneas (p. ej. el del simulador) cabe sin recortarse.
+      isThreeLine: subtitle != null,
       // Icono 3D (fix3, punto 6) con el acento de la app: relleno
-      // con degradado + brillito, como el corazón de las vidas.
+      // con degradado + brillito, como el corazón de las vidas,
+      // sobre un chip redondeado con tinte del acento.
       // La flecha de la derecha sigue plana (es solo una pista).
-      leading: LucideIcon(icon,
-          size: 24, color: Theme.of(context).colorScheme.primary, threeD: true),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: subtitle == null ? null : Text(subtitle),
-      trailing: const LucideIcon(LucideIcons.chevronRight, size: 18),
+      leading: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: scheme.primary.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        alignment: Alignment.center,
+        child: LucideIcon(icon,
+            size: 22, color: scheme.primary, threeD: true),
+      ),
+      title: Text(title,
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+      subtitle: subtitle == null
+          ? null
+          : Text(
+              subtitle,
+              // Sin ellipsis ni límite de líneas: el texto completo
+              // se ve, aunque ocupe dos líneas (el ListTile crece).
+              softWrap: true,
+              maxLines: null,
+              overflow: TextOverflow.visible,
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.35,
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+      trailing: LucideIcon(LucideIcons.chevronRight,
+          size: 18, color: scheme.onSurfaceVariant),
       onTap: () {
         SoundService.tap();
         Navigator.of(context).pop();
@@ -1125,16 +1162,82 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// Título pequeño de una sección del menú (Practicar, Referencia...).
+  /// Ronda #6, ítem 5: barrita de acento + texto en mayúsculas +
+  /// separador suave, para que la sección no sea una lista plana.
   Widget _drawerSection(String title) {
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 2),
-      child: Text(
-        title.toUpperCase(),
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1.2,
-          color: Theme.of(context).colorScheme.primary,
+      padding: const EdgeInsets.fromLTRB(20, 20, 16, 8),
+      child: Row(
+        children: [
+          Container(
+            width: 4,
+            height: 14,
+            decoration: BoxDecoration(
+              color: scheme.primary,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            title.toUpperCase(),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.2,
+              color: scheme.primary,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Divider(
+              height: 1,
+              color: scheme.onSurface.withValues(alpha: 0.10),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Una tarjeta de sección del menú: agrupa varias filas (_drawerItem)
+  /// en un bloque redondeado con separadores suaves entre filas, en
+  /// lugar de la lista plana sobre el fondo del drawer. El color sale
+  /// del tema (surfaceContainerHighest), así que en claro es gris muy
+  /// claro sobre blanco y en oscuro, superficie oscura sobre el fondo.
+  Widget _drawerCard(List<Widget> items) {
+    final scheme = Theme.of(context).colorScheme;
+    final children = <Widget>[];
+    for (var i = 0; i < items.length; i++) {
+      if (i > 0) {
+        children.add(Divider(
+          height: 1,
+          indent: 68,
+          endIndent: 16,
+          color: scheme.onSurface.withValues(alpha: 0.08),
+        ));
+      }
+      children.add(items[i]);
+    }
+    // Material (no un Container con color): el ListTile pinta su fondo
+    // y el splash del toque sobre el Material más cercano; con un
+    // DecoratedBox de por medio el splash quedaba invisible y Flutter
+    // lo marcaba como error. El Material recorta el splash a la
+    // tarjeta con clipBehavior.
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 2, 12, 4),
+      child: Material(
+        color: scheme.surfaceContainerHighest,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(
+            color: scheme.onSurface.withValues(alpha: 0.06),
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: children,
         ),
       ),
     );
@@ -1211,45 +1314,69 @@ class _HomeScreenState extends State<HomeScreen> {
                             // el subtítulo, si se parte en 2 líneas, lo desbordaba
                             // 11 px: con fuente grande o en otro idioma se cortaba
                             // el texto. Este Container crece con su contenido.
+                            // Ronda #6, ítem 5: degradado suave del acento,
+                            // esquinas inferiores redondeadas, logo algo mayor
+                            // y más aire y jerarquía entre nombre y subtítulo.
                             Container(
                               width: double.infinity,
                               decoration: BoxDecoration(
-                                color: scheme.primary.withValues(alpha: 0.15),
-                                border: Border(
-                                  bottom: Divider.createBorderSide(context),
+                                gradient: LinearGradient(
+                                  colors: [
+                                    scheme.primary.withValues(alpha: 0.22),
+                                    scheme.secondary
+                                        .withValues(alpha: 0.10),
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                borderRadius: const BorderRadius.only(
+                                  bottomLeft: Radius.circular(24),
+                                  bottomRight: Radius.circular(24),
                                 ),
                               ),
                               padding:
-                                  const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                                  const EdgeInsets.fromLTRB(20, 20, 20, 18),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   // Fix3, punto 6: logo panorámico recortado a las
                                   // gemelas (ancho 60, alto ~24), no el cuadrado
                                   // marrón de 56 que dominaba la cabecera.
-                                  const BrandLogo(size: 60),
-                                  const SizedBox(height: 10),
+                                  const BrandLogo(size: 72),
+                                  const SizedBox(height: 14),
                                   const Text('Quemia',
                                       style: TextStyle(
-                                          fontSize: 22,
-                                          fontWeight: FontWeight.bold)),
-                                  Text(tr('appSubtitle')),
+                                          fontSize: 28,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: -0.5)),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    tr('appSubtitle'),
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      height: 1.3,
+                                      color: scheme.onSurfaceVariant,
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
-                            _drawerItem(
-                              icon: LucideIcons.network,
-                              title: tr('menuBranches'),
-                              subtitle:
-                                  'Orgánica, Inorgánica, Analítica, Química física',
-                              onTap: () => _openScreenKey('branches'),
-                            ),
-                            _drawerItem(
-                              icon: LucideIcons.dna,
-                              title: tr('menuLab'),
-                              subtitle: 'Seguridad, cuestionario y simulador',
-                              onTap: () => _openScreenKey('lab'),
-                            ),
+                            const SizedBox(height: 10),
+                            _drawerCard([
+                              _drawerItem(
+                                icon: LucideIcons.network,
+                                title: tr('menuBranches'),
+                                subtitle:
+                                    'Orgánica, Inorgánica, Analítica, Química física',
+                                onTap: () => _openScreenKey('branches'),
+                              ),
+                              _drawerItem(
+                                icon: LucideIcons.dna,
+                                title: tr('menuLab'),
+                                subtitle: 'Seguridad, cuestionario y simulador',
+                                onTap: () => _openScreenKey('lab'),
+                              ),
+                            ]),
                             // Fix4, punto 12: el simulador SÍ va como
                             // entrada aparte en el menú, en Referencia
                             // (Kristian lo pidió así: acceso directo al
@@ -1257,67 +1384,69 @@ class _HomeScreenState extends State<HomeScreen> {
                             // Laboratorio). La decisión fix3 de no
                             // duplicarlo queda sustituida por esta.
                             _drawerSection(tr('drawerPractice')),
-                            _drawerItem(
-                              icon: LucideIcons.timer,
-                              title: tr('timedTitle'),
-                              subtitle: tr('timedSub'),
-                              onTap: () => _openScreenKey('timed'),
-                            ),
-                            _drawerItem(
-                              icon: LucideIcons.gamepad2,
-                              title: tr('challengeTitle'),
-                              subtitle: tr('challengeSub'),
-                              onTap: () => _openScreenKey('challenge'),
-                            ),
-                            _drawerItem(
-                              icon: LucideIcons.circleHelp,
-                              title: tr('tableQuizTitle'),
-                              subtitle: 'Adivina el elemento',
-                              onTap: () => _openScreenKey('tableQuiz'),
-                            ),
+                            _drawerCard([
+                              _drawerItem(
+                                icon: LucideIcons.timer,
+                                title: tr('timedTitle'),
+                                subtitle: tr('timedSub'),
+                                onTap: () => _openScreenKey('timed'),
+                              ),
+                              _drawerItem(
+                                icon: LucideIcons.gamepad2,
+                                title: tr('challengeTitle'),
+                                subtitle: tr('challengeSub'),
+                                onTap: () => _openScreenKey('challenge'),
+                              ),
+                              _drawerItem(
+                                icon: LucideIcons.circleHelp,
+                                title: tr('tableQuizTitle'),
+                                subtitle: 'Adivina el elemento',
+                                onTap: () => _openScreenKey('tableQuiz'),
+                              ),
+                            ]),
                             _drawerSection(tr('drawerReference')),
-                            _drawerItem(
-                              icon: LucideIcons.flaskConical,
-                              title: tr('labSimTitle'),
-                              subtitle: 'Mezcla, mira el pH y el color',
-                              onTap: () => _openScreenKey('labSim'),
-                            ),
-                            _drawerItem(
-                              icon: LucideIcons.table,
-                              title: tr('menuTables'),
-                              subtitle: 'Actividad de metales y solubilidad',
-                              onTap: () => _openScreenKey('tables'),
-                            ),
-                            _drawerItem(
-                              icon: LucideIcons.sigma,
-                              title: tr('menuFormulas'),
-                              subtitle: 'Todas las fórmulas juntas',
-                              onTap: () => _openScreenKey('formulas'),
-                            ),
-                            _drawerItem(
-                              icon: LucideIcons.arrowLeftRight,
-                              title: tr('menuConstants'),
-                              subtitle: 'Constantes y conversor de unidades',
-                              onTap: () => _openScreenKey('constants'),
-                            ),
-                            _drawerItem(
-                              icon: LucideIcons.bookOpen,
-                              title: tr('glossaryTitle'),
-                              subtitle: 'Términos de química explicados',
-                              onTap: () => _openScreenKey('glossary'),
-                            ),
-                            _drawerItem(
-                              icon: LucideIcons.arrowLeftRight,
-                              title: tr('compareTitle'),
-                              subtitle: 'Dos elementos, cara a cara',
-                              onTap: () => _openScreenKey('compare'),
-                            ),
-                            _drawerItem(
-                              icon: LucideIcons.notebookPen,
-                              title: tr('notesTitle'),
-                              subtitle: 'Tus notas por tema',
-                              onTap: () => _openScreenKey('notes'),
-                            ),
+                            _drawerCard([
+                              _drawerItem(
+                                icon: LucideIcons.flaskConical,
+                                title: tr('labSimTitle'),
+                                subtitle: 'Mezcla, mira el pH y el color',
+                                onTap: () => _openScreenKey('labSim'),
+                              ),
+                              _drawerItem(
+                                icon: LucideIcons.table,
+                                title: tr('menuTables'),
+                                subtitle: 'Actividad de metales y solubilidad',
+                                onTap: () => _openScreenKey('tables'),
+                              ),
+                              _drawerItem(
+                                icon: LucideIcons.sigma,
+                                title: tr('menuFormulas'),
+                                subtitle: 'Todas las fórmulas juntas',
+                                onTap: () => _openScreenKey('formulas'),
+                              ),
+                              _drawerItem(
+                                icon: LucideIcons.arrowLeftRight,
+                                title: tr('menuConstants'),
+                                subtitle: 'Constantes y conversor de unidades',
+                                onTap: () => _openScreenKey('constants'),
+                              ),
+                              _drawerItem(
+                                icon: LucideIcons.bookOpen,
+                                title: tr('glossaryTitle'),
+                                subtitle: 'Términos de química explicados',
+                                onTap: () => _openScreenKey('glossary'),
+                              ),
+                              _drawerItem(
+                                icon: LucideIcons.arrowLeftRight,
+                                title: tr('compareTitle'),
+                                subtitle: 'Dos elementos, cara a cara',
+                                onTap: () => _openScreenKey('compare'),
+                              ),
+                            ]),
+                            // Ronda #6, ítem 5: "Mi cuaderno" sale del menú
+                            // (clave 'notes'); la pantalla de notas sigue
+                            // existiendo en _openScreenKey y en la búsqueda.
+                            const SizedBox(height: 16),
                           ],
                         ),
                       ),

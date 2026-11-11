@@ -56,7 +56,7 @@ import 'notification_service.dart';
 /// Versión actual de la app: ÚNICA fuente de verdad en el código.
 /// Debe coincidir con `latest` de version.json en la build que se
 /// publica, para que no salga un aviso falso nada más instalar.
-const String kAppVersion = '6.2';
+const String kAppVersion = '6.3';
 
 /// version.json en la raíz del repo, servido en crudo por GitHub.
 const String kUpdateCheckUrl =

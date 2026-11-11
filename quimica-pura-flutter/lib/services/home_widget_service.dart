@@ -1,15 +1,13 @@
-// Widget de la pantalla de inicio (v6): tarjeta con la pregunta del
-// día, un tip de estudio que rota cada día (fix4, punto 10), la
-// racha, las vidas y los puntos. Al tocarla se abre la app.
+// Widget de la pantalla de inicio (v6): tarjeta con un tip de
+// estudio que rota cada día (fix4, punto 10), la racha, las vidas
+// y los puntos. Al tocarla se abre la app.
 // La parte nativa vive en MelliQuiWidgetProvider (Kotlin, RemoteViews);
 // aquí solo se le mandan los datos con home_widget y se pide que se
 // actualice. Si no hay widget instalado (o el plugin falla), la app
 // sigue igual: update() nunca lanza una excepción.
 import 'package:home_widget/home_widget.dart';
 
-import '../data/extra_content.dart';
 import '../data/i18n/content_i18n.dart';
-import '../data/questions.dart';
 import 'localization.dart';
 import 'progress.dart';
 
@@ -22,12 +20,8 @@ class HomeWidgetService {
   static Future<void> update() async {
     try {
       final p = ProgressService.instance;
-      final today = questionOfTheDay(DateTime.now());
-      final index = allQuestions.indexOf(today);
-      final q = index >= 0 ? localizedQuestionAt(index) : today;
-      await HomeWidget.saveWidgetData<String>('qotd', q.question);
-      // Tip del día (fix4, punto 10): mismo día, mismo tip (como la
-      // pregunta del día); cambia al día siguiente. Texto localizado
+      // Tip del día (fix4, punto 10): mismo día, mismo tip;
+      // cambia al día siguiente. Texto localizado
       // en el idioma de la app, con la etiqueta "Tip:". Sin emojis.
       // Las flechas "→" se sustituyen por "a" SOLO en lo que se
       // guarda para el widget: el widget corre en el lado nativo con
