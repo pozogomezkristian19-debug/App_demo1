@@ -13,6 +13,11 @@
          8+ el usuario concede "Instalar apps desconocidas" para
          Melli-Qui; sin ese ajuste, el sistema bloquea la instalación. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Internet: sin este permiso la app no puede salir a la red.
+         "Buscar actualización" no puede descargar version.json y
+         siempre dice "No se pudo comprobar: revisa tu conexión".
+         Las apps Flutter lo llevan por defecto; aquí faltaba. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <application
         android:label="Quemia"
         android:name="${applicationName}"
