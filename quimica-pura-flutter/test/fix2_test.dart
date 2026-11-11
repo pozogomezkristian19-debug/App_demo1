@@ -219,9 +219,9 @@ void main() {
       expect(find.text(tr('levelsIntro')), findsNothing);
       // El banner "Hoy te acompaña…" ya NO está en Niveles (fix4,
       // punto 13 REVISADO: lo quitó Kristian); la pregunta del día
-      // sigue, ancha, con la foto del acompañante dentro.
+      // se eliminó por completo de la app en la ronda #6.
       expect(find.textContaining('Hoy te acompaña'), findsNothing);
-      expect(find.text('Pregunta del día'), findsOneWidget);
+      expect(find.text('Pregunta del día'), findsNothing);
       expect(find.byType(CompanionAvatar), findsWidgets);
       // El primer nivel del camino se ve sin deslizar (viewport
       // 360x800 con barra y navegación: cabe antes de los 660 px).
@@ -229,25 +229,10 @@ void main() {
       expect(firstLevel.dy, lessThan(660));
     });
 
-    testWidgets('el mando del Reto va en su círculo, sin deformarse',
-        (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: ThemeData(useMaterial3: true),
-          home: Scaffold(
-            body: PracticarScreen(onOpenScreen: (_) {}),
-          ),
-        ),
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-      final gamepad = lucide(LucideIcons.gamepad2);
-      expect(gamepad, findsOneWidget);
-      expect(
-        tester.widget<LucideIcon>(gamepad).size,
-        28,
-      );
-    });
+    // (fix6, ronda #6): la tarjeta "Practicar de otra forma" (con
+    // el mando del Reto) se quitó de Niveles, así que este test se
+    // elimina. El mando del Reto sigue probado en su propia pantalla
+    // ('el mando del Reto va en un círculo de 96', más abajo).
   });
 
   group('Tabla (items 9 y 10; fix3 punto 2 REVISADO: leyenda solo en "Todos")',
@@ -347,13 +332,12 @@ void main() {
       expect(find.text(tr('accountTitle')), findsOneWidget);
       expect(find.text(tr(companionOfDayKey(companionOfTheDay()))),
           findsOneWidget);
-      // Tema ya NO es una tarjeta inline en Cuenta (fix3, último
-      // cambio): es una fila táctil como las demás, con el
-      // subtítulo de la selección actual ("Verde · Claro"), que
-      // abre su propia pantalla dedicada. Las opciones viven allí,
-      // no en Cuenta.
+      // Fix6, ítem 3: el tema por defecto es 'sistema' (el estático
+      // nace así y load() sin nada guardado también), así que el
+      // subtítulo de la fila Tema es "Verde · Sistema".
+      await UserPrefs.saveThemeMode('sistema');
       expect(find.text(tr('themeTitle')), findsOneWidget);
-      expect(find.text('${tr('themeGreen')} · ${tr('lightWord')}'),
+      expect(find.text('${tr('themeGreen')} · ${tr('themeSystem')}'),
           findsOneWidget);
       expect(find.text(tr('themeViolet')), findsNothing);
       expect(find.text(tr('themeModeLabel')), findsNothing);
@@ -487,8 +471,9 @@ void main() {
     testWidgets('Niveles: ninguna tarjeta es gris claro en oscuro',
         (tester) async {
       await pumpDark(tester, PracticarScreen(onOpenScreen: (_) {}), 'niveles');
-      // La pregunta del día y las 3 "Practicar de otra forma".
-      expect(find.text('Pregunta del día'), findsOneWidget);
+      // La pregunta del día y "Practicar de otra forma" ya no están
+      // en Niveles (ronda #6).
+      expect(find.text('Pregunta del día'), findsNothing);
       for (final e in find.byType(Card).evaluate()) {
         final c = e.widget as Card;
         expect(c.color, isNot(BrandColors.cardGray));
@@ -579,8 +564,9 @@ void main() {
             (w.image as AssetImage).assetName == 'assets/whatsapp.png'),
         findsNothing,
       );
-      // Las últimas filas del menú siguen ahí (Notas cierra la lista).
-      expect(find.text(tr('notesTitle')), findsOneWidget);
+      // Fix6, ítem 5: "Mi cuaderno" salió del menú; la última fila
+      // es ahora Comparar, que cierra la lista.
+      expect(find.text(tr('compareTitle')), findsOneWidget);
     });
   });
 
@@ -792,9 +778,14 @@ void main() {
     testWidgets(
         'Reto: el botón atrás avisa sin pérdida de vida (fix4, punto 5)',
         (tester) async {
+      // Fix6, ítem 6: el jugador 1 es fijo (nombre del perfil +
+      // " (tú)"), así que se fija el perfil antes de montar la
+      // pantalla; solo queda 1 TextField, el del jugador 2.
+      UserPrefs.userName = 'Kristian';
+      addTearDown(() => UserPrefs.userName = '');
       await pumpPushable(tester, const ChallengeScreen());
-      await tester.enterText(find.byType(TextField).at(0), 'Kristian (tú)');
-      await tester.enterText(find.byType(TextField).at(1), 'Britany');
+      expect(find.text('Kristian (tú)'), findsOneWidget);
+      await tester.enterText(find.byType(TextField), 'Britany');
       await tester.tap(find.text(tr('challengeStart')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));

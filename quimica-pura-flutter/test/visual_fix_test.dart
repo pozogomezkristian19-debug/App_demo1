@@ -57,8 +57,8 @@ void main() {
   });
 
   testWidgets(
-      'fix 3+4: Niveles sin tarjeta de estadísticas, sin banner, y 2 '
-      'tarjetas iguales',
+      'fix 3+4+6: Niveles sin tarjeta de estadísticas, sin banner, '
+      'sin pregunta del día ni "Practicar de otra forma"',
       (tester) async {
     tester.view.physicalSize = const Size(800, 1800);
     tester.view.devicePixelRatio = 1.0;
@@ -85,23 +85,13 @@ void main() {
     expect(find.text('Puntos'), findsNothing);
     expect(find.text('Meta del día'), findsNothing);
     // Sin banner "Hoy te acompaña…" en Niveles (fix4, punto 13
-    // REVISADO: lo quitó Kristian); quedan la pregunta del día
-    // (ancha, con la foto del acompañante dentro) y el camino.
+    // REVISADO: lo quitó Kristian); la pregunta del día se eliminó
+    // por completo de la app en la ronda #6 y "Practicar de otra
+    // forma" ya no está en Niveles: queda solo el camino.
     expect(find.textContaining('Hoy te acompaña'), findsNothing);
-    expect(find.text('Pregunta del día'), findsOneWidget);
-    // Las dos tarjetas miden exactamente lo mismo.
-    Size cardSize(String title) {
-      final card = find.ancestor(
-        of: find.text(title),
-        matching: find.byType(Card),
-      );
-      return tester.getSize(card);
-    }
+    expect(find.text('Pregunta del día'), findsNothing);
+    expect(find.text('Practicar de otra forma'), findsNothing);
 
-    final a = cardSize('Examen con tiempo');
-    final b = cardSize('Reto');
-    expect(a.width, moreOrLessEquals(b.width, epsilon: 0.5));
-    expect(a.height, moreOrLessEquals(b.height, epsilon: 0.5));
   });
 
   testWidgets('fix 3: Cuenta tiene UNA tarjeta de estadísticas, sin duplicar',

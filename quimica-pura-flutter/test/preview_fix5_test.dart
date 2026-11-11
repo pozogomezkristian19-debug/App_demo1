@@ -164,10 +164,11 @@ void main() {
     expect(find.text(tr('elementDayTitle')), findsNothing);
     expect(find.text(tr('howToPlayTitle')), findsNothing);
     expect(find.byType(AlertDialog), findsNothing);
-    // La pregunta del día y "Practicar de otra forma" SIGUEN en
-    // Niveles (después del primer tema, no se quitaron).
-    expect(find.text(tr('qotdTitle')), findsOneWidget);
-    expect(find.text(tr('practiceOtherWays')), findsOneWidget);
+    // (fix6, ronda #6): la pregunta del día se eliminó por
+    // completo de la app y "Practicar de otra forma" ya no está en
+    // Niveles. El golden de esta pantalla cambia: no regenerar.
+    expect(find.text('Pregunta del día'), findsNothing);
+    expect(find.text(tr('practiceOtherWays')), findsNothing);
     // El nodo 1: el círculo de 64x64 que envuelve su número, entero
     // por encima del pliegue (la barra inferior empieza a 772).
     Rect rectOf(Element e) {

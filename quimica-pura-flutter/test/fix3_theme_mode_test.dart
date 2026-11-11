@@ -122,9 +122,11 @@ void main() {
       expect(UserPrefs.themeMode, 'oscuro');
       expect(UserPrefs.isDark, true);
 
+      // Fix6, ítem 3: sin modo guardado, isDark=false ya NO da 'claro':
+      // el defecto es 'sistema' (sigue al brillo del teléfono).
       SharedPreferences.setMockInitialValues({'melli_dark_mode': false});
       await UserPrefs.load();
-      expect(UserPrefs.themeMode, 'claro');
+      expect(UserPrefs.themeMode, 'sistema');
       expect(UserPrefs.isDark, false);
 
       // Un modo guardado raro se sanea a claro al cargar.

@@ -230,7 +230,7 @@ void main() {
     await settle(tester);
   });
 
-  testWidgets('fix3_niveles (barra limpia, banner, QOTD, camino)',
+  testWidgets('fix3_niveles (barra limpia, camino)',
       (tester) async {
     // El compañero del día lo decide la fecha (día % 3): hoy
     // 2026-11-10 → 10 % 3 = 1 → Britany. No se puede forzar a

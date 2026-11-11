@@ -6,18 +6,12 @@
 //
 // - fix5_mascota_pregunta.png: pregunta de nivel (SimpleQuizRunner
 //   real): solo foto + burbuja con el mensaje, sin ningún nombre.
-// - fix5_mascota_qotd.png: diálogo REAL de la pregunta del día
-//   (se abre desde la app con el botón "Responder"): foto +
-//   burbuja sin nombres. La línea "Hoy te acompaña…" DEBAJO de la
-//   burbuja se quitó en el cierre de la ronda fix5, así que ya NO
-//   sale en el diálogo. (El diálogo muestra las opciones en orden
-//   fijo, sin barajar: su golden es determinista.)
+// (fix6, ronda #6: el golden fix5_mascota_qotd.png se quitó con la
+// pregunta del día, eliminada por completo de la app.)
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quimica_pura/main.dart';
 import 'package:quimica_pura/models.dart';
-import 'package:quimica_pura/services/localization.dart';
 import 'package:quimica_pura/services/notification_inbox.dart';
 import 'package:quimica_pura/services/progress.dart';
 import 'package:quimica_pura/services/user_prefs.dart';
@@ -197,45 +191,4 @@ void main() {
     await shot(tester, 'fix5_mascota_pregunta.png');
   });
 
-  testWidgets(
-      'fix5_mascota_qotd: diálogo real de la pregunta del día: '
-      'foto + burbuja sin nombres (sin la línea "Hoy te acompaña…" '
-      'debajo de la burbuja: se quitó en el cierre de la ronda fix5)',
-      (tester) async {
-    await setPhone(tester);
-    await tester.pumpWidget(const MelliQuiApp());
-    await settle(tester);
-    await warmCompanions(tester);
-    // La tarjeta de la pregunta del día está bajo el pliegue: hay
-    // que bajar hasta el botón "Responder" antes de tocarlo.
-    await tester.scrollUntilVisible(
-      find.text(tr('qotdAnswer')),
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.tap(find.text(tr('qotdAnswer')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
-    // La burbuja del diálogo: foto + mensaje, sin nombre bajo la
-    // foto ni firma. La línea "Hoy te acompaña…" (practicar_screen)
-    // se quitó en el cierre de la ronda fix5: ya NO sale debajo de
-    // la burbuja. (OJO: la tarjeta de la pregunta del día detrás del
-    // diálogo también lleva una foto, así que se busca DENTRO del diálogo.)
-    final dialog = find.byType(AlertDialog);
-    expect(dialog, findsOneWidget);
-    expect(
-        find.descendant(
-            of: dialog, matching: find.byType(CompanionAvatar)),
-        findsOneWidget);
-    expect(
-        find.descendant(
-            of: dialog,
-            matching:
-                find.text(tr(companionOfDayKey(companionOfTheDay())))),
-        findsNothing,
-        reason: 'la línea (4) se quitó en el cierre de la ronda fix5');
-    await shot(tester, 'fix5_mascota_qotd.png');
-  });
 }

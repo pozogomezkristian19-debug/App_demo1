@@ -2,10 +2,10 @@
 // ya no despliega la lección dentro de la tarjeta (ExpansionTile):
 // abre su pantalla propia completa (TopicDetailScreen, la misma que
 // usan las Ramas de la química y la búsqueda). La tarjeta queda
-// limpia: título, nivel y marca de dominado. Nada de contenido se
-// pierde: la pantalla del tema tiene resumen, fórmulas, moléculas,
-// ejemplo con pasos, errores, consejo, favorito y botón de dominado
-// (y el cuestionario de laboratorio cuando toca).
+// limpia: título y nivel. Nada de contenido se pierde: la pantalla
+// del tema tiene resumen, fórmulas, moléculas, ejemplo con pasos,
+// errores, consejo y favorito (y el cuestionario de laboratorio
+// cuando toca).
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quimica_pura/data/i18n/content_i18n.dart';
@@ -65,7 +65,7 @@ StudyTopic firstLearnTopic() => localizedTopic(topics.firstWhere(
     testWidgets('no queda ningún ExpansionTile', (tester) async {
       await pumpScreen(tester, const AprenderScreen());
       expect(find.byType(ExpansionTile), findsNothing);
-      // La tarjeta sigue mostrando título, nivel y marca de dominado.
+      // La tarjeta sigue mostrando título y nivel.
       final topic = firstLearnTopic();
       expect(find.text(topic.title), findsOneWidget);
       expect(find.text(topic.level), findsAtLeastNWidgets(1));
@@ -82,18 +82,11 @@ StudyTopic firstLearnTopic() => localizedTopic(topics.firstWhere(
       await tester.pumpAndSettle();
       expect(find.byType(TopicDetailScreen), findsOneWidget);
       // El contenido de la lección está en la pantalla del tema:
-      // resumen, ejemplo y consejo, más la estrellita de favorito
-      // y el botón de dominado.
+      // resumen, ejemplo y consejo, más la estrellita de favorito.
       expect(find.text(topic.summary.first), findsOneWidget);
       expect(find.text(topic.exampleAnswer), findsOneWidget);
       expect(find.textContaining(topic.tip), findsOneWidget);
       expect(find.byTooltip('Favorito'), findsOneWidget);
-      expect(
-          find.text(
-              ProgressService.instance.isMastered(topic.slug)
-                  ? tr('mastered')
-                  : tr('markMastered')),
-          findsOneWidget);
     });
   });
 

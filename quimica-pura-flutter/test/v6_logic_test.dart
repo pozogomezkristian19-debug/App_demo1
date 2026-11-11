@@ -40,15 +40,6 @@ void main() {
       expect(pointsForWrong(2).abs(), greaterThan(pointsForCorrect(2)));
       expect(pointsForWrong(3).abs(), greaterThan(pointsForCorrect(3)));
     });
-
-    test('pregunta del día: fallar resta EL DOBLE del valor', () {
-      expect(qotdPoints(1, true), 3);
-      expect(qotdPoints(1, false), -6);
-      expect(qotdPoints(2, true), 5);
-      expect(qotdPoints(2, false), -10);
-      expect(qotdPoints(3, true), 8);
-      expect(qotdPoints(3, false), -16);
-    });
   });
 
   group('Pasar de nivel por aciertos (fix5, punto 13: 4/5 siempre pasa)', () {

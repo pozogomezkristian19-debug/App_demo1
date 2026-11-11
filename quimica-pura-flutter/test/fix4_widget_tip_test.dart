@@ -103,9 +103,9 @@ void main() {
       expect(saved['tip'], expected);
       expect((saved['tip'] as String).startsWith('Tip: '), isTrue);
       expect((saved['tip'] as String).contains('→'), isFalse);
-      // La pregunta del día y las estadísticas siguen guardándose.
-      expect(saved['qotd'], isNotNull);
-      expect((saved['qotd'] as String).isNotEmpty, isTrue);
+      // La pregunta del día se eliminó de la app en la ronda #6:
+      // el widget ya no la guarda. Las estadísticas siguen.
+      expect(saved.containsKey('qotd'), isFalse);
       expect(saved['streak'], isNotNull);
       expect(saved['lives'], isNotNull);
       expect(saved['points'], isNotNull);

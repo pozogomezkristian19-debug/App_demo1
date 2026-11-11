@@ -115,12 +115,12 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
       expect(find.text(tr('reviewTitle')), findsNothing);
       // Sin slugs en la pantalla, y el camino de niveles sí se ve
-      // (el título "Niveles" y la pregunta del día siguen ahí,
-      // sin la tarjeta empujándolos hacia abajo).
+      // (el título "Niveles" sigue ahí; la pregunta del día se
+      // eliminó por completo de la app en la ronda #6).
       expect(find.textContaining('bach-'), findsNothing);
       expect(find.textContaining('uni-'), findsNothing);
       expect(find.text(tr('levelsTitle')), findsOneWidget);
-      expect(find.text(tr('qotdTitle')), findsOneWidget);
+      expect(find.text('Pregunta del día'), findsNothing);
     });
   });
 

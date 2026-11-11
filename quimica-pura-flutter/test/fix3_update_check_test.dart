@@ -22,14 +22,14 @@ import 'package:quimica_pura/services/user_prefs.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const _newerJson =
-    '{"latest":"6.3","apk_url":"https://example.com/app.apk","notes":"Novedades de la versión","force":false}';
+    '{"latest":"6.4","apk_url":"https://example.com/app.apk","notes":"Novedades de la versión","force":false}';
 const _forcedJson =
-    '{"latest":"6.3","apk_url":"https://example.com/app.apk","notes":"Actualización obligatoria","force":true}';
+    '{"latest":"6.4","apk_url":"https://example.com/app.apk","notes":"Actualización obligatoria","force":true}';
 
 final _now = DateTime(2026, 11, 10, 18, 30);
 
 const _updateInfo = UpdateInfo(
-  latest: '6.3',
+  latest: '6.4',
   apkUrl: 'https://example.com/app.apk',
   notes: 'Novedades de la versión',
   force: false,
@@ -169,7 +169,7 @@ void main() {
     test('versión nueva sin descartar y sin comprobar hoy: avisa', () {
       expect(
         shouldShowUpdate(
-          latest: '6.3',
+          latest: '6.4',
           force: false,
           dismissedVersion: null,
         ),
@@ -180,9 +180,9 @@ void main() {
     test('versión descartada con "Más tarde" no vuelve a preguntar', () {
       expect(
         shouldShowUpdate(
-          latest: '6.3',
+          latest: '6.4',
           force: false,
-          dismissedVersion: '6.3',
+          dismissedVersion: '6.4',
         ),
         isFalse,
       );
@@ -200,9 +200,9 @@ void main() {
     test('con force no se puede posponer: avisa aunque se descartó', () {
       expect(
         shouldShowUpdate(
-          latest: '6.3',
+          latest: '6.4',
           force: true,
-          dismissedVersion: '6.3',
+          dismissedVersion: '6.4',
         ),
         isTrue,
       );
@@ -215,7 +215,7 @@ void main() {
       // se acabara de mirar hace un minuto o hace un mes.
       expect(
         shouldShowUpdate(
-          latest: '6.3',
+          latest: '6.4',
           force: false,
           dismissedVersion: null,
         ),
@@ -223,7 +223,7 @@ void main() {
       );
       expect(
         shouldShowUpdate(
-          latest: '6.3',
+          latest: '6.4',
           force: true,
           dismissedVersion: null,
         ),
@@ -232,9 +232,9 @@ void main() {
       // La versión descartada sigue sin avisar, con o sin force.
       expect(
         shouldShowUpdate(
-          latest: '6.3',
+          latest: '6.4',
           force: false,
-          dismissedVersion: '6.3',
+          dismissedVersion: '6.4',
         ),
         isFalse,
       );
@@ -242,14 +242,14 @@ void main() {
   });
 
   group('kAppVersion (fix4, punto 6)', () {
-    test('la versión instalada es la 6.2', () {
-      expect(kAppVersion, '6.2');
-      expect(compareVersions('6.2', '6.0'), greaterThan(0));
-      // Nada más instalar la 6.2, la 6.2 remota no avisa (sin falso
-      // aviso); la 6.3 sí.
+    test('la versión instalada es la 6.3', () {
+      expect(kAppVersion, '6.3');
+      expect(compareVersions('6.3', '6.0'), greaterThan(0));
+      // Nada más instalar la 6.3, la 6.3 remota no avisa (sin falso
+      // aviso); la 6.4 sí.
       expect(
         shouldShowUpdate(
-          latest: '6.2',
+          latest: '6.3',
           force: false,
           dismissedVersion: null,
         ),
@@ -257,7 +257,7 @@ void main() {
       );
       expect(
         shouldShowUpdate(
-          latest: '6.3',
+          latest: '6.4',
           force: false,
           dismissedVersion: null,
         ),
@@ -270,7 +270,7 @@ void main() {
     test('sin recordatorio previo: se programa', () {
       expect(
         shouldScheduleReminder(
-          latest: '6.3',
+          latest: '6.4',
           scheduledVersion: null,
           scheduledAt: null,
           now: _now,
@@ -282,8 +282,8 @@ void main() {
     test('ya hay uno para ESTA versión y aún no llegó: no se duplica', () {
       expect(
         shouldScheduleReminder(
-          latest: '6.3',
-          scheduledVersion: '6.3',
+          latest: '6.4',
+          scheduledVersion: '6.4',
           scheduledAt: _now.add(const Duration(hours: 2)),
           now: _now,
         ),
@@ -294,8 +294,8 @@ void main() {
     test('salió una versión más nueva: se actualiza a esa', () {
       expect(
         shouldScheduleReminder(
-          latest: '6.4',
-          scheduledVersion: '6.3',
+          latest: '6.5',
+          scheduledVersion: '6.4',
           scheduledAt: _now.add(const Duration(hours: 2)),
           now: _now,
         ),
@@ -306,8 +306,8 @@ void main() {
     test('el recordatorio ya pasó: se programa el siguiente', () {
       expect(
         shouldScheduleReminder(
-          latest: '6.3',
-          scheduledVersion: '6.3',
+          latest: '6.4',
+          scheduledVersion: '6.4',
           scheduledAt: _now.subtract(const Duration(hours: 1)),
           now: _now,
         ),
@@ -369,14 +369,14 @@ void main() {
       expect(dl.progress.value, 1);
       expect(seen, contains(1.0));
       expect(await file!.readAsBytes(), bytes);
-      expect(file.path.endsWith('quemia-6.3.apk'), isTrue);
+      expect(file.path.endsWith('quemia-6.4.apk'), isTrue);
       expect(dl.downloadedPath, file.path);
-      expect(dl.downloadedVersion, '6.3');
+      expect(dl.downloadedVersion, '6.4');
     });
 
     test('si el APK ya está descargado, no descarga de nuevo', () async {
       final bytes = List<int>.generate(50, (i) => i);
-      await File('${dir.path}/quemia-6.3.apk').writeAsBytes(bytes);
+      await File('${dir.path}/quemia-6.4.apk').writeAsBytes(bytes);
       var calls = 0;
       final dl = UpdateDownloader();
       final file = await dl.download(
@@ -410,11 +410,11 @@ void main() {
       expect(dl.state.value, UpdateDownloadState.idle);
       expect(dl.progress.value, 0);
       expect(
-        await File('${dir.path}/quemia-6.3.apk').exists(),
+        await File('${dir.path}/quemia-6.4.apk').exists(),
         isFalse,
       );
       expect(
-        await File('${dir.path}/quemia-6.3.apk.part').exists(),
+        await File('${dir.path}/quemia-6.4.apk.part').exists(),
         isFalse,
       );
     });
@@ -446,7 +446,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Hay una nueva actualización'), findsOneWidget);
-      expect(find.text('Versión 6.3 disponible'), findsOneWidget);
+      expect(find.text('Versión 6.4 disponible'), findsOneWidget);
       expect(find.text('Novedades de la versión'), findsOneWidget);
       expect(find.text('Actualizar ahora'), findsOneWidget);
       expect(find.text('Más tarde'), findsOneWidget);
@@ -484,15 +484,15 @@ void main() {
       expect(find.text('Hay una nueva actualización'), findsNothing);
 
       final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString(kUpdateDismissedKey), '6.3');
+      expect(prefs.getString(kUpdateDismissedKey), '6.4');
       // La info pendiente queda guardada: al tocar el recordatorio
       // el diálogo sale con estos datos aunque no haya internet.
       final pending = prefs.getString(kUpdatePendingKey);
       expect(pending, isNotNull);
       final pendingJson =
           jsonDecode(pending!) as Map<String, dynamic>;
-      expect(UpdateInfo.fromJson(pendingJson)?.latest, '6.3');
-      expect(prefs.getString(kUpdateReminderVersionKey), '6.3');
+      expect(UpdateInfo.fromJson(pendingJson)?.latest, '6.4');
+      expect(prefs.getString(kUpdateReminderVersionKey), '6.4');
       final atMs = prefs.getInt(kUpdateReminderAtKey);
       expect(atMs, isNotNull);
       // Mañana, no hoy: al día siguiente.
@@ -503,7 +503,7 @@ void main() {
     testWidgets('versión descartada: al abrir no hay diálogo, solo el '
         'recordatorio (una vez al día)', (tester) async {
       SharedPreferences.setMockInitialValues({
-        kUpdateDismissedKey: '6.3',
+        kUpdateDismissedKey: '6.4',
       });
       var calls = 0;
       await tester.pumpWidget(
@@ -520,7 +520,7 @@ void main() {
       expect(calls, 1);
       expect(find.text('Hay una nueva actualización'), findsNothing);
       final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString(kUpdateReminderVersionKey), '6.3');
+      expect(prefs.getString(kUpdateReminderVersionKey), '6.4');
 
       // La comprobación inicial reprograma el recordatorio (con
       // E/S real de archivos, que en testWidgets solo avanza en
@@ -550,7 +550,7 @@ void main() {
     testWidgets('desde el recordatorio, la versión descartada SÍ muestra '
         'el diálogo', (tester) async {
       SharedPreferences.setMockInitialValues({
-        kUpdateDismissedKey: '6.3',
+        kUpdateDismissedKey: '6.4',
       });
       await tester.pumpWidget(
         _Harness(
@@ -670,13 +670,13 @@ void main() {
         () => Directory.systemTemp.createTemp('melli_apk_'),
       );
       addTearDown(() => dir!.deleteSync(recursive: true));
-      final apk = File('${dir!.path}/quemia-6.3.apk');
+      final apk = File('${dir!.path}/quemia-6.4.apk');
       await tester.runAsync(
         () => apk.writeAsBytes(List<int>.generate(20, (i) => i)),
       );
       SharedPreferences.setMockInitialValues({
         kUpdateApkPathKey: apk.path,
-        kUpdateApkVersionKey: '6.3',
+        kUpdateApkVersionKey: '6.4',
       });
       await tester.pumpWidget(
         _Harness(fetcher: (_) async => _newerJson, now: _now),
@@ -694,7 +694,7 @@ void main() {
 
     // La versión instalada: la primera mirada no avisa nada.
     const sameVersionJson =
-        '{"latest":"6.2","apk_url":"https://example.com/app.apk","notes":"","force":false}';
+        '{"latest":"6.3","apk_url":"https://example.com/app.apk","notes":"","force":false}';
 
     /// Espera a que la comprobación inicial (disparada por el primer
     /// frame) termine de verdad: pumpAndSettle no espera a sus
@@ -748,8 +748,8 @@ void main() {
       // comprobación inicial no vuelve a programarlo (esa ruta, con
       // E/S real, la cubre el test de "Más tarde").
       SharedPreferences.setMockInitialValues({
-        kUpdateDismissedKey: '6.3',
-        kUpdateReminderVersionKey: '6.3',
+        kUpdateDismissedKey: '6.4',
+        kUpdateReminderVersionKey: '6.4',
         kUpdateReminderAtKey:
             _now.add(const Duration(hours: 24)).millisecondsSinceEpoch,
       });
@@ -764,12 +764,12 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      // La primera mirada ve la 6.3 descartada: no hay diálogo y el
+      // La primera mirada ve la 6.4 descartada: no hay diálogo y el
       // recordatorio por notificación sigue programado.
       expect(calls, 1);
       expect(find.text('Hay una nueva actualización'), findsNothing);
       final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString(kUpdateReminderVersionKey), '6.3');
+      expect(prefs.getString(kUpdateReminderVersionKey), '6.4');
 
       // La comprobación inicial reprograma el recordatorio: se
       // espera a que termine antes de la vuelta a primer plano.
@@ -783,17 +783,17 @@ void main() {
       // ...pero la versión pospuesta NO vuelve a avisar: el aviso
       // queda en el recordatorio (no se duplica).
       expect(find.text('Hay una nueva actualización'), findsNothing);
-      expect(prefs.getString(kUpdateReminderVersionKey), '6.3');
+      expect(prefs.getString(kUpdateReminderVersionKey), '6.4');
     });
 
     testWidgets('force: al volver a primer plano vuelve a avisar '
         'aunque esa versión se descartó', (tester) async {
-      // La primera mirada ve la 6.3 normal y descartada (no la
+      // La primera mirada ve la 6.4 normal y descartada (no la
       // misma versión: esa limpiaría el descartado al actualizar).
       // El recordatorio ya está programado (ver el test anterior).
       SharedPreferences.setMockInitialValues({
-        kUpdateDismissedKey: '6.3',
-        kUpdateReminderVersionKey: '6.3',
+        kUpdateDismissedKey: '6.4',
+        kUpdateReminderVersionKey: '6.4',
         kUpdateReminderAtKey:
             _now.add(const Duration(hours: 24)).millisecondsSinceEpoch,
       });
@@ -898,13 +898,13 @@ void main() {
         () => Directory.systemTemp.createTemp('melli_inst_'),
       );
       addTearDown(() => dir!.deleteSync(recursive: true));
-      final apk = File('${dir!.path}/quemia-6.3.apk');
+      final apk = File('${dir!.path}/quemia-6.4.apk');
       await tester.runAsync(
         () => apk.writeAsBytes(List<int>.generate(10, (i) => i)),
       );
       SharedPreferences.setMockInitialValues({
         kUpdateApkPathKey: apk.path,
-        kUpdateApkVersionKey: '6.3',
+        kUpdateApkVersionKey: '6.4',
       });
       await tester.pumpWidget(
         const MaterialApp(home: Scaffold(body: Text('Inicio'))),
@@ -932,13 +932,13 @@ void main() {
         () => Directory.systemTemp.createTemp('melli_inst2_'),
       );
       addTearDown(() => dir!.deleteSync(recursive: true));
-      final apk = File('${dir!.path}/quemia-6.3.apk');
+      final apk = File('${dir!.path}/quemia-6.4.apk');
       await tester.runAsync(
         () => apk.writeAsBytes(List<int>.generate(10, (i) => i)),
       );
       SharedPreferences.setMockInitialValues({
         kUpdateApkPathKey: apk.path,
-        kUpdateApkVersionKey: '6.3',
+        kUpdateApkVersionKey: '6.4',
       });
       await tester.pumpWidget(
         const MaterialApp(home: Scaffold(body: Text('Inicio'))),
@@ -1009,7 +1009,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final apk = File('${dir!.path}/quemia-6.3.apk');
+      final apk = File('${dir!.path}/quemia-6.4.apk');
       expect(await tester.runAsync(() => apk.exists()), isTrue);
       expect(await tester.runAsync(() => apk.readAsBytes()), bytes);
       expect(installedPaths, [apk.path]);
@@ -1017,7 +1017,7 @@ void main() {
           UpdateDownloadState.installing);
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getString(kUpdateApkPathKey), apk.path);
-      expect(prefs.getString(kUpdateApkVersionKey), '6.3');
+      expect(prefs.getString(kUpdateApkVersionKey), '6.4');
     });
   });
 
@@ -1046,7 +1046,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('Hay una nueva actualización'), findsOneWidget);
-      expect(find.text('Versión 6.3 disponible'), findsOneWidget);
+      expect(find.text('Versión 6.4 disponible'), findsOneWidget);
 
       // Cerrar con "Más tarde" para que el método termine.
       await tester.tap(find.text('Más tarde'));
@@ -1092,7 +1092,7 @@ void main() {
     testWidgets('pasa por encima de "Más tarde": versión descartada '
         'SÍ muestra el diálogo', (tester) async {
       SharedPreferences.setMockInitialValues({
-        kUpdateDismissedKey: '6.3',
+        kUpdateDismissedKey: '6.4',
       });
       final context = await pumpHome(tester);
 
@@ -1122,7 +1122,7 @@ void main() {
     tearDown(() => UpdateCheckService.resetForTests());
 
     const sameJson =
-        '{"latest":"6.2","apk_url":"https://example.com/app.apk","notes":"","force":false}';
+        '{"latest":"6.3","apk_url":"https://example.com/app.apk","notes":"","force":false}';
 
     Future<void> pumpAccount(WidgetTester tester) async {
       SharedPreferences.setMockInitialValues({});
@@ -1160,8 +1160,8 @@ void main() {
         (tester) async {
       await pumpAccount(tester);
       // La comprobación al abrir arma el servicio con el falso (que
-      // primero dice 6.2, la instalada); el botón usa ese mismo
-      // falso y en su segunda llamada dice 6.3.
+      // primero dice 6.3, la instalada); el botón usa ese mismo
+      // falso y en su segunda llamada dice 6.4.
       var calls = 0;
       Future<String?> statefulFetcher(Uri url) async {
         calls++;
@@ -1182,7 +1182,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       expect(calls, 2);
       expect(find.text('Hay una nueva actualización'), findsOneWidget);
-      expect(find.text('Versión 6.3 disponible'), findsOneWidget);
+      expect(find.text('Versión 6.4 disponible'), findsOneWidget);
     });
 
     testWidgets('sin versión nueva, avisa "Ya tienes la última versión"',

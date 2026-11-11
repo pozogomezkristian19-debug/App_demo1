@@ -738,46 +738,5 @@ void main() {
       expect(find.byKey(const Key('calculator-toggle')), findsOneWidget);
     });
 
-    testWidgets(
-        'pregunta del día: icono en el diálogo, pantalla encima y '
-        'vuelta al diálogo intacto', (tester) async {
-      await pumpNiveles(tester);
-      expect(find.text(tr('qotdTitle')), findsOneWidget);
-      // La tarjeta queda debajo del primer tema: bajar hasta ella.
-      await tester.ensureVisible(find.text(tr('qotdAnswer')));
-      await tester.pump();
-      await tester.tap(find.text(tr('qotdAnswer')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-      // El diálogo: 4 opciones y el icono de teclado.
-      expect(find.byType(ElevatedButton), findsNWidgets(4));
-      expect(find.byKey(const Key('calculator-toggle')), findsOneWidget);
-      expect(find.byType(CalculatorScreen), findsNothing);
-      await tester.tap(find.byKey(const Key('calculator-toggle')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-      // La pantalla encima del diálogo: calculadora normal.
-      expect(find.byType(CalculatorScreen), findsOneWidget);
-      expect(find.text('log'), findsNothing);
-      expect(find.text(tr('calcUseResult')), findsNothing);
-      // Al cerrar, el diálogo sigue intacto: 4 opciones y se puede
-      // contestar. (El título "Pregunta del día" está dos veces:
-      // la tarjeta de Niveles detrás y el diálogo: se busca el del
-      // diálogo.)
-      await closeCalculator(tester);
-      expect(find.byType(CalculatorScreen), findsNothing);
-      expect(
-          find.descendant(
-            of: find.byType(AlertDialog),
-            matching: find.text(tr('qotdTitle')),
-          ),
-          findsOneWidget);
-      expect(find.byType(ElevatedButton), findsNWidgets(4));
-      await tester.tap(find.byType(ElevatedButton).first);
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-      // El diálogo de resultado: botón "Cerrar".
-      expect(find.text(tr('closeWord')), findsOneWidget);
-    });
   });
 }

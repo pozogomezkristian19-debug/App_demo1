@@ -476,10 +476,9 @@ void main() {
   });
 
   testWidgets(
-      'fix4_niveles_sin_pregunta: Niveles con la pregunta del día ya '
-      'contestada hoy (retoque final): la tarjeta desaparece y todo '
-      'lo de abajo sube', (tester) async {
-    ProgressService.instance.recordQotd(DateTime.now());
+      'fix4_niveles_sin_pregunta: Niveles sin la pregunta del día '
+      '(eliminada por completo de la app en la ronda #6): solo el '
+      'camino', (tester) async {
     await setPhone(tester);
     await tester.pumpWidget(const MelliQuiApp());
     await settle(tester);

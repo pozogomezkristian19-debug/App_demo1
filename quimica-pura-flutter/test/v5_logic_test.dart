@@ -160,22 +160,13 @@ void main() {
     });
   });
 
-  group('Pregunta y elemento del día', () {
-    test('la misma fecha da la misma pregunta y el mismo elemento', () {
+  // (fix6, ronda #6): la pregunta del día se eliminó por completo
+  // de la app; el elemento del día sigue.
+  group('Elemento del día', () {
+    test('la misma fecha da el mismo elemento', () {
       final d = DateTime(2026, 11, 10);
-      final q1 = questionOfTheDay(d);
-      final q2 = questionOfTheDay(d);
-      expect(q1.question, q2.question);
       expect(elementOfTheDay(d).atomicNumber,
           elementOfTheDay(d).atomicNumber);
-    });
-
-    test('días distintos suelen dar preguntas distintas', () {
-      final qs = {
-        for (var i = 0; i < 10; i++)
-          questionOfTheDay(DateTime(2026, 11, 10 + i)).question,
-      };
-      expect(qs.length, greaterThan(5));
     });
 
     test('el elemento del día tiene un dato curioso', () {
