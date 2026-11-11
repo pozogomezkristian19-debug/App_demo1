@@ -58,7 +58,6 @@ void main() {
     await UserPrefs.saveThemeMode('claro');
     UserPrefs.isDark = false;
     UserPrefs.onboardingDone = true;
-    ProgressService.instance.markElementDayShown();
   });
 
   tearDown(() {

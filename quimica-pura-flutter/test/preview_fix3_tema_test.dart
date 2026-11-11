@@ -97,7 +97,6 @@ void main() {
     UserPrefs.metBrenda = true;
     UserPrefs.metBritany = true;
     UserPrefs.metKristian = true;
-    ProgressService.instance.markElementDayShown();
   });
 
   tearDown(() {

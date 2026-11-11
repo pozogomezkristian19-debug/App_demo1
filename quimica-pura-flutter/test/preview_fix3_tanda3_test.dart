@@ -134,7 +134,6 @@ void main() {
     UserPrefs.metBrenda = true;
     UserPrefs.metBritany = true;
     UserPrefs.metKristian = true;
-    ProgressService.instance.markElementDayShown();
   });
 
   tearDown(() {
@@ -255,10 +254,10 @@ void main() {
   });
 
   // Quiz de cálculo con la calculadora científica: pregunta de pH
-  // ([H+] = 1×10^-2 → pH = 2) y la expresión −log(0.01) tecleada,
-  // con el resultado 2 ya en el campo de respuesta (unidad pH).
-  // La burbuja es de Brenda (companionForTurn(0)) con su frase
-  // variada de pregunta.
+  // ([H+] = 1×10^-2 → pH = 2) y la expresión −log(0.01) tecleada
+  // en la PANTALLA de la calculadora (ronda fix5: ya no es un panel
+  // inline), con el resultado 2 en el visor. La burbuja es de
+  // Brenda (companionForTurn(0)) con su frase variada de pregunta.
   Future<void> pumpPhQuiz(WidgetTester tester, {bool dark = false}) async {
     final q = buildPh('ph', 1, 2).question;
     await pumpScreen(
@@ -271,11 +270,17 @@ void main() {
         ),
         dark: dark,
         height: 1050);
-    // Teclea −log(0.01) y pulsa '=': la respuesta (2) queda en el
-    // campo, con la unidad pH al lado. Las teclas son FilledButton
-    // con su etiqueta: así no se confunden con el '0' del campo de
-    // respuesta (un Text suelto dentro del mismo teclado).
-    Finder key(String label) => find.widgetWithText(FilledButton, label);
+    // Se abre la pantalla de la calculadora con el botoncito de
+    // teclado y se teclea ahí. Las teclas son FilledButton u
+    // OutlinedButton con su etiqueta.
+    await tester.tap(find.byKey(const Key('calculator-toggle')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    Finder key(String label) {
+      final filled = find.widgetWithText(FilledButton, label);
+      if (filled.evaluate().isNotEmpty) return filled;
+      return find.widgetWithText(OutlinedButton, label);
+    }
     for (final label in ['−', 'log', '0', '.', '0', '1', ')', '=']) {
       await tester.tap(key(label));
       await tester.pump();

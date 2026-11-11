@@ -51,22 +51,29 @@ void main() {
     });
   });
 
-  group('Pasar de nivel por puntos (v6, item 11)', () {
-    test('5 medias con 4 aciertos = 4,0 exactos y NO pasa', () {
-      final score = levelScore5([2, 2, 2, 2, 2], [true, true, true, true, false]);
-      expect(score, 4.0);
-      expect(levelPassed(score), isFalse);
+  group('Pasar de nivel por aciertos (fix5, punto 13: 4/5 siempre pasa)', () {
+    test('4/5 correctas pasa SIEMPRE, falle la fácil, la media o la difícil', () {
+      expect(levelPassed(4, 5), isTrue);
+      // La nota ponderada cambia según qué se falló, pero la puerta
+      // es el conteo, no la nota.
+      expect(
+          levelScore5([2, 2, 2, 2, 2], [true, true, true, true, false]),
+          4.0);
+      // 4 medias + 1 fácil fallada: 20/24 × 5 = 4,17.
+      expect(
+          levelScore5([2, 2, 2, 2, 1], [true, true, true, true, false]),
+          closeTo(4.17, 0.01));
+      // 4 medias + 1 difícil fallada: 20/26 × 5 = 3,85 (antes no
+      // pasaba; con la regla por conteo, sí).
+      expect(
+          levelScore5([2, 2, 2, 2, 3], [true, true, true, true, false]),
+          closeTo(3.85, 0.01));
     });
 
-    test('5 medias con 5 aciertos = 5,0 y pasa', () {
-      expect(levelPassed(levelScore5([2, 2, 2, 2, 2], [true, true, true, true, true])), isTrue);
-    });
-
-    test('fallar una fácil se puede compensar; fallar una difícil no', () {
-      // 4 medias + 1 fácil fallada: 20/24 × 5 = 4,17 → pasa.
-      expect(levelPassed(levelScore5([2, 2, 2, 2, 1], [true, true, true, true, false])), isTrue);
-      // 4 medias + 1 difícil fallada: 20/26 × 5 = 3,85 → no pasa.
-      expect(levelPassed(levelScore5([2, 2, 2, 2, 3], [true, true, true, true, false])), isFalse);
+    test('3/5 no pasa y 5/5 pasa', () {
+      expect(levelPassed(3, 5), isFalse);
+      expect(levelPassed(5, 5), isTrue);
+      expect(levelPassed(0, 5), isFalse);
     });
 
     test('puntos máximos por dificultad: fácil 4, media 5, difícil 6', () {
@@ -229,10 +236,12 @@ void main() {
   });
 
   group('Traducción del generador (v6, item 8)', () {
-    test('en español el texto es EXACTAMENTE el de antes', () {
+    test('en español la pregunta trae la línea de datos (fix5, punto 14)',
+        () {
       genLang = 'es';
       final g = buildMolarMass('H2SO4');
-      expect(g.question.question, '¿Cuál es la masa molar del ácido sulfúrico (H2SO4)?');
+      expect(g.question.question,
+          '¿Cuál es la masa molar del ácido sulfúrico (H2SO4)?\nDatos: H = 1.01; S = 32.06; O = 16');
       expect(g.question.explanation,
           startsWith('M = 2×1.01 (H) + 32.06 (S) + 4×16 (O) = 98.07 g/mol.'));
     });

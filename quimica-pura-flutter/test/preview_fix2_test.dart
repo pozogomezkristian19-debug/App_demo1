@@ -116,7 +116,6 @@ void main() {
     UserPrefs.themeAccentNotifier.value = 'verde';
     UserPrefs.onboardingDone = true;
     UserPrefs.isDark = false;
-    ProgressService.instance.markElementDayShown();
   });
 
   tearDown(() {

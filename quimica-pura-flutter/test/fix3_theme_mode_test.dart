@@ -65,7 +65,6 @@ void main() {
     await UserPrefs.saveThemeMode('claro');
     // Sin el popup del elemento del día, que si no se abre solo al
     // montar la pantalla principal y tapa los tests.
-    ProgressService.instance.markElementDayShown();
   });
 
   tearDown(() async {

@@ -1,10 +1,10 @@
 // Pruebas de la ronda fix3 2026-11-10 (punto 11: Kristian, el
 // tercer compañero, junto a Brenda y Britany): la rotación del
-// compañero del día es de tres, Kristian se presenta la primera
-// vez como ellas ("¡Hola! Soy Kristian"), el banner dice "Hoy te
-// acompaña Kristian" el día que le toca y su burbuja va firmada
-// "— Kristian" con su color teal. Las gemelas no cambian nada:
-// Brenda sigue violeta y Britany azul.
+// compañero del día es de tres, el banner dice "Hoy te
+// acompaña Kristian" el día que le toca y su burbuja muestra el
+// texto que se le pasa, sin saludo, sin firma y sin nombre (ronda
+// fix5). Las gemelas no cambian nada: Brenda sigue violeta y
+// Britany azul.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quimica_pura/services/localization.dart';
@@ -64,7 +64,10 @@ void main() {
         'Hoy te acompaña Kristian',
       );
       expect(companionIntroKey(Companion.kristian), 'mascotIntroKristian');
-      expect(tr(companionIntroKey(Companion.kristian)), '¡Hola! Soy Kristian');
+      // La clave de presentación ya no existe en los idiomas (el
+      // saludo se quitó en la ronda fix5): tr devuelve la clave.
+      expect(tr(companionIntroKey(Companion.kristian)),
+          'mascotIntroKristian');
     });
 
     test('la API antigua sigue funcionando (compatibilidad)', () {
@@ -80,10 +83,10 @@ void main() {
   });
 
   group('Kristian en la UI', () {
-    // La presentación solo pasa una vez por compañero y queda
-    // guardada en la sesión: este test va primero, con Kristian
-    // sin conocer todavía.
-    testWidgets('Kristian se presenta la primera vez', (tester) async {
+    // La burbuja NUNCA muestra un saludo (ronda fix5): siempre el
+    // texto que se le pasa, sin nombre ni firma.
+    testWidgets('la burbuja de Kristian muestra el texto, sin saludo',
+        (tester) async {
       SharedPreferences.setMockInitialValues({});
       await UserPrefs.load();
       await tester.pumpWidget(
@@ -97,12 +100,13 @@ void main() {
         ),
       );
       await tester.pump();
-      expect(find.text('¡Hola! Soy Kristian'), findsOneWidget);
-      // Etiqueta con su nombre junto al avatar.
-      expect(find.text('Kristian'), findsWidgets);
+      expect(find.text('Vamos a practicar'), findsOneWidget);
+      expect(find.text('¡Hola! Soy Kristian'), findsNothing);
+      // Sin etiqueta de nombre junto al avatar.
+      expect(find.text('Kristian'), findsNothing);
     });
 
-    testWidgets('la burbuja de Kristian va firmada "— Kristian"',
+    testWidgets('la burbuja de Kristian no lleva firma "— Kristian"',
         (tester) async {
       SharedPreferences.setMockInitialValues({'melli_met_kristian': true});
       await UserPrefs.load();
@@ -118,8 +122,8 @@ void main() {
       );
       await tester.pump();
       expect(find.text('Vamos a practicar'), findsOneWidget);
-      expect(find.text('— Kristian'), findsOneWidget);
-      expect(find.text('Kristian'), findsWidgets);
+      expect(find.text('— Kristian'), findsNothing);
+      expect(find.text('Kristian'), findsNothing);
     });
 
     testWidgets('banner "Hoy te acompaña Kristian" con su avatar',

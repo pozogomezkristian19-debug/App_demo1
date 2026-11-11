@@ -44,7 +44,6 @@ void main() {
     UserPrefs.themeAccentNotifier.value = 'verde';
     // Sin el popup del elemento del día, que si no se abre solo al
     // montar la pantalla principal y tapa los tests.
-    ProgressService.instance.markElementDayShown();
   });
 
   tearDown(() {

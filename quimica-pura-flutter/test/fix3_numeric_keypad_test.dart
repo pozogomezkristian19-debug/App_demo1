@@ -5,7 +5,7 @@
 //   de ±0,005 por el redondeo a 2 decimales del generador).
 // - Qué preguntas abren el teclado (las 9 generadas de cálculo) y
 //   cuáles siguen con opciones (conceptuales generadas y banco).
-// - El widget NumericKeypad: teclas, borrar, limpiar, Comprobar.
+// - El widget NumericKeypad: teclas, borrar, limpiar, Usar resultado.
 // - El runner compartido (SimpleQuizRunner: examen con tiempo y reto)
 //   muestra el teclado con una pregunta de cálculo y las opciones
 //   con una conceptual.
@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quimica_pura/data/questions.dart';
 import 'package:quimica_pura/models.dart';
+import 'package:quimica_pura/screens/calculator_screen.dart';
 import 'package:quimica_pura/services/calculator.dart';
 import 'package:quimica_pura/services/numeric_answer.dart';
 import 'package:quimica_pura/services/progress.dart';
@@ -404,7 +405,7 @@ void main() {
       expect(find.text('Borrar'), findsOneWidget);
       expect(find.text('Limpiar'), findsOneWidget);
       expect(find.text('='), findsOneWidget);
-      expect(find.text('Comprobar'), findsOneWidget);
+      expect(find.text('Usar resultado'), findsOneWidget);
       expect(find.text('mol'), findsOneWidget);
       expect(displayText(tester), '0');
       expect(expressionText(tester), 'Escribe el cálculo');
@@ -416,7 +417,7 @@ void main() {
       expect(find.text('mol'), findsNothing);
     });
 
-    testWidgets('teclear 2 . 5, = y Comprobar entrega 2.5',
+    testWidgets('teclear 2 . 5, = y Usar resultado entrega 2.5',
         (tester) async {
       double? submitted;
       await pumpKeypad(tester,
@@ -426,22 +427,22 @@ void main() {
       await tapKey(tester, '5');
       expect(expressionText(tester), '2.5');
       expect(resultText(tester), '= 2.5');
-      // Sin '=', Comprobar sigue apagado: el resultado aún no está
+      // Sin '=', Usar resultado sigue apagado: el resultado aún no está
       // en el campo de respuesta.
       expect(displayText(tester), '0');
-      await tapKey(tester, 'Comprobar');
+      await tapKey(tester, 'Usar resultado');
       expect(submitted, isNull);
       await tapKey(tester, '=');
       expect(displayText(tester), '2.5');
-      await tapKey(tester, 'Comprobar');
+      await tapKey(tester, 'Usar resultado');
       expect(submitted, 2.5);
     });
 
-    testWidgets('Comprobar apagado con el campo vacío', (tester) async {
+    testWidgets('Usar resultado apagado con el campo vacío', (tester) async {
       double? submitted;
       await pumpKeypad(tester,
           unit: 'mol', onSubmit: (v) => submitted = v);
-      await tapKey(tester, 'Comprobar');
+      await tapKey(tester, 'Usar resultado');
       expect(submitted, isNull);
     });
 
@@ -453,7 +454,7 @@ void main() {
       expect(expressionText(tester), '−3');
       await tapKey(tester, '=');
       expect(displayText(tester), '-3');
-      await tapKey(tester, 'Comprobar');
+      await tapKey(tester, 'Usar resultado');
       expect(submitted, -3.0);
     });
 
@@ -551,7 +552,7 @@ void main() {
       expect(resultText(tester), '= 2');
       await tapKey(tester, '=');
       expect(displayText(tester), '2');
-      await tapKey(tester, 'Comprobar');
+      await tapKey(tester, 'Usar resultado');
       expect(submitted, 2.0);
     });
 
@@ -602,7 +603,7 @@ void main() {
       expect(resultText(tester), '');
       await tapKey(tester, '=');
       expect(displayText(tester), '0');
-      await tapKey(tester, 'Comprobar');
+      await tapKey(tester, 'Usar resultado');
       expect(submitted, isNull);
     });
 
@@ -667,12 +668,12 @@ void main() {
         ),
       );
       await tester.pump();
-      // Sin deslizar: la pregunta se ve arriba y Comprobar abajo,
+      // Sin deslizar: la pregunta se ve arriba y Usar resultado abajo,
       // dentro de la pantalla (sin errores de overflow).
-      expect(tester.getCenter(find.text('Comprobar')).dy, lessThan(844));
+      expect(tester.getCenter(find.text('Usar resultado')).dy, lessThan(844));
       await tapKeys(tester, ['−', 'log', '0', '.', '0', '1', ')', '=']);
       expect(displayText(tester), '2');
-      await tapKey(tester, 'Comprobar');
+      await tapKey(tester, 'Usar resultado');
       expect(submitted, 2.0);
     });
   });
@@ -701,6 +702,15 @@ void main() {
         (tester) async {
       final g = buildMassMoles('moles', 'H2O', 36);
       await pumpRunner(tester, [g.question]);
+      // Ronda fix5: la calculadora es bajo demanda — el teclado no
+      // está montado hasta tocar el botoncito de teclado.
+      expect(find.byType(NumericKeypad), findsNothing);
+      await tester.tap(find.descendant(
+        of: find.byType(QuestionCalculatorButton),
+        matching: find.byType(IconButton),
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
       expect(find.byType(NumericKeypad), findsOneWidget);
       expect(find.text('2.00 mol'), findsNothing);
       expect(find.text('mol'), findsOneWidget);
@@ -719,14 +729,23 @@ void main() {
         (tester) async {
       final g = buildMassMoles('moles', 'H2O', 36); // 36 g / 18,02 ≈ 2 mol
       await pumpRunner(tester, [g.question]);
+      // Ronda fix5: primero hay que abrir la calculadora con el
+      // botoncito de teclado; al volver con el valor se responde.
+      await tester.tap(find.descendant(
+        of: find.byType(QuestionCalculatorButton),
+        matching: find.byType(IconButton),
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
       await tester.tap(find.text('2'));
       await tester.pump();
       // Con la pantalla alta (800×1600) todo el runner cabe sin
       // deslizar, como en el teléfono.
       await tester.tap(find.widgetWithText(FilledButton, '='));
       await tester.pump();
-      await tester.tap(find.text('Comprobar'));
+      await tester.tap(find.text('Usar resultado'));
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
       expect(find.text('¡Correcto!'), findsOneWidget);
     });
   });

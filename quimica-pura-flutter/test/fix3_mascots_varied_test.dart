@@ -4,9 +4,11 @@
 //   acompaña…"), sin avatar del usuario ni selector y sin repetir
 //   el nombre bajo la foto.
 // - Mensajes de los muñecos variados: 5 variantes por compañero
-//   (Brenda, Britany, Kristian) y categoría (saludo, pregunta,
-//   ánimo, consuelo), en los 6 idiomas, rotando sin repetirse
-//   seguidas; MascotBubble muestra una variante.
+//   (Brenda, Britany, Kristian) y categoría (pregunta, ánimo,
+//   consuelo) en los 6 idiomas, rotando sin repetirse seguidas;
+//   MascotBubble muestra una variante. Los saludos se quitaron en
+//   la ronda fix5: la burbuja NUNCA sustituye el texto por un
+//   saludo y las claves mascotGreet*/mascotIntro* ya no existen.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quimica_pura/screens/account_screen.dart';
@@ -37,8 +39,12 @@ void main() {
 
   group('Frases variadas: repertorio completo', () {
     test('5 variantes distintas por compañero y categoría', () {
+      // Solo las categorías vivas (pregunta, ánimo, consuelo): el
+      // saludo se quitó en la ronda fix5 y sus claves ya no existen.
+      final kinds =
+          MascotLine.values.where((k) => k != MascotLine.greet);
       for (final c in Companion.values) {
-        for (final kind in MascotLine.values) {
+        for (final kind in kinds) {
           final keys = [
             for (var i = 0; i < mascotLineVariants; i++)
               mascotLineKeyAt(c, kind, i),
@@ -52,10 +58,12 @@ void main() {
       }
     });
 
-    test('las 60 claves existen en los 6 idiomas', () {
+    test('las 45 claves existen en los 6 idiomas', () {
       final maps = AppLang.allStrings;
+      final kinds =
+          MascotLine.values.where((k) => k != MascotLine.greet);
       for (final c in Companion.values) {
-        for (final kind in MascotLine.values) {
+        for (final kind in kinds) {
           for (var i = 0; i < mascotLineVariants; i++) {
             final key = mascotLineKeyAt(c, kind, i);
             for (final lang in ['es', 'en', 'fr', 'it', 'pt', 'ru']) {
@@ -68,13 +76,24 @@ void main() {
       }
     });
 
-    test('el saludo 0 es la presentación clásica en los 6 idiomas', () {
+    test('preguntar/ánimo/consuelo: 5 variantes distintas en los 6 idiomas',
+        () {
+      // El saludo se quitó en la ronda fix5; estas 3 categorías son
+      // las que la burbuja muestra de verdad.
+      final kinds =
+          MascotLine.values.where((k) => k != MascotLine.greet);
       for (final lang in ['es', 'en', 'fr', 'it', 'pt', 'ru']) {
         AppLang.code = lang;
         for (final c in Companion.values) {
-          expect(tr(mascotLineKeyAt(c, MascotLine.greet, 0)),
-              tr(companionIntroKey(c)),
-              reason: '$lang $c');
+          for (final kind in kinds) {
+            final texts = [
+              for (var i = 0; i < mascotLineVariants; i++)
+                tr(mascotLineKeyAt(c, kind, i)),
+            ];
+            expect(texts.toSet().length, mascotLineVariants,
+                reason: '$lang $c $kind');
+            expect(texts.every((t) => t.isNotEmpty), isTrue);
+          }
         }
       }
       AppLang.code = 'es';
@@ -193,35 +212,29 @@ void main() {
       );
       await tester.pump();
       expect(find.text(text), findsOneWidget);
-      expect(find.text('— Brenda'), findsOneWidget);
+      // Sin firma "— Brenda" (se quitó en la ronda fix5).
+      expect(find.text('— Brenda'), findsNothing);
     });
 
-    testWidgets('el saludo de presentación es una variante de Brenda',
+    testWidgets('la burbuja muestra SIEMPRE el texto que se le pasa',
         (tester) async {
-      // Sin presentar todavía: el saludo rota entre las 5 variantes
-      // de presentación de Brenda (la primera vez, la clásica).
-      final greetings = {
-        for (var i = 0; i < mascotLineVariants; i++)
-          tr(mascotLineKeyAt(Companion.brenda, MascotLine.greet, i)),
-      };
+      // Rondas fix5: la burbuja NUNCA sustituye el texto por un
+      // saludo — foto y texto siempre del mismo acompañante.
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
             body: MascotBubble(
               companion: Companion.brenda,
-              text: 'Texto fijo que no debe salir',
+              text: 'Texto fijo que debe salir',
             ),
           ),
         ),
       );
       await tester.pump();
-      final shown = tester
-          .widgetList<Text>(find.byType(Text))
-          .map((t) => t.data)
-          .whereType<String>()
-          .toSet();
-      expect(shown.intersection(greetings).length, 1);
-      expect(find.text('Texto fijo que no debe salir'), findsNothing);
+      expect(find.text('Texto fijo que debe salir'), findsOneWidget);
+      expect(find.text('¡Hola! Soy Brenda'), findsNothing);
+      expect(find.text('— Brenda'), findsNothing);
+      expect(find.text('Brenda'), findsNothing);
     });
   });
 }

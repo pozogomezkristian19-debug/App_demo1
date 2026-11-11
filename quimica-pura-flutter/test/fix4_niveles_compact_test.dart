@@ -53,7 +53,6 @@ void main() {
     await UserPrefs.saveThemeMode('claro');
     UserPrefs.isDark = false;
     UserPrefs.onboardingDone = true;
-    ProgressService.instance.markElementDayShown();
   });
 
   tearDown(() {
@@ -115,36 +114,36 @@ void main() {
       expect(find.textContaining('Vale'), findsOneWidget);
     });
 
-    testWidgets('el botón Responder sigue existiendo y viéndose',
-        (tester) async {
+    testWidgets('el botón Responder sigue existiendo', (tester) async {
       await pumpNiveles(tester);
       expect(find.text(tr('qotdAnswer')), findsOneWidget);
       // El BOTÓN (no solo su texto, que va centrado): a todo lo
-      // ancho de la tarjeta, dentro de la pantalla (360x800).
+      // ancho de la tarjeta. En la ronda fix5 el camino va primero
+      // y la tarjeta de la pregunta queda más abajo, así que ya no
+      // se le exige estar dentro del primer alto de pantalla.
       final buttonRect = tester.getRect(find.ancestor(
         of: find.text(tr('qotdAnswer')),
         matching: find.byType(FilledButton),
       ));
-      expect(buttonRect.top, greaterThan(0));
-      expect(buttonRect.bottom, lessThan(800));
       expect(buttonRect.left, lessThan(40));
       expect(buttonRect.right, greaterThan(320));
     });
 
     testWidgets(
-        'Practicar de otra forma y el primer nivel se ven sin desplazar',
+        'el camino es lo primero: el primer nivel se ve sin desplazar',
         (tester) async {
       await pumpNiveles(tester);
-      // La pantalla es 360x800 lógicos.
+      // La pantalla es 360x800 lógicos. En la ronda fix5 el camino
+      // va primero: la cabecera del primer tema (en mayúsculas) y
+      // su primer nodo se ven al abrir, sin desplazar.
       const height = 800.0;
-      // La sección "Practicar de otra forma" está en la pantalla.
-      final otherWays = tester.getRect(find.text(tr('practiceOtherWays')));
-      expect(otherWays.top, lessThan(height));
-      // El primer tema del camino también (su cabecera, en
-      // mayúsculas; la cabecera usa localizedTopicTitle).
       final firstTopic = tester.getRect(find.text(
           localizedTopicTitle(bachTopics.first).toUpperCase()));
       expect(firstTopic.top, lessThan(height));
+      // La pregunta del día y "Practicar de otra forma" siguen
+      // existiendo, pero ahora van después del primer tema.
+      expect(find.text(tr('qotdTitle')), findsOneWidget);
+      expect(find.text(tr('practiceOtherWays')), findsOneWidget);
     });
 
     testWidgets('el nodo 1 ya no choca con el cartel del tema',
@@ -194,10 +193,24 @@ void main() {
         (tester) async {
       ProgressService.instance.recordQotd(DateTime.now());
       await pumpNiveles(tester);
-      // Sin la tarjeta, "Practicar de otra forma" queda arriba del
-      // todo (con la tarjeta estaría por debajo de ~290).
-      final otherWays = tester.getRect(find.text(tr('practiceOtherWays')));
-      expect(otherWays.top, lessThan(200));
+      // Sin la tarjeta, "Practicar de otra forma" queda más arriba
+      // que con la tarjeta puesta (con la tarjeta estaría más abajo).
+      final answeredTop =
+          tester.getRect(find.text(tr('practiceOtherWays'))).top;
+      // Vuelta a empezar sin la pregunta contestada: hay que
+      // limpiar la instancia cacheada de SharedPreferences, no
+      // solo los valores iniciales del mock, y desmontar la app
+      // (bompear el mismo MelliQuiApp const reutilizaría el árbol
+      // y el estado viejo).
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+      await ProgressService.load();
+      await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+      await tester.pump();
+      await pumpNiveles(tester);
+      final unansweredTop =
+          tester.getRect(find.text(tr('practiceOtherWays'))).top;
+      expect(answeredTop, lessThan(unansweredTop));
       // Y el primer nivel sigue viéndose sin desplazar.
       final firstTopic = tester.getRect(find.text(
           localizedTopicTitle(bachTopics.first).toUpperCase()));
@@ -218,6 +231,10 @@ void main() {
         (tester) async {
       await pumpNiveles(tester);
       expect(find.text(tr('qotdTitle')), findsOneWidget);
+      // La tarjeta queda más abajo desde la ronda fix5 (el camino
+      // va primero): hay que llevarla a la vista antes de tocarla.
+      await tester.ensureVisible(find.text(tr('qotdAnswer')));
+      await tester.pump();
       await tester.tap(find.text(tr('qotdAnswer')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));

@@ -33,7 +33,6 @@ void main() {
     UserPrefs.themeAccentNotifier.value = 'verde';
     UserPrefs.onboardingDone = true;
     UserPrefs.isDark = false;
-    ProgressService.instance.markElementDayShown();
   });
 
   tearDown(() {
@@ -89,12 +88,12 @@ void main() {
         expect(e.value.containsKey('howToPlayBody'), isFalse,
             reason: e.key);
       }
-      // El contenido es el mismo: vidas, puntos con signo, media > 4
-      // y 3 aciertos seguidos para borrar el error.
+      // El contenido es el mismo: vidas, puntos con signo, 4 de 5
+      // aciertos para pasar y 3 aciertos seguidos para borrar el error.
       expect(AppLang.t('howToPlayLives'), contains('5 vidas'));
       expect(AppLang.t('howToPlayPoints'), contains('+3'));
       expect(AppLang.t('howToPlayPoints'), contains('−12'));
-      expect(AppLang.t('howToPlayPass'), contains('4 de promedio'));
+      expect(AppLang.t('howToPlayPass'), contains('4 de 5'));
       expect(AppLang.t('howToPlayReview'), contains('3 seguidas'));
     });
 
@@ -148,8 +147,8 @@ void main() {
     });
   });
 
-  group('fix3 pulido: punto 9 (elemento del día)', () {
-    testWidgets('los dos botones van en la misma fila, mismo alto',
+  group('fix5 punto 2 (sin popup del elemento del día)', () {
+    testWidgets('al abrir la app no sale ningún popup de elemento',
         (tester) async {
       tester.view.physicalSize = const Size(720, 1600);
       tester.view.devicePixelRatio = 2.0;
@@ -157,50 +156,17 @@ void main() {
         tester.view.resetPhysicalSize();
         tester.view.resetDevicePixelRatio();
       });
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(
-          'melli_progress_element_day_shown', '2000-01-01');
       await tester.pumpWidget(const MelliQuiApp());
       await tester.pump();
       await tester.pump(const Duration(seconds: 2));
       await tester.pump(const Duration(seconds: 2));
 
-      final dialog = find.byType(AlertDialog);
-      expect(dialog, findsOneWidget);
-      expect(find.text(tr('elementDayTitle')), findsOneWidget);
-      // Secundario con borde a la izquierda, primario relleno a la
-      // derecha; ya no hay enlace de texto (TextButton) apilado.
-      final closeBtn = find.descendant(
-          of: dialog, matching: find.byType(OutlinedButton));
-      final sheetBtn = find.descendant(
-          of: dialog, matching: find.byType(FilledButton));
-      expect(closeBtn, findsOneWidget);
-      expect(sheetBtn, findsOneWidget);
-      expect(
-          find.descendant(of: dialog, matching: find.byType(TextButton)),
-          findsNothing);
-      expect(
-          find.descendant(
-              of: closeBtn, matching: find.text(tr('closeWord'))),
-          findsOneWidget);
-      expect(
-          find.descendant(
-              of: sheetBtn, matching: find.text(tr('elementDaySeeMore'))),
-          findsOneWidget);
-      // Misma fila y mismo alto: mismo centro vertical y misma altura.
-      final closeBox = tester.getRect(closeBtn);
-      final sheetBox = tester.getRect(sheetBtn);
-      expect((closeBox.center.dy - sheetBox.center.dy).abs(),
-          lessThan(2.0));
-      expect(closeBox.height, moreOrLessEquals(sheetBox.height, epsilon: 1.0));
-      expect(closeBox.left, lessThan(sheetBox.left));
-
-      // "Ver ficha completa" abre la ficha y cierra el popup.
-      await tester.tap(find.text(tr('elementDaySeeMore')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+      // El popup del elemento del día se quitó en la ronda fix5:
+      // al abrir no sale ningún diálogo; solo la pantalla de Niveles.
       expect(find.byType(AlertDialog), findsNothing);
-      expect(find.byType(DraggableScrollableSheet), findsOneWidget);
+      // Y las claves del popup ya no existen (tr devuelve la clave).
+      expect(tr('elementDayTitle'), 'elementDayTitle');
+      expect(tr('elementDaySeeMore'), 'elementDaySeeMore');
     });
   });
 

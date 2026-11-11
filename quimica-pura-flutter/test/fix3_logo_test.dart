@@ -98,7 +98,6 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       await ProgressService.load();
       UserPrefs.rulesSeenV6 = true;
-      ProgressService.instance.markElementDayShown();
       addTearDown(() => UserPrefs.rulesSeenV6 = false);
       tester.view.physicalSize = const Size(800, 1700);
       tester.view.devicePixelRatio = 1.0;
@@ -270,7 +269,6 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       await ProgressService.load();
       UserPrefs.rulesSeenV6 = true;
-      ProgressService.instance.markElementDayShown();
       addTearDown(() => UserPrefs.rulesSeenV6 = false);
       tester.view.physicalSize = const Size(800, 1700);
       tester.view.devicePixelRatio = 1.0;
@@ -307,7 +305,6 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       await ProgressService.load();
       UserPrefs.rulesSeenV6 = true;
-      ProgressService.instance.markElementDayShown();
       addTearDown(() => UserPrefs.rulesSeenV6 = false);
       tester.view.physicalSize = const Size(800, 1700);
       tester.view.devicePixelRatio = 1.0;
