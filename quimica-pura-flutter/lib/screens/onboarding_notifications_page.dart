@@ -21,6 +21,7 @@ import 'package:flutter/material.dart';
 import '../services/localization.dart';
 import '../services/notification_service.dart';
 import '../widgets/lucide_icons.dart';
+import '../widgets/notification_settings_dialog.dart';
 
 class OnboardingNotificationsPage extends StatefulWidget {
   const OnboardingNotificationsPage({super.key, required this.onNext});
@@ -45,10 +46,11 @@ class _OnboardingNotificationsPageState
     final ok = await NotificationService.enable();
     if (!mounted) return;
     setState(() => _busy = false);
+    // Permiso denegado: el diálogo con "Ir a Ajustes" (fix4, punto
+    // 3); se avanza igual al siguiente paso y los recordatorios
+    // quedan apagados, para activarlos luego desde Cuenta.
     if (!ok) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('notifNeedPermission'))),
-      );
+      await showNotificationSettingsDialog(context);
     }
     widget.onNext();
   }

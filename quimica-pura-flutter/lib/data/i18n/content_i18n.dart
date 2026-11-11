@@ -9,6 +9,8 @@
 // construyen SIEMPRE con el texto español, para que no dependan del
 // idioma activo. La traducción es solo de presentación.
 
+import 'dart:math';
+
 import '../../models.dart';
 import '../../services/localization.dart';
 import '../extra_content.dart';
@@ -349,4 +351,15 @@ List<ExamTip> localizedGeneralTips() {
   return list
       .map((t) => ExamTip(title: t[0], body: t.length > 1 ? t[1] : ''))
       .toList();
+}
+
+/// Tip del día (fix4, punto 10): un consejo de estudio distinto cada
+/// día, estable dentro del día (misma semilla que la pregunta del
+/// día). Se elige de los tips localizados; el widget guarda su texto
+/// con la etiqueta "Tip:". Función pura para poder probarla.
+ExamTip tipOfTheDay(DateTime date) {
+  final tips = localizedGeneralTips();
+  if (tips.isEmpty) return const ExamTip(title: '', body: '');
+  final rng = Random(daySeed(date));
+  return tips[rng.nextInt(tips.length)];
 }

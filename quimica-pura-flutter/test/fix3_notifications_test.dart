@@ -70,8 +70,13 @@ void main() {
   // Sin plataforma real, la llamada a la zona horaria se queda
   // colgada: se simula America/Havana. El permiso de notificaciones
   // se simula NEGADO por defecto (cada test de concedido lo cambia).
-  setUp(() {
+  setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    // Recargar los estáticos de UserPrefs desde las prefs (vacías):
+    // sin esto, un test anterior que activó los recordatorios deja
+    // `reminderOn` en true para el siguiente test (los estáticos no
+    // se reinician solos entre tests del mismo archivo).
+    await UserPrefs.load();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
       const MethodChannel('flutter_timezone'),
@@ -204,9 +209,14 @@ void main() {
     // "Siguiente" de abajo no sale aquí.
     expect(find.text('Siguiente'), findsNothing);
     // Con el permiso negado (en pruebas enable() devuelve false),
-    // "Activar recordatorios" avanza igual al idioma, donde está
-    // "Finalizar".
+    // "Activar recordatorios" muestra el diálogo con "Ir a
+    // Ajustes" (fix4, punto 3, en lugar del aviso de antes) y, al
+    // cerrarlo, se avanza igual al idioma, donde está "Finalizar".
     await tester.tap(find.text('Activar recordatorios'));
+    await tester.pumpAndSettle();
+    expect(find.text('Ir a Ajustes'), findsOneWidget);
+    expect(find.text('Finalizar'), findsNothing);
+    await tester.tap(find.text('Cerrar'));
     await tester.pumpAndSettle();
     expect(find.text('Finalizar'), findsOneWidget);
   });
@@ -236,14 +246,19 @@ void main() {
       (tester) async {
     await goToNotificationsPage(tester);
     // En pruebas el permiso está simulado como NEGADO
-    // (requestNotificationsPermission devuelve false): sale el aviso
-    // de que hace falta el permiso y se avanza igual a la pantalla
-    // del idioma. Los recordatorios quedan apagados y se pueden
+    // (requestNotificationsPermission devuelve false): sale el
+    // diálogo con "Ir a Ajustes" (fix4, punto 3, en lugar del aviso
+    // de antes) y, al cerrarlo, se avanza igual a la pantalla del
+    // idioma. Los recordatorios quedan apagados y se pueden
     // activar luego desde Cuenta › Recordatorios.
     await tester.tap(find.text('Activar recordatorios'));
     await tester.pumpAndSettle();
-    expect(find.byType(SnackBar), findsOneWidget);
+    expect(find.text('Ir a Ajustes'), findsOneWidget);
+    expect(find.byType(SnackBar), findsNothing);
+    await tester.tap(find.text('Cerrar'));
+    await tester.pumpAndSettle();
     expect(find.text('Finalizar'), findsOneWidget);
+    expect(UserPrefs.reminderOn, isFalse);
   });
 
   group('Próximo aviso (fix3, H3)', () {

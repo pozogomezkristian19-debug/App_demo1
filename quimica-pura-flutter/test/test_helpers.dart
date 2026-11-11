@@ -33,3 +33,21 @@ Future<void> loadRobotoFonts() async {
   }
   if (found > 0) await loader.load();
 }
+
+/// loadMaterialIcons: carga la fuente MaterialIcons REAL del SDK
+/// para que los iconos Material (la flecha ▼ del desplegable, el ✓
+/// del segmento seleccionado, la flecha atrás) se dibujen de verdad
+/// en las capturas. Sin ella salen como un cuadrado hueco ▯: en el
+/// teléfono se ven bien (la fuente va empaquetada en la app), así
+/// que el ▯ es solo un artefacto del render, no un bug de la app.
+/// Si no se encuentra el SDK, no rompe nada.
+Future<void> loadMaterialIcons() async {
+  final home = Platform.environment['HOME'] ?? '';
+  final file = File('$home/sdks/flutter-3.47.9/bin/cache/artifacts/'
+      'material_fonts/MaterialIcons-Regular.otf');
+  if (!await file.exists()) return;
+  final bytes = await file.readAsBytes();
+  final loader = FontLoader('MaterialIcons');
+  loader.addFont(Future.value(ByteData.view(bytes.buffer)));
+  await loader.load();
+}

@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 
-<!-- Tarjeta del widget de inicio (v6): título, pregunta del día y
-     racha / vidas / puntos. Colores literales (RemoteViews no admite
-     atributos de tema): noche #0A1628, texto claro y acento menta. -->
+<!-- Tarjeta del widget de inicio (v6; fix4, punto 10: línea de tip):
+     título, pregunta del día, tip de estudio del día (ámbar claro,
+     3 líneas como mucho con elipsis) y racha / vidas / puntos.
+     Colores literales (RemoteViews no admite atributos de tema):
+     noche #0A1628, texto claro y acento menta. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/widget_container"
@@ -31,6 +33,20 @@
         android:textColor="#D9D2F2"
         android:textSize="14sp"
         tools:text="¿Cuál es la masa molar del ácido sulfúrico?" />
+
+    <!-- Tip de estudio del día (fix4, punto 10): rota cada día, con su
+         propio TextView (widget_tip) y la etiqueta "Tip:". Si el texto
+         es largo, se corta con elipsis a 3 líneas. -->
+    <TextView
+        android:id="@+id/widget_tip"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:ellipsize="end"
+        android:maxLines="3"
+        android:textColor="#FDE68A"
+        android:textSize="14sp"
+        tools:text="Tip: Convierte todo a las unidades del SI antes de sustituir: mL → L, °C → K, g → mol." />
 
     <LinearLayout
         android:layout_width="match_parent"

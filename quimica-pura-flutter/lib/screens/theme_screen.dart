@@ -11,6 +11,7 @@
 import 'package:flutter/material.dart';
 import '../widgets/lucide_icons.dart';
 
+import '../services/accent.dart';
 import '../services/localization.dart';
 import '../services/sound_service.dart';
 import '../services/user_prefs.dart';
@@ -40,12 +41,13 @@ class _ThemeColors {
 
   factory _ThemeColors.of(BuildContext context) {
     if (Theme.of(context).brightness == Brightness.dark) {
-      return const _ThemeColors(
-        bg: Color(0xFF0A1F1A),
-        card: Color(0xFF122B24),
+      // Fondo y tarjetas según el acento (fix4, punto 2).
+      return _ThemeColors(
+        bg: AppAccent.darkBackground,
+        card: AppAccent.darkCard,
         ink: Colors.white,
-        inkSoft: Color(0xFFB8CFC8),
-        border: Color(0xFF1E4D42),
+        inkSoft: AppAccent.darkInkSoft,
+        border: AppAccent.darkBorder,
       );
     }
     return const _ThemeColors(
@@ -66,9 +68,8 @@ class _ThemeColors {
 
 /// Nombre localizado del color actual, para el subtítulo de la fila
 /// de Cuenta ("Verde · Claro").
-String themeAccentName() => UserPrefs.themeAccent == 'violeta'
-    ? tr('themeViolet')
-    : tr('themeGreen');
+String themeAccentName() =>
+    UserPrefs.themeAccent == 'violeta' ? tr('themeViolet') : tr('themeGreen');
 
 /// Nombre localizado del modo actual, para el subtítulo de la fila
 /// de Cuenta ("Verde · Claro").
@@ -84,8 +85,7 @@ String themeModeName() {
 }
 
 /// Subtítulo de la fila "Tema" de Cuenta: "Verde · Claro".
-String themeSelectionSubtitle() =>
-    '${themeAccentName()} · ${themeModeName()}';
+String themeSelectionSubtitle() => '${themeAccentName()} · ${themeModeName()}';
 
 class ThemeScreen extends StatefulWidget {
   const ThemeScreen({super.key});
@@ -253,8 +253,7 @@ class _OptionTile extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               Text(label,
-                  style:
-                      TextStyle(fontWeight: FontWeight.bold, color: c.ink)),
+                  style: TextStyle(fontWeight: FontWeight.bold, color: c.ink)),
             ],
           ),
         ),

@@ -2,6 +2,8 @@
 // app es offline. Dos personas juegan en el mismo teléfono, por turnos:
 // cada una contesta 5 preguntas distintas y gana quien acierte más.
 // Al final se puede compartir el resultado por WhatsApp.
+// Puntos (fix4, punto 5): son solo del jugador 1 (tú); el jugador 2
+// es invitado y no tiene cuenta — su turno no toca el progreso.
 
 import 'dart:math';
 
@@ -101,6 +103,10 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                   items: _phase == 1 ? _q1 : _q2,
                   itemIds: _phase == 1 ? _ids1 : _ids2,
                   playerName: _phase == 1 ? _p1.text : _p2.text,
+                  // Solo el jugador 1 tiene cuenta: el turno del
+                  // invitado (jugador 2) no toca puntos, estadísticas
+                  // ni errores (fix4, punto 5).
+                  trackProgress: _phase == 1,
                   onFinished: (score, total) {
                     if (_phase == 1) {
                       setState(() {

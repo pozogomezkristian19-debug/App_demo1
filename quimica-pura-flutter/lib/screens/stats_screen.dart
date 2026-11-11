@@ -20,6 +20,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../data/i18n/content_i18n.dart';
 import '../services/achievements.dart';
+import '../services/accent.dart';
+
 import '../services/localization.dart';
 import '../services/progress.dart';
 import '../services/user_prefs.dart';
@@ -62,21 +64,25 @@ class _StatsColors {
 
   factory _StatsColors.of(BuildContext context) {
     if (Theme.of(context).brightness == Brightness.dark) {
-      return const _StatsColors(
-        bg: Color(0xFF0A1F1A),
-        card: Color(0xFF122B24),
-        surface: Color(0xFF122B24),
-        ink: Color(0xFFE6F4EE),
-        inkSoft: Color(0xFFB8CFC8),
-        border: Color(0xFF1E4D42),
-        edgeGray: Color(0xFF1E4D42),
-        accent: BrandColors.mintLight,
-        accentDark: BrandColors.mint,
-        // Logro desbloqueado: tinte menta, nunca ámbar en oscuro.
-        unlockedBg: Color(0x2614B8A6),
-        unlockedIcon: BrandColors.mintLight,
-        flameBg: Color(0x2614B8A6),
-        flameIcon: BrandColors.mintLight,
+      // Superficies y tintes según el acento (fix4, punto 2): con
+      // Violeta el oscuro es violeta, no verde (los valores son los
+      // mismos que _darkTheme en main.dart).
+      final violet = AppAccent.isViolet;
+      return _StatsColors(
+        bg: AppAccent.darkBackground,
+        card: AppAccent.darkCard,
+        surface: AppAccent.darkCard,
+        ink: violet ? const Color(0xFFEDE9F7) : const Color(0xFFE6F4EE),
+        inkSoft: AppAccent.darkInkSoft,
+        border: AppAccent.darkBorder,
+        edgeGray: AppAccent.darkBorder,
+        accent: violet ? BrandColors.violetLight : BrandColors.mintLight,
+        accentDark: violet ? BrandColors.violet : BrandColors.mint,
+        // Logro desbloqueado: tinte del acento, nunca ámbar en oscuro.
+        unlockedBg: violet ? const Color(0x268B5CF6) : const Color(0x2614B8A6),
+        unlockedIcon: violet ? BrandColors.violetLight : BrandColors.mintLight,
+        flameBg: violet ? const Color(0x268B5CF6) : const Color(0x2614B8A6),
+        flameIcon: violet ? BrandColors.violetLight : BrandColors.mintLight,
       );
     }
     return const _StatsColors(
@@ -186,8 +192,7 @@ class _StatsScreenState extends State<StatsScreen> {
       final pixelRatio =
           MediaQuery.of(context).devicePixelRatio.clamp(1.0, 2.0);
       final image = await boundary.toImage(pixelRatio: pixelRatio);
-      final byteData =
-          await image.toByteData(format: ui.ImageByteFormat.png);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       if (byteData == null) {
         throw StateError('could not encode image');
       }
@@ -306,14 +311,12 @@ class _StatsScreenState extends State<StatsScreen> {
               : (_otherBest ?? {}),
           _topicsOf(ProgressService.trackBach)),
       'mejores_puntuaciones': {
-        for (final e in p.bestScores.entries)
-          _prettyScoreKey(e.key): e.value,
+        for (final e in p.bestScores.entries) _prettyScoreKey(e.key): e.value,
       },
       'respuestas_correctas': p.totalCorrect,
       'respuestas_totales': p.totalAnswered,
       'errores_pendientes': p.failedCount,
-      'temas_dominados':
-          p.masteredTopics.map(localizedTopicTitle).toList(),
+      'temas_dominados': p.masteredTopics.map(localizedTopicTitle).toList(),
       'dias_practica': p.practiceDays.toList(),
     };
     return const JsonEncoder.withIndent('  ').convert(data);
@@ -348,9 +351,8 @@ class _StatsScreenState extends State<StatsScreen> {
         ? ProgressService.trackBach
         : ProgressService.trackUni;
     final otherTopics = _topicsOf(otherTrack);
-    final otherPassed = _otherBest == null
-        ? null
-        : _passedLevels(_otherBest!, otherTopics);
+    final otherPassed =
+        _otherBest == null ? null : _passedLevels(_otherBest!, otherTopics);
     final otherTotal = _totalLevels(otherTopics);
     return Scaffold(
       backgroundColor: c.bg,
@@ -505,12 +507,11 @@ class _StatsScreenState extends State<StatsScreen> {
                     'Niveles pasados (${otherTrack == ProgressService.trackUni ? tr('trackUni') : tr('trackBach')})',
                     otherPassed == null ? '…' : '$otherPassed / $otherTotal',
                     c.ink),
-                _statRow('Examen mixto (mejor)', '${p.bestScore('mixto')}%',
-                    c.ink),
-                _statRow('Temas dominados', '${p.masteredTopics.length}',
-                    c.ink),
                 _statRow(
-                    'Días practicando', '${p.practiceDays.length}', c.ink),
+                    'Examen mixto (mejor)', '${p.bestScore('mixto')}%', c.ink),
+                _statRow(
+                    'Temas dominados', '${p.masteredTopics.length}', c.ink),
+                _statRow('Días practicando', '${p.practiceDays.length}', c.ink),
               ],
             ),
           ),
@@ -618,14 +619,14 @@ class _StatsScreenState extends State<StatsScreen> {
               borderRadius: BorderRadius.circular(16),
               clipBehavior: Clip.antiAlias,
               child: SwitchListTile(
-              title: Text('Sonido y vibración al contestar',
-                  style: TextStyle(color: c.ink)),
-              value: UserPrefs.soundOn,
-              activeThumbColor: _teal,
-              onChanged: (v) async {
-                await UserPrefs.saveSoundOn(v);
-                setState(() {});
-              },
+                title: Text('Sonido y vibración al contestar',
+                    style: TextStyle(color: c.ink)),
+                value: UserPrefs.soundOn,
+                activeThumbColor: _teal,
+                onChanged: (v) async {
+                  await UserPrefs.saveSoundOn(v);
+                  setState(() {});
+                },
               ),
             ),
           ),
@@ -705,8 +706,7 @@ class _PillButton extends StatelessWidget {
       decoration: BoxDecoration(
         color: background,
         borderRadius: BorderRadius.circular(100),
-        border:
-            border == null ? null : Border.all(color: border!, width: 2),
+        border: border == null ? null : Border.all(color: border!, width: 2),
         boxShadow: [
           BoxShadow(
             color: edge,
@@ -721,8 +721,7 @@ class _PillButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(100),
           onTap: onPressed,
           child: Padding(
-            padding:
-                const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [

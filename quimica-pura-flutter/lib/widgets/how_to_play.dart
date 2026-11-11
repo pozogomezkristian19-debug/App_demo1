@@ -1,11 +1,12 @@
 // Ventanita "¿Cómo se juega?" (v6, rediseño claro 2026-11-10; filas
 // con icono en la ronda fix3, punto 1): antes era un solo Text con
 // howToPlayBody, un muro de texto. Ahora cada regla es una fila
-// corta con su icono — corazón (vidas), estrella (puntos), birrete
-// (cómo se pasa) y flecha circular (repaso) — y cada regla tiene su
-// propia clave i18n en los 6 idiomas (howToPlayLives, howToPlayPoints,
-// howToPlayPass, howToPlayReview). El contenido de las reglas es el
-// mismo, solo cambia la presentación.
+// corta con su icono — corazón (vidas), rayo (las vidas son solo de
+// los niveles, fix4 punto 5), estrella (puntos), birrete (cómo se
+// pasa) y flecha circular (repaso) — y cada regla tiene su propia
+// clave i18n en los 6 idiomas (howToPlayLives, howToPlayNoLives,
+// howToPlayPoints, howToPlayPass, howToPlayReview). El contenido de
+// las reglas es el mismo, solo cambia la presentación.
 //
 // Los colores salen del tema (auditoría fix2): antes el fondo era
 // blanco fijo y en modo oscuro la ventanita se quedaba blanca.
@@ -44,6 +45,17 @@ Future<void> showHowToPlayDialog(BuildContext context) async {
               _RuleRow(
                 icon: const LivesHeart(size: 22),
                 text: tr('howToPlayLives'),
+              ),
+              const SizedBox(height: 14),
+              _RuleRow(
+                icon: LucideIcon(
+                  LucideIcons.zap,
+                  size: 22,
+                  color: scheme.primary,
+                  filled: true,
+                  threeD: true,
+                ),
+                text: tr('howToPlayNoLives'),
               ),
               const SizedBox(height: 14),
               _RuleRow(

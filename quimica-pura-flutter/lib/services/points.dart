@@ -29,6 +29,13 @@
 // móvil) cuesta 1 vida. Terminar un nivel (aprobado o suspendido) no
 // cuesta nada. Con 0 vidas no se puede empezar ningún nivel hasta
 // mañana: cada día nuevo las vidas vuelven a 5.
+//
+// Las vidas son SOLO de los niveles (fix4, punto 5): el Reto, el
+// examen con tiempo, el quiz de la tabla periódica, el cuestionario
+// del laboratorio, el repaso de errores y el examen mixto NUNCA
+// quitan vidas — ni al salir ni al fallar — usan solo el sistema de
+// puntos. Con 0 vidas solo se bloquean los niveles nuevos; las demás
+// actividades se pueden jugar siempre.
 
 /// Puntos que suma acertar una pregunta de esta dificultad (1-3).
 int pointsForCorrect(int difficulty) {

@@ -1,5 +1,6 @@
 // Widget de la pantalla de inicio (v6): tarjeta con la pregunta del
-// día, la racha, las vidas y los puntos. Al tocarla se abre la app.
+// día, un tip de estudio que rota cada día (fix4, punto 10), la
+// racha, las vidas y los puntos. Al tocarla se abre la app.
 // La parte nativa vive en MelliQuiWidgetProvider (Kotlin, RemoteViews);
 // aquí solo se le mandan los datos con home_widget y se pide que se
 // actualice. Si no hay widget instalado (o el plugin falla), la app
@@ -25,6 +26,22 @@ class HomeWidgetService {
       final index = allQuestions.indexOf(today);
       final q = index >= 0 ? localizedQuestionAt(index) : today;
       await HomeWidget.saveWidgetData<String>('qotd', q.question);
+      // Tip del día (fix4, punto 10): mismo día, mismo tip (como la
+      // pregunta del día); cambia al día siguiente. Texto localizado
+      // en el idioma de la app, con la etiqueta "Tip:". Sin emojis.
+      // Las flechas "→" se sustituyen por "a" SOLO en lo que se
+      // guarda para el widget: el widget corre en el lado nativo con
+      // la fuente del sistema y una flecha que no esté en la fuente
+      // se vería como un cuadradito; el texto original (con flechas)
+      // de Tips de examen NO se toca.
+      final tip = tipOfTheDay(DateTime.now());
+      if (tip.title.isNotEmpty) {
+        final tipText = (tip.body.isEmpty
+                ? 'Tip: ${tip.title}'
+                : 'Tip: ${tip.title} — ${tip.body}')
+            .replaceAll('→', 'a');
+        await HomeWidget.saveWidgetData<String>('tip', tipText);
+      }
       await HomeWidget.saveWidgetData<String>(
           'streak', '${tr('streakWord')}: ${p.streakNow}');
       await HomeWidget.saveWidgetData<String>(

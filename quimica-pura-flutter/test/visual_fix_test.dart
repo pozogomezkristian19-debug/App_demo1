@@ -57,7 +57,8 @@ void main() {
   });
 
   testWidgets(
-      'fix 3+4: Niveles sin tarjeta de estadísticas y 2 tarjetas iguales',
+      'fix 3+4: Niveles sin tarjeta de estadísticas, sin banner, y 2 '
+      'tarjetas iguales',
       (tester) async {
     tester.view.physicalSize = const Size(800, 1800);
     tester.view.devicePixelRatio = 1.0;
@@ -83,8 +84,10 @@ void main() {
     expect(find.text('Vidas'), findsNothing);
     expect(find.text('Puntos'), findsNothing);
     expect(find.text('Meta del día'), findsNothing);
-    // Quedan el banner de la gemela y la pregunta del día.
-    expect(find.textContaining('Hoy te acompaña'), findsOneWidget);
+    // Sin banner "Hoy te acompaña…" en Niveles (fix4, punto 13
+    // REVISADO: lo quitó Kristian); quedan la pregunta del día
+    // (ancha, con la foto del acompañante dentro) y el camino.
+    expect(find.textContaining('Hoy te acompaña'), findsNothing);
     expect(find.text('Pregunta del día'), findsOneWidget);
     // Las dos tarjetas miden exactamente lo mismo.
     Size cardSize(String title) {

@@ -15,6 +15,7 @@ import '../widgets/lucide_icons.dart';
 import '../services/localization.dart';
 import '../services/notification_service.dart';
 import '../services/user_prefs.dart';
+import '../widgets/notification_settings_dialog.dart';
 
 class ReminderScreen extends StatefulWidget {
   const ReminderScreen({super.key});
@@ -22,14 +23,48 @@ class ReminderScreen extends StatefulWidget {
   State<ReminderScreen> createState() => _ReminderScreenState();
 }
 
-class _ReminderScreenState extends State<ReminderScreen> {
+class _ReminderScreenState extends State<ReminderScreen>
+    with WidgetsBindingObserver {
   var _busy = false;
+
+  /// El usuario fue a Ajustes a conceder el permiso: al volver se
+  /// vuelve a comprobar y, si ya está dado, se activan los
+  /// recordatorios (fix4, punto 3).
+  var _waitingForPermission = false;
   late Future<DateTime?> _nextFuture;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _refreshNext();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _waitingForPermission) {
+      _waitingForPermission = false;
+      _recheckPermission();
+    }
+  }
+
+  Future<void> _recheckPermission() async {
+    final granted = await NotificationService.isPermissionGranted;
+    if (!granted || !mounted) return;
+    final ok = await NotificationService.enable();
+    if (!mounted) return;
+    setState(() => _refreshNext());
+    if (ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(tr('notifOn'))),
+      );
+    }
   }
 
   void _refreshNext() {
@@ -66,11 +101,20 @@ class _ReminderScreenState extends State<ReminderScreen> {
                       // próximo aviso; al apagar se borra.
                       _refreshNext();
                     });
+                    // Sin permiso no hay nada que activar: en vez del
+                    // toast, el diálogo con "Ir a Ajustes" (fix4,
+                    // punto 3). El interruptor queda apagado hasta que
+                    // el permiso se conceda en Ajustes.
+                    if (v && !ok) {
+                      final went =
+                          await showNotificationSettingsDialog(context);
+                      if (went && mounted) _waitingForPermission = true;
+                      return;
+                    }
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text(v
-                            ? (ok ? tr('notifOn') : tr('notifNeedPermission'))
-                            : tr('notifOff')),
+                        content:
+                            Text(v ? tr('notifOn') : tr('notifOff')),
                       ),
                     );
                   },
@@ -133,6 +177,20 @@ class _ReminderScreenState extends State<ReminderScreen> {
           ),
           ElevatedButton.icon(
             onPressed: () async {
+              // Primero el permiso: sin él el aviso no sale y el
+              // "enviado" mentiría (fix4, punto 3). Se pide el
+              // permiso y, si sigue denegado, sale el diálogo con
+              // "Ir a Ajustes".
+              var granted = await NotificationService.isPermissionGranted;
+              if (!granted) {
+                granted = await NotificationService.requestPermission();
+              }
+              if (!mounted) return;
+              if (!granted) {
+                final went = await showNotificationSettingsDialog(context);
+                if (went && mounted) _waitingForPermission = true;
+                return;
+              }
               await NotificationService.sendTest();
               if (!mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(

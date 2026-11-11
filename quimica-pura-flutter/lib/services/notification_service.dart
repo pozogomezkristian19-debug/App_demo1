@@ -16,6 +16,8 @@
 //    notificación) se vuelve a programar la tanda;
 //  - el ajuste (activado/apagado) y la hora de la última notificación
 //    programada se guardan en el teléfono.
+//  - cada aviso que se dispara queda también registrado en la bandeja
+//    de Notificaciones (fix4, punto 8), por si el usuario no lo vio.
 //
 // Por qué antes casi no llegaban (la captura de las 7:00 es la única
 // que llegó en horas):
@@ -49,6 +51,7 @@
 // al activar el recordatorio) y de que el sistema no mate la app en
 // segundo plano.
 
+import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
@@ -65,6 +68,7 @@ import '../data/questions.dart';
 import '../widgets/twin_avatars.dart';
 import 'localization.dart';
 import 'nav_requests.dart';
+import 'notification_inbox.dart';
 import 'progress.dart';
 import 'user_prefs.dart';
 
@@ -204,7 +208,11 @@ class NotificationService {
           if (response.payload == reviewPayload ||
               response.actionId == _reviewActionId) {
             NavRequests.requestReview();
-            scheduleNext();
+            // La bandeja anota el aviso que se tocó ANTES de
+            // reprogramar la tanda (que borra las horas pasadas).
+            unawaited(
+              reconcileFiredReminders().then((_) => scheduleNext()),
+            );
           } else if (response.payload == updatePayload) {
             // Recordatorio de actualización: la app se abre y sale el
             // diálogo de actualización (fix3, punto 20).
@@ -218,6 +226,10 @@ class NotificationService {
         },
       );
       _ready = true;
+      // Los avisos que ya se dispararon mientras la app estaba
+      // cerrada quedan registrados en la bandeja ANTES de
+      // reprogramar la tanda (que borraría sus horas).
+      await reconcileFiredReminders();
       if (UserPrefs.reminderOn) {
         await scheduleNext();
       }
@@ -228,11 +240,33 @@ class NotificationService {
     }
   }
 
-  /// Activa los recordatorios: pide el permiso (Android 13+), pide el
-  /// permiso de alarmas exactas (Android 12+, en Android 14+ abre los
-  /// ajustes del sistema), guarda el ajuste y programa la primera
-  /// tanda (el primer aviso llega dentro de la primera hora).
-  static Future<bool> enable() async {
+  /// ¿Está dado el permiso de notificaciones? (Android 13+:
+  /// POST_NOTIFICATIONS; antes: avisos activados.) Solo consulta,
+  /// no pide nada. Si la plataforma no responde, se asume que sí
+  /// (en Android < 13 no hay permiso que pedir).
+  static Future<bool> get isPermissionGranted async {
+    if (!_ready) {
+      final ok = await init();
+      if (!ok) return true;
+    }
+    try {
+      // areNotificationsEnabled vive en la implementación de
+      // Android (no en el plugin ni en la interfaz abstracta): en
+      // Android 13+ dice si POST_NOTIFICATIONS está concedido;
+      // antes, si los avisos están activados.
+      final android = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      return await android?.areNotificationsEnabled() ?? true;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  /// Pide el permiso de notificaciones (muestra el diálogo del
+  /// sistema la primera vez). Devuelve si quedó concedido. Extraído
+  /// de [enable] para reutilizarlo en la pantalla de Recordatorios,
+  /// en el botón de prueba y en el onboarding (fix4, punto 3).
+  static Future<bool> requestPermission() async {
     if (!_ready) {
       final ok = await init();
       if (!ok) return false;
@@ -240,9 +274,38 @@ class NotificationService {
     try {
       final android = _plugin.resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>();
-      final granted =
-          await android?.requestNotificationsPermission() ?? true;
-      if (granted == false) return false;
+      return await android?.requestNotificationsPermission() ?? true;
+    } catch (_) {
+      // En Android < 13 no hay permiso que pedir.
+      return true;
+    }
+  }
+
+  /// Abre los ajustes de notificaciones de la app (el sistema abre
+  /// la pantalla de notificaciones o, si no la hay, los detalles de
+  /// la app). Lo implementa el propio plugin de notificaciones, sin
+  /// dependencia ni código nativo nuevo en MainActivity. Devuelve si
+  /// se pudo abrir.
+  static Future<bool> openNotificationSettings() async {
+    try {
+      return await _plugin.openAppNotificationSettings() ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Activa los recordatorios: pide el permiso (Android 13+), pide el
+  /// permiso de alarmas exactas (Android 12+, en Android 14+ abre los
+  /// ajustes del sistema), guarda el ajuste y programa la primera
+  /// tanda (el primer aviso llega dentro de la primera hora). Si el
+  /// permiso está denegado de forma permanente, el sistema ya no
+  /// muestra su diálogo y devuelve false: la UI ofrece entonces
+  /// "Ir a Ajustes" (fix4, punto 3).
+  static Future<bool> enable() async {
+    if (!await requestPermission()) return false;
+    try {
+      final android = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
       // Alarmas exactas: sin este permiso, Doze retrasa los avisos
       // horas. Si el sistema abre los ajustes y el usuario no lo
       // concede, se sigue con alarmas inexactas (llegan tarde, pero
@@ -328,6 +391,39 @@ class NotificationService {
       return null;
     } catch (_) {
       return null;
+    }
+  }
+
+  /// Registra en la bandeja de Notificaciones los recordatorios de
+  /// estudio que ya se dispararon (fix4, punto 8): cada hora
+  /// programada que ya pasó genera una entrada ("Hora de repasar"),
+  /// por si el usuario no vio el aviso. Se llama al abrir la app
+  /// (antes de reprogramar la tanda, que borraría las horas
+  /// pasadas), al tocar una notificación de repaso y al abrir la
+  /// bandeja. NO reescribe la lista de programadas: el dedup va por
+  /// el id de la entrada (recordatorio-<milisegundos de la hora>),
+  /// así que llamarlo dos veces no duplica nada. [nowOverride] es
+  /// solo para los tests.
+  static Future<void> reconcileFiredReminders({
+    DateTime? nowOverride,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_kNextNotifs);
+      if (raw == null || raw.isEmpty) return;
+      final now = nowOverride ?? DateTime.now();
+      for (final part in raw.split(',')) {
+        final at = DateTime.tryParse(part.trim());
+        if (at == null || !at.isBefore(now)) continue;
+        await NotificationInbox.add(
+          id: 'reminder-${at.millisecondsSinceEpoch}',
+          kind: InboxKind.reminder,
+          title: tr('inboxReminderTitle'),
+          body: tr('inboxReminderBody'),
+        );
+      }
+    } catch (_) {
+      // Registrar en la bandeja es opcional: la app sigue.
     }
   }
 

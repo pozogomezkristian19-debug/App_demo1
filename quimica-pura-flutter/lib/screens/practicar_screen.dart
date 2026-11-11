@@ -6,6 +6,8 @@ import '../data/extra_content.dart';
 import '../data/questions.dart';
 import '../models.dart';
 import '../services/home_widget_service.dart';
+import '../services/accent.dart';
+
 import '../services/localization.dart';
 import '../services/nav_requests.dart';
 import '../services/numeric_answer.dart';
@@ -50,6 +52,7 @@ import '../widgets/how_to_play.dart';
 //   guardado (ver ProgressService.setTrack).
 
 const int _levelSize = 5;
+
 /// Con la nota por puntos, el aprobado es nota5 > 4,0.
 /// En porcentaje guardado (nota5 x 20), el aprobado empieza en 81:
 /// 4,0 exactos son 80 y NO pasan (ver points.dart y la migración en
@@ -83,12 +86,13 @@ const List<String> bachTopics = [
 
 // Color de las tarjetas de Niveles (pregunta del día, repaso,
 // practicar de otra forma): gris claro en modo claro, superficie
-// oscura en modo oscuro. Con el gris fijo, en oscuro el texto del
+// oscura en modo oscuro (verde con Verde, violeta con Violeta:
+// AppAccent.darkCard). Con el gris fijo, en oscuro el texto del
 // tema (blanco) quedaba invisible sobre tarjeta blanca (capturas
 // 2026-11-10, bug 2).
 Color _nivelesCardColor(BuildContext context) =>
     Theme.of(context).brightness == Brightness.dark
-        ? const Color(0xFF122B24)
+        ? AppAccent.darkCard
         : BrandColors.cardGray;
 
 // ---- Camino de niveles (estilo Duolingo / Candy Crush) ----
@@ -97,6 +101,11 @@ Color _nivelesCardColor(BuildContext context) =>
 // mismas, así la línea pasa justo por el centro de cada nodo.
 const double _headerH = 76.0;
 const double _rowH = 100.0;
+// Aire entre el cartel del tema y el primer nodo (fix4, punto 13
+// REVISADO y retoque del halo): la bolita del nivel 1 chocaba con
+// el cartel; con 28 px el halo del nodo actual queda a 26 px del
+// cartel en reposo y a ~21 px en su pulso máximo, y la bolita a 32.
+const double _pathTopGap = 28.0;
 const double _nodeSize = 64.0;
 const double _nodeCenterY = 36.0; // centro del nodo dentro de su fila
 
@@ -129,7 +138,8 @@ const Map<String, LucideIconData> _topicIcons = {
 String bankId(QuizQuestion q) => 'bank:${q.topic}:${q.question}';
 
 class _QuizItem {
-  const _QuizItem({required this.id, required this.question, this.reviewEntryId});
+  const _QuizItem(
+      {required this.id, required this.question, this.reviewEntryId});
 
   final String id; // 'bank:...' o 'gen:...'
   final QuizQuestion question;
@@ -141,11 +151,7 @@ class _QuizItem {
 
 class _QuizSpec {
   const _QuizSpec(
-      {required this.kind,
-      this.topic,
-      this.level = 0,
-      this.reviewOnly,
-      this.groupLabel});
+      {required this.kind, this.topic, this.level = 0, this.reviewOnly});
   final String kind; // 'level', 'review' o 'mixto'
   final String? topic;
   final int level;
@@ -153,10 +159,6 @@ class _QuizSpec {
   /// Repaso inteligente: solo estas entradas (los errores de días
   /// anteriores). null = todos los errores.
   final List<FailedEntry>? reviewOnly;
-
-  /// Etiqueta del grupo que se repasa ("Estequiometría · Nivel 2"),
-  /// para el título del repaso por niveles.
-  final String? groupLabel;
 }
 
 class PracticarScreen extends StatefulWidget {
@@ -304,7 +306,8 @@ class _PracticarScreenState extends State<PracticarScreen> {
     final needsScroll =
         current == null || current.topicIndex > 0 || current.level > 2;
     if (!needsScroll) return;
-    Scrollable.ensureVisible(ctx, alignment: 0.45, duration: const Duration(milliseconds: 400));
+    Scrollable.ensureVisible(ctx,
+        alignment: 0.45, duration: const Duration(milliseconds: 400));
   }
 
   /// Temas y preguntas del banco de la pista actual, en el idioma
@@ -338,8 +341,7 @@ class _PracticarScreenState extends State<PracticarScreen> {
     return byTopic;
   }
 
-  int _levelCount(String topic) =>
-      ProgressService.levelCountForTopic(topic);
+  int _levelCount(String topic) => ProgressService.levelCountForTopic(topic);
 
   /// Resuelve una entrada fallada a su pregunta (banco o generada),
   /// en el idioma activo.
@@ -423,8 +425,8 @@ class _PracticarScreenState extends State<PracticarScreen> {
         }
         if (g != null) {
           if (items.any((it) => it.id == g!.id)) continue;
-          items.add(_QuizItem(
-              id: g.id, question: g.question, reviewEntryId: f.id));
+          items.add(
+              _QuizItem(id: g.id, question: g.question, reviewEntryId: f.id));
           made++;
         } else {
           // Sin generador: otras preguntas del banco del mismo tema
@@ -441,8 +443,8 @@ class _PracticarScreenState extends State<PracticarScreen> {
             final id = bankId(spanishBank[i]);
             if (items.any((it) => it.id == id)) continue;
             // La pregunta se muestra en el idioma activo.
-            items.add(_QuizItem(
-                id: id, question: bank[i], reviewEntryId: f.id));
+            items
+                .add(_QuizItem(id: id, question: bank[i], reviewEntryId: f.id));
             made++;
           }
           break; // sin generador no hay más variantes que probar
@@ -462,8 +464,8 @@ class _PracticarScreenState extends State<PracticarScreen> {
 
   List<_QuizItem> _buildMixedQuestions() {
     final progress = ProgressService.instance;
-    final weakest =
-        progress.weakestTopics(_byTopic.keys.toList()); // del más débil al más fuerte
+    final weakest = progress
+        .weakestTopics(_byTopic.keys.toList()); // del más débil al más fuerte
     final size = ProgressService.track == ProgressService.trackBach
         ? _mixedSizeBach
         : _mixedSize;
@@ -515,7 +517,6 @@ class _PracticarScreenState extends State<PracticarScreen> {
       case 'level':
         return '${localizedTopicName(spec.topic!)} · ${tr('levelWord')} ${spec.level}';
       case 'review':
-        if (spec.groupLabel != null) return spec.groupLabel!;
         return spec.reviewOnly != null
             ? tr('smartReviewTitle')
             : tr('reviewTitle');
@@ -527,8 +528,7 @@ class _PracticarScreenState extends State<PracticarScreen> {
   void _start(_QuizSpec spec) {
     // Sin vidas no se puede empezar un nivel (v6): hay que esperar a
     // mañana, cuando se reponen las 5.
-    if (spec.kind == 'level' &&
-        !ProgressService.instance.canStartLevel) {
+    if (spec.kind == 'level' && !ProgressService.instance.canStartLevel) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(tr('livesEmptyBody')),
@@ -603,17 +603,6 @@ class _PracticarScreenState extends State<PracticarScreen> {
     _exitQuiz();
   }
 
-  /// Empieza el repaso de un grupo (tema + nivel) con variantes.
-  void _startReviewGroup(
-      String topic, int level, List<FailedEntry> entries) {
-    _start(_QuizSpec(
-      kind: 'review',
-      reviewOnly: entries,
-      groupLabel:
-          tr('reviewLevelTitle').replaceFirst('%s', localizedTopicName(topic)).replaceFirst('%d', '$level'),
-    ));
-  }
-
   void _repeat() {
     if (_spec != null) _start(_spec!);
   }
@@ -622,8 +611,7 @@ class _PracticarScreenState extends State<PracticarScreen> {
     final progress = ProgressService.instance;
     // Desbloqueado cuando el Nivel 1 está pasado en todos los temas:
     // pasar el Nivel 1 sube el nivel desbloqueado a 2.
-    return _byTopic.keys
-        .every((topic) => progress.unlockedLevel(topic) >= 2);
+    return _byTopic.keys.every((topic) => progress.unlockedLevel(topic) >= 2);
   }
 
   List<String> _missingLevel1Topics() {
@@ -650,9 +638,6 @@ class _PracticarScreenState extends State<PracticarScreen> {
     final mixedUnlocked = _mixedUnlocked();
     final level1Done = topics.length - _missingLevel1Topics().length;
     final current = _firstUnpassed();
-    // Compañero del día, una sola vez: el banner y el nodo actual
-    // usan el mismo.
-    final companion = companionOfTheDay();
     final passedCount = _passedLevelCount();
     final totalCount = _totalLevelCount();
     if (!_scrolledToCurrent) {
@@ -708,33 +693,20 @@ class _PracticarScreenState extends State<PracticarScreen> {
           // racha/meta) ya NO está en Niveles: vive en Cuenta (fix 3),
           // así el camino empieza más arriba y se ve más.
           const _ReminderCard(),
-          // Compañero del día (v6): va rotando, uno cada día.
+          // Pregunta del día (fix4, punto 13 REVISADO): la fila lado
+          // a lado NO — vuelve la tarjeta ANCHA de antes (título,
+          // puntos, botón "Responder"), pero con la FOTO del
+          // acompañante del día DENTRO de la tarjeta. El banner
+          // "Hoy te acompaña…" ya no sale en Niveles (el acompañante
+          // sigue en su avatar junto al nodo y en los demás sitios).
+          // "Practicar de otra forma" queda debajo, como antes.
+          // El hueco de 10 px de debajo de la tarjeta vive DENTRO
+          // de la tarjeta (fix4, retoque final): al contestarla
+          // desaparece sin dejar hueco y todo sube.
           FadeSlideIn(
-            child: Card(
-              child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                child: Row(
-                  children: [
-                    CompanionAvatar(companion: companion, size: 36),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        tr(companionOfDayKey(companion)),
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+            child: _QuestionOfTheDayChip(
+                onChanged: () => setState(() {})),
           ),
-          const SizedBox(height: 10),
-          FadeSlideIn(
-            delay: const Duration(milliseconds: 80),
-            child: _QuestionOfTheDayChip(onChanged: () => setState(() {})),
-          ),
-          const SizedBox(height: 10),
           // Repaso inteligente: errores de días anteriores que resurgen.
           if (progress.dueFailed().isNotEmpty)
             Card(
@@ -753,17 +725,16 @@ class _PracticarScreenState extends State<PracticarScreen> {
               ),
             ),
           if (progress.dueFailed().isNotEmpty) const SizedBox(height: 8),
-          // Repaso de errores POR NIVEL (v6), solo si hay algo que
-          // repasar: cada grupo es un nivel de un tema, con variantes.
-          if (progress.failedCount > 0)
-            _ReviewGroupsCard(onGroupTap: _startReviewGroup),
-          if (progress.failedCount > 0) const SizedBox(height: 8),
+          // La tarjeta "Repasar mis errores" POR NIVEL ya NO está en
+          // Niveles (fix4, punto 4): con un solo error empujaba el
+          // camino de niveles muy abajo. El repaso sigue en el chip
+          // de la barra superior y en "Mis errores" de Cuenta (los
+          // dos abren el repaso general, sin grupos por nivel).
           // Practicar de otra forma: examen con tiempo y
           // reto. Antes solo se llegaba desde la búsqueda, por eso
           // casi nadie los veía: ahora están aquí, en Niveles.
           _OtherWaysSection(
-            onOpen: widget.onOpenScreen ??
-                (_) {},
+            onOpen: widget.onOpenScreen ?? (_) {},
           ),
           const SizedBox(height: 20),
           for (var i = 0; i < topics.length; i++)
@@ -772,10 +743,12 @@ class _PracticarScreenState extends State<PracticarScreen> {
               bankCount: byTopic[topics[i]]!.length,
               levelCount: _levelCount(topics[i]),
               locked: !_topicUnlocked(i),
-              currentLevel:
-                  current != null && current.topicIndex == i ? current.level : 0,
-              currentKey:
-                  current != null && current.topicIndex == i ? _currentKey : null,
+              currentLevel: current != null && current.topicIndex == i
+                  ? current.level
+                  : 0,
+              currentKey: current != null && current.topicIndex == i
+                  ? _currentKey
+                  : null,
               onLevelTap: (level, unlocked) {
                 if (!_topicUnlocked(i)) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -784,8 +757,8 @@ class _PracticarScreenState extends State<PracticarScreen> {
                   return;
                 }
                 if (unlocked) {
-                  _start(_QuizSpec(
-                      kind: 'level', topic: topics[i], level: level));
+                  _start(
+                      _QuizSpec(kind: 'level', topic: topics[i], level: level));
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
@@ -824,7 +797,10 @@ class _PracticarScreenState extends State<PracticarScreen> {
           Text(
             '$bankTotal ${tr('questionsWord')} ${tr('bankWord')} + ${tr('newWord')}',
             style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+              color: Theme.of(context)
+                  .colorScheme
+                  .onSurface
+                  .withValues(alpha: 0.7),
             ),
           ),
         ],
@@ -863,8 +839,7 @@ class _OtherWaysSection extends StatelessWidget {
               onOpen(key);
             },
             child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(vertical: 14, horizontal: 6),
+              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 6),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -883,8 +858,8 @@ class _OtherWaysSection extends StatelessWidget {
                     // Icono 3D (fix3, punto 6): relleno con el
                     // degradado del acento + brillito, como el
                     // corazón de las vidas.
-                    child: LucideIcon(icon,
-                        size: 28, color: accent, threeD: true),
+                    child:
+                        LucideIcon(icon, size: 28, color: accent, threeD: true),
                   ),
                   const SizedBox(height: 8),
                   // Título DEBAJO, flexible (fix2, item 1): mínimo
@@ -959,7 +934,7 @@ class _PathPainter extends CustomPainter {
     final centers = <Offset>[
       for (var i = 0; i < levelCount; i++)
         Offset(size.width / 2 + _pathOffsets[i % _pathOffsets.length],
-            _headerH + i * _rowH + _nodeCenterY),
+            _headerH + _pathTopGap + i * _rowH + _nodeCenterY),
     ];
     // Curva suave que pasa por los centros: cada tramo va del punto
     // anterior al punto medio con el siguiente.
@@ -979,8 +954,8 @@ class _PathPainter extends CustomPainter {
       while (distance < metric.length) {
         final len = min(12.0, metric.length - distance);
         final mid = metric.getTangentForOffset(distance + len / 2)?.position;
-        final outside = mid != null &&
-            centers.every((c) => (mid - c).distance > keepOut);
+        final outside =
+            mid != null && centers.every((c) => (mid - c).distance > keepOut);
         if (outside) {
           dashed.addPath(
               metric.extractPath(distance, distance + len), Offset.zero);
@@ -1041,7 +1016,7 @@ class _TopicPathSection extends StatelessWidget {
     // Cabecera y camino en el color de acento (fix2, item 12; gris
     // si el tema está bloqueado): todos los temas comparten el color.
     return SizedBox(
-      height: _headerH + levelCount * _rowH,
+      height: _headerH + _pathTopGap + levelCount * _rowH,
       child: Stack(
         children: [
           Positioned.fill(
@@ -1060,9 +1035,7 @@ class _TopicPathSection extends StatelessWidget {
                 height: _headerH,
                 child: Container(
                   decoration: BoxDecoration(
-                    color: locked
-                        ? const Color(0xFFE5E7EB)
-                        : scheme.primary,
+                    color: locked ? const Color(0xFFE5E7EB) : scheme.primary,
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
@@ -1081,7 +1054,8 @@ class _TopicPathSection extends StatelessWidget {
                         child: LucideIcon(
                             locked
                                 ? LucideIcons.lock
-                                : (_topicIcons[topic] ?? LucideIcons.circleHelp),
+                                : (_topicIcons[topic] ??
+                                    LucideIcons.circleHelp),
                             color: locked
                                 ? const Color(0xFF9CA3AF)
                                 : scheme.primary),
@@ -1109,8 +1083,7 @@ class _TopicPathSection extends StatelessWidget {
                                     fontSize: 16,
                                     fontWeight: FontWeight.w800,
                                     color: locked
-                                        ? BrandColors.ink
-                                            .withValues(alpha: 0.6)
+                                        ? BrandColors.ink.withValues(alpha: 0.6)
                                         : Colors.white),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis),
@@ -1134,6 +1107,10 @@ class _TopicPathSection extends StatelessWidget {
                   ),
                 ),
               ),
+              // Aire entre el cartel y el primer nodo (fix4, punto 13
+              // REVISADO): sin esto la bolita del nivel 1 tocaba el
+              // cartel. El pintor usa el mismo hueco (_pathTopGap).
+              const SizedBox(height: _pathTopGap),
               for (var level = 1; level <= levelCount; level++)
                 _LevelNodeRow(
                   key: level == currentLevel ? currentKey : null,
@@ -1219,22 +1196,20 @@ class _LevelNodeRowState extends State<_LevelNodeRow>
     final best = progress.bestScore('level:${widget.topic}:${widget.level}');
     final passed = best >= _passPercent;
     // Niveles sin preguntas del banco: solo preguntas nuevas generadas.
-    final generatedOnly =
-        (widget.level - 1) * _levelSize >= widget.bankCount;
+    final generatedOnly = (widget.level - 1) * _levelSize >= widget.bankCount;
     final offset = _pathOffsets[(widget.level - 1) % _pathOffsets.length];
     final Color bg;
     final Widget inner;
     if (passed) {
       // Nivel pasado: color de acento con palomita blanca.
       bg = scheme.primary;
-      inner = const LucideIcon(LucideIcons.check, color: Colors.white, size: 34);
+      inner =
+          const LucideIcon(LucideIcons.check, color: Colors.white, size: 34);
     } else if (widget.unlocked) {
       bg = scheme.primary;
       inner = Text('${widget.level}',
           style: const TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.bold,
-              color: Colors.white));
+              fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white));
     } else {
       // Nodo bloqueado: gris claro con candado gris.
       bg = const Color(0xFFE5E7EB);
@@ -1246,7 +1221,15 @@ class _LevelNodeRowState extends State<_LevelNodeRow>
       child: LayoutBuilder(
         builder: (context, constraints) {
           final cx = constraints.maxWidth / 2 + offset;
+          // Sin recorte (Clip.none): el halo del nodo actual mide
+          // 76 px centrado en el nodo (36 px arriba y abajo) y en
+          // su pulso máximo llega a 85 px, así que sobresale ~7 px
+          // por encima de la fila; con el recorte por defecto del
+          // Stack salía cortado en plano por arriba (la bolita no
+          // se veía completa). El hueco _pathTopGap (28 px) lo
+          // absorbe sin tocar el cartel del tema.
           return Stack(
+            clipBehavior: Clip.none,
             children: [
               if (widget.isCurrent)
                 Positioned(
@@ -1282,8 +1265,8 @@ class _LevelNodeRowState extends State<_LevelNodeRow>
                       ? cx - _nodeSize / 2 - 72
                       : cx + _nodeSize / 2 + 32,
                   top: _nodeCenterY - 20,
-                  child: CompanionAvatar(
-                      companion: companionOfTheDay(), size: 40),
+                  child:
+                      CompanionAvatar(companion: companionOfTheDay(), size: 40),
                 ),
               Positioned(
                 left: cx - _nodeSize / 2,
@@ -1334,9 +1317,8 @@ class _LevelNodeRowState extends State<_LevelNodeRow>
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 12,
-                    fontWeight: widget.isCurrent
-                        ? FontWeight.bold
-                        : FontWeight.normal,
+                    fontWeight:
+                        widget.isCurrent ? FontWeight.bold : FontWeight.normal,
                     color: widget.isCurrent
                         ? scheme.primary
                         : Theme.of(context)
@@ -1414,9 +1396,7 @@ class _FinalExamSection extends StatelessWidget {
             height: 84,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: unlocked
-                  ? scheme.primary
-                  : const Color(0xFFE5E7EB),
+              color: unlocked ? scheme.primary : const Color(0xFFE5E7EB),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.15),
@@ -1429,9 +1409,7 @@ class _FinalExamSection extends StatelessWidget {
             child: LucideIcon(
               unlocked ? LucideIcons.trophy : LucideIcons.lock,
               size: 44,
-              color: unlocked
-                  ? Colors.white
-                  : const Color(0xFF9CA3AF),
+              color: unlocked ? Colors.white : const Color(0xFF9CA3AF),
             ),
           ),
         ),
@@ -1448,8 +1426,7 @@ class _FinalExamSection extends StatelessWidget {
         if (!unlocked)
           Text(
             tr('mixedLocked'),
-            style: TextStyle(
-                color: scheme.onSurface.withValues(alpha: 0.7)),
+            style: TextStyle(color: scheme.onSurface.withValues(alpha: 0.7)),
             textAlign: TextAlign.center,
           ),
       ],
@@ -1495,10 +1472,12 @@ class _ReminderCard extends StatelessWidget {
   }
 }
 
-/// Pregunta del día, compacta (v6): una ficha pequeña con su valor en
-/// puntos y un botón que abre el diálogo con la pregunta. Acertar suma
-/// los puntos; fallar RESTA EL DOBLE. Al contestarla, la ficha queda
-/// marcada por hoy.
+/// Al contestarla, la ficha DESAPARECE de Niveles hasta el día
+/// siguiente (regla v6, restaurada en el retoque final de la #4):
+/// no se queda en estado "Ya respondiste" y todo lo de abajo sube.
+/// La foto del acompañante del día va DENTRO de la tarjeta, a la
+/// izquierda del título (fix4, punto 13 REVISADO): ya no hay banner
+/// "Hoy te acompaña…" en Niveles.
 class _QuestionOfTheDayChip extends StatefulWidget {
   const _QuestionOfTheDayChip({required this.onChanged});
   final VoidCallback onChanged;
@@ -1541,8 +1520,8 @@ class _QuestionOfTheDayChipState extends State<_QuestionOfTheDayChip> {
                 children: [
                   MascotBubble(
                     companion: companionOfTheDay(),
-                    text: tr(mascotLineKey(companionOfTheDay(),
-                        MascotLine.ask, DateTime.now().day)),
+                    text: tr(mascotLineKey(companionOfTheDay(), MascotLine.ask,
+                        DateTime.now().day)),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -1623,9 +1602,7 @@ class _QuestionOfTheDayChipState extends State<_QuestionOfTheDayChip> {
                     mood: wasCorrect ? TwinMood.happy : TwinMood.soft,
                     text: tr(mascotLineKey(
                         companionOfTheDay(),
-                        wasCorrect
-                            ? MascotLine.praise
-                            : MascotLine.console,
+                        wasCorrect ? MascotLine.praise : MascotLine.console,
                         DateTime.now().day)),
                   ),
                   const SizedBox(height: 12),
@@ -1652,66 +1629,92 @@ class _QuestionOfTheDayChipState extends State<_QuestionOfTheDayChip> {
 
   @override
   Widget build(BuildContext context) {
+    // Regla v6, restaurada (fix4, retoque final de Kristian): una
+    // vez contestada, la tarjeta DESAPARECE de Niveles hasta el día
+    // siguiente — no se queda en estado "Ya respondiste". El hueco
+    // de 10 px de debajo va dentro de la tarjeta, para que al
+    // desaparecer no quede un hueco vacío y todo lo de abajo
+    // (Practicar de otra forma, el camino) suba.
+    if (_answered) return const SizedBox.shrink();
     final scheme = Theme.of(context).colorScheme;
-    // Tarjeta reequilibrada (fix3): el título ya no comparte su fila
-    // con el botón "Responder", que lo apretaba hasta partirlo en dos
-    // líneas ("Pregunta del / día"). Ahora el título tiene todo el
-    // ancho (icono aparte) y cabe en UNA línea en los 6 idiomas, y
-    // el botón va debajo, a todo lo ancho, estilo Duolingo. Nada se
-    // recorta: ni el título, ni el botón, ni el subtítulo.
-    return Card(
-      color: _nivelesCardColor(context),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    // Ancha (fix4, punto 13 REVISADO): a todo lo ancho, con la foto
+    // del acompañante del día a la izquierda del título y los puntos
+    // (la foto es de 44 px, igual que el avatar del nodo). El botón
+    // "Responder" va debajo, a todo lo ancho, y NO comparte fila con
+    // el título (la lección fix3: compartir fila lo apretaba hasta
+    // partirlo en dos).
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Card(
+          color: _nivelesCardColor(context),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                LucideIcon(LucideIcons.calendar,
-                    size: 22, color: scheme.primary),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(tr('qotdTitle'),
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 16),
-                          maxLines: 1),
-                      const SizedBox(height: 2),
-                      Text(_answered
-                          ? tr('qotdDone')
-                          : tr('qotdWorth')
-                              .replaceFirst('%d', '$_value')
-                              .replaceFirst('%d', '${_value * 2}')),
-                    ],
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CompanionAvatar(
+                        companion: companionOfTheDay(), size: 44),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              LucideIcon(LucideIcons.calendar,
+                                  size: 18, color: scheme.primary),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(tr('qotdTitle'),
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            tr('qotdWorth')
+                                .replaceFirst('%d', '$_value')
+                                .replaceFirst('%d', '${_value * 2}'),
+                            style: const TextStyle(fontSize: 13),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      textStyle: const TextStyle(
+                          fontSize: 15, fontFamily: 'Roboto'),
+                    ),
+                    onPressed: () async {
+                      await _showDialog();
+                      HomeWidgetService.update();
+                    },
+                    child: Text(tr('qotdAnswer')),
                   ),
                 ),
-                if (_answered)
-                  LucideIcon(LucideIcons.circleCheck,
-                      color: scheme.primary, size: 24),
               ],
             ),
-            if (!_answered) ...[
-              const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  onPressed: () async {
-                    await _showDialog();
-                    HomeWidgetService.update();
-                  },
-                  child: Text(tr('qotdAnswer')),
-                ),
-              ),
-            ],
-          ],
+          ),
         ),
-      ),
+        const SizedBox(height: 10),
+      ],
     );
   }
 }
@@ -1719,67 +1722,11 @@ class _QuestionOfTheDayChipState extends State<_QuestionOfTheDayChip> {
 /// Repaso POR NIVEL (v6): los errores agrupados por tema y nivel.
 /// Cada grupo se repasa con variantes (mismo concepto, otros datos) y
 /// hacen falta 3 aciertos seguidos para darlo por superado.
-class _ReviewGroupsCard extends StatelessWidget {
-  const _ReviewGroupsCard({required this.onGroupTap});
-
-  final void Function(String topic, int level, List<FailedEntry> entries)
-      onGroupTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = ProgressService.instance;
-    final scheme = Theme.of(context).colorScheme;
-    final groups = p.failedGroups();
-    return Card(
-      color: _nivelesCardColor(context),
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ListTile(
-              leading: LucideIcon(LucideIcons.rotateCcw,
-                  size: 32, color: scheme.primary),
-              title: Text(tr('reviewTitle'),
-                  style: const TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text(
-                  '${p.failedCount} ${tr('reviewQuestions')} · ${tr('reviewVariants')}'),
-            ),
-            Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: MascotBubble(
-                companion: companionForTurn(p.failedCount),
-                mood: TwinMood.soft,
-                size: 44,
-                text: tr(mascotLineKey(companionForTurn(p.failedCount),
-                    MascotLine.console, p.failedCount)),
-              ),
-            ),
-            for (final g in groups)
-              ListTile(
-                leading: const LucideIcon(LucideIcons.graduationCap, size: 20),
-                title: Text(g.level > 0
-                    ? '${localizedTopicName(g.topic)} · ${tr('levelWord')} ${g.level}'
-                    : localizedTopicName(g.topic)),
-                subtitle:
-                    Text('${g.entries.length} ${tr('reviewQuestions')}'),
-                trailing: const LucideIcon(LucideIcons.chevronRight, size: 18),
-                onTap: () {
-                  SoundService.tap();
-                  onGroupTap(g.topic, g.level, g.entries);
-                },
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _QuizState {
   _QuizState(
-      {required this.testId, required this.title, required List<_QuizItem> items})
+      {required this.testId,
+      required this.title,
+      required List<_QuizItem> items})
       : items = List<_QuizItem>.of(items);
 
   final String testId;
@@ -1860,10 +1807,18 @@ class _QuizRunnerState extends State<_QuizRunner> {
     } else {
       SoundService.wrong();
     }
-    // Puntos (v6): cada respuesta suma o resta según la dificultad.
+    // Puntos (v6; inmediatos desde la fix4, punto 5): cada respuesta
+    // suma o resta según la dificultad, y los puntos van al saldo
+    // total EN EL MOMENTO de contestar — no al terminar el quiz.
+    // Así, salir de un repaso o de un examen mixto a mitad no pierde
+    // los puntos ganados hasta ahí (en los niveles, salir a mitad
+    // sigue costando 1 vida, pero los puntos se quedan igual).
     _correct.add(correct);
-    _quizPoints +=
-        correct ? pointsForCorrect(_q.difficulty) : pointsForWrong(_q.difficulty);
+    final delta = correct
+        ? pointsForCorrect(_q.difficulty)
+        : pointsForWrong(_q.difficulty);
+    progress.addPoints(delta);
+    _quizPoints += delta;
     if (widget.spec.kind == 'review' && _item.reviewEntryId != null) {
       // Repaso de variantes: la respuesta suma racha de la entrada
       // original (3 seguidos = superada). Fallar no crea un error
@@ -1897,7 +1852,7 @@ class _QuizRunnerState extends State<_QuizRunner> {
   /// Respuesta de una pregunta de cálculo (fix3, punto 7): el valor
   /// tecleado en el teclado numérico se traduce al índice de opción
   /// que le corresponde y pasa por el mismo `_answer` de siempre, con
-  /// los mismos puntos, vidas y repaso de errores (incluida la racha
+  /// los mismos puntos y repaso de errores (incluida la racha
   /// de variantes del repaso).
   void _answerNumeric(double value) {
     if (_selected != null) return;
@@ -1907,9 +1862,9 @@ class _QuizRunnerState extends State<_QuizRunner> {
 
   void _next() {
     if (_index + 1 >= widget.quiz.items.length) {
-      // Los puntos del quiz van al saldo total (v6).
+      // Los puntos ya se sumaron al saldo total al contestar cada
+      // pregunta (fix4, punto 5): aquí no se añade nada más.
       final progress = ProgressService.instance;
-      progress.addPoints(_quizPoints);
       // Nota por puntos (v6): cada pregunta vale según su dificultad
       // (fácil 4, media 5, difícil 6) y se pasa con nota > 4,0.
       final nota5 = levelScore5(
@@ -1956,8 +1911,7 @@ class _QuizRunnerState extends State<_QuizRunner> {
         _correct,
       );
       final passedLevel = isLevel && levelPassed(nota5);
-      final remaining =
-          ProgressService.instance.failedCount;
+      final remaining = ProgressService.instance.failedCount;
       // Celebración al pasar de nivel: confeti cayendo sobre el
       // resultado durante unos segundos.
       final resultBody = Padding(
@@ -1983,8 +1937,8 @@ class _QuizRunnerState extends State<_QuizRunner> {
             if (isLevel)
               Text(
                 'Nota: ${nota5.toStringAsFixed(1)} / 5',
-                style: const TextStyle(
-                    fontSize: 18, fontWeight: FontWeight.bold),
+                style:
+                    const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 textAlign: TextAlign.center,
               ),
             Text(
@@ -2024,10 +1978,8 @@ class _QuizRunnerState extends State<_QuizRunner> {
             MascotBubble(
               companion: companionForTurn(total - 1),
               mood: passedLevel ? TwinMood.happy : TwinMood.soft,
-              text: tr(mascotLineKey(
-                  companionForTurn(total - 1),
-                  passedLevel ? MascotLine.praise : MascotLine.console,
-                  total)),
+              text: tr(mascotLineKey(companionForTurn(total - 1),
+                  passedLevel ? MascotLine.praise : MascotLine.console, total)),
             ),
             const SizedBox(height: 24),
             ElevatedButton(
@@ -2086,13 +2038,12 @@ class _QuizRunnerState extends State<_QuizRunner> {
                   ? TwinMood.happy
                   : TwinMood.soft),
           text: tr(_selected == null
-              ? mascotLineKey(
-                  companionForTurn(_index), MascotLine.ask, _index)
+              ? mascotLineKey(companionForTurn(_index), MascotLine.ask, _index)
               : (_order[_selected!] == _q.answer
-                  ? mascotLineKey(companionForTurn(_index),
-                      MascotLine.praise, _index)
-                  : mascotLineKey(companionForTurn(_index),
-                      MascotLine.console, _index))),
+                  ? mascotLineKey(
+                      companionForTurn(_index), MascotLine.praise, _index)
+                  : mascotLineKey(
+                      companionForTurn(_index), MascotLine.console, _index))),
         ),
         const SizedBox(height: 16),
         Text(_q.question,
@@ -2110,35 +2061,35 @@ class _QuizRunnerState extends State<_QuizRunner> {
           )
         else
           for (var i = 0; i < 4; i++)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _selected == null
-                    ? Theme.of(context).colorScheme.surfaceContainerHighest
-                    : (_order[i] == _q.answer
-                        ? scheme.primary
-                        : (_selected == i
-                            ? Colors.redAccent
-                            : Theme.of(context)
-                                .colorScheme
-                                .surfaceContainerHighest)),
-                // El texto SIEMPRE legible (capturas 2026-11-10):
-                // antes heredaba el blanco del tema y sobre el
-                // fondo gris claro no se leía nada. Sobre fondo
-                // claro va tinta oscura; sobre teal/rojo, blanco.
-                foregroundColor: _selected != null &&
-                        (_order[i] == _q.answer || _selected == i)
-                    ? Colors.white
-                    : Theme.of(context).colorScheme.onSurface,
-                alignment: Alignment.centerLeft,
-                padding: const EdgeInsets.all(14),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _selected == null
+                      ? Theme.of(context).colorScheme.surfaceContainerHighest
+                      : (_order[i] == _q.answer
+                          ? scheme.primary
+                          : (_selected == i
+                              ? Colors.redAccent
+                              : Theme.of(context)
+                                  .colorScheme
+                                  .surfaceContainerHighest)),
+                  // El texto SIEMPRE legible (capturas 2026-11-10):
+                  // antes heredaba el blanco del tema y sobre el
+                  // fondo gris claro no se leía nada. Sobre fondo
+                  // claro va tinta oscura; sobre teal/rojo, blanco.
+                  foregroundColor: _selected != null &&
+                          (_order[i] == _q.answer || _selected == i)
+                      ? Colors.white
+                      : Theme.of(context).colorScheme.onSurface,
+                  alignment: Alignment.centerLeft,
+                  padding: const EdgeInsets.all(14),
+                ),
+                onPressed: () => _answer(i),
+                child: Text(_q.options[_order[i]],
+                    style: const TextStyle(fontSize: 16)),
               ),
-              onPressed: () => _answer(i),
-              child: Text(_q.options[_order[i]],
-                  style: const TextStyle(fontSize: 16)),
             ),
-          ),
         if (_selected != null) ...[
           const SizedBox(height: 8),
           Card(
@@ -2165,9 +2116,8 @@ class _QuizRunnerState extends State<_QuizRunner> {
           const SizedBox(height: 12),
           ElevatedButton(
             onPressed: _next,
-            child: Text(_index + 1 >= total
-                ? tr('quizResult')
-                : tr('quizNext')),
+            child:
+                Text(_index + 1 >= total ? tr('quizResult') : tr('quizNext')),
           ),
         ],
       ],

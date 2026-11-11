@@ -1,6 +1,11 @@
 // Quiz de la tabla periódica (v5): adivina el elemento por su símbolo
 // o el símbolo por el nombre. 10 rondas, 4 opciones. Se abre desde
 // Tabla y desde la búsqueda.
+// Puntos (fix4, punto 5): cada respuesta suma o resta puntos de
+// dificultad FÁCIL (+3/−5): reconocer un símbolo o un nombre es
+// recordar un solo dato, lo más fácil que hay. No hay vidas en
+// juego: salir a mitad no cuesta vida, solo termina el quiz y los
+// puntos ganados hasta ahí se quedan.
 
 import 'dart:math';
 
@@ -10,6 +15,7 @@ import '../data/i18n/content_i18n.dart';
 import '../data/periodic_table.dart';
 import '../models.dart';
 import '../services/localization.dart';
+import '../services/points.dart';
 import '../services/progress.dart';
 
 class TableQuizScreen extends StatefulWidget {
@@ -24,6 +30,9 @@ class _TableQuizScreenState extends State<TableQuizScreen> {
   late List<List<ChemicalElement>> _options;
   int _index = 0;
   int _score = 0;
+  // Puntos del quiz (fix4, punto 5): fáciles, +3 por acierto y −5
+  // por fallo (ver la nota del encabezado del archivo).
+  int _points = 0;
   int? _selected;
   bool _finished = false;
 
@@ -45,6 +54,7 @@ class _TableQuizScreenState extends State<TableQuizScreen> {
     }).toList();
     _index = 0;
     _score = 0;
+    _points = 0;
     _selected = null;
     _finished = false;
   }
@@ -53,8 +63,13 @@ class _TableQuizScreenState extends State<TableQuizScreen> {
     if (_selected != null) return;
     final correct = _options[_index][i] == _rounds[_index];
     ProgressService.instance.recordAnswer('tabla', correct);
+    // Puntos (fix4, punto 5): dificultad fácil, +3/−5.
+    final delta =
+        correct ? pointsForCorrect(1) : pointsForWrong(1);
+    ProgressService.instance.addPoints(delta);
     setState(() {
       _selected = i;
+      _points += delta;
       if (correct) _score++;
     });
   }
@@ -70,9 +85,10 @@ class _TableQuizScreenState extends State<TableQuizScreen> {
     }
   }
 
-  /// Salir en medio del quiz (fix2, ronda 2): cuesta 1 vida, igual
-  /// que abandonar un nivel, así que se pide confirmación antes de
-  /// salir. Es el mismo aviso del quiz de Niveles.
+  /// Salir en medio del quiz (fix2, ronda 2; aviso sin vidas en la
+  /// fix4, punto 5): las vidas son solo de los niveles, así que
+  /// salir aquí no cuesta nada: termina el quiz y los puntos
+  /// ganados hasta ahí se quedan. Se pide confirmación antes de salir.
   void _requestExit() {
     if (_finished) {
       Navigator.of(context).pop();
@@ -81,8 +97,8 @@ class _TableQuizScreenState extends State<TableQuizScreen> {
     showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(tr('exitLevelTitle')),
-        content: Text(tr('exitLevelBody')),
+        title: Text(tr('exitNoLivesTitle')),
+        content: Text(tr('exitNoLivesBody')),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
@@ -91,10 +107,9 @@ class _TableQuizScreenState extends State<TableQuizScreen> {
           TextButton(
             onPressed: () {
               Navigator.of(dialogContext).pop();
-              ProgressService.instance.loseLifeOnAbandon();
               Navigator.of(context).pop();
             },
-            child: Text(tr('exitLevelLeave')),
+            child: Text(tr('exitNoLivesLeave')),
           ),
         ],
       ),
@@ -105,9 +120,10 @@ class _TableQuizScreenState extends State<TableQuizScreen> {
   Widget build(BuildContext context) {
     // Bloqueo de sesión (fix2, ronda 2): mientras el quiz está en
     // curso, ni el botón atrás ni la flecha de la barra pueden
-    // cerrarlo directamente: muestran el aviso de Salir con pérdida
-    // de vida. Terminado, se sale libre. Este quiz no tiene botón
-    // Salir propio: la única salida es la flecha o el botón atrás.
+    // cerrarlo directamente: muestran el aviso de Salir sin pérdida
+    // de vida (las vidas son solo de los niveles, fix4, punto 5).
+    // Terminado, se sale libre. Este quiz no tiene botón Salir
+    // propio: la única salida es la flecha o el botón atrás.
     return PopScope(
       canPop: _finished,
       onPopInvokedWithResult: (didPop, _) {
@@ -135,6 +151,12 @@ class _TableQuizScreenState extends State<TableQuizScreen> {
                           fontSize: 48,
                           fontWeight: FontWeight.bold,
                           color: Colors.tealAccent),
+                      textAlign: TextAlign.center),
+                  const SizedBox(height: 4),
+                  Text(
+                      '${tr('pointsWord')}: ${_points > 0 ? '+$_points' : '$_points'}',
+                      style: const TextStyle(
+                          fontSize: 22, fontWeight: FontWeight.bold),
                       textAlign: TextAlign.center),
                   const SizedBox(height: 24),
                   ElevatedButton(
@@ -172,6 +194,11 @@ class _TableQuizScreenState extends State<TableQuizScreen> {
                       .replaceFirst('%d', '$_score'),
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
+                const SizedBox(height: 4),
+                Text(
+                    '${tr('pointsWord')}: ${_points > 0 ? '+$_points' : '$_points'}',
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 12),
                 Card(
                   color: Theme.of(context)

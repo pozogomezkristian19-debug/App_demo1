@@ -7,6 +7,8 @@ import '../widgets/brand_logo.dart';
 import '../widgets/lucide_icons.dart';
 
 import '../services/localization.dart';
+import '../services/accent.dart';
+
 import 'lab_quiz_screen.dart';
 import 'lab_sim_screen.dart';
 import 'topic_detail_screen.dart';
@@ -31,7 +33,7 @@ class LabScreen extends StatelessWidget {
       child: Card(
         margin: EdgeInsets.zero,
         color: Theme.of(context).brightness == Brightness.dark
-            ? const Color(0xFF122B24)
+            ? AppAccent.darkCard
             : BrandColors.cardGray,
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
@@ -51,8 +53,8 @@ class LabScreen extends StatelessWidget {
                   alignment: Alignment.center,
                   // Icono 3D (fix3, punto 6): degradado del acento
                   // en el trazo + brillito, como el corazón.
-                  child: LucideIcon(icon,
-                      size: 28, color: accent, threeD: true),
+                  child:
+                      LucideIcon(icon, size: 28, color: accent, threeD: true),
                 ),
                 const SizedBox(height: 8),
                 ConstrainedBox(
@@ -95,8 +97,7 @@ class LabScreen extends StatelessWidget {
                     label: tr('labSimTitle'),
                     onTap: () {
                       Navigator.of(context).push(
-                        MaterialPageRoute(
-                            builder: (_) => const LabSimScreen()),
+                        MaterialPageRoute(builder: (_) => const LabSimScreen()),
                       );
                     },
                   ),
@@ -107,8 +108,7 @@ class LabScreen extends StatelessWidget {
                     label: tr('labQuizButton'),
                     onTap: () {
                       Navigator.of(context).push(
-                        MaterialPageRoute(
-                            builder: (_) => const LabQuizPage()),
+                        MaterialPageRoute(builder: (_) => const LabQuizPage()),
                       );
                     },
                   ),

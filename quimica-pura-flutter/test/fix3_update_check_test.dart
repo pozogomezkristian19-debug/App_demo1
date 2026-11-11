@@ -5,8 +5,9 @@
 // sistema (MethodChannel), diálogo (fondo blanco, teal, "Actualizar
 // ahora" / "Más tarde") y recordatorio por notificación ("Más tarde"
 // programa el aviso de mañana; una vez al día como máximo).
-// Punto 20b: la comprobación es cada 4 horas (al abrir y al volver a
-// primer plano), no una vez al día; "Más tarde" sigue sin repetirse.
+// Punto 20b (cadencia reescrita en la fix4, punto 7): la comprobación
+// es en CADA apertura y al volver a primer plano (nada de esperar
+// 4 horas); "Más tarde" sigue sin repetirse.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -14,18 +15,21 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:quimica_pura/screens/account_screen.dart';
+import 'package:quimica_pura/services/progress.dart';
 import 'package:quimica_pura/services/update_check.dart';
+import 'package:quimica_pura/services/user_prefs.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const _newerJson =
-    '{"latest":"6.1","apk_url":"https://example.com/app.apk","notes":"Novedades de la versión","force":false}';
+    '{"latest":"6.2","apk_url":"https://example.com/app.apk","notes":"Novedades de la versión","force":false}';
 const _forcedJson =
-    '{"latest":"6.1","apk_url":"https://example.com/app.apk","notes":"Actualización obligatoria","force":true}';
+    '{"latest":"6.2","apk_url":"https://example.com/app.apk","notes":"Actualización obligatoria","force":true}';
 
 final _now = DateTime(2026, 11, 10, 18, 30);
 
 const _updateInfo = UpdateInfo(
-  latest: '6.1',
+  latest: '6.2',
   apkUrl: 'https://example.com/app.apk',
   notes: 'Novedades de la versión',
   force: false,
@@ -79,6 +83,22 @@ ApkStreamFetcher fakeApkSource(List<int> bytes, {int? total}) {
 }
 
 void main() {
+  // Sin mock, getTemporaryDirectory() se queda colgada en pruebas y la
+  // programación del recordatorio (que copia el PNG del compañero a un
+  // archivo temporal) no termina nunca: la comprobación inicial queda
+  // en curso y la vuelta a primer plano se la salta. Mismo patrón que
+  // en fix3_notifications_test.dart.
+  setUp(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/path_provider'),
+      (call) async {
+        if (call.method == 'getTemporaryDirectory') return '/tmp';
+        return null;
+      },
+    );
+  });
+
   group('compareVersions', () {
     test('mayor, menor e igual', () {
       expect(compareVersions('6.1', '6.0'), greaterThan(0));
@@ -133,8 +153,6 @@ void main() {
           latest: kAppVersion,
           force: false,
           dismissedVersion: null,
-          lastCheck: null,
-          now: _now,
         ),
         isFalse,
       );
@@ -143,8 +161,6 @@ void main() {
           latest: '5.9',
           force: true,
           dismissedVersion: null,
-          lastCheck: null,
-          now: _now,
         ),
         isFalse,
       );
@@ -153,11 +169,9 @@ void main() {
     test('versión nueva sin descartar y sin comprobar hoy: avisa', () {
       expect(
         shouldShowUpdate(
-          latest: '6.1',
+          latest: '6.2',
           force: false,
           dismissedVersion: null,
-          lastCheck: null,
-          now: _now,
         ),
         isTrue,
       );
@@ -166,22 +180,18 @@ void main() {
     test('versión descartada con "Más tarde" no vuelve a preguntar', () {
       expect(
         shouldShowUpdate(
-          latest: '6.1',
+          latest: '6.2',
           force: false,
-          dismissedVersion: '6.1',
-          lastCheck: null,
-          now: _now,
+          dismissedVersion: '6.2',
         ),
         isFalse,
       );
       // Otra versión más nueva sí vuelve a avisar.
       expect(
         shouldShowUpdate(
-          latest: '6.2',
+          latest: '6.3',
           force: false,
-          dismissedVersion: '6.1',
-          lastCheck: null,
-          now: _now,
+          dismissedVersion: '6.2',
         ),
         isTrue,
       );
@@ -190,67 +200,66 @@ void main() {
     test('con force no se puede posponer: avisa aunque se descartó', () {
       expect(
         shouldShowUpdate(
-          latest: '6.1',
+          latest: '6.2',
           force: true,
-          dismissedVersion: '6.1',
-          lastCheck: null,
-          now: _now,
+          dismissedVersion: '6.2',
         ),
         isTrue,
       );
     });
 
-    test('una comprobación cada 4 horas (fix3, punto 20b)', () {
-      // Hace 1 h (< 4 h): ni se comprueba.
+    test('sin cadencia: la comprobación es en cada apertura (fix4, '
+        'punto 7)', () {
+      // shouldShowUpdate ya no mira cuándo se comprobó por última
+      // vez: una versión nueva avisa siempre (salvo "Más tarde"),
+      // se acabara de mirar hace un minuto o hace un mes.
       expect(
         shouldShowUpdate(
-          latest: '6.1',
+          latest: '6.2',
           force: false,
           dismissedVersion: null,
-          lastCheck: _now.subtract(const Duration(hours: 1)),
-          now: _now,
-        ),
-        isFalse,
-      );
-      // Justo 4 h: se comprueba.
-      expect(
-        shouldShowUpdate(
-          latest: '6.1',
-          force: false,
-          dismissedVersion: null,
-          lastCheck: _now.subtract(const Duration(hours: 4)),
-          now: _now,
         ),
         isTrue,
       );
       expect(
         shouldShowUpdate(
-          latest: '6.1',
-          force: false,
+          latest: '6.2',
+          force: true,
           dismissedVersion: null,
-          lastCheck: _now.subtract(const Duration(hours: 5)),
-          now: _now,
         ),
         isTrue,
       );
-      // Con force la cadencia es la misma: a 1 h no, a 25 h sí.
+      // La versión descartada sigue sin avisar, con o sin force.
+      expect(
+        shouldShowUpdate(
+          latest: '6.2',
+          force: false,
+          dismissedVersion: '6.2',
+        ),
+        isFalse,
+      );
+    });
+  });
+
+  group('kAppVersion (fix4, punto 6)', () {
+    test('la versión instalada es la 6.1', () {
+      expect(kAppVersion, '6.1');
+      expect(compareVersions('6.1', '6.0'), greaterThan(0));
+      // Nada más instalar la 6.1, la 6.1 remota no avisa (sin falso
+      // aviso); la 6.2 sí.
       expect(
         shouldShowUpdate(
           latest: '6.1',
-          force: true,
+          force: false,
           dismissedVersion: null,
-          lastCheck: _now.subtract(const Duration(hours: 1)),
-          now: _now,
         ),
         isFalse,
       );
       expect(
         shouldShowUpdate(
-          latest: '6.1',
-          force: true,
+          latest: '6.2',
+          force: false,
           dismissedVersion: null,
-          lastCheck: _now.subtract(const Duration(hours: 25)),
-          now: _now,
         ),
         isTrue,
       );
@@ -261,7 +270,7 @@ void main() {
     test('sin recordatorio previo: se programa', () {
       expect(
         shouldScheduleReminder(
-          latest: '6.1',
+          latest: '6.2',
           scheduledVersion: null,
           scheduledAt: null,
           now: _now,
@@ -273,8 +282,8 @@ void main() {
     test('ya hay uno para ESTA versión y aún no llegó: no se duplica', () {
       expect(
         shouldScheduleReminder(
-          latest: '6.1',
-          scheduledVersion: '6.1',
+          latest: '6.2',
+          scheduledVersion: '6.2',
           scheduledAt: _now.add(const Duration(hours: 2)),
           now: _now,
         ),
@@ -285,8 +294,8 @@ void main() {
     test('salió una versión más nueva: se actualiza a esa', () {
       expect(
         shouldScheduleReminder(
-          latest: '6.2',
-          scheduledVersion: '6.1',
+          latest: '6.3',
+          scheduledVersion: '6.2',
           scheduledAt: _now.add(const Duration(hours: 2)),
           now: _now,
         ),
@@ -297,8 +306,8 @@ void main() {
     test('el recordatorio ya pasó: se programa el siguiente', () {
       expect(
         shouldScheduleReminder(
-          latest: '6.1',
-          scheduledVersion: '6.1',
+          latest: '6.2',
+          scheduledVersion: '6.2',
           scheduledAt: _now.subtract(const Duration(hours: 1)),
           now: _now,
         ),
@@ -360,14 +369,14 @@ void main() {
       expect(dl.progress.value, 1);
       expect(seen, contains(1.0));
       expect(await file!.readAsBytes(), bytes);
-      expect(file.path.endsWith('melli-qui-6.1.apk'), isTrue);
+      expect(file.path.endsWith('quemia-6.2.apk'), isTrue);
       expect(dl.downloadedPath, file.path);
-      expect(dl.downloadedVersion, '6.1');
+      expect(dl.downloadedVersion, '6.2');
     });
 
     test('si el APK ya está descargado, no descarga de nuevo', () async {
       final bytes = List<int>.generate(50, (i) => i);
-      await File('${dir.path}/melli-qui-6.1.apk').writeAsBytes(bytes);
+      await File('${dir.path}/quemia-6.2.apk').writeAsBytes(bytes);
       var calls = 0;
       final dl = UpdateDownloader();
       final file = await dl.download(
@@ -401,11 +410,11 @@ void main() {
       expect(dl.state.value, UpdateDownloadState.idle);
       expect(dl.progress.value, 0);
       expect(
-        await File('${dir.path}/melli-qui-6.1.apk').exists(),
+        await File('${dir.path}/quemia-6.2.apk').exists(),
         isFalse,
       );
       expect(
-        await File('${dir.path}/melli-qui-6.1.apk.part').exists(),
+        await File('${dir.path}/quemia-6.2.apk.part').exists(),
         isFalse,
       );
     });
@@ -437,7 +446,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Hay una nueva actualización'), findsOneWidget);
-      expect(find.text('Versión 6.1 disponible'), findsOneWidget);
+      expect(find.text('Versión 6.2 disponible'), findsOneWidget);
       expect(find.text('Novedades de la versión'), findsOneWidget);
       expect(find.text('Actualizar ahora'), findsOneWidget);
       expect(find.text('Más tarde'), findsOneWidget);
@@ -464,7 +473,10 @@ void main() {
       // notificaciones): se espera a que termine de verdad antes de
       // afirmar que el diálogo se cerró, porque pumpAndSettle no
       // espera a sus Futures y en una máquina cargada la cadena no
-      // termina en los primeros pumps.
+      // termina en los primeros pumps. El avance de 4 s dispara el
+      // límite de 3 s de la copia del icono, o el temporizador
+      // quedaría pendiente al cerrar el test.
+      await tester.pump(const Duration(seconds: 4));
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 500)),
       );
@@ -472,15 +484,15 @@ void main() {
       expect(find.text('Hay una nueva actualización'), findsNothing);
 
       final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString(kUpdateDismissedKey), '6.1');
+      expect(prefs.getString(kUpdateDismissedKey), '6.2');
       // La info pendiente queda guardada: al tocar el recordatorio
       // el diálogo sale con estos datos aunque no haya internet.
       final pending = prefs.getString(kUpdatePendingKey);
       expect(pending, isNotNull);
       final pendingJson =
           jsonDecode(pending!) as Map<String, dynamic>;
-      expect(UpdateInfo.fromJson(pendingJson)?.latest, '6.1');
-      expect(prefs.getString(kUpdateReminderVersionKey), '6.1');
+      expect(UpdateInfo.fromJson(pendingJson)?.latest, '6.2');
+      expect(prefs.getString(kUpdateReminderVersionKey), '6.2');
       final atMs = prefs.getInt(kUpdateReminderAtKey);
       expect(atMs, isNotNull);
       // Mañana, no hoy: al día siguiente.
@@ -491,7 +503,7 @@ void main() {
     testWidgets('versión descartada: al abrir no hay diálogo, solo el '
         'recordatorio (una vez al día)', (tester) async {
       SharedPreferences.setMockInitialValues({
-        kUpdateDismissedKey: '6.1',
+        kUpdateDismissedKey: '6.2',
       });
       var calls = 0;
       await tester.pumpWidget(
@@ -508,9 +520,20 @@ void main() {
       expect(calls, 1);
       expect(find.text('Hay una nueva actualización'), findsNothing);
       final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString(kUpdateReminderVersionKey), '6.1');
+      expect(prefs.getString(kUpdateReminderVersionKey), '6.2');
 
-      // Segunda comprobación antes de 4 h: ni descarga.
+      // La comprobación inicial reprograma el recordatorio (con
+      // E/S real de archivos, que en testWidgets solo avanza en
+      // runAsync): se espera a que termine antes de la segunda
+      // comprobación, o el servicio la saltaría por estar en curso.
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 500)),
+      );
+      await tester.pumpAndSettle();
+
+      // Segunda comprobación (fix4, punto 7): ahora SÍ se descarga
+      // en cada apertura — pero la versión pospuesta sigue sin
+      // avisar: el aviso queda en el recordatorio.
       await UpdateCheckService.checkForUpdate(
         tester.element(find.text('Inicio')),
         fetcher: (_) async {
@@ -520,13 +543,14 @@ void main() {
         nowOverride: _now,
       );
       await tester.pumpAndSettle();
-      expect(calls, 1);
+      expect(calls, 2);
+      expect(find.text('Hay una nueva actualización'), findsNothing);
     });
 
     testWidgets('desde el recordatorio, la versión descartada SÍ muestra '
         'el diálogo', (tester) async {
       SharedPreferences.setMockInitialValues({
-        kUpdateDismissedKey: '6.1',
+        kUpdateDismissedKey: '6.2',
       });
       await tester.pumpWidget(
         _Harness(
@@ -561,24 +585,29 @@ void main() {
     testWidgets('sin internet: silencio, sin diálogo ni error',
         (tester) async {
       SharedPreferences.setMockInitialValues({});
+      var calls = 0;
       await tester.pumpWidget(
-        _Harness(fetcher: (_) async => null, now: _now),
+        _Harness(
+          fetcher: (_) async {
+            calls++;
+            return null;
+          },
+          now: _now,
+        ),
       );
       await tester.pumpAndSettle();
 
       expect(find.text('Hay una nueva actualización'), findsNothing);
       expect(find.text('Inicio'), findsOneWidget);
-      // La comprobación fallida también queda anotada: no se
-      // reintenta en cada apertura del mismo día.
-      final prefs = await SharedPreferences.getInstance();
-      expect(
-          prefs.getInt(kUpdateLastCheckKey), _now.millisecondsSinceEpoch);
+      // Sin cadencia ya no se anota la última mirada: la
+      // comprobación se intenta en cada apertura (y falla en
+      // silencio, sin diálogo ni error visible).
+      expect(calls, 1);
     });
 
-    testWidgets('comprobada hoy: ni descarga ni diálogo', (tester) async {
-      SharedPreferences.setMockInitialValues({
-        kUpdateLastCheckKey: _now.millisecondsSinceEpoch,
-      });
+    testWidgets('al abrir se comprueba siempre aunque se mirara hace '
+        'un minuto (fix4, punto 7)', (tester) async {
+      SharedPreferences.setMockInitialValues({});
       var calls = 0;
       await tester.pumpWidget(
         _Harness(
@@ -591,9 +620,31 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(calls, 0);
-      expect(find.text('Hay una nueva actualización'), findsNothing);
+      // La primera mirada descarga y avisa.
+      expect(calls, 1);
+      expect(find.text('Hay una nueva actualización'), findsOneWidget);
+
+      // Un minuto después, al volver a abrir, se vuelve a descargar
+      // (nada de esperar 4 horas): el aviso sale en cuanto se abre
+      // la app tras publicar.
+      await tester.tap(find.text('Más tarde'));
+      await tester.pump(const Duration(seconds: 4));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 500)),
+      );
+      await tester.pumpAndSettle();
+      await UpdateCheckService.checkForUpdate(
+        tester.element(find.text('Inicio')),
+        fetcher: (_) async {
+          calls++;
+          return _newerJson;
+        },
+        nowOverride: _now.add(const Duration(minutes: 1)),
+      );
+      await tester.pumpAndSettle();
+      expect(calls, 2);
     });
+
 
     testWidgets('misma versión que la instalada: no hay aviso falso',
         (tester) async {
@@ -619,13 +670,13 @@ void main() {
         () => Directory.systemTemp.createTemp('melli_apk_'),
       );
       addTearDown(() => dir!.deleteSync(recursive: true));
-      final apk = File('${dir!.path}/melli-qui-6.1.apk');
+      final apk = File('${dir!.path}/quemia-6.2.apk');
       await tester.runAsync(
         () => apk.writeAsBytes(List<int>.generate(20, (i) => i)),
       );
       SharedPreferences.setMockInitialValues({
         kUpdateApkPathKey: apk.path,
-        kUpdateApkVersionKey: '6.1',
+        kUpdateApkVersionKey: '6.2',
       });
       await tester.pumpWidget(
         _Harness(fetcher: (_) async => _newerJson, now: _now),
@@ -638,25 +689,12 @@ void main() {
     });
   });
 
-  group('cadencia de 4 horas y vuelta a primer plano (fix3, 20b)', () {
+  group('comprobación en cada apertura y vuelta a primer plano (fix4, punto 7)', () {
     tearDown(() => UpdateCheckService.resetForTests());
 
     // La versión instalada: la primera mirada no avisa nada.
     const sameVersionJson =
-        '{"latest":"6.0","apk_url":"https://example.com/app.apk","notes":"","force":false}';
-
-    /// Mueve la "última mirada" a hace [hours] horas (la
-    /// re-comprobación al volver a primer plano usa la hora real,
-    /// no el _now fijo de los tests).
-    Future<void> setLastCheckHoursAgo(int hours) async {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(
-        kUpdateLastCheckKey,
-        DateTime.now()
-            .subtract(Duration(hours: hours))
-            .millisecondsSinceEpoch,
-      );
-    }
+        '{"latest":"6.1","apk_url":"https://example.com/app.apk","notes":"","force":false}';
 
     /// Espera a que la comprobación inicial (disparada por el primer
     /// frame) termine de verdad: pumpAndSettle no espera a sus
@@ -670,12 +708,8 @@ void main() {
           () => Future<void>.delayed(const Duration(milliseconds: 500)),
         );
 
-    test('kUpdateCheckInterval es 4 horas', () {
-      expect(kUpdateCheckInterval, const Duration(hours: 4));
-    });
-
-    testWidgets('al volver a primer plano con ≥4 h, se comprueba y '
-        'sale el diálogo', (tester) async {
+    testWidgets('al volver a primer plano se comprueba y sale el '
+        'diálogo', (tester) async {
       SharedPreferences.setMockInitialValues({});
       var json = sameVersionJson;
       var calls = 0;
@@ -693,9 +727,9 @@ void main() {
       expect(find.text('Hay una nueva actualización'), findsNothing);
       await waitForInitialCheck(tester);
 
-      // 5 h después de la última mirada: volver a primer plano
-      // dispara la comprobación y sale el diálogo.
-      await setLastCheckHoursAgo(5);
+      // Sin cadencia: volver a primer plano dispara la comprobación
+      // aunque la última mirada fuera hace un minuto, y sale el
+      // diálogo si hay versión nueva.
       json = _newerJson;
       tester.binding
           .handleAppLifecycleStateChanged(AppLifecycleState.resumed);
@@ -706,41 +740,18 @@ void main() {
       expect(find.text('Actualizar ahora'), findsOneWidget);
     });
 
-    testWidgets('a <4 h de la última mirada, volver a primer plano '
-        'NO comprueba', (tester) async {
-      SharedPreferences.setMockInitialValues({});
-      var json = sameVersionJson;
-      var calls = 0;
-      await tester.pumpWidget(
-        _Harness(
-          fetcher: (_) async {
-            calls++;
-            return json;
-          },
-          now: _now,
-        ),
-      );
-      await tester.pumpAndSettle();
-      expect(calls, 1);
-      await waitForInitialCheck(tester);
-
-      // Solo 1 h después: la vuelta a primer plano ni descarga.
-      await setLastCheckHoursAgo(1);
-      json = _newerJson;
-      tester.binding
-          .handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-      await tester.pumpAndSettle();
-
-      expect(calls, 1);
-      expect(find.text('Hay una nueva actualización'), findsNothing);
-    });
-
     testWidgets(
         '"Más tarde" sigue sin repetirse al volver a primer plano '
         '(solo comprueba, el recordatorio es el que avisa)',
         (tester) async {
+      // El recordatorio ya está programado para mañana: la
+      // comprobación inicial no vuelve a programarlo (esa ruta, con
+      // E/S real, la cubre el test de "Más tarde").
       SharedPreferences.setMockInitialValues({
-        kUpdateDismissedKey: '6.1',
+        kUpdateDismissedKey: '6.2',
+        kUpdateReminderVersionKey: '6.2',
+        kUpdateReminderAtKey:
+            _now.add(const Duration(hours: 24)).millisecondsSinceEpoch,
       });
       var calls = 0;
       await tester.pumpWidget(
@@ -753,18 +764,17 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      // La primera mirada ve la 6.1 descartada: no hay diálogo y se
-      // programa el recordatorio por notificación.
+      // La primera mirada ve la 6.2 descartada: no hay diálogo y el
+      // recordatorio por notificación sigue programado.
       expect(calls, 1);
       expect(find.text('Hay una nueva actualización'), findsNothing);
       final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString(kUpdateReminderVersionKey), '6.1');
+      expect(prefs.getString(kUpdateReminderVersionKey), '6.2');
 
       // La comprobación inicial reprograma el recordatorio: se
       // espera a que termine antes de la vuelta a primer plano.
       await waitForInitialCheck(tester);
-      // 5 h después, al volver a primer plano sí se comprueba...
-      await setLastCheckHoursAgo(5);
+      // Al volver a primer plano sí se comprueba...
       tester.binding
           .handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await tester.pumpAndSettle();
@@ -773,15 +783,21 @@ void main() {
       // ...pero la versión pospuesta NO vuelve a avisar: el aviso
       // queda en el recordatorio (no se duplica).
       expect(find.text('Hay una nueva actualización'), findsNothing);
-      expect(prefs.getString(kUpdateReminderVersionKey), '6.1');
+      expect(prefs.getString(kUpdateReminderVersionKey), '6.2');
     });
 
-    testWidgets('force: al volver a primer plano con ≥4 h vuelve a '
-        'avisar aunque esa versión se descartó', (tester) async {
+    testWidgets('force: al volver a primer plano vuelve a avisar '
+        'aunque esa versión se descartó', (tester) async {
+      // La primera mirada ve la 6.2 normal y descartada (no la
+      // misma versión: esa limpiaría el descartado al actualizar).
+      // El recordatorio ya está programado (ver el test anterior).
       SharedPreferences.setMockInitialValues({
-        kUpdateDismissedKey: '6.1',
+        kUpdateDismissedKey: '6.2',
+        kUpdateReminderVersionKey: '6.2',
+        kUpdateReminderAtKey:
+            _now.add(const Duration(hours: 24)).millisecondsSinceEpoch,
       });
-      var json = sameVersionJson;
+      var json = _newerJson;
       var calls = 0;
       await tester.pumpWidget(
         _Harness(
@@ -797,7 +813,6 @@ void main() {
       expect(find.text('Hay una nueva actualización'), findsNothing);
       await waitForInitialCheck(tester);
 
-      await setLastCheckHoursAgo(5);
       json = _forcedJson;
       tester.binding
           .handleAppLifecycleStateChanged(AppLifecycleState.resumed);
@@ -826,7 +841,6 @@ void main() {
       expect(calls, 1);
       await waitForInitialCheck(tester);
 
-      await setLastCheckHoursAgo(5);
       json = _newerJson;
       tester.binding
           .handleAppLifecycleStateChanged(AppLifecycleState.resumed);
@@ -835,11 +849,12 @@ void main() {
       await tester.pumpAndSettle();
 
       // La segunda reanudación cae sobre la comprobación en curso
-      // (o sobre la mirada ya anotada) y no descarga de nuevo.
+      // y no descarga de nuevo.
       expect(calls, 2);
       expect(find.text('Hay una nueva actualización'), findsOneWidget);
     });
   });
+
 
   group('UpdateInstaller (MethodChannel)', () {
     const channel = MethodChannel('com.melliqui/update_installer');
@@ -883,13 +898,13 @@ void main() {
         () => Directory.systemTemp.createTemp('melli_inst_'),
       );
       addTearDown(() => dir!.deleteSync(recursive: true));
-      final apk = File('${dir!.path}/melli-qui-6.1.apk');
+      final apk = File('${dir!.path}/quemia-6.2.apk');
       await tester.runAsync(
         () => apk.writeAsBytes(List<int>.generate(10, (i) => i)),
       );
       SharedPreferences.setMockInitialValues({
         kUpdateApkPathKey: apk.path,
-        kUpdateApkVersionKey: '6.1',
+        kUpdateApkVersionKey: '6.2',
       });
       await tester.pumpWidget(
         const MaterialApp(home: Scaffold(body: Text('Inicio'))),
@@ -917,13 +932,13 @@ void main() {
         () => Directory.systemTemp.createTemp('melli_inst2_'),
       );
       addTearDown(() => dir!.deleteSync(recursive: true));
-      final apk = File('${dir!.path}/melli-qui-6.1.apk');
+      final apk = File('${dir!.path}/quemia-6.2.apk');
       await tester.runAsync(
         () => apk.writeAsBytes(List<int>.generate(10, (i) => i)),
       );
       SharedPreferences.setMockInitialValues({
         kUpdateApkPathKey: apk.path,
-        kUpdateApkVersionKey: '6.1',
+        kUpdateApkVersionKey: '6.2',
       });
       await tester.pumpWidget(
         const MaterialApp(home: Scaffold(body: Text('Inicio'))),
@@ -994,7 +1009,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final apk = File('${dir!.path}/melli-qui-6.1.apk');
+      final apk = File('${dir!.path}/quemia-6.2.apk');
       expect(await tester.runAsync(() => apk.exists()), isTrue);
       expect(await tester.runAsync(() => apk.readAsBytes()), bytes);
       expect(installedPaths, [apk.path]);
@@ -1002,7 +1017,189 @@ void main() {
           UpdateDownloadState.installing);
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getString(kUpdateApkPathKey), apk.path);
-      expect(prefs.getString(kUpdateApkVersionKey), '6.1');
+      expect(prefs.getString(kUpdateApkVersionKey), '6.2');
+    });
+  });
+
+  group('checkForUpdateManual (fix4, punto 7)', () {
+    tearDown(() => UpdateCheckService.resetForTests());
+
+    /// Pantalla mínima con contexto para llamar al servicio.
+    Future<BuildContext> pumpHome(WidgetTester tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(home: Scaffold(body: Text('Inicio'))),
+      );
+      return tester.element(find.text('Inicio'));
+    }
+
+    testWidgets('versión nueva: muestra el diálogo y devuelve '
+        'updateAvailable', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final context = await pumpHome(tester);
+
+      ManualUpdateResult? result;
+      unawaited(
+        UpdateCheckService.checkForUpdateManual(
+          context,
+          fetcher: (_) async => _newerJson,
+        ).then((r) => result = r),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Hay una nueva actualización'), findsOneWidget);
+      expect(find.text('Versión 6.2 disponible'), findsOneWidget);
+
+      // Cerrar con "Más tarde" para que el método termine.
+      await tester.tap(find.text('Más tarde'));
+      // El avance de 4 s dispara el límite de 3 s de la copia
+      // del icono (ver el test de "Más tarde").
+      await tester.pump(const Duration(seconds: 4));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 500)),
+      );
+      await tester.pumpAndSettle();
+      expect(result, ManualUpdateResult.updateAvailable);
+    });
+
+    testWidgets('ya estamos al día: upToDate, sin diálogo',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final context = await pumpHome(tester);
+
+      final result = await UpdateCheckService.checkForUpdateManual(
+        context,
+        fetcher: (_) async =>
+            '{"latest":"$kAppVersion","apk_url":"https://example.com/app.apk","notes":"","force":false}',
+      );
+      await tester.pumpAndSettle();
+      expect(result, ManualUpdateResult.upToDate);
+      expect(find.text('Hay una nueva actualización'), findsNothing);
+    });
+
+    testWidgets('sin internet: checkFailed, sin diálogo',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final context = await pumpHome(tester);
+
+      final result = await UpdateCheckService.checkForUpdateManual(
+        context,
+        fetcher: (_) async => null,
+      );
+      await tester.pumpAndSettle();
+      expect(result, ManualUpdateResult.checkFailed);
+      expect(find.text('Hay una nueva actualización'), findsNothing);
+    });
+
+    testWidgets('pasa por encima de "Más tarde": versión descartada '
+        'SÍ muestra el diálogo', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        kUpdateDismissedKey: '6.2',
+      });
+      final context = await pumpHome(tester);
+
+      ManualUpdateResult? result;
+      unawaited(
+        UpdateCheckService.checkForUpdateManual(
+          context,
+          fetcher: (_) async => _newerJson,
+        ).then((r) => result = r),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Hay una nueva actualización'), findsOneWidget);
+
+      await tester.tap(find.text('Más tarde'));
+      // El avance de 4 s dispara el límite de 3 s de la copia
+      // del icono (ver el test de "Más tarde").
+      await tester.pump(const Duration(seconds: 4));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 500)),
+      );
+      await tester.pumpAndSettle();
+      expect(result, ManualUpdateResult.updateAvailable);
+    });
+  });
+
+  group('botón "Buscar actualización" en Cuenta (fix4, punto 7)', () {
+    tearDown(() => UpdateCheckService.resetForTests());
+
+    const sameJson =
+        '{"latest":"6.1","apk_url":"https://example.com/app.apk","notes":"","force":false}';
+
+    Future<void> pumpAccount(WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await UserPrefs.load();
+      await ProgressService.load();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: AccountScreen(
+              onOpenScreen: (_) {},
+              onShowAbout: () {},
+              onShowShareApp: () {},
+              trackTopics: const [],
+            ),
+          ),
+        ),
+      );
+      // Sin pumpAndSettle: el corazón de la tarjeta de estadísticas
+      // late sin parar (PulseWidget repite cada 1200 ms) y
+      // pumpAndSettle no terminaría nunca. Unos pumps bastan.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      // La fila está al final de la lista: hay que bajar hasta ella
+      // para que se construya (el ListView solo pinta lo visible).
+      await tester.scrollUntilVisible(
+        find.text('Buscar actualización'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+
+    testWidgets('con versión nueva, abre el diálogo de actualización',
+        (tester) async {
+      await pumpAccount(tester);
+      // La comprobación al abrir arma el servicio con el falso (que
+      // primero dice 6.1, la instalada); el botón usa ese mismo
+      // falso y en su segunda llamada dice 6.2.
+      var calls = 0;
+      Future<String?> statefulFetcher(Uri url) async {
+        calls++;
+        return calls == 1 ? sameJson : _newerJson;
+      }
+
+      await UpdateCheckService.checkForUpdate(
+        tester.element(find.text('Buscar actualización')),
+        fetcher: statefulFetcher,
+        nowOverride: _now,
+      );
+      await tester.pump();
+      expect(calls, 1);
+      expect(find.text('Hay una nueva actualización'), findsNothing);
+
+      await tester.tap(find.text('Buscar actualización'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(calls, 2);
+      expect(find.text('Hay una nueva actualización'), findsOneWidget);
+      expect(find.text('Versión 6.2 disponible'), findsOneWidget);
+    });
+
+    testWidgets('sin versión nueva, avisa "Ya tienes la última versión"',
+        (tester) async {
+      await pumpAccount(tester);
+      await UpdateCheckService.checkForUpdate(
+        tester.element(find.text('Buscar actualización')),
+        fetcher: (_) async => sameJson,
+        nowOverride: _now,
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('Buscar actualización'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Ya tienes la última versión'), findsOneWidget);
+      expect(find.text('Hay una nueva actualización'), findsNothing);
     });
   });
 }

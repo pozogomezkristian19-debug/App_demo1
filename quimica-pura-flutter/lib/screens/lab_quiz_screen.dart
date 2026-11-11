@@ -3,6 +3,10 @@
 // después desde "Repasar mis errores" de la pista Universidad).
 // Antes vivía dentro de aprender_screen.dart; ahora es una pantalla
 // propia que se abre desde Laboratorio y desde la búsqueda.
+// Puntos (fix4, punto 5): cada respuesta suma o resta puntos según
+// la dificultad de la pregunta (+3/−5, +5/−8, +8/−12). No hay vidas
+// en juego: salir a mitad no cuesta vida, solo termina el
+// cuestionario y los puntos ganados hasta ahí se quedan.
 
 import 'dart:math';
 
@@ -14,6 +18,7 @@ import '../data/questions.dart';
 import '../models.dart';
 import '../services/localization.dart';
 import '../services/numeric_answer.dart';
+import '../services/points.dart';
 import '../services/progress.dart';
 import '../widgets/numeric_keypad.dart';
 
@@ -30,6 +35,9 @@ class _LabQuizPageState extends State<LabQuizPage> {
   late List<int> _idx;
   int _index = 0;
   int _score = 0;
+  // Puntos del cuestionario (fix4, punto 5): se suman o restan al
+  // contestar, según la dificultad de cada pregunta.
+  int _points = 0;
   int? _selected;
   List<int> _order = [];
   bool _finished = false;
@@ -60,6 +68,12 @@ class _LabQuizPageState extends State<LabQuizPage> {
     final correct = realIndex == _q.answer;
     final progress = ProgressService.instance;
     progress.recordAnswer(_q.topic, correct);
+    // Puntos (fix4, punto 5): fáciles +3/−5, medios +5/−8,
+    // difíciles +8/−12, según la dificultad de la pregunta.
+    final delta = correct
+        ? pointsForCorrect(_q.difficulty)
+        : pointsForWrong(_q.difficulty);
+    progress.addPoints(delta);
     // Id y texto del error, siempre en español (regla de content_i18n).
     final es = allQuestions[_idx[_index]];
     final id = 'bank:${es.topic}:${es.question}';
@@ -68,11 +82,15 @@ class _LabQuizPageState extends State<LabQuizPage> {
       setState(() {
         _selected = displayedIndex;
         _score++;
+        _points += delta;
       });
     } else {
       progress.addFailed(
           FailedEntry(id: id, topic: es.topic, question: es.question));
-      setState(() => _selected = displayedIndex);
+      setState(() {
+        _selected = displayedIndex;
+        _points += delta;
+      });
     }
   }
 
@@ -98,9 +116,10 @@ class _LabQuizPageState extends State<LabQuizPage> {
     }
   }
 
-  /// Salir en medio del cuestionario (fix2, ronda 2): cuesta 1 vida,
-  /// igual que abandonar un nivel, así que se pide confirmación
-  /// antes de salir. Es el mismo aviso del quiz de Niveles.
+  /// Salir en medio del cuestionario (fix2, ronda 2; aviso sin vidas
+  /// en la fix4, punto 5): las vidas son solo de los niveles, así que
+  /// salir aquí no cuesta nada: termina el cuestionario y los puntos
+  /// ganados hasta ahí se quedan. Se pide confirmación antes de salir.
   void _requestExit() {
     if (_finished) {
       Navigator.of(context).pop();
@@ -109,8 +128,8 @@ class _LabQuizPageState extends State<LabQuizPage> {
     showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(tr('exitLevelTitle')),
-        content: Text(tr('exitLevelBody')),
+        title: Text(tr('exitNoLivesTitle')),
+        content: Text(tr('exitNoLivesBody')),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
@@ -119,10 +138,9 @@ class _LabQuizPageState extends State<LabQuizPage> {
           TextButton(
             onPressed: () {
               Navigator.of(dialogContext).pop();
-              ProgressService.instance.loseLifeOnAbandon();
               Navigator.of(context).pop();
             },
-            child: Text(tr('exitLevelLeave')),
+            child: Text(tr('exitNoLivesLeave')),
           ),
         ],
       ),
@@ -136,6 +154,7 @@ class _LabQuizPageState extends State<LabQuizPage> {
       _questions = [for (final i in _idx) bank[i]];
       _index = 0;
       _score = 0;
+      _points = 0;
       _finished = false;
       _shuffleOptions();
     });
@@ -146,8 +165,9 @@ class _LabQuizPageState extends State<LabQuizPage> {
     final total = _questions.length;
     // Bloqueo de sesión (fix2, ronda 2): mientras el cuestionario
     // está en curso, ni el botón atrás ni la flecha de la barra
-    // pueden cerrarlo directamente: muestran el aviso de Salir con
-    // pérdida de vida. Terminado, se sale libre.
+    // pueden cerrarlo directamente: muestran el aviso de Salir sin
+    // pérdida de vida (las vidas son solo de los niveles, fix4,
+    // punto 5). Terminado, se sale libre.
     return PopScope(
       canPop: _finished,
       onPopInvokedWithResult: (didPop, _) {
@@ -175,6 +195,12 @@ class _LabQuizPageState extends State<LabQuizPage> {
                           fontSize: 48,
                           fontWeight: FontWeight.bold,
                           color: Colors.tealAccent),
+                      textAlign: TextAlign.center),
+                  const SizedBox(height: 4),
+                  Text(
+                      '${tr('pointsWord')}: ${_points > 0 ? '+$_points' : '$_points'}',
+                      style: const TextStyle(
+                          fontSize: 22, fontWeight: FontWeight.bold),
                       textAlign: TextAlign.center),
                   const SizedBox(height: 24),
                   ElevatedButton(
@@ -216,6 +242,11 @@ class _LabQuizPageState extends State<LabQuizPage> {
                 ),
                 const SizedBox(height: 12),
                 LinearProgressIndicator(value: (_index + 1) / total),
+                const SizedBox(height: 8),
+                Text(
+                    '${tr('pointsWord')}: ${_points > 0 ? '+$_points' : '$_points'}',
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 16),
                 Text(_q.question,
                     style: const TextStyle(

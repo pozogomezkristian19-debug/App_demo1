@@ -90,10 +90,13 @@ void main() {
     });
 
     testWidgets(
-        'la fila de Repasar mis errores muestra el nombre bonito, no el slug',
+        'con 1 error, Niveles NO muestra la tarjeta de Repasar mis '
+        'errores (fix4, punto 4)',
         (tester) async {
-      // La captura de las 7:03: la fila del grupo decía
-      // 'bach-estequiometr…' con '1 errores por repasar'.
+      // La tarjeta grande ("Repasar mis errores" + burbuja de la
+      // mascota) empujaba el camino de niveles muy abajo: se quitó
+      // de Niveles. Quedan el chip de repaso de la barra superior
+      // (en main.dart, no aquí) y la fila "Mis errores" de Cuenta.
       ProgressService.instance.addFailed(const FailedEntry(
         id: 'fix3-review-1',
         topic: 'bach-estequiometria',
@@ -110,18 +113,48 @@ void main() {
       );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
-      expect(find.textContaining('Estequiometría básica'), findsOneWidget);
+      expect(find.text(tr('reviewTitle')), findsNothing);
+      // Sin slugs en la pantalla, y el camino de niveles sí se ve
+      // (el título "Niveles" y la pregunta del día siguen ahí,
+      // sin la tarjeta empujándolos hacia abajo).
       expect(find.textContaining('bach-'), findsNothing);
       expect(find.textContaining('uni-'), findsNothing);
+      expect(find.text(tr('levelsTitle')), findsOneWidget);
+      expect(find.text(tr('qotdTitle')), findsOneWidget);
     });
   });
 
   group('Tabla periódica responsiva (fix3, punto 14)', () {
-    testWidgets('a 360 px la rejilla mantiene celdas de 40 px y desliza',
-        (tester) async {
+    testWidgets('a 360 px la rejilla ocupa todo el ancho, sin scroll '
+        'horizontal (fix4, punto 1)', (tester) async {
       await pumpTabla(tester, logicalWidth: 360, logicalHeight: 800);
-      // La rejilla no se encoge al ancho del teléfono: mide 18 x 40
-      // = 720 px y se desplaza en horizontal para verla completa.
+      // La tabla completa sin scroll es lo NORMAL: solo los
+      // teléfonos realmente angostos (< 340 dp) deslizan. A 360 px
+      // la rejilla mide 360 - 16 de padding = 344 px, como en v6.
+      final grid = find.byType(GridView);
+      expect(grid, findsOneWidget);
+      expect(tester.getSize(grid).width, 344);
+      // El único SingleChildScrollView horizontal es el de la fila
+      // de chips: no hay fade de desplazamiento de rejilla.
+      expect(_horizontalScrolls(tester), findsOneWidget);
+      expect(find.byKey(const Key('gridScrollFade')), findsNothing);
+      // La tabla arranca en la posición inicial: el hidrógeno
+      // (columna 1) está a la izquierda y su símbolo se ve entero
+      // y sin recortes (el Text centrado dentro de su celda queda
+      // en x≈24).
+      expect(find.text('H'), findsOneWidget);
+      expect(tester.getTopLeft(find.text('H').first).dx, lessThan(40));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a 320 px (teléfono angosto) la rejilla desliza con '
+        'celdas de 40 px y se ven todas las filas sin cortes '
+        '(fix4, punto 1)', (tester) async {
+      // Pantalla alta para que entre toda la página (búsqueda,
+      // chips, rejilla de 495 px y leyenda) sin desplazar.
+      await pumpTabla(tester, logicalWidth: 320, logicalHeight: 2000);
+      // La rejilla mide 18 x 40 = 720 px y se desplaza en
+      // horizontal para verla completa.
       final grid = find.byType(GridView);
       expect(grid, findsOneWidget);
       final gridWidth = tester.getSize(grid).width;
@@ -135,10 +168,14 @@ void main() {
       expect(find.byKey(const Key('gridScrollFade')), findsOneWidget);
       // La tabla arranca en la posición inicial: el hidrógeno (columna
       // 1) está a la izquierda y su símbolo se ve entero y sin recortes.
-      // 1) está a la izquierda y su símbolo se ve entero y sin recortes
-      // (el Text centrado dentro de su celda queda en x≈24).
       expect(find.text('H'), findsOneWidget);
       expect(tester.getTopLeft(find.text('H').first).dx, lessThan(40));
+      // La última fila se ve entera y sin cortes: el oganesón (118,
+      // última fila) está dentro de la caja de la rejilla.
+      expect(find.text('Og'), findsOneWidget);
+      final gridBox = tester.getRect(grid);
+      final ogBox = tester.getRect(find.text('Og').first);
+      expect(ogBox.bottom, lessThanOrEqualTo(gridBox.bottom));
       expect(tester.takeException(), isNull);
     });
 
@@ -233,15 +270,16 @@ void main() {
     testWidgets('fade en el borde derecho y respiro al final',
         (tester) async {
       await pumpTabla(tester, logicalWidth: 360, logicalHeight: 800);
-      // Los degradados del borde derecho: uno en la fila de chips y
-      // otro en la rejilla (teléfono angosto). Dos Container con
+      // A 360 px (modo normal, fix4, punto 1) el único degradado
+      // del borde derecho es el de la fila de chips: la rejilla ya
+      // no desliza, así que no hay fade de rejilla. Un Container con
       // LinearGradient transparente -> color de fondo.
       final fade = find.byWidgetPredicate((w) =>
           w is Container &&
           w.decoration is BoxDecoration &&
           (w.decoration as BoxDecoration).gradient is LinearGradient);
-      expect(fade, findsNWidgets(2));
-      expect(find.byKey(const Key('gridScrollFade')), findsOneWidget);
+      expect(fade, findsOneWidget);
+      expect(find.byKey(const Key('gridScrollFade')), findsNothing);
       // Respiro final de 24 px tras el último chip.
       expect(
         find.byWidgetPredicate((w) => w is SizedBox && w.width == 24),

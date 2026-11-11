@@ -60,8 +60,7 @@ void main() {
   group('tema Verde/Violeta (item 12)', () {
     test('las 6 lenguas tienen las mismas claves (con las 4 nuevas)', () {
       final maps = AppLang.allStrings;
-      expect(maps.keys.toSet(),
-          {'es', 'en', 'fr', 'it', 'pt', 'ru'});
+      expect(maps.keys.toSet(), {'es', 'en', 'fr', 'it', 'pt', 'ru'});
       final esKeys = maps['es']!.keys.toSet();
       expect(esKeys.length, greaterThan(100));
       for (final e in maps.entries) {
@@ -156,10 +155,12 @@ void main() {
       await tester.pump();
       // La fila del chip (ancestro Row más cercano al icono) tiene
       // un solo Text: el número de errores.
-      final chipRow = find.ancestor(
-        of: lucide(LucideIcons.rotateCcw),
-        matching: find.byType(Row),
-      ).first;
+      final chipRow = find
+          .ancestor(
+            of: lucide(LucideIcons.rotateCcw),
+            matching: find.byType(Row),
+          )
+          .first;
       final chipText = find.descendant(
         of: chipRow,
         matching: find.byType(Text),
@@ -167,7 +168,8 @@ void main() {
       expect(tester.widget<Text>(chipText).data, '1');
     });
 
-    testWidgets('menú: búsqueda fija arriba; sin simulador duplicado',
+    testWidgets(
+        'menú: búsqueda fija arriba; simulador en Referencia (fix4, punto 12)',
         (tester) async {
       await pumpHome(tester);
       await tester.tap(find.byTooltip(tr('menuWord')));
@@ -181,20 +183,22 @@ void main() {
         tester.getTopLeft(searchField).dy,
         lessThan(tester.getTopLeft(header).dy),
       );
-      // Fix3 (segunda pasada): el simulador NO tiene entrada aparte
-      // en el menú (estaba duplicado). No aparece en el cajón; la
-      // vía de acceso es Laboratorio, cuya descripción lo anuncia.
-      expect(find.text(tr('labSimTitle')), findsNothing);
+      // Fix4, punto 12 (sustituye la regla de fix3): el simulador
+      // TIENE entrada propia en el menú, en Referencia, UNA sola
+      // vez (no duplicado). La vía de acceso Laboratorio sigue
+      // existiendo, con su descripción anunciándolo.
+      expect(find.text(tr('labSimTitle')), findsOneWidget);
       expect(find.text(tr('menuLab')), findsOneWidget);
-      expect(find.text('Seguridad, cuestionario y simulador'),
-          findsOneWidget);
+      expect(find.text('Seguridad, cuestionario y simulador'), findsOneWidget);
       // Y ya no queda ningún "Buscar" suelto al final del menú.
       expect(find.text(tr('searchWord')), findsOneWidget);
     });
   });
 
   group('Niveles compacto (item 3)', () {
-    testWidgets('sin intro, con gemela + pregunta del día + camino arriba',
+    testWidgets(
+        'sin intro, pregunta del día ancha con la foto del acompañante'
+        ' + camino arriba (fix4, punto 13 REVISADO)',
         (tester) async {
       tester.view.physicalSize = const Size(720, 1600);
       tester.view.devicePixelRatio = 2.0;
@@ -214,9 +218,12 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
       // La introducción larga ya no está.
       expect(find.text(tr('levelsIntro')), findsNothing);
-      // Gemela del día, pregunta del día y las 2 tarjetas.
-      expect(find.textContaining('Hoy te acompaña'), findsOneWidget);
+      // El banner "Hoy te acompaña…" ya NO está en Niveles (fix4,
+      // punto 13 REVISADO: lo quitó Kristian); la pregunta del día
+      // sigue, ancha, con la foto del acompañante dentro.
+      expect(find.textContaining('Hoy te acompaña'), findsNothing);
       expect(find.text('Pregunta del día'), findsOneWidget);
+      expect(find.byType(CompanionAvatar), findsWidgets);
       // El primer nivel del camino se ve sin deslizar (viewport
       // 360x800 con barra y navegación: cabe antes de los 660 px).
       final firstLevel = tester.getTopLeft(find.text('Nivel 1').first);
@@ -244,7 +251,8 @@ void main() {
     });
   });
 
-  group('Tabla (items 9 y 10; fix3 punto 2 REVISADO: leyenda solo en "Todos")', () {
+  group('Tabla (items 9 y 10; fix3 punto 2 REVISADO: leyenda solo en "Todos")',
+      () {
     testWidgets('lupa pequeña y leyenda solo sin filtro de categoría',
         (tester) async {
       tester.view.physicalSize = const Size(800, 1700);
@@ -307,7 +315,8 @@ void main() {
   });
 
   group('Cuenta (items 6 y 12)', () {
-    testWidgets('sin selector de avatar propio; con fila Tema que abre '
+    testWidgets(
+        'sin selector de avatar propio; con fila Tema que abre '
         'su pantalla', (tester) async {
       final opened = <String>[];
       await tester.pumpWidget(
@@ -337,9 +346,7 @@ void main() {
       expect(find.byType(TwinAvatarA), findsNothing);
       expect(find.byType(TwinAvatarB), findsNothing);
       expect(find.text(tr('accountTitle')), findsOneWidget);
-      expect(
-          find.text(
-              tr(companionOfDayKey(companionOfTheDay()))),
+      expect(find.text(tr(companionOfDayKey(companionOfTheDay()))),
           findsOneWidget);
       // Tema ya NO es una tarjeta inline en Cuenta (fix3, último
       // cambio): es una fila táctil como las demás, con el
@@ -347,9 +354,7 @@ void main() {
       // abre su propia pantalla dedicada. Las opciones viven allí,
       // no en Cuenta.
       expect(find.text(tr('themeTitle')), findsOneWidget);
-      expect(
-          find.text(
-              '${tr('themeGreen')} · ${tr('lightWord')}'),
+      expect(find.text('${tr('themeGreen')} · ${tr('lightWord')}'),
           findsOneWidget);
       expect(find.text(tr('themeViolet')), findsNothing);
       expect(find.text(tr('themeModeLabel')), findsNothing);
@@ -415,8 +420,7 @@ void main() {
       expect(sizes.first, sizes.last);
     });
 
-    testWidgets('el mando del Reto va en un círculo de 96',
-        (tester) async {
+    testWidgets('el mando del Reto va en un círculo de 96', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           theme: ThemeData(useMaterial3: true),
@@ -448,8 +452,8 @@ void main() {
 
   group('Encabezado del quiz (bug 6: sin ids internos)', () {
     test('localizedTopicName devuelve el nombre, no el slug', () {
-      expect(localizedTopicName('bach-estequiometria'),
-          'Estequiometría básica');
+      expect(
+          localizedTopicName('bach-estequiometria'), 'Estequiometría básica');
       expect(localizedTopicName('bach-gases'), 'Gases');
       expect(localizedTopicName('bach-disoluciones'), 'Disoluciones');
       expect(localizedTopicName('bach-acido-base'), 'Ácido-base');
@@ -473,8 +477,7 @@ void main() {
       });
       await tester.pumpWidget(
         MaterialApp(
-          theme:
-              ThemeData(brightness: Brightness.dark, useMaterial3: true),
+          theme: ThemeData(brightness: Brightness.dark, useMaterial3: true),
           home: Scaffold(body: child),
         ),
       );
@@ -484,8 +487,7 @@ void main() {
 
     testWidgets('Niveles: ninguna tarjeta es gris claro en oscuro',
         (tester) async {
-      await pumpDark(
-          tester, PracticarScreen(onOpenScreen: (_) {}), 'niveles');
+      await pumpDark(tester, PracticarScreen(onOpenScreen: (_) {}), 'niveles');
       // La pregunta del día y las 3 "Practicar de otra forma".
       expect(find.text('Pregunta del día'), findsOneWidget);
       for (final e in find.byType(Card).evaluate()) {
@@ -504,7 +506,9 @@ void main() {
     });
   });
 
-  group('AppBar sin título (fix3, punto 6) y Soporte en el menú', () {
+  group(
+      'AppBar sin título (fix3, punto 6) y Soporte fuera del menú '
+      '(fix4, punto 11)', () {
     Future<void> pumpHomeScreen(WidgetTester tester) async {
       tester.view.physicalSize = const Size(800, 1700);
       tester.view.devicePixelRatio = 1.0;
@@ -556,7 +560,8 @@ void main() {
       expect(lucide(LucideIcons.rotateCcw), findsOneWidget);
     });
 
-    testWidgets('sin botón flotante; Soporte vive al pie del menú',
+    testWidgets(
+        'sin botón flotante; el menú ya no trae Soporte (vive en Cuenta)',
         (tester) async {
       await pumpHomeScreen(tester);
       expect(find.byType(SupportButton), findsNothing);
@@ -564,37 +569,19 @@ void main() {
       await tester.tap(find.byTooltip(tr('menuWord')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      // Soporte está en el menú, al final (debajo de Notas).
-      expect(find.text(tr('supportWord')), findsOneWidget);
-      final supportY =
-          tester.getTopLeft(find.text(tr('supportWord'))).dy;
-      final notesY = tester.getTopLeft(find.text(tr('notesTitle'))).dy;
-      expect(supportY, greaterThan(notesY));
-    });
-
-    testWidgets('el logo de WhatsApp va en su círculo verde',
-        (tester) async {
-      // El asset es el glifo BLANCO: sin el círculo verde era
-      // invisible sobre el fondo blanco del drawer (auditoría).
-      await pumpHomeScreen(tester);
-      await tester.tap(find.byTooltip(tr('menuWord')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-      final logo = find.byWidgetPredicate((w) =>
-          w is Image &&
-          w.image is AssetImage &&
-          (w.image as AssetImage).assetName == 'assets/whatsapp.png');
-      expect(logo, findsOneWidget);
-      final greenCircle = find.ancestor(
-        of: logo,
-        matching: find.byWidgetPredicate((w) =>
-            w is Container &&
-            w.decoration is BoxDecoration &&
-            (w.decoration as BoxDecoration).color ==
-                const Color(0xFF25D366) &&
-            (w.decoration as BoxDecoration).shape == BoxShape.circle),
+      // El Soporte salió del menú por completo (fix4, punto 11): ni
+      // la fila ni el logo de WhatsApp están ya en el drawer. Vive
+      // en Cuenta como última opción (ver fix4_cuenta_soporte_test).
+      expect(find.text(tr('supportWord')), findsNothing);
+      expect(
+        find.byWidgetPredicate((w) =>
+            w is Image &&
+            w.image is AssetImage &&
+            (w.image as AssetImage).assetName == 'assets/whatsapp.png'),
+        findsNothing,
       );
-      expect(greenCircle, findsOneWidget);
+      // Las últimas filas del menú siguen ahí (Notas cierra la lista).
+      expect(find.text(tr('notesTitle')), findsOneWidget);
     });
   });
 
@@ -618,25 +605,21 @@ void main() {
       for (final labelKey in ['tableQuizTitle', 'compareTitle']) {
         final label = find.text(tr(labelKey));
         expect(label, findsOneWidget);
-        final card = find
-            .ancestor(of: label, matching: find.byType(Card))
-            .first;
-        final icon = find.descendant(
-            of: card, matching: find.byType(LucideIcon));
+        final card =
+            find.ancestor(of: label, matching: find.byType(Card)).first;
+        final icon =
+            find.descendant(of: card, matching: find.byType(LucideIcon));
         expect(icon, findsOneWidget);
-        expect(tester.getCenter(icon).dy,
-            lessThan(tester.getCenter(label).dy));
+        expect(tester.getCenter(icon).dy, lessThan(tester.getCenter(label).dy));
       }
       // Los dos botones miden exactamente lo mismo.
       final quizCard = find
           .ancestor(
-              of: find.text(tr('tableQuizTitle')),
-              matching: find.byType(Card))
+              of: find.text(tr('tableQuizTitle')), matching: find.byType(Card))
           .first;
       final compareCard = find
           .ancestor(
-              of: find.text(tr('compareTitle')),
-              matching: find.byType(Card))
+              of: find.text(tr('compareTitle')), matching: find.byType(Card))
           .first;
       expect(tester.getSize(quizCard), tester.getSize(compareCard));
     });
@@ -666,8 +649,7 @@ void main() {
 
     /// Una pantalla empujada desde un botón, para probar el botón
     /// atrás (la raíz no se puede cerrar con pop).
-    Future<void> pumpPushable(
-        WidgetTester tester, Widget screen) async {
+    Future<void> pumpPushable(WidgetTester tester, Widget screen) async {
       tester.view.physicalSize = const Size(720, 1600);
       tester.view.devicePixelRatio = 2.0;
       addTearDown(() {
@@ -697,38 +679,88 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
     }
 
-    /// El botón atrás muestra el aviso; quedarse no sale; salir
-    /// confirma, quita 1 vida y cierra la pantalla.
-    Future<void> checkBackWarning(WidgetTester tester) async {
+    /// El botón atrás en una actividad SIN vidas (fix4, punto 5):
+    /// muestra el aviso nuevo, quedarse no sale, y salir NO quita
+    /// vidas (los puntos ganados hasta ahí se quedan).
+    Future<void> checkBackWarningNoLives(WidgetTester tester) async {
       expect(ProgressService.instance.livesLeft, 5);
       await tester.pageBack();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      expect(find.text(tr('exitLevelTitle')), findsOneWidget);
+      expect(find.text(tr('exitNoLivesTitle')), findsOneWidget);
       // Quedarse: la pantalla sigue.
       await tester.tap(find.text(tr('exitLevelStay')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      expect(find.text(tr('exitLevelTitle')), findsNothing);
+      expect(find.text(tr('exitNoLivesTitle')), findsNothing);
       expect(find.text('Abrir pantalla'), findsNothing);
-      // Salir: −1 vida y vuelta a la pantalla anterior.
+      // Salir: las vidas NO cambian y vuelta a la pantalla anterior.
+      // El botón "Salir" del diálogo dice igual que el botón Salir
+      // del quiz que hay detrás: se busca dentro del diálogo.
       await tester.pageBack();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.text(tr('exitNoLivesLeave')),
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(ProgressService.instance.livesLeft, 5);
+      expect(find.text('Abrir pantalla'), findsOneWidget);
+    }
+
+    /// El botón atrás en un NIVEL: salir sí cuesta 1 vida.
+    /// La sesión de quiz no tiene AppBar ni botón atrás del sistema
+    /// (ronda 2): la única salida es el botón Salir del quiz.
+    Future<void> checkBackWarningLevel(WidgetTester tester) async {
+      expect(ProgressService.instance.livesLeft, 5);
+      await tester.tap(find.text(tr('quizExit')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text(tr('exitLevelTitle')), findsOneWidget);
+      // Quedarse: la sesión sigue.
+      await tester.tap(find.text(tr('exitLevelStay')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text(tr('exitLevelTitle')), findsNothing);
+      expect(find.textContaining('Pregunta 1 de'), findsOneWidget);
+      // Salir: −1 vida y vuelta a Niveles.
+      await tester.tap(find.text(tr('quizExit')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       await tester.tap(find.text(tr('exitLevelLeave')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       expect(ProgressService.instance.livesLeft, 4);
-      expect(find.text('Abrir pantalla'), findsOneWidget);
+      // De vuelta en Niveles (el título aparece 2 veces: cabecera
+      // de la pantalla y etiqueta de la barra inferior).
+      expect(find.text(tr('levelsTitle')), findsWidgets);
+      expect(find.byType(AppBar), findsOneWidget);
     }
 
     testWidgets(
-        'en un repaso se ocultan AppBar y navbar; las opciones se leen',
+        'Nivel: el botón atrás pide confirmar y salir cuesta '
+        '1 vida (fix4, punto 5)', (tester) async {
+      await pumpHomeScreen(tester);
+      // Toca el nodo del Nivel 1 del primer tema: el centro del
+      // nodo está 43 px por encima del centro de su etiqueta
+      // "Nivel 1" (nodo de 64 px + 4 px de hueco + ~7 px de media
+      // etiqueta). La etiqueta en sí no es tocable.
+      final label = find.text('${tr('levelWord')} 1').first;
+      await tester.tapAt(tester.getCenter(label) + const Offset(0, -43));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.textContaining('Pregunta 1 de'), findsOneWidget);
+      await checkBackWarningLevel(tester);
+    });
+
+    testWidgets('en un repaso se ocultan AppBar y navbar; las opciones se leen',
         (tester) async {
       await pumpHomeScreen(tester);
       // Un error real del banco, para que el repaso tenga variantes.
-      final q = allQuestions.firstWhere(
-          (element) => element.topic == 'estequiometria');
+      final q = allQuestions
+          .firstWhere((element) => element.topic == 'estequiometria');
       ProgressService.instance.addFailed(FailedEntry(
         id: 'bank:${q.topic}:${q.question}',
         topic: q.topic,
@@ -747,8 +779,7 @@ void main() {
       // Las opciones se leen: el color del texto no es blanco.
       for (final e in find.byType(ElevatedButton).evaluate()) {
         final b = e.widget as ElevatedButton;
-        final fg =
-            b.style?.foregroundColor?.resolve(<WidgetState>{});
+        final fg = b.style?.foregroundColor?.resolve(<WidgetState>{});
         if (fg != null) expect(fg, isNot(Colors.white));
       }
       // Salir del repaso es directo (no es un nivel) y la barra vuelve.
@@ -759,46 +790,46 @@ void main() {
       expect(find.byType(NavigationBar), findsOneWidget);
     });
 
-    testWidgets('Reto: el botón atrás pide confirmar con pérdida de vida',
+    testWidgets(
+        'Reto: el botón atrás avisa sin pérdida de vida (fix4, punto 5)',
         (tester) async {
       await pumpPushable(tester, const ChallengeScreen());
-      await tester.enterText(
-          find.byType(TextField).at(0), 'Kristian (tú)');
+      await tester.enterText(find.byType(TextField).at(0), 'Kristian (tú)');
       await tester.enterText(find.byType(TextField).at(1), 'Britany');
       await tester.tap(find.text(tr('challengeStart')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.textContaining('Pregunta 1 de'), findsOneWidget);
-      await checkBackWarning(tester);
+      await checkBackWarningNoLives(tester);
     });
 
     testWidgets(
-        'Examen con tiempo: el botón atrás pide confirmar con vida',
+        'Examen con tiempo: el botón atrás avisa sin pérdida de vida (fix4, punto 5)',
         (tester) async {
       await pumpPushable(tester, const TimedExamScreen());
       await tester.tap(find.text(tr('timedStart')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.textContaining('Pregunta 1'), findsOneWidget);
-      await checkBackWarning(tester);
+      await checkBackWarningNoLives(tester);
     });
 
     testWidgets(
-        'Cuestionario de laboratorio: el botón atrás pide confirmar',
+        'Cuestionario de laboratorio: el botón atrás avisa sin pérdida de vida (fix4, punto 5)',
         (tester) async {
       await pumpPushable(tester, const LabQuizPage());
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.textContaining('Pregunta 1 de'), findsOneWidget);
-      await checkBackWarning(tester);
+      await checkBackWarningNoLives(tester);
     });
 
-    testWidgets('Quiz de la tabla: el botón atrás pide confirmar',
+    testWidgets(
+        'Quiz de la tabla: el botón atrás avisa sin pérdida de vida (fix4, punto 5)',
         (tester) async {
       await pumpPushable(tester, const TableQuizScreen());
       await tester.pump(const Duration(milliseconds: 300));
-      await checkBackWarning(tester);
+      await checkBackWarningNoLives(tester);
     });
-
   });
 
   group('LucideIcon no se estira (auditoría)', () {
@@ -807,8 +838,7 @@ void main() {
     // es el GLIFO. El pintor dibuja siempre al tamaño nominal,
     // centrado. Se comprueba que el CustomPaint lleva el tamaño
     // nominal; el píxel se verifica en las previews (drawer, Tabla).
-    testWidgets('en un Column con stretch el glifo sigue a 24',
-        (tester) async {
+    testWidgets('en un Column con stretch el glifo sigue a 24', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
@@ -825,8 +855,9 @@ void main() {
       final icon = lucide(LucideIcons.gamepad2);
       expect(icon, findsOneWidget);
       expect(
-          tester.widget<CustomPaint>(find.descendant(
-              of: icon, matching: find.byType(CustomPaint)))
+          tester
+              .widget<CustomPaint>(
+                  find.descendant(of: icon, matching: find.byType(CustomPaint)))
               .size,
           const Size(24, 24));
     });
@@ -839,8 +870,7 @@ void main() {
             body: TextField(
               decoration: InputDecoration(
                 hintText: tr('searchWord'),
-                prefixIcon:
-                    const LucideIcon(LucideIcons.search, size: 18),
+                prefixIcon: const LucideIcon(LucideIcons.search, size: 18),
               ),
             ),
           ),
@@ -850,8 +880,9 @@ void main() {
       final icon = lucide(LucideIcons.search);
       expect(icon, findsOneWidget);
       expect(
-          tester.widget<CustomPaint>(find.descendant(
-              of: icon, matching: find.byType(CustomPaint)))
+          tester
+              .widget<CustomPaint>(
+                  find.descendant(of: icon, matching: find.byType(CustomPaint)))
               .size,
           const Size(18, 18));
     });

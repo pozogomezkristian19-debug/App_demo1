@@ -15,15 +15,25 @@
 //     → "Más tarde" (solo si force es false): pospone la descarga y
 //       programa un RECORDATORIO por notificación para mañana (una vez
 //       al día como máximo, hasta actualizar); al tocarlo, la app se
-//       abre y vuelve a salir el diálogo. No molesta en cada apertura.
+//       abre y vuelve a salir el diálogo. También deja una entrada en
+//       la bandeja de Notificaciones (fix4, punto 8). No molesta en
+//       cada apertura.
 //     → Si el APK de esa versión ya está descargado, el botón es
 //       "Instalar" en vez de descargar de nuevo.
 //
 // Sin internet o si la descarga falla: SILENCIO en la comprobación
-// (la app sigue normal, sin diálogo ni error visible). Como mucho una
-// comprobación cada 4 horas (fix3, punto 20b). Si el teléfono no tiene
-// activado "Instalar apps desconocidas" para Melli-Qui, al intentar
-// instalar sale un aviso claro y lleva a Ajustes para activarlo.
+// (la app sigue normal, sin diálogo ni error visible). La
+// comprobación es en CADA apertura y al volver a primer plano (fix4,
+// punto 7): version.json es un JSON diminuto y fallar en silencio no
+// cuesta nada. Esto NO hace que el diálogo vuelva a salir en cada
+// comprobación: si el usuario tocó "Más tarde", esa versión queda
+// registrada como pospuesta y solo avisa su recordatorio por
+// notificación (una vez al día como máximo) o una versión aún más
+// nueva. Así el aviso sale en cuanto se abre la app tras publicar.
+// Además hay un botón manual "Buscar actualización" en Cuenta
+// (fix4, punto 7). Si el teléfono no tiene activado "Instalar apps
+// desconocidas" para Melli-Qui, al intentar instalar sale un aviso
+// claro y lleva a Ajustes para activarlo.
 //
 // El permiso de instalar y el instalador del sistema solo se pueden
 // confirmar en el teléfono real de Kristian, no en pruebas.
@@ -40,30 +50,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/brand_logo.dart';
 import '../widgets/lucide_icons.dart';
 import 'localization.dart';
+import 'notification_inbox.dart';
 import 'notification_service.dart';
 
 /// Versión actual de la app: ÚNICA fuente de verdad en el código.
 /// Debe coincidir con `latest` de version.json en la build que se
 /// publica, para que no salga un aviso falso nada más instalar.
-const String kAppVersion = '6.0';
-
-/// Cadencia de la comprobación (fix3, punto 20b): como mucho una vez
-/// cada 4 horas. La app mira version.json al abrirse y al volver a
-/// primer plano, pero solo si pasaron ≥ 4 h desde la última mirada.
-/// El archivo es un JSON diminuto: no gasta casi nada de datos ni de
-/// batería. Esto NO hace que el diálogo vuelva a salir en cada
-/// comprobación: si el usuario tocó "Más tarde", esa versión queda
-/// registrada como pospuesta y solo avisa su recordatorio por
-/// notificación (una vez al día como máximo) o una versión aún más
-/// nueva. Así el aviso les llega en horas, no al día siguiente.
-const Duration kUpdateCheckInterval = Duration(hours: 4);
+const String kAppVersion = '6.1';
 
 /// version.json en la raíz del repo, servido en crudo por GitHub.
 const String kUpdateCheckUrl =
     'https://raw.githubusercontent.com/pozogomezkristian19-debug/App_demo1/main/version.json';
 
 /// Claves guardadas en el teléfono (SharedPreferences).
-const String kUpdateLastCheckKey = 'melli_update_last_check_ms';
 const String kUpdateDismissedKey = 'melli_update_dismissed_version';
 const String kUpdatePendingKey = 'melli_update_pending_json';
 const String kUpdateReminderVersionKey = 'melli_update_reminder_version';
@@ -131,23 +130,16 @@ class UpdateInfo {
 ///
 /// - La versión remota debe ser mayor que la instalada.
 /// - Con `force` no se puede posponer: el aviso sale en cada apertura
-///   (pero como mucho una vez cada 4 horas, como todo lo demás).
+///   (la comprobación es en cada apertura, fix4, punto 7).
 /// - Sin `force`, si el usuario ya pulsó "Más tarde" para ESA versión,
 ///   no se le vuelve a preguntar por ella (el recordatorio por
-///   notificación es lo que avisa).
-/// - En cualquier caso, como mucho una comprobación cada 4 horas.
+///   notificación y la entrada de la bandeja son lo que avisa).
 bool shouldShowUpdate({
   required String latest,
   required bool force,
   required String? dismissedVersion,
-  required DateTime? lastCheck,
-  required DateTime now,
 }) {
   if (compareVersions(latest, kAppVersion) <= 0) return false;
-  if (lastCheck != null &&
-      now.difference(lastCheck) < kUpdateCheckInterval) {
-    return false;
-  }
   if (!force && dismissedVersion == latest) return false;
   return true;
 }
@@ -500,15 +492,29 @@ Map<String, String> updateTexts(String lang) {
   }
 }
 
+/// Resultado de la comprobación MANUAL ("Buscar actualización").
+enum ManualUpdateResult {
+  /// La versión remota es igual o más vieja que la instalada.
+  upToDate,
+
+  /// Hay una versión nueva: el diálogo ya se mostró.
+  updateAvailable,
+
+  /// No se pudo descargar version.json (sin internet o archivo roto).
+  checkFailed,
+}
+
 /// Comprueba si hay actualización y, si toca, muestra el diálogo.
 /// La app la llama al abrirse (tras el primer frame); el servicio
 /// además se vuelve a comprobar solo al volver a primer plano
-/// (AppLifecycleListener, fix3 punto 20b), cada 4 h como mucho.
+/// (AppLifecycleListener, fix3 punto 20b). La comprobación es en
+/// CADA apertura y al volver (fix4, punto 7): version.json es un
+/// JSON diminuto y fallar en silencio no cuesta nada.
 /// En silencio total si no hay internet, si version.json no existe o
 /// si trae algo raro: la app sigue en silencio, sin avisar de nada.
 /// [fromReminder]: desde el recordatorio de actualización (el usuario
-/// tocó la notificación): se salta la regla de las 4 horas y la
-/// versión descartada, porque lo pidió él.
+/// tocó la notificación): se salta la versión descartada, porque lo
+/// pidió él.
 class UpdateCheckService {
   UpdateCheckService._();
 
@@ -536,6 +542,11 @@ class UpdateCheckService {
   /// primer plano seguidos): la segunda se salta.
   static bool _checkInFlight = false;
 
+  /// Para no apilar dos diálogos de actualización (p. ej. volver a
+  /// primer plano con el diálogo ya abierto): mientras uno está en
+  /// pantalla, los demás no se muestran.
+  static bool _dialogShowing = false;
+
   /// Arma el observador de ciclo de vida en la primera llamada a
   /// [checkForUpdate]; las llamadas posteriores solo actualizan el
   /// contexto guardado. Idempotente.
@@ -558,8 +569,8 @@ class UpdateCheckService {
     }
   }
 
-  /// Al volver a primer plano: comprobar, con la misma cadencia de
-  /// 4 h (el servicio decide si toca o no; si el usuario pospuso
+  /// Al volver a primer plano: comprobar, con la misma cadencia que
+  /// al abrir (en cada vuelta, fix4, punto 7; si el usuario pospuso
   /// ESA versión, no hay diálogo: solo el recordatorio).
   static void _onForeground() {
     final context = _resumeContext;
@@ -579,6 +590,7 @@ class UpdateCheckService {
     _resumeContext = null;
     _resumeFetcher = null;
     _checkInFlight = false;
+    _dialogShowing = false;
   }
 
   static Future<void> checkForUpdate(
@@ -604,6 +616,24 @@ class UpdateCheckService {
     }
   }
 
+  /// Descarga version.json y lo parsea. null si no hay internet, si
+  /// el archivo no existe o si trae algo raro. La usan la
+  /// comprobación al abrir y la manual de Cuenta.
+  static Future<UpdateInfo?> _fetchUpdateInfo(
+      UpdateJsonFetcher? fetcher) async {
+    final raw = await (fetcher ?? _defaultFetcher)(Uri.parse(kUpdateCheckUrl));
+    if (raw == null) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) {
+        return UpdateInfo.fromJson(decoded);
+      }
+    } catch (_) {
+      // JSON roto: silencio, como siempre.
+    }
+    return null;
+  }
+
   static Future<void> _performCheck(
     BuildContext context, {
     UpdateJsonFetcher? fetcher,
@@ -612,35 +642,10 @@ class UpdateCheckService {
   }) async {
     final now = nowOverride ?? DateTime.now();
     final prefs = await SharedPreferences.getInstance();
-    final lastCheckMs = prefs.getInt(kUpdateLastCheckKey);
-    final lastCheck = lastCheckMs == null
-        ? null
-        : DateTime.fromMillisecondsSinceEpoch(lastCheckMs);
-    // Como mucho una comprobación cada 4 horas: si ya se miró hace
-    // menos de 4 h, ni se descarga nada. Esto se revisa ANTES de
-    // tocar la red (salvo que venga del recordatorio, que lo pidió
-    // el usuario).
-    if (!fromReminder &&
-        lastCheck != null &&
-        now.difference(lastCheck) < kUpdateCheckInterval) {
-      return;
-    }
-
-    final raw = await (fetcher ?? _defaultFetcher)(Uri.parse(kUpdateCheckUrl));
-    // Se anota la comprobación aunque falle: sin internet, no tiene
-    // sentido reintentarlo en cada apertura durante las próximas
-    // 4 horas.
-    await prefs.setInt(kUpdateLastCheckKey, now.millisecondsSinceEpoch);
-    if (raw == null) return;
-    UpdateInfo? info;
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is Map<String, dynamic>) {
-        info = UpdateInfo.fromJson(decoded);
-      }
-    } catch (_) {
-      info = null;
-    }
+    // Comprobación en CADA apertura (fix4, punto 7): version.json es
+    // diminuto y fallar en silencio no cuesta nada, así que ya no
+    // hay cadencia de 4 horas ni se anota la última comprobación.
+    final info = await _fetchUpdateInfo(fetcher);
     if (info == null) return;
 
     // Ya estamos al día (o por encima): se acabó el aviso y se
@@ -667,13 +672,34 @@ class UpdateCheckService {
       latest: info.latest,
       force: info.force,
       dismissedVersion: dismissed,
-      lastCheck: lastCheck,
-      now: now,
     )) {
       return;
     }
     if (!context.mounted) return;
     await showUpdateDialog(context, info);
+  }
+
+  /// Comprobación MANUAL, desde el botón "Buscar actualización" de
+  /// Cuenta (fix4, punto 7): fuerza el chequeo y dice qué pasó.
+  /// A diferencia de la automática, pasa por encima de "Más tarde":
+  /// si el usuario lo pide, el diálogo sale aunque esa versión se
+  /// hubiera pospuesto. El fetcher es el guardado en la comprobación
+  /// al abrir (en los tests, el falso inyectado); en la app es null
+  /// y se usa HttpClient.
+  static Future<ManualUpdateResult> checkForUpdateManual(
+    BuildContext context, {
+    UpdateJsonFetcher? fetcher,
+  }) async {
+    final info = await _fetchUpdateInfo(
+        fetcher ?? _resumeFetcher ?? _defaultFetcher);
+    if (info == null) return ManualUpdateResult.checkFailed;
+    if (compareVersions(info.latest, kAppVersion) <= 0) {
+      await _cleanupAfterUpdate();
+      return ManualUpdateResult.upToDate;
+    }
+    if (!context.mounted) return ManualUpdateResult.checkFailed;
+    await showUpdateDialog(context, info);
+    return ManualUpdateResult.updateAvailable;
   }
 
   /// Muestra el diálogo de la actualización pendiente (la que guardó
@@ -711,19 +737,30 @@ class UpdateCheckService {
   /// igual en claro y en oscuro). Botón principal "Actualizar ahora"
   /// (o "Instalar" si el APK de esa versión ya está descargado) y
   /// "Más tarde" salvo que la actualización sea obligatoria.
+  ///
+  /// Los botones solo cierran el diálogo con una elección
+  /// ('update' / 'later'; tocar fuera devuelve null): lo que se hace
+  /// con esa elección pasa DESPUÉS, fuera del diálogo. Así "Más
+  /// tarde" y descartar el diálogo hacen lo mismo (posponer +
+  /// recordatorio + entrada en la bandeja), y nunca se ejecuta dos
+  /// veces. Si ya hay un diálogo abierto, no se apila otro.
   static Future<void> showUpdateDialog(
       BuildContext context, UpdateInfo info) async {
+    if (_dialogShowing) return;
     final t = updateTexts(AppLang.code);
     final already = await _downloadedApkFile(info.latest) != null;
     if (!context.mounted) return;
-    await showDialog<void>(
-      context: context,
-      // Con actualización obligatoria no se puede cerrar tocando
-      // fuera ni con el botón atrás: solo queda Actualizar.
-      barrierDismissible: !info.force,
-      builder: (dialogContext) => PopScope(
-        canPop: !info.force,
-        child: Dialog(
+    _dialogShowing = true;
+    String? choice;
+    try {
+      choice = await showDialog<String>(
+        context: context,
+        // Con actualización obligatoria no se puede cerrar tocando
+        // fuera ni con el botón atrás: solo queda Actualizar.
+        barrierDismissible: !info.force,
+        builder: (dialogContext) => PopScope(
+          canPop: !info.force,
+          child: Dialog(
           backgroundColor: Colors.white,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
@@ -809,14 +846,8 @@ class UpdateCheckService {
                       foregroundColor: Colors.white,
                       shadowColor: BrandColors.tealDark,
                     ),
-                    onPressed: () async {
-                      Navigator.of(dialogContext).pop();
-                      if (already) {
-                        await installDownloadedApk(context);
-                      } else {
-                        await startDownload(context, info);
-                      }
-                    },
+                    onPressed: () =>
+                        Navigator.of(dialogContext).pop('update'),
                     child: Text(already ? t['install']! : t['updateNow']!),
                   ),
                 ),
@@ -828,12 +859,8 @@ class UpdateCheckService {
                       style: TextButton.styleFrom(
                         foregroundColor: BrandColors.teal,
                       ),
-                      onPressed: () async {
-                        await _onLaterPressed(info);
-                        if (dialogContext.mounted) {
-                          Navigator.of(dialogContext).pop();
-                        }
-                      },
+                      onPressed: () =>
+                          Navigator.of(dialogContext).pop('later'),
                       child: Text(t['later']!),
                     ),
                   ),
@@ -845,16 +872,43 @@ class UpdateCheckService {
         ),
       ),
     );
+    } finally {
+      _dialogShowing = false;
+    }
+    if (choice == 'update') {
+      // "Actualizar ahora" (o "Instalar", si el APK ya estaba
+      // descargado): el diálogo ya se cerró, se descarga o instala.
+      if (!context.mounted) return;
+      if (already) {
+        await installDownloadedApk(context);
+      } else {
+        await startDownload(context, info);
+      }
+      return;
+    }
+    // "Más tarde" o descartar el diálogo tocando fuera (null):
+    // posponer. Con force no se puede llegar aquí (no hay botón
+    // "Más tarde" ni se puede cerrar tocando fuera).
+    await _onLaterPressed(info);
   }
 
   /// "Más tarde": pospone la descarga. No vuelve a preguntar por ESA
   /// versión al abrir la app; el aviso pasa al sistema de
   /// notificaciones: un recordatorio para mañana (ver
-  /// scheduleUpdateReminder).
+  /// scheduleUpdateReminder) y una entrada en la bandeja de
+  /// Notificaciones (fix4, punto 8), que desaparece al actualizar.
   static Future<void> _onLaterPressed(UpdateInfo info) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(kUpdateDismissedKey, info.latest);
     await scheduleUpdateReminder(info, DateTime.now());
+    await NotificationInbox.add(
+      id: 'update-${info.latest}',
+      kind: InboxKind.update,
+      title: tr('inboxUpdateTitle'),
+      body: '${tr('inboxUpdateBody').replaceFirst('{v}', info.latest)}'
+          '${info.notes.isEmpty ? '' : '\n${info.notes}'}',
+      data: info.toJson(),
+    );
   }
 
   /// Programa el recordatorio por notificación para mañana (al día
@@ -894,9 +948,12 @@ class UpdateCheckService {
   }
 
   /// Limpia el recordatorio y el APK viejo cuando ya estamos al día.
+  /// También quita la entrada de actualización de la bandeja de
+  /// Notificaciones (fix4, punto 8): ya no hay nada pendiente.
   static Future<void> _cleanupAfterUpdate() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(kUpdateDismissedKey);
+    await NotificationInbox.removeByKind(InboxKind.update);
     await prefs.remove(kUpdatePendingKey);
     await prefs.remove(kUpdateReminderVersionKey);
     await prefs.remove(kUpdateReminderAtKey);

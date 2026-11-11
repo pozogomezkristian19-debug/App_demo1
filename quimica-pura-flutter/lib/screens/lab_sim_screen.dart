@@ -53,24 +53,13 @@ const List<_Reagent> _acids = [
 
 const List<_Reagent> _bases = [
   _Reagent(name: 'Hidróxido de sodio', formula: 'NaOH 0.10 M', strong: true),
-  _Reagent(
-      name: 'Hidróxido de potasio', formula: 'KOH 0.10 M', strong: true),
+  _Reagent(name: 'Hidróxido de potasio', formula: 'KOH 0.10 M', strong: true),
   _Reagent(name: 'Hidróxido de litio', formula: 'LiOH 0.10 M', strong: true),
+  _Reagent(name: 'Amoníaco', formula: 'NH₃ 0.10 M', strong: false, kb: 1.8e-5),
   _Reagent(
-      name: 'Amoníaco',
-      formula: 'NH₃ 0.10 M',
-      strong: false,
-      kb: 1.8e-5),
+      name: 'Metilamina', formula: 'CH₃NH₂ 0.10 M', strong: false, kb: 4.4e-4),
   _Reagent(
-      name: 'Metilamina',
-      formula: 'CH₃NH₂ 0.10 M',
-      strong: false,
-      kb: 4.4e-4),
-  _Reagent(
-      name: 'Etilamina',
-      formula: 'C₂H₅NH₂ 0.10 M',
-      strong: false,
-      kb: 5.6e-4),
+      name: 'Etilamina', formula: 'C₂H₅NH₂ 0.10 M', strong: false, kb: 5.6e-4),
 ];
 
 const List<String> _indicators = [
@@ -169,7 +158,10 @@ class _LabSimScreenState extends State<LabSimScreen> {
         return (-_log10(excess / vTot), 'Queda ácido sin neutralizar. $note');
       }
       if (excess < -1e-12) {
-        return (14 + _log10(-excess / vTot), 'Queda base sin neutralizar. $note');
+        return (
+          14 + _log10(-excess / vTot),
+          'Queda base sin neutralizar. $note'
+        );
       }
       return (7.0, 'Neutralización completa: solo queda la sal en agua. $note');
     }
@@ -184,10 +176,15 @@ class _LabSimScreenState extends State<LabSimScreen> {
       if ((nb - na).abs() < 1e-12) {
         final c = na / vTot;
         final oh = math.sqrt((_kw / ka) * c);
-        return (14 + _log10(oh),
-            'Punto de equivalencia: la base conjugada se hidroliza y el pH es básico.');
+        return (
+          14 + _log10(oh),
+          'Punto de equivalencia: la base conjugada se hidroliza y el pH es básico.'
+        );
       }
-      return (14 + _log10((nb - na) / vTot), 'La base fuerte sobra: manda el OH⁻ libre.');
+      return (
+        14 + _log10((nb - na) / vTot),
+        'La base fuerte sobra: manda el OH⁻ libre.'
+      );
     }
     if (acid.strong && !base.strong) {
       // Ácido fuerte + base débil (Kb propio de cada base).
@@ -195,16 +192,24 @@ class _LabSimScreenState extends State<LabSimScreen> {
       final pKb = -_log10(kb);
       if (na < nb) {
         final poh = pKb + _log10(na / (nb - na));
-        return (14 - poh, 'Tampón ácido/base conjugada (Henderson-Hasselbalch).');
+        return (
+          14 - poh,
+          'Tampón ácido/base conjugada (Henderson-Hasselbalch).'
+        );
       }
       if ((na - nb).abs() < 1e-12) {
         final c = nb / vTot;
         final ka = _kw / kb;
         final h = math.sqrt(ka * c);
-        return (-_log10(h),
-            'Punto de equivalencia: el ácido conjugado se hidroliza y el pH es ácido.');
+        return (
+          -_log10(h),
+          'Punto de equivalencia: el ácido conjugado se hidroliza y el pH es ácido.'
+        );
       }
-      return (-_log10((na - nb) / vTot), 'El ácido fuerte sobra: manda el H⁺ libre.');
+      return (
+        -_log10((na - nb) / vTot),
+        'El ácido fuerte sobra: manda el H⁺ libre.'
+      );
     }
     // Ácido débil + base débil: aproximación del punto medio.
     final ka = acid.ka ?? 1.8e-5;
@@ -225,7 +230,8 @@ class _LabSimScreenState extends State<LabSimScreen> {
   /// se intensifica o se mezcla a medida que el pH cruza la zona de
   /// viraje (como en el laboratorio de verdad). Los extremos son los
   /// colores clásicos de cada indicador:
-  /// - Fenolftaleína: incolora < 8,2 · rosa 8,2–10 · rosa intenso > 10.
+  /// - Fenolftaleína: incolora < 7 · rosa que aparece poco a poco
+  ///   7–8,2 · rosa 8,2–10 · rosa intenso > 10.
   /// - Tornasol: rojo < 4,5 · violeta 4,5–8,3 · azul > 8,3.
   /// - Universal: rojo-naranja-amarillo-verde-azul-violeta de 0 a 14.
   /// - Naranja de metilo: rojo < 3,1 · naranja 3,1–4,4 · amarillo > 4,4.
@@ -280,7 +286,16 @@ class _LabSimScreenState extends State<LabSimScreen> {
         }
         return const Color(0xFF1E88E5);
       default: // Fenolftaleína
-        if (ph < 8.2) return const Color(0xFFECEFF1);
+        if (ph < 7.0) return const Color(0xFFECEFF1);
+        if (ph < 8.2) {
+          // El viraje no es un escalón en 8,2: el rosa aparece poco
+          // a poco entre pH 7 y 8,2, como en el laboratorio de
+          // verdad (fix4, punto 9b). Antes el color saltaba de rosa
+          // claro a casi blanco en un solo paso de pH y, al bajar el
+          // deslizante de base, el líquido se ponía blanco de golpe.
+          return _mix(const Color(0xFFECEFF1), const Color(0xFFF8BBD0),
+              (ph - 7.0) / 1.2);
+        }
         if (ph < 10.0) {
           return _mix(const Color(0xFFF8BBD0), const Color(0xFFEC407A),
               (ph - 8.2) / 1.8);
@@ -335,10 +350,8 @@ class _LabSimScreenState extends State<LabSimScreen> {
               side: BorderSide(color: scheme.primary),
             ),
             segments: [
-              ButtonSegment(
-                  value: false, label: Text(tr('labModeAcidBase'))),
-              ButtonSegment(
-                  value: true, label: Text(tr('labModePrecip'))),
+              ButtonSegment(value: false, label: Text(tr('labModeAcidBase'))),
+              ButtonSegment(value: true, label: Text(tr('labModePrecip'))),
             ],
             selected: {_precip},
             onSelectionChanged: (s) => setState(() => _precip = s.first),
@@ -366,12 +379,17 @@ class _LabSimScreenState extends State<LabSimScreen> {
       const SizedBox(height: 16),
       DropdownButtonFormField<int>(
         initialValue: _acidIndex,
+        // isExpanded + ellipsis: sin esto el nombre largo del ácido
+        // corre bajo la flecha ▼ y se corta por la derecha (fix4,
+        // punto 9b: "Hidróxido de sodio (NaOH 0.10 M)" en la base).
+        isExpanded: true,
         decoration: const InputDecoration(labelText: 'Ácido'),
         items: [
           for (var i = 0; i < _acids.length; i++)
             DropdownMenuItem(
                 value: i,
-                child: Text('${_acids[i].name} (${_acids[i].formula})')),
+                child: Text('${_acids[i].name} (${_acids[i].formula})',
+                    overflow: TextOverflow.ellipsis)),
         ],
         onChanged: (v) {
           if (v != null) setState(() => _acidIndex = v);
@@ -379,22 +397,25 @@ class _LabSimScreenState extends State<LabSimScreen> {
       ),
       const SizedBox(height: 8),
       Text('Volumen de ácido: ${_acidVol.round()} mL'),
+      // Sin "label": la burbuja del valor tapaba la etiqueta de
+      // arriba en valores bajos; el valor ya se lee en la etiqueta.
       Slider(
         value: _acidVol,
         min: 10,
         max: 100,
         divisions: 18,
-        label: '${_acidVol.round()} mL',
         onChanged: (v) => setState(() => _acidVol = v),
       ),
       DropdownButtonFormField<int>(
         initialValue: _baseIndex,
+        isExpanded: true,
         decoration: const InputDecoration(labelText: 'Base'),
         items: [
           for (var i = 0; i < _bases.length; i++)
             DropdownMenuItem(
                 value: i,
-                child: Text('${_bases[i].name} (${_bases[i].formula})')),
+                child: Text('${_bases[i].name} (${_bases[i].formula})',
+                    overflow: TextOverflow.ellipsis)),
         ],
         onChanged: (v) {
           if (v != null) setState(() => _baseIndex = v);
@@ -407,15 +428,17 @@ class _LabSimScreenState extends State<LabSimScreen> {
         min: 10,
         max: 100,
         divisions: 18,
-        label: '${_baseVol.round()} mL',
         onChanged: (v) => setState(() => _baseVol = v),
       ),
       const SizedBox(height: 8),
       DropdownButtonFormField<String>(
         initialValue: _indicator,
+        isExpanded: true,
         decoration: const InputDecoration(labelText: 'Indicador'),
         items: _indicators
-            .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+            .map((s) => DropdownMenuItem(
+                value: s,
+                child: Text(s, overflow: TextOverflow.ellipsis)))
             .toList(),
         onChanged: (v) {
           if (v != null) setState(() => _indicator = v);
@@ -445,8 +468,7 @@ class _LabSimScreenState extends State<LabSimScreen> {
       ),
       const SizedBox(height: 16),
       Card(
-        color:
-            Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -482,11 +504,14 @@ class _LabSimScreenState extends State<LabSimScreen> {
       const SizedBox(height: 16),
       DropdownButtonFormField<int>(
         initialValue: _precipIndex,
+        isExpanded: true,
         decoration: const InputDecoration(labelText: 'Reacción'),
         items: [
           for (var i = 0; i < _precipReactions.length; i++)
             DropdownMenuItem(
-                value: i, child: Text(_precipReactions[i].name)),
+                value: i,
+                child: Text(_precipReactions[i].name,
+                    overflow: TextOverflow.ellipsis)),
         ],
         onChanged: (v) {
           if (v != null) setState(() => _precipIndex = v);
@@ -499,7 +524,6 @@ class _LabSimScreenState extends State<LabSimScreen> {
         min: 10,
         max: 100,
         divisions: 18,
-        label: '${_vol1.round()} mL',
         onChanged: (v) => setState(() => _vol1 = v),
       ),
       Text('Volumen de ${r.sol2}: ${_vol2.round()} mL'),
@@ -508,7 +532,6 @@ class _LabSimScreenState extends State<LabSimScreen> {
         min: 10,
         max: 100,
         divisions: 18,
-        label: '${_vol2.round()} mL',
         onChanged: (v) => setState(() => _vol2 = v),
       ),
       const SizedBox(height: 20),
@@ -535,8 +558,7 @@ class _LabSimScreenState extends State<LabSimScreen> {
       ),
       const SizedBox(height: 16),
       Card(
-        color:
-            Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -588,8 +610,7 @@ class _Beaker extends StatefulWidget {
   State<_Beaker> createState() => _BeakerState();
 }
 
-class _BeakerState extends State<_Beaker>
-    with SingleTickerProviderStateMixin {
+class _BeakerState extends State<_Beaker> with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   late Animation<double> _fill;
   late Animation<double> _precip;
@@ -618,31 +639,36 @@ class _BeakerState extends State<_Beaker>
   void didUpdateWidget(_Beaker oldWidget) {
     super.didUpdateWidget(oldWidget);
     var changed = false;
-    if (widget.fillFraction != oldWidget.fillFraction) {
+    if (widget.fillFraction != oldWidget.fillFraction) changed = true;
+    if (widget.precipFraction != oldWidget.precipFraction) changed = true;
+    if (widget.liquidColor != oldWidget.liquidColor) changed = true;
+    if (widget.precipColor != oldWidget.precipColor) changed = true;
+    if (changed) {
+      // Se rebasan TODOS los tweens desde el valor que se está
+      // mostrando ahora mismo, no solo el que cambió: antes solo se
+      // recreaba el tween del valor cambiado y, al reiniciar el
+      // controlador desde 0, los demás saltaban a su `begin` antiguo.
+      // Eso hacía que el nivel del líquido (y el montículo de
+      // precipitado) se desplomaran y volvieran a crecer cada vez que
+      // cambiaba el indicador, el ácido o la reacción, aunque el
+      // volumen no se hubiera tocado (ronda #4, punto 9: el vaso "se
+      // deformaba" al mover los controles).
       _fill = Tween<double>(begin: _fill.value, end: widget.fillFraction)
           .animate(
               CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
-      changed = true;
-    }
-    if (widget.precipFraction != oldWidget.precipFraction) {
-      _precip =
-          Tween<double>(begin: _precip.value, end: widget.precipFraction)
-              .animate(CurvedAnimation(
-                  parent: _controller, curve: Curves.easeInOut));
-      changed = true;
-    }
-    if (widget.liquidColor != oldWidget.liquidColor) {
-      _liquid = ColorTween(begin: _liquid.value, end: widget.liquidColor)
+      _precip = Tween<double>(begin: _precip.value, end: widget.precipFraction)
+          .animate(
+              CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+      _liquid = ColorTween(
+              begin: _liquid.value ?? widget.liquidColor,
+              end: widget.liquidColor)
           .animate(_controller);
-      changed = true;
+      _precipColor = ColorTween(
+              begin: _precipColor.value ?? widget.precipColor,
+              end: widget.precipColor)
+          .animate(_controller);
+      _controller.forward(from: 0);
     }
-    if (widget.precipColor != oldWidget.precipColor) {
-      _precipColor =
-          ColorTween(begin: _precipColor.value, end: widget.precipColor)
-              .animate(_controller);
-      changed = true;
-    }
-    if (changed) _controller.forward(from: 0);
   }
 
   @override
@@ -679,15 +705,18 @@ class _BeakerState extends State<_Beaker>
 }
 
 /// Dibuja un vaso de precipitados con aspecto real: vidrio con
-/// degradado vertical, paredes gruesas (trazo ancho de vidrio por
-/// dentro del contorno + base pesada en el fondo), pico vertedor,
+/// degradado vertical, paredes con trazo claro por dentro del
+/// contorno + base pesada en el fondo, pico vertedor,
 /// graduaciones cada 25 mL (con número cada 50 mL), reflejos del
 /// vidrio por encima del líquido, superficie con menisco cóncavo y
 /// brillo, líquido con degradado vertical (más claro arriba, más
 /// intenso abajo) y —en precipitación— líquido turbio/lechoso con
 /// partículas en suspensión y un precipitado granuloso, de densidad
 /// y tamaño crecientes hacia el fondo, acumulado sobre el fondo del
-/// vaso.
+/// vaso. El CONTORNO es fino (1,25 px) y suave, nunca negro y
+/// grueso: en claro es gris oscuro al 55 % y en oscuro gris claro
+/// al 55 % (retoque final de Kristian: "todas esas líneas tan
+/// toscas").
 ///
 /// El vidrio, las marcas y el contorno siguen `onSurface` del tema,
 /// así que se ven bien en modo claro (fondo blanco) y en modo oscuro
@@ -745,8 +774,7 @@ class _BeakerPainter extends CustomPainter {
     var up = true;
     while (x < _right + 12) {
       final nx = math.min(x + step, _right + 12);
-      path.quadraticBezierTo(
-          (x + nx) / 2, y + (up ? 0 : 7), nx, y + 4);
+      path.quadraticBezierTo((x + nx) / 2, y + (up ? 0 : 7), nx, y + 4);
       x = nx;
       up = !up;
     }
@@ -758,6 +786,10 @@ class _BeakerPainter extends CustomPainter {
       text: TextSpan(
           text: text,
           style: TextStyle(
+              // Familia explícita: sin ella el texto del pintor usa
+              // la fuente por defecto del sistema (en los tests es
+              // Ahem y los números salían como barras sólidas).
+              fontFamily: 'Roboto',
               color: onSurface.withValues(alpha: 0.75),
               fontSize: 10,
               fontWeight: FontWeight.w600)),
@@ -803,15 +835,16 @@ class _BeakerPainter extends CustomPainter {
     final turbidity = (precipFraction / 0.45).clamp(0.0, 1.0);
     if (liquidH > 2) {
       final liquidTop = _bottom - liquidH;
-      // Un líquido casi blanco (fenolftaleína en medio ácido) es
-      // agua incolora: se dibuja como agua (de casi blanca arriba a
-      // gris azulado pálido abajo), no como un gris plano.
-      final isWater =
-          HSLColor.fromColor(liquidColor).lightness > 0.92;
-      final topColor =
-          isWater ? const Color(0xFFF7FAFB) : _shade(liquidColor, 0.22);
-      final bottomColor =
-          isWater ? const Color(0xFFD3DEE4) : _shade(liquidColor, -0.10);
+      // El líquido se dibuja siempre con el mismo degradado (claro
+      // arriba, intenso abajo) a partir de su propio color. Antes
+      // había una rama "agua incolora" que se activaba de golpe
+      // cuando la luminosidad pasaba de 0,92: en mitad de la
+      // animación del color el líquido saltaba a blanco (fix4,
+      // punto 9b). Un líquido casi blanco (fenolftaleína en medio
+      // ácido) ya sale casi blanco con el degradado normal, sin
+      // ningún salto.
+      final topColor = _shade(liquidColor, 0.22);
+      final bottomColor = _shade(liquidColor, -0.10);
       // Superficie con menisco: se hunde un poco en el centro.
       final liquidPath = Path()
         ..moveTo(_left - 2, liquidTop)
@@ -840,10 +873,10 @@ class _BeakerPainter extends CustomPainter {
       canvas.drawPath(
           surface,
           Paint()
-            ..color = _shade(liquidColor, isWater ? -0.30 : -0.22)
+            ..color = _shade(liquidColor, -0.22)
                 .withValues(alpha: 0.65)
             ..style = PaintingStyle.stroke
-            ..strokeWidth = 1.8);
+            ..strokeWidth = 1.5);
       // Brillo justo bajo la superficie del líquido.
       final shine = Path()
         ..moveTo(_left + 8, liquidTop + 7)
@@ -863,13 +896,10 @@ class _BeakerPainter extends CustomPainter {
         canvas.clipPath(liquidPath);
         // El líquido se vuelve turbio/lechoso según la cantidad de
         // precipitado, con un leve tinte de su color real.
-        canvas.drawPath(
-            liquidPath,
+        canvas.drawPath(liquidPath,
             Paint()..color = Colors.white.withValues(alpha: 0.55 * turbidity));
-        canvas.drawPath(
-            liquidPath,
-            Paint()
-              ..color = precipColor.withValues(alpha: 0.18 * turbidity));
+        canvas.drawPath(liquidPath,
+            Paint()..color = precipColor.withValues(alpha: 0.18 * turbidity));
         final precipTopY = _bottom - innerH * precipFraction;
         // Partículas en suspensión, con caída al fondo: cada una
         // tiene su punto de partida repartido por el líquido (como
@@ -884,15 +914,13 @@ class _BeakerPainter extends CustomPainter {
         for (var i = 0; i < suspended; i++) {
           final startY = liquidTop +
               10 +
-              rnd.nextDouble() *
-                  math.max(1.0, precipTopY - liquidTop - 14);
+              rnd.nextDouble() * math.max(1.0, precipTopY - liquidTop - 14);
           final endY = precipTopY - 2 - rnd.nextDouble() * 6;
           final y = startY + (endY - startY) * settle;
           final depth =
               ((y - liquidTop) / math.max(1.0, innerH)).clamp(0.0, 1.0);
           canvas.drawCircle(
-              Offset(_left + 8 + rnd.nextDouble() * (_right - _left - 16),
-                  y),
+              Offset(_left + 8 + rnd.nextDouble() * (_right - _left - 16), y),
               0.9 + rnd.nextDouble() * 1.3,
               Paint()
                 ..color = _shade(precipColor, -0.30)
@@ -946,8 +974,7 @@ class _BeakerPainter extends CustomPainter {
                 Offset(gx, gy),
                 r,
                 Paint()
-                  ..color = _shade(precipColor, shade)
-                      .withValues(alpha: 0.75));
+                  ..color = _shade(precipColor, shade).withValues(alpha: 0.75));
           }
           canvas.restore();
         }
@@ -957,6 +984,8 @@ class _BeakerPainter extends CustomPainter {
     }
 
     // ---- Graduaciones: marcas menores cada 25 mL y números cada 50.
+    // Líneas finas (1,5 / 1,0): antes eran de 2 / 1,5 y se veían
+    // toscas junto al contorno fino (retoque final de Kristian).
     for (final v in [25, 50, 75, 100, 125, 150, 175, 200]) {
       final y = _bottom - innerH * (v / 200);
       final major = v % 50 == 0;
@@ -965,7 +994,7 @@ class _BeakerPainter extends CustomPainter {
           Offset(_left + (major ? 20 : 12), y),
           Paint()
             ..color = onSurface.withValues(alpha: major ? 0.65 : 0.35)
-            ..strokeWidth = major ? 2 : 1.5
+            ..strokeWidth = major ? 1.5 : 1.0
             ..strokeCap = StrokeCap.round);
       if (major) _paintLabel(canvas, '$v', Offset(_left - 26, y - 6));
     }
@@ -1033,13 +1062,16 @@ class _BeakerPainter extends CustomPainter {
           ..strokeCap = StrokeCap.round);
     canvas.restore();
 
-    // Contorno del vaso.
+    // Contorno del vaso: FINO (1,25 px) y suave (onSurface al
+    // 55 %): en claro se lee como gris oscuro elegante y en oscuro
+    // como gris claro, nunca como negro grueso (retoque final de
+    // Kristian: "todas esas líneas tan toscas").
     canvas.drawPath(
         outline,
         Paint()
-          ..color = onSurface
+          ..color = onSurface.withValues(alpha: 0.55)
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.5
+          ..strokeWidth = 1.25
           ..strokeJoin = StrokeJoin.round);
 
     // Mesa sobre la que está el vaso.

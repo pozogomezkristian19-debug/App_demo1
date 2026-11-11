@@ -15,7 +15,9 @@
 // - Aquí viven Idioma, Estadísticas, Cambiar versión y Errores, que
 //   antes estaban sueltos en el menú hamburguesa: el menú queda libre
 //   para el contenido. También están Favoritos, Recordatorio,
-//   Compartir progreso (imagen), Compartir la app y Acerca de.
+//   Compartir progreso (imagen), Compartir la app, Buscar
+//   actualización (fix4, punto 7: chequeo manual con la versión
+//   instalada) y Acerca de.
 //
 // La cabecera se dibuja con colores explícitos (fondo blanco, tarjeta
 // blanca con borde y sombra suave) y sin animación de entrada, para
@@ -23,12 +25,16 @@
 // cabecera depende del tema ni de un FadeIn.
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../widgets/lucide_icons.dart';
 
 import '../services/achievements.dart';
 import '../services/localization.dart';
+import '../services/accent.dart';
+
 import '../services/progress.dart';
 import '../services/sound_service.dart';
+import '../services/update_check.dart';
 import '../services/user_prefs.dart';
 import '../widgets/brand_logo.dart';
 import '../widgets/how_to_play.dart';
@@ -65,12 +71,13 @@ class _CuentaColors {
 
   factory _CuentaColors.of(BuildContext context) {
     if (Theme.of(context).brightness == Brightness.dark) {
-      return const _CuentaColors(
-        bg: Color(0xFF0A1F1A),
-        card: Color(0xFF122B24),
+      // Fondo y tarjetas según el acento (fix4, punto 2).
+      return _CuentaColors(
+        bg: AppAccent.darkBackground,
+        card: AppAccent.darkCard,
         ink: Colors.white,
-        inkSoft: Color(0xFFB8CFC8),
-        border: Color(0xFF1E4D42),
+        inkSoft: AppAccent.darkInkSoft,
+        border: AppAccent.darkBorder,
       );
     }
     return const _CuentaColors(
@@ -110,6 +117,67 @@ class AccountScreen extends StatefulWidget {
 }
 
 class _AccountScreenState extends State<AccountScreen> {
+  /// Comprobación manual en curso (para no lanzar dos a la vez).
+  bool _checkingUpdate = false;
+
+  /// Comprobación manual de actualización (fix4, punto 7): fuerza
+  /// el chequeo y dice qué pasó. El diálogo ya salió solo si hay
+  /// versión nueva; si no, un aviso abajo.
+  Future<void> _manualUpdateCheck() async {
+    if (_checkingUpdate) return;
+    setState(() => _checkingUpdate = true);
+    final result = await UpdateCheckService.checkForUpdateManual(context);
+    if (!mounted) return;
+    setState(() => _checkingUpdate = false);
+    switch (result) {
+      case ManualUpdateResult.upToDate:
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(tr('checkUpdateLatest'))),
+        );
+      case ManualUpdateResult.checkFailed:
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(tr('checkUpdateFailed'))),
+        );
+      case ManualUpdateResult.updateAvailable:
+        // El diálogo ya se mostró; nada más que avisar.
+        break;
+    }
+  }
+
+  /// Abre el chat de WhatsApp del creador (fix4, punto 11): el mismo
+  /// enlace de siempre, https://wa.me/5356519431, sin texto
+  /// pre-escrito. Igual que _openWhatsApp en main.dart: primero
+  /// wa.me (en Android lo abre directo en WhatsApp si está
+  /// instalada) y, si falla, el esquema propio de WhatsApp.
+  Future<void> _openWhatsApp() async {
+    final waMe = Uri.parse('https://wa.me/5356519431');
+    final appScheme = Uri.parse('whatsapp://send?phone=5356519431');
+    var opened = false;
+    try {
+      if (await canLaunchUrl(waMe)) {
+        opened = await launchUrl(waMe, mode: LaunchMode.platformDefault);
+      }
+    } catch (_) {
+      opened = false;
+    }
+    if (!opened) {
+      try {
+        if (await canLaunchUrl(appScheme)) {
+          opened =
+              await launchUrl(appScheme, mode: LaunchMode.externalApplication);
+        }
+      } catch (_) {
+        opened = false;
+      }
+    }
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('No se pudo abrir WhatsApp: revisa tu conexión')),
+      );
+    }
+  }
+
   int get _achievementsUnlocked {
     final p = ProgressService.instance;
     var n = 0;
@@ -132,9 +200,8 @@ class _AccountScreenState extends State<AccountScreen> {
     // la foto de la compañera no es el avatar del usuario.
     final companion = companionOfTheDay();
     final accent = companionAccent(companion);
-    final genderLabel = UserPrefs.userGender.isEmpty
-        ? ''
-        : ' · ${UserPrefs.userGender}';
+    final genderLabel =
+        UserPrefs.userGender.isEmpty ? '' : ' · ${UserPrefs.userGender}';
 
     return Container(
       color: c.bg,
@@ -306,11 +373,34 @@ class _AccountScreenState extends State<AccountScreen> {
             onTap: widget.onShowShareApp,
           ),
           _Row(
+            icon: LucideIcons.download,
+            iconColor: _teal,
+            title: tr('checkUpdateTitle'),
+            subtitle: tr('checkUpdateSub').replaceFirst('%s', kAppVersion),
+            onTap: _manualUpdateCheck,
+          ),
+          _Row(
             icon: LucideIcons.info,
             iconColor: _violet,
             title: tr('accountAbout'),
             subtitle: tr('appSubtitle'),
             onTap: widget.onShowAbout,
+          ),
+          // Soporte, última opción de Cuenta (fix4, punto 11,
+          // corrección final): UNA OPCIÓN MÁS, igual que las demás
+          // filas — tarjeta gris, icono de mensaje en círculo
+          // tintado teal, título "Soporte", subtítulo "Escríbeme por
+          // WhatsApp", chevron. Nada de botón verde llamativo ni de
+          // logo de WhatsApp. El enlace es el de siempre (wa.me
+          // vacío, sin texto pre-escrito). El Soporte del menú
+          // hamburguesa está ELIMINADO (no hay versión normal
+          // tampoco).
+          _Row(
+            icon: LucideIcons.messageCircle,
+            iconColor: _teal,
+            title: tr('supportWord'),
+            subtitle: tr('supportWriteMe'),
+            onTap: _openWhatsApp,
           ),
           const SizedBox(height: 16),
           Center(
@@ -321,8 +411,7 @@ class _AccountScreenState extends State<AccountScreen> {
                 const SizedBox(width: 8),
                 Text(
                   'Quemia',
-                  style:
-                      TextStyle(fontWeight: FontWeight.bold, color: c.ink),
+                  style: TextStyle(fontWeight: FontWeight.bold, color: c.ink),
                 ),
                 Text(
                   ' · ${tr('creatorWord')}: CraigKamer',
@@ -355,12 +444,14 @@ class _Row extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = _CuentaColors.of(context);
-    // En modo oscuro, los iconos son verdes (item 8): nada de
-    // violeta, azul ni ámbar en oscuro.
-    final iconColor =
-        Theme.of(context).brightness == Brightness.dark
-            ? BrandColors.mintLight
-            : this.iconColor;
+    // En modo oscuro, los iconos llevan el color del acento
+    // (menta con Verde, violeta claro con Violeta): el "nada de
+    // violeta en oscuro" era de la ronda #2, cuando el oscuro era
+    // verde fijo; con el oscuro violeta (fix4, punto 2) el icono
+    // sigue al acento.
+    final iconColor = Theme.of(context).brightness == Brightness.dark
+        ? Theme.of(context).colorScheme.primary
+        : this.iconColor;
     return Card(
       color: c.card,
       elevation: 0,
@@ -373,24 +464,24 @@ class _Row extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         clipBehavior: Clip.antiAlias,
         child: ListTile(
-        leading: Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: iconColor.withValues(alpha: 0.14),
-            borderRadius: BorderRadius.circular(12),
+          leading: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: iconColor.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: LucideIcon(icon, color: iconColor, size: 22),
           ),
-          child: LucideIcon(icon, color: iconColor, size: 22),
-        ),
-        title: Text(title,
-            style: TextStyle(
-                fontWeight: FontWeight.w600, color: c.ink)),
-        subtitle: Text(subtitle, style: TextStyle(color: c.inkSoft)),
-        trailing: LucideIcon(LucideIcons.chevronRight, size: 18, color: c.inkSoft),
-        onTap: () {
-          SoundService.tap();
-          onTap();
-        },
+          title: Text(title,
+              style: TextStyle(fontWeight: FontWeight.w600, color: c.ink)),
+          subtitle: Text(subtitle, style: TextStyle(color: c.inkSoft)),
+          trailing:
+              LucideIcon(LucideIcons.chevronRight, size: 18, color: c.inkSoft),
+          onTap: () {
+            SoundService.tap();
+            onTap();
+          },
         ),
       ),
     );

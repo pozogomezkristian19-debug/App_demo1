@@ -18,6 +18,7 @@ import 'screens/lab_screen.dart';
 import 'screens/lab_sim_screen.dart';
 import 'screens/language_screen.dart';
 import 'screens/notes_screen.dart';
+import 'screens/notifications_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/practicar_screen.dart';
 import 'screens/reference_tables_screen.dart';
@@ -36,6 +37,7 @@ import 'data/i18n/content_i18n.dart';
 import 'services/favorites.dart';
 import 'services/home_widget_service.dart';
 import 'services/localization.dart';
+import 'services/notification_inbox.dart';
 import 'services/notification_service.dart';
 import 'services/nav_requests.dart';
 import 'services/notes.dart';
@@ -59,6 +61,10 @@ Future<void> main() async {
   // progreso, porque las claves de guardado dependen de la pista.
   ProgressService.track = UserPrefs.track;
   await ProgressService.load();
+  // La bandeja de Notificaciones (fix4, punto 8): se carga antes
+  // de init() del servicio de notificaciones, que reconcilia los
+  // avisos que ya sonaron.
+  await NotificationInbox.load();
   await NotesService.load();
   await FavoritesService.load();
   await AppLang.load();
@@ -104,8 +110,7 @@ class _FadeSlideTransitionsBuilder extends PageTransitionsBuilder {
 /// borde inferior se dibuja de verdad, no es solo una sombra.
 class _DuoPillBorder extends RoundedRectangleBorder {
   const _DuoPillBorder({
-    super.borderRadius =
-        const BorderRadius.all(Radius.circular(999)),
+    super.borderRadius = const BorderRadius.all(Radius.circular(999)),
     this.edgeColor = BrandColors.tealDark,
   });
 
@@ -138,8 +143,7 @@ class MelliQuiApp extends StatefulWidget {
   State<MelliQuiApp> createState() => _MelliQuiAppState();
 }
 
-class _MelliQuiAppState extends State<MelliQuiApp>
-    with WidgetsBindingObserver {
+class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
   bool _isDark = UserPrefs.isDark;
   bool _onboardingDone = UserPrefs.onboardingDone;
 
@@ -192,13 +196,34 @@ class _MelliQuiAppState extends State<MelliQuiApp>
   // Nueva identidad visual (rediseño claro estilo Duolingo, con el
   // color propio de Melli-Qui: teal #00C2A8, nunca verde Duolingo).
   // Los colores de marca viven en BrandColors.
-  // Modo oscuro VERDE, como al principio (fix2, item 8): fondo
-  // verde muy oscuro y acentos SOLO de la familia verde (teal/
-  // menta). Nada de violeta ni azul en el tema oscuro.
+  // Modo oscuro (fix4, punto 2): sigue al acento elegido en Cuenta
+  // — verde oscuro como al principio con Verde, violeta oscuro con
+  // Violeta (fondo con tinte violeta y primario violeta claro).
+  // Antes era verde fijo y el violeta no se veía nunca en oscuro.
+  // Verde oscuro de siempre: fondo y superficie del modo oscuro
+  // con el acento Verde.
   static const _deepGreen = Color(0xFF0A1F1A);
   static const _surfaceGreen = Color(0xFF122B24);
-
   ThemeData _darkTheme() {
+    // Paleta oscura según el acento (fix4, punto 2): Verde usa el
+    // verde oscuro de siempre; Violeta usa fondo con tinte violeta,
+    // superficie violeta oscura y primario violeta claro (legible
+    // sobre oscuro, como el menta lo es sobre el verde oscuro).
+    final violet = AppAccent.isViolet;
+    final bg = violet ? const Color(0xFF17112A) : _deepGreen;
+    final surface = violet ? const Color(0xFF241B3D) : _surfaceGreen;
+    final onSurface =
+        violet ? const Color(0xFFEDE9F7) : const Color(0xFFE6F4EE);
+    final primary = violet ? BrandColors.violetLight : BrandColors.mintLight;
+    final secondary = violet ? BrandColors.violet : BrandColors.mint;
+    final containerHighest =
+        violet ? const Color(0xFF2E2350) : const Color(0xFF1B3A31);
+    final buttonBg = violet ? BrandColors.violet : BrandColors.teal;
+    final buttonShadow = violet ? BrandColors.violetDeep : BrandColors.tealDark;
+    final inputFill =
+        violet ? const Color(0xFF1C1533) : const Color(0xFF0F241E);
+    final unselected =
+        violet ? const Color(0xFF9B8FC4) : const Color(0xFF8A9A93);
     return ThemeData(
       useMaterial3: true,
       fontFamily: 'Roboto',
@@ -209,38 +234,36 @@ class _MelliQuiAppState extends State<MelliQuiApp>
           TargetPlatform.iOS: _FadeSlideTransitionsBuilder(),
         },
       ),
-      scaffoldBackgroundColor: _deepGreen,
-      colorScheme: const ColorScheme.dark(
-        primary: BrandColors.mintLight,
-        onPrimary: _deepGreen,
-        secondary: BrandColors.mint,
-        surface: _surfaceGreen,
-        onSurface: Color(0xFFE6F4EE),
-        surfaceContainerHighest: Color(0xFF1B3A31),
+      scaffoldBackgroundColor: bg,
+      colorScheme: ColorScheme.dark(
+        primary: primary,
+        onPrimary: bg,
+        secondary: secondary,
+        surface: surface,
+        onSurface: onSurface,
+        surfaceContainerHighest: containerHighest,
         error: Color(0xFFEF4444),
       ),
-      appBarTheme: const AppBarTheme(
-        backgroundColor: _deepGreen,
-        foregroundColor: Color(0xFFE6F4EE),
+      appBarTheme: AppBarTheme(
+        backgroundColor: bg,
+        foregroundColor: onSurface,
         elevation: 0,
         scrolledUnderElevation: 0,
         titleTextStyle: TextStyle(
           fontFamily: 'Roboto',
           fontSize: 20,
           fontWeight: FontWeight.w800,
-          color: Color(0xFFE6F4EE),
+          color: onSurface,
         ),
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: _deepGreen,
+        backgroundColor: bg,
         elevation: 2,
         shadowColor: Colors.black.withValues(alpha: 0.30),
-        indicatorColor: BrandColors.teal.withValues(alpha: 0.25),
+        indicatorColor: buttonBg.withValues(alpha: 0.25),
         iconTheme: WidgetStateProperty.resolveWith(
           (states) => IconThemeData(
-            color: states.contains(WidgetState.selected)
-                ? BrandColors.mintLight
-                : const Color(0xFF8A9A93),
+            color: states.contains(WidgetState.selected) ? primary : unselected,
             size: 26,
           ),
         ),
@@ -251,19 +274,17 @@ class _MelliQuiAppState extends State<MelliQuiApp>
             fontWeight: states.contains(WidgetState.selected)
                 ? FontWeight.w800
                 : FontWeight.w600,
-            color: states.contains(WidgetState.selected)
-                ? BrandColors.mintLight
-                : const Color(0xFF8A9A93),
+            color: states.contains(WidgetState.selected) ? primary : unselected,
           ),
         ),
       ),
-      cardTheme: const CardThemeData(
-        color: _surfaceGreen,
+      cardTheme: CardThemeData(
+        color: surface,
         elevation: 0,
-        margin: EdgeInsets.symmetric(vertical: 6),
+        margin: const EdgeInsets.symmetric(vertical: 6),
       ),
-      dialogTheme: const DialogThemeData(
-        backgroundColor: _surfaceGreen,
+      dialogTheme: DialogThemeData(
+        backgroundColor: surface,
         elevation: 4,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.all(Radius.circular(20)),
@@ -272,96 +293,86 @@ class _MelliQuiAppState extends State<MelliQuiApp>
           fontFamily: 'Roboto',
           fontSize: 20,
           fontWeight: FontWeight.w800,
-          color: Color(0xFFE6F4EE),
+          color: onSurface,
         ),
         contentTextStyle: TextStyle(
           fontFamily: 'Roboto',
           fontSize: 16,
           height: 1.45,
-          color: Color(0xFFE6F4EE),
+          color: onSurface,
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: BrandColors.teal,
+          backgroundColor: buttonBg,
           foregroundColor: Colors.white,
           elevation: 2,
-          shadowColor: BrandColors.tealDark,
+          shadowColor: buttonShadow,
           surfaceTintColor: Colors.transparent,
           shape: const _DuoPillBorder(),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           textStyle: const TextStyle(
-              fontFamily: 'Roboto',
-              fontSize: 16, fontWeight: FontWeight.w800),
+              fontFamily: 'Roboto', fontSize: 16, fontWeight: FontWeight.w800),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: BrandColors.teal,
+          backgroundColor: buttonBg,
           foregroundColor: Colors.white,
           elevation: 2,
-          shadowColor: BrandColors.tealDark,
+          shadowColor: buttonShadow,
           surfaceTintColor: Colors.transparent,
           shape: const _DuoPillBorder(),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           textStyle: const TextStyle(
-              fontFamily: 'Roboto',
-              fontSize: 16, fontWeight: FontWeight.w800),
+              fontFamily: 'Roboto', fontSize: 16, fontWeight: FontWeight.w800),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: BrandColors.mintLight,
-          backgroundColor: _surfaceGreen,
-          side: const BorderSide(color: BrandColors.teal, width: 2),
+          foregroundColor: primary,
+          backgroundColor: surface,
+          side: BorderSide(color: buttonBg, width: 2),
           shape: const StadiumBorder(),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           textStyle: const TextStyle(
-              fontFamily: 'Roboto',
-              fontSize: 16, fontWeight: FontWeight.w800),
+              fontFamily: 'Roboto', fontSize: 16, fontWeight: FontWeight.w800),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: BrandColors.mintLight,
+          foregroundColor: primary,
           textStyle: const TextStyle(
-              fontFamily: 'Roboto',
-              fontSize: 15, fontWeight: FontWeight.w700),
+              fontFamily: 'Roboto', fontSize: 15, fontWeight: FontWeight.w700),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: const Color(0xFF0F241E),
+        fillColor: inputFill,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
         ),
       ),
-      snackBarTheme: const SnackBarThemeData(
-        backgroundColor: Color(0xFFE6F4EE),
-        contentTextStyle: TextStyle(
-            fontFamily: 'Roboto', color: _deepGreen, fontSize: 15),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: onSurface,
+        contentTextStyle:
+            TextStyle(fontFamily: 'Roboto', color: bg, fontSize: 15),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.all(Radius.circular(12)),
         ),
       ),
-      progressIndicatorTheme: const ProgressIndicatorThemeData(
-        color: BrandColors.mintLight,
-        linearTrackColor: Color(0xFF1B3A31),
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        color: primary,
+        linearTrackColor: containerHighest,
       ),
-      textTheme: const TextTheme(
-        bodyMedium:
-            TextStyle(fontSize: 16, height: 1.45, color: Color(0xFFE6F4EE)),
-        bodyLarge:
-            TextStyle(fontSize: 17, height: 1.45, color: Color(0xFFE6F4EE)),
+      textTheme: TextTheme(
+        bodyMedium: TextStyle(fontSize: 16, height: 1.45, color: onSurface),
+        bodyLarge: TextStyle(fontSize: 17, height: 1.45, color: onSurface),
         titleMedium: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFFE6F4EE)),
+            fontSize: 18, fontWeight: FontWeight.w600, color: onSurface),
         titleLarge: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFFE6F4EE)),
+            fontSize: 22, fontWeight: FontWeight.bold, color: onSurface),
       ).apply(fontFamily: 'Roboto'),
     );
   }
@@ -389,8 +400,7 @@ class _MelliQuiAppState extends State<MelliQuiApp>
       colorScheme: ColorScheme.light(
         primary: AppAccent.primary,
         onPrimary: Colors.white,
-        secondary:
-            AppAccent.isViolet ? BrandColors.teal : BrandColors.violet,
+        secondary: AppAccent.isViolet ? BrandColors.teal : BrandColors.violet,
         surface: Colors.white,
         onSurface: BrandColors.ink,
         surfaceContainerHighest: BrandColors.cardGray,
@@ -466,32 +476,28 @@ class _MelliQuiAppState extends State<MelliQuiApp>
         style: ElevatedButton.styleFrom(
           backgroundColor: AppAccent.primary,
           foregroundColor: Colors.white,
-          disabledBackgroundColor:
-              AppAccent.primary.withValues(alpha: 0.40),
+          disabledBackgroundColor: AppAccent.primary.withValues(alpha: 0.40),
           elevation: 2,
           shadowColor: AppAccent.primaryDark,
           surfaceTintColor: Colors.transparent,
           shape: _DuoPillBorder(edgeColor: AppAccent.primaryDark),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           textStyle: const TextStyle(
-              fontFamily: 'Roboto',
-              fontSize: 16, fontWeight: FontWeight.w800),
+              fontFamily: 'Roboto', fontSize: 16, fontWeight: FontWeight.w800),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           backgroundColor: AppAccent.primary,
           foregroundColor: Colors.white,
-          disabledBackgroundColor:
-              AppAccent.primary.withValues(alpha: 0.40),
+          disabledBackgroundColor: AppAccent.primary.withValues(alpha: 0.40),
           elevation: 2,
           shadowColor: AppAccent.primaryDark,
           surfaceTintColor: Colors.transparent,
           shape: _DuoPillBorder(edgeColor: AppAccent.primaryDark),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           textStyle: const TextStyle(
-              fontFamily: 'Roboto',
-              fontSize: 16, fontWeight: FontWeight.w800),
+              fontFamily: 'Roboto', fontSize: 16, fontWeight: FontWeight.w800),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -502,16 +508,14 @@ class _MelliQuiAppState extends State<MelliQuiApp>
           shape: const StadiumBorder(),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           textStyle: const TextStyle(
-              fontFamily: 'Roboto',
-              fontSize: 16, fontWeight: FontWeight.w800),
+              fontFamily: 'Roboto', fontSize: 16, fontWeight: FontWeight.w800),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: AppAccent.primary,
           textStyle: const TextStyle(
-              fontFamily: 'Roboto',
-              fontSize: 15, fontWeight: FontWeight.w700),
+              fontFamily: 'Roboto', fontSize: 15, fontWeight: FontWeight.w700),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
@@ -538,8 +542,8 @@ class _MelliQuiAppState extends State<MelliQuiApp>
       ),
       snackBarTheme: const SnackBarThemeData(
         backgroundColor: BrandColors.ink,
-        contentTextStyle: TextStyle(
-            fontFamily: 'Roboto', color: Colors.white, fontSize: 15),
+        contentTextStyle:
+            TextStyle(fontFamily: 'Roboto', color: Colors.white, fontSize: 15),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.all(Radius.circular(12)),
@@ -550,10 +554,10 @@ class _MelliQuiAppState extends State<MelliQuiApp>
         linearTrackColor: BrandColors.cardGray,
       ),
       textTheme: const TextTheme(
-        bodyMedium: TextStyle(
-            fontSize: 16, height: 1.45, color: BrandColors.ink),
-        bodyLarge: TextStyle(
-            fontSize: 17, height: 1.45, color: BrandColors.ink),
+        bodyMedium:
+            TextStyle(fontSize: 16, height: 1.45, color: BrandColors.ink),
+        bodyLarge:
+            TextStyle(fontSize: 17, height: 1.45, color: BrandColors.ink),
         titleMedium: TextStyle(
             fontSize: 18, fontWeight: FontWeight.w700, color: BrandColors.ink),
         titleLarge: TextStyle(
@@ -583,27 +587,27 @@ class _MelliQuiAppState extends State<MelliQuiApp>
     return ValueListenableBuilder<String>(
       valueListenable: UserPrefs.themeAccentNotifier,
       builder: (context, accent, _) => ValueListenableBuilder<String>(
-      valueListenable: AppLang.notifier,
-      builder: (context, lang, _) => MaterialApp(
-        title: 'Quemia',
-        debugShowCheckedModeBanner: false,
-        theme: _lightTheme(),
-        darkTheme: _darkTheme(),
-        themeMode: _themeMode,
-        home: _onboardingDone
-            ? KeyedSubtree(
-                key: ValueKey('home-$_reloadToken'),
-                child: HomeScreen(
-                  isDark: _isDark,
-                  onToggleTheme: _toggleTheme,
-                  onTrackChanged: _reloadApp,
+        valueListenable: AppLang.notifier,
+        builder: (context, lang, _) => MaterialApp(
+          title: 'Quemia',
+          debugShowCheckedModeBanner: false,
+          theme: _lightTheme(),
+          darkTheme: _darkTheme(),
+          themeMode: _themeMode,
+          home: _onboardingDone
+              ? KeyedSubtree(
+                  key: ValueKey('home-$_reloadToken'),
+                  child: HomeScreen(
+                    isDark: _isDark,
+                    onToggleTheme: _toggleTheme,
+                    onTrackChanged: _reloadApp,
+                  ),
+                )
+              : OnboardingScreen(
+                  onFinished: () => setState(() => _onboardingDone = true),
                 ),
-              )
-            : OnboardingScreen(
-                onFinished: () => setState(() => _onboardingDone = true),
-              ),
+        ),
       ),
-    ),
     );
   }
 }
@@ -653,6 +657,90 @@ class _ReviewChip extends StatelessWidget {
   }
 }
 
+/// Separación IGUAL entre los tres controles de la AppBar (fix4,
+/// punto 9): vidas, repaso y campana. Cada control lleva este
+/// padding a ambos lados, así que el hueco entre dos controles es
+/// siempre 2 × _kTopBarGap (12 px) y no depende del icono que lleve
+/// cada uno: antes los dos chips llevaban Padding(right: 2) y la
+/// campana era un IconButton con su propio inset de 12 px, así que
+/// los huecos se veían distintos.
+const double _kTopBarGap = 6.0;
+
+/// Campana de notificaciones en la AppBar (fix4, puntos 8 y 9):
+/// una PÍLDORA como los otros dos chips (mismo fondo tintado, mismo
+/// padding horizontal 9 y vertical 5, icono de 17 px), no un
+/// IconButton suelto, para que el hueco entre los tres controles sea
+/// igual. Lleva el numerito rojo de no leídos de la bandeja (como
+/// Facebook); sin no leídos, no hay numerito. Abre la bandeja de
+/// Notificaciones (ya no Recordatorios).
+class _NotificationBell extends StatelessWidget {
+  const _NotificationBell({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ValueListenableBuilder<List<InboxEntry>>(
+      valueListenable: NotificationInbox.entriesNotifier,
+      builder: (context, entries, _) {
+        final unread = entries.where((e) => !e.read).length;
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(999),
+            onTap: onTap,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Tooltip(
+                  message: tr('inboxTitle'),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: scheme.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: LucideIcon(LucideIcons.bell,
+                        size: 17, color: scheme.primary, threeD: true),
+                  ),
+                ),
+                if (unread > 0)
+                  Positioned(
+                    top: -5,
+                    right: -5,
+                    child: Container(
+                      key: const Key('inboxBadge'),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 5, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEF4444),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: scheme.surface,
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Text(
+                        unread > 9 ? '9+' : '$unread',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
     super.key,
@@ -689,8 +777,7 @@ class _HomeScreenState extends State<HomeScreen> {
     // punto 20): tocar esas notificaciones con la app ya abierta
     // pide el diálogo o la instalación, igual que el repaso.
     NavRequests.updateRequested.addListener(_onNotificationUpdateRequest);
-    NavRequests.installRequested
-        .addListener(_onNotificationInstallRequest);
+    NavRequests.installRequested.addListener(_onNotificationInstallRequest);
     // Tras el primer frame: primero el elemento del día (si toca),
     // luego el diálogo de actualización si la app se abrió desde su
     // recordatorio, y si no, la comprobación normal vía GitHub
@@ -706,17 +793,17 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
       await UpdateCheckService.checkForUpdate(context);
+      if (!mounted) return;
+      // Logros nuevos y aviso de racha en la bandeja (fix4, punto 8).
+      await NotificationInbox.syncDaily(_trackTopics);
     });
   }
 
   @override
   void dispose() {
-    NavRequests.reviewRequested
-        .removeListener(_onNotificationReviewRequest);
-    NavRequests.updateRequested
-        .removeListener(_onNotificationUpdateRequest);
-    NavRequests.installRequested
-        .removeListener(_onNotificationInstallRequest);
+    NavRequests.reviewRequested.removeListener(_onNotificationReviewRequest);
+    NavRequests.updateRequested.removeListener(_onNotificationUpdateRequest);
+    NavRequests.installRequested.removeListener(_onNotificationInstallRequest);
     super.dispose();
   }
 
@@ -767,8 +854,7 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 CircleAvatar(
                   radius: 26,
-                  backgroundColor:
-                      Theme.of(context).colorScheme.primary,
+                  backgroundColor: Theme.of(context).colorScheme.primary,
                   child: Text(
                     element.symbol,
                     style: const TextStyle(
@@ -807,42 +893,41 @@ class _HomeScreenState extends State<HomeScreen> {
             // (mismo patrón que el menú de Laboratorio).
             IntrinsicHeight(
               child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () =>
-                        Navigator.of(dialogContext).pop(),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 12),
-                      textStyle: const TextStyle(fontSize: 14),
-                    ),
-                    child: Text(
-                      tr('closeWord'),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: FilledButton(
-                    onPressed: () {
-                      Navigator.of(dialogContext).pop();
-                      showElementSheet(context, element);
-                    },
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 12),
-                      textStyle: const TextStyle(fontSize: 14),
-                    ),
-                    child: Text(
-                      tr('elementDaySeeMore'),
-                      textAlign: TextAlign.center,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 12),
+                        textStyle: const TextStyle(fontSize: 14),
+                      ),
+                      child: Text(
+                        tr('closeWord'),
+                        textAlign: TextAlign.center,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: () {
+                        Navigator.of(dialogContext).pop();
+                        showElementSheet(context, element);
+                      },
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 12),
+                        textStyle: const TextStyle(fontSize: 14),
+                      ),
+                      child: Text(
+                        tr('elementDaySeeMore'),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -876,9 +961,10 @@ class _HomeScreenState extends State<HomeScreen> {
       ];
 
   /// Temas de la pista actual, en orden (para Mis estadísticas).
-  List<String> get _trackTopics => ProgressService.track == ProgressService.trackBach
-      ? bachTopics
-      : uniTopics;
+  List<String> get _trackTopics =>
+      ProgressService.track == ProgressService.trackBach
+          ? bachTopics
+          : uniTopics;
 
   /// Ir a una pestaña, con una petición opcional para la pantalla
   /// destino (abrir un solucionador, empezar el repaso, filtrar Tabla).
@@ -938,6 +1024,8 @@ class _HomeScreenState extends State<HomeScreen> {
         page = const FavoritesScreen();
       case 'reminder':
         page = const ReminderScreen();
+      case 'notifications':
+        page = NotificationsScreen(onOpenScreen: _openScreenKey);
       case 'language':
         page = const LanguageScreen();
       case 'tableQuiz':
@@ -968,8 +1056,7 @@ class _HomeScreenState extends State<HomeScreen> {
         final topic = findTopic(entry.target);
         if (topic != null) {
           Navigator.of(context).push(
-            MaterialPageRoute(
-                builder: (_) => TopicDetailScreen(topic: topic)),
+            MaterialPageRoute(builder: (_) => TopicDetailScreen(topic: topic)),
           );
         }
       case 'levels':
@@ -980,9 +1067,8 @@ class _HomeScreenState extends State<HomeScreen> {
         _goToTab(1, openSolver: entry.target);
       case 'element':
         final z = int.tryParse(entry.target) ?? 0;
-        final element = allElements
-            .where((e) => e.atomicNumber == z)
-            .firstOrNull;
+        final element =
+            allElements.where((e) => e.atomicNumber == z).firstOrNull;
         if (element != null) showElementSheet(context, element);
       case 'formula':
         Navigator.of(context).pop();
@@ -1009,42 +1095,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Abre el chat de WhatsApp del creador.
-  ///
-  /// Secuencia robusta para un teléfono Android real:
-  /// 1) El enlace wa.me con el manejo por defecto de la plataforma: en
-  ///    Android, WhatsApp registra wa.me como enlace de la app, así que
-  ///    el sistema lo abre directo en WhatsApp si está instalada.
-  /// 2) Si eso falla, el esquema propio de WhatsApp
-  ///    (whatsapp://send?phone=...).
-  /// El aviso de error solo sale si fallan las dos.
-  Future<void> _openWhatsApp(BuildContext context) async {
-    final waMe = Uri.parse('https://wa.me/5356519431');
-    final appScheme = Uri.parse('whatsapp://send?phone=5356519431');
-    var opened = false;
-    try {
-      if (await canLaunchUrl(waMe)) {
-        opened = await launchUrl(waMe, mode: LaunchMode.platformDefault);
-      }
-    } catch (_) {
-      opened = false;
-    }
-    if (!opened) {
-      try {
-        if (await canLaunchUrl(appScheme)) {
-          opened = await launchUrl(appScheme,
-              mode: LaunchMode.externalApplication);
-        }
-      } catch (_) {
-        opened = false;
-      }
-    }
-    if (!opened && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('whatsappFail'))),
-      );
-    }
-  }
 
   /// Diálogo para compartir la app: el enlace de descarga, para copiar
   /// o para mandar por WhatsApp.
@@ -1057,8 +1107,7 @@ class _HomeScreenState extends State<HomeScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-                'Pásale Quemia a otros estudiantes de química:'),
+            const Text('Pásale Quemia a otros estudiantes de química:'),
             const SizedBox(height: 12),
             SelectableText(kLandingUrl),
           ],
@@ -1066,8 +1115,7 @@ class _HomeScreenState extends State<HomeScreen> {
         actions: [
           TextButton(
             onPressed: () async {
-              await Clipboard.setData(
-                  const ClipboardData(text: kLandingUrl));
+              await Clipboard.setData(const ClipboardData(text: kLandingUrl));
               if (!context.mounted) return;
               Navigator.of(dialogContext).pop();
               ScaffoldMessenger.of(context).showSnackBar(
@@ -1164,9 +1212,7 @@ class _HomeScreenState extends State<HomeScreen> {
       // con degradado + brillito, como el corazón de las vidas.
       // La flecha de la derecha sigue plana (es solo una pista).
       leading: LucideIcon(icon,
-          size: 24,
-          color: Theme.of(context).colorScheme.primary,
-          threeD: true),
+          size: 24, color: Theme.of(context).colorScheme.primary, threeD: true),
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
       subtitle: subtitle == null ? null : Text(subtitle),
       trailing: const LucideIcon(LucideIcons.chevronRight, size: 18),
@@ -1197,13 +1243,18 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    // Color de la pestaña seleccionada (fix2, items 8 y 12): en modo
-    // oscuro, verde para las 5; en claro, el color propio de cada
+    // Color de la pestaña seleccionada (fix2, items 8 y 12; fix4,
+    // punto 2): en modo oscuro sigue al acento — menta con Verde,
+    // violeta claro con Violeta. En claro, el color propio de cada
     // pestaña con el acento verde, o violeta para todas con el
     // acento violeta.
     final tabColors = List<Color>.generate(
       5,
-      (i) => widget.isDark ? BrandColors.mintLight : AppAccent.tabColor(i),
+      (i) => widget.isDark
+          ? (AppAccent.isViolet
+              ? BrandColors.violetLight
+              : BrandColors.mintLight)
+          : AppAccent.tabColor(i),
     );
     return PopScope(
       // Botón atrás: primero cierra lo abierto por dentro (quiz,
@@ -1227,234 +1278,219 @@ class _HomeScreenState extends State<HomeScreen> {
         // propia pantalla; nada suelto ni repetido dentro del menú.
         // La barra de búsqueda va PRIMERA y FIJA (fix2, item 11): no
         // se desplaza con el resto del menú. Tocar abre la búsqueda.
-        drawer: _inSession ? null : Drawer(
-          child: SafeArea(
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                  child: TextField(
-                    readOnly: true,
-                    showCursor: false,
-                    onTap: () {
-                      Navigator.of(context).pop();
-                      _openSearch();
-                    },
-                    decoration: InputDecoration(
-                      hintText: tr('searchWord'),
-                      prefixIcon:
-                          const LucideIcon(LucideIcons.search, size: 18),
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 10),
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: ListView(
-                    padding: EdgeInsets.zero,
+        drawer: _inSession
+            ? null
+            : Drawer(
+                child: SafeArea(
+                  child: Column(
                     children: [
-              // Cabecera del menú: altura LIBRE (fix2, auditoría).
-              // El DrawerHeader de Flutter tiene altura fija (160) y
-              // el subtítulo, si se parte en 2 líneas, lo desbordaba
-              // 11 px: con fuente grande o en otro idioma se cortaba
-              // el texto. Este Container crece con su contenido.
-              Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: scheme.primary.withValues(alpha: 0.15),
-                  border: Border(
-                    bottom: Divider.createBorderSide(context),
-                  ),
-                ),
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Fix3, punto 6: logo panorámico recortado a las
-                    // gemelas (ancho 60, alto ~24), no el cuadrado
-                    // marrón de 56 que dominaba la cabecera.
-                    const BrandLogo(size: 60),
-                    const SizedBox(height: 10),
-                    const Text('Quemia',
-                        style: TextStyle(
-                            fontSize: 22, fontWeight: FontWeight.bold)),
-                    Text(tr('appSubtitle')),
-                  ],
-                ),
-              ),
-              _drawerItem(
-                icon: LucideIcons.network,
-                title: tr('menuBranches'),
-                subtitle: 'Orgánica, Inorgánica, Analítica, Química física',
-                onTap: () => _openScreenKey('branches'),
-              ),
-              _drawerItem(
-                icon: LucideIcons.dna,
-                title: tr('menuLab'),
-                subtitle: 'Seguridad, cuestionario y simulador',
-                onTap: () => _openScreenKey('lab'),
-              ),
-              // Fix3 (segunda pasada): el simulador NO va como
-              // entrada aparte en el menú — ya estaba duplicado:
-              // "Laboratorio" dice "Seguridad, cuestionario y
-              // simulador" y el simulador es la PRIMERA tarjeta de
-              // la pantalla Laboratorio. La vía de acceso sigue
-              // siendo esa tarjeta (y la búsqueda y Resolver, que
-              // usan la ruta 'labSim', que se conserva).
-              _drawerSection(tr('drawerPractice')),
-              _drawerItem(
-                icon: LucideIcons.timer,
-                title: tr('timedTitle'),
-                subtitle: tr('timedSub'),
-                onTap: () => _openScreenKey('timed'),
-              ),
-              _drawerItem(
-                icon: LucideIcons.gamepad2,
-                title: tr('challengeTitle'),
-                subtitle: tr('challengeSub'),
-                onTap: () => _openScreenKey('challenge'),
-              ),
-              _drawerItem(
-                icon: LucideIcons.circleHelp,
-                title: tr('tableQuizTitle'),
-                subtitle: 'Adivina el elemento',
-                onTap: () => _openScreenKey('tableQuiz'),
-              ),
-              _drawerSection(tr('drawerReference')),
-              _drawerItem(
-                icon: LucideIcons.table,
-                title: tr('menuTables'),
-                subtitle: 'Actividad de metales y solubilidad',
-                onTap: () => _openScreenKey('tables'),
-              ),
-              _drawerItem(
-                icon: LucideIcons.sigma,
-                title: tr('menuFormulas'),
-                subtitle: 'Todas las fórmulas juntas',
-                onTap: () => _openScreenKey('formulas'),
-              ),
-              _drawerItem(
-                icon: LucideIcons.arrowLeftRight,
-                title: tr('menuConstants'),
-                subtitle: 'Constantes y conversor de unidades',
-                onTap: () => _openScreenKey('constants'),
-              ),
-              _drawerItem(
-                icon: LucideIcons.bookOpen,
-                title: tr('glossaryTitle'),
-                subtitle: 'Términos de química explicados',
-                onTap: () => _openScreenKey('glossary'),
-              ),
-              _drawerItem(
-                icon: LucideIcons.arrowLeftRight,
-                title: tr('compareTitle'),
-                subtitle: 'Dos elementos, cara a cara',
-                onTap: () => _openScreenKey('compare'),
-              ),
-              _drawerItem(
-                icon: LucideIcons.notebookPen,
-                title: tr('notesTitle'),
-                subtitle: 'Tus notas por tema',
-                onTap: () => _openScreenKey('notes'),
-              ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                        child: TextField(
+                          readOnly: true,
+                          showCursor: false,
+                          onTap: () {
+                            Navigator.of(context).pop();
+                            _openSearch();
+                          },
+                          decoration: InputDecoration(
+                            hintText: tr('searchWord'),
+                            prefixIcon:
+                                const LucideIcon(LucideIcons.search, size: 18),
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 10),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: ListView(
+                          padding: EdgeInsets.zero,
+                          children: [
+                            // Cabecera del menú: altura LIBRE (fix2, auditoría).
+                            // El DrawerHeader de Flutter tiene altura fija (160) y
+                            // el subtítulo, si se parte en 2 líneas, lo desbordaba
+                            // 11 px: con fuente grande o en otro idioma se cortaba
+                            // el texto. Este Container crece con su contenido.
+                            Container(
+                              width: double.infinity,
+                              decoration: BoxDecoration(
+                                color: scheme.primary.withValues(alpha: 0.15),
+                                border: Border(
+                                  bottom: Divider.createBorderSide(context),
+                                ),
+                              ),
+                              padding:
+                                  const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Fix3, punto 6: logo panorámico recortado a las
+                                  // gemelas (ancho 60, alto ~24), no el cuadrado
+                                  // marrón de 56 que dominaba la cabecera.
+                                  const BrandLogo(size: 60),
+                                  const SizedBox(height: 10),
+                                  const Text('Quemia',
+                                      style: TextStyle(
+                                          fontSize: 22,
+                                          fontWeight: FontWeight.bold)),
+                                  Text(tr('appSubtitle')),
+                                ],
+                              ),
+                            ),
+                            _drawerItem(
+                              icon: LucideIcons.network,
+                              title: tr('menuBranches'),
+                              subtitle:
+                                  'Orgánica, Inorgánica, Analítica, Química física',
+                              onTap: () => _openScreenKey('branches'),
+                            ),
+                            _drawerItem(
+                              icon: LucideIcons.dna,
+                              title: tr('menuLab'),
+                              subtitle: 'Seguridad, cuestionario y simulador',
+                              onTap: () => _openScreenKey('lab'),
+                            ),
+                            // Fix4, punto 12: el simulador SÍ va como
+                            // entrada aparte en el menú, en Referencia
+                            // (Kristian lo pidió así: acceso directo al
+                            // simulador, además de la tarjeta de
+                            // Laboratorio). La decisión fix3 de no
+                            // duplicarlo queda sustituida por esta.
+                            _drawerSection(tr('drawerPractice')),
+                            _drawerItem(
+                              icon: LucideIcons.timer,
+                              title: tr('timedTitle'),
+                              subtitle: tr('timedSub'),
+                              onTap: () => _openScreenKey('timed'),
+                            ),
+                            _drawerItem(
+                              icon: LucideIcons.gamepad2,
+                              title: tr('challengeTitle'),
+                              subtitle: tr('challengeSub'),
+                              onTap: () => _openScreenKey('challenge'),
+                            ),
+                            _drawerItem(
+                              icon: LucideIcons.circleHelp,
+                              title: tr('tableQuizTitle'),
+                              subtitle: 'Adivina el elemento',
+                              onTap: () => _openScreenKey('tableQuiz'),
+                            ),
+                            _drawerSection(tr('drawerReference')),
+                            _drawerItem(
+                              icon: LucideIcons.flaskConical,
+                              title: tr('labSimTitle'),
+                              subtitle: 'Mezcla, mira el pH y el color',
+                              onTap: () => _openScreenKey('labSim'),
+                            ),
+                            _drawerItem(
+                              icon: LucideIcons.table,
+                              title: tr('menuTables'),
+                              subtitle: 'Actividad de metales y solubilidad',
+                              onTap: () => _openScreenKey('tables'),
+                            ),
+                            _drawerItem(
+                              icon: LucideIcons.sigma,
+                              title: tr('menuFormulas'),
+                              subtitle: 'Todas las fórmulas juntas',
+                              onTap: () => _openScreenKey('formulas'),
+                            ),
+                            _drawerItem(
+                              icon: LucideIcons.arrowLeftRight,
+                              title: tr('menuConstants'),
+                              subtitle: 'Constantes y conversor de unidades',
+                              onTap: () => _openScreenKey('constants'),
+                            ),
+                            _drawerItem(
+                              icon: LucideIcons.bookOpen,
+                              title: tr('glossaryTitle'),
+                              subtitle: 'Términos de química explicados',
+                              onTap: () => _openScreenKey('glossary'),
+                            ),
+                            _drawerItem(
+                              icon: LucideIcons.arrowLeftRight,
+                              title: tr('compareTitle'),
+                              subtitle: 'Dos elementos, cara a cara',
+                              onTap: () => _openScreenKey('compare'),
+                            ),
+                            _drawerItem(
+                              icon: LucideIcons.notebookPen,
+                              title: tr('notesTitle'),
+                              subtitle: 'Tus notas por tema',
+                              onTap: () => _openScreenKey('notes'),
+                            ),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                // Soporte al PIE del menú (fix2, ronda 2): el botón
-                // flotante verde tapaba contenido en Niveles y en
-                // Tabla, así que vive aquí, fijo abajo, con el logo
-                // de WhatsApp. Abre lo mismo de siempre (wa.me con
-                // lanzamiento en dos pasos).
-                const Divider(height: 1),
-                ListTile(
-                  // El logo de WhatsApp es el glifo BLANCO (estaba
-                  // pensado para el pill verde): sobre el fondo
-                  // blanco del drawer era invisible. Va dentro de su
-                  // círculo verde #25D366, visible en claro y oscuro.
-                  leading: Container(
-                    width: 32,
-                    height: 32,
-                    alignment: Alignment.center,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF25D366),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Image(
-                      image: AssetImage('assets/whatsapp.png'),
-                      width: 20,
-                      height: 20,
-                    ),
-                  ),
-                  title: Text(tr('supportWord'),
-                      style: const TextStyle(fontWeight: FontWeight.w600)),
-                  subtitle: Text(tr('writeWhatsApp')),
-                  trailing:
-                      const LucideIcon(LucideIcons.chevronRight, size: 18),
-                  onTap: () {
-                    SoundService.tap();
-                    Navigator.of(context).pop();
-                    _openWhatsApp(context);
-                  },
-                ),
-              ],
-            ),
-          ),
-        ),
-        appBar: _inSession ? null : AppBar(
-          leading: Builder(
-            builder: (context) => IconButton(
-              icon: const LucideIcon(LucideIcons.menu),
-              tooltip: tr('menuWord'),
-              onPressed: () => Scaffold.of(context).openDrawer(),
-            ),
-          ),
-          // Sin título de texto en la barra (fix3, punto 6,
-          // ampliación): el nombre de la pantalla ("Niveles",
-          // "Tabla"...) se recortaba ("Ni...") y ya está como
-          // título grande dentro del contenido de cada pestaña.
-          // La barra queda solo con sus controles: menú, vidas,
-          // repaso y campana.
-          actions: [
-            // Chip de vidas junto al saludo (corazón + número, fix 1):
-            // siempre visible en las 5 pestañas. Se actualiza solo
-            // cuando cambian las vidas, sin reconstruir la pantalla.
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.only(right: 2),
-                child: ValueListenableBuilder<int>(
-                  valueListenable: ProgressService.livesNotifier,
-                  builder: (context, _, __) => LivesChip(
-                    lives: ProgressService.instance.livesLeft,
-                  ),
-                ),
               ),
-            ),
-            // Repasar mis errores (fix2, item 2): entrada visible en
-            // la barra de arriba, estilo Duolingo, junto a la campana
-            // de notificaciones. El numerito es la cantidad de errores
-            // por repasar; sin errores, avisa y no abre nada.
-            // El avatar del usuario ya NO está aquí (fix2, item 6).
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.only(right: 2),
-                child: ValueListenableBuilder<int>(
-                  valueListenable: ProgressService.failedNotifier,
-                  builder: (context, _, __) => _ReviewChip(
-                    count: ProgressService.instance.failedCount,
-                    onTap: _startReviewFromAppBar,
+        appBar: _inSession
+            ? null
+            : AppBar(
+                leading: Builder(
+                  builder: (context) => IconButton(
+                    icon: const LucideIcon(LucideIcons.menu),
+                    tooltip: tr('menuWord'),
+                    onPressed: () => Scaffold.of(context).openDrawer(),
                   ),
                 ),
+                // Sin título de texto en la barra (fix3, punto 6,
+                // ampliación): el nombre de la pantalla ("Niveles",
+                // "Tabla"...) se recortaba ("Ni...") y ya está como
+                // título grande dentro del contenido de cada pestaña.
+                // La barra queda solo con sus controles: menú, vidas,
+                // repaso y campana.
+                actions: [
+                  // Chip de vidas junto al saludo (corazón + número, fix 1):
+                  // siempre visible en las 5 pestañas. Se actualiza solo
+                  // cuando cambian las vidas, sin reconstruir la pantalla.
+                  // Separación igual entre los tres controles (fix4,
+                  // punto 9): cada uno lleva _kTopBarGap a ambos lados.
+                  Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: _kTopBarGap),
+                      child: ValueListenableBuilder<int>(
+                        valueListenable: ProgressService.livesNotifier,
+                        builder: (context, _, __) => LivesChip(
+                          lives: ProgressService.instance.livesLeft,
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Repasar mis errores (fix2, item 2): entrada visible en
+                  // la barra de arriba, estilo Duolingo, junto a la campana
+                  // de notificaciones. El numerito es la cantidad de errores
+                  // por repasar; sin errores, avisa y no abre nada.
+                  // El avatar del usuario ya NO está aquí (fix2, item 6).
+                  Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: _kTopBarGap),
+                      child: ValueListenableBuilder<int>(
+                        valueListenable: ProgressService.failedNotifier,
+                        builder: (context, _, __) => _ReviewChip(
+                          count: ProgressService.instance.failedCount,
+                          onTap: _startReviewFromAppBar,
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Campana de notificaciones (fix4, punto 8): abre la
+                  // bandeja de Notificaciones (ya no Recordatorios).
+                  // Píldora como los otros dos chips (fix4, punto 9).
+                  Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: _kTopBarGap),
+                      child: _NotificationBell(
+                        onTap: () => _openScreenKey('notifications'),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ),
-            // Campana de notificaciones (fix2, item 2): abre los
-            // recordatorios (avisos del sistema).
-            IconButton(
-              tooltip: tr('notifTitle'),
-              onPressed: () => _openScreenKey('reminder'),
-              icon: const LucideIcon(LucideIcons.bell),
-            ),
-          ],
-        ),
         body: SafeArea(
           // Cambio de pestaña con fundido + deslizamiento suave.
           child: AnimatedSwitcher(
@@ -1475,58 +1511,59 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
-        bottomNavigationBar: _inSession ? null : NavigationBar(
-          selectedIndex: _index,
-          onDestinationSelected: (i) {
-            SoundService.tap();
-            setState(() => _index = i);
-          },
-          // Barra blanca; la pestaña seleccionada lleva su color
-          // (fix2, items 8 y 12): verde en modo oscuro, el color
-          // propio de cada pestaña con el acento verde, o violeta
-          // para todas con el acento violeta; gris si no está.
-          indicatorColor: (widget.isDark
-                  ? BrandColors.mintLight
-                  : AppAccent.primary)
-              .withValues(alpha: 0.15),
-          destinations: [
-            NavigationDestination(
-              icon: const LucideIcon(LucideIcons.route,
-                  color: Color(0xFF9CA3AF)),
-              selectedIcon: LucideIcon(LucideIcons.route,
-                  color: tabColors[0], threeD: true),
-              label: tr('tabLevels'),
-            ),
-            NavigationDestination(
-              icon: const LucideIcon(LucideIcons.calculator,
-                  color: Color(0xFF9CA3AF)),
-              selectedIcon: LucideIcon(LucideIcons.calculator,
-                  color: tabColors[1], threeD: true),
-              label: tr('tabResolver'),
-            ),
-            NavigationDestination(
-              icon: const LucideIcon(LucideIcons.bookOpen,
-                  color: Color(0xFF9CA3AF)),
-              selectedIcon: LucideIcon(LucideIcons.bookOpen,
-                  color: tabColors[2], threeD: true),
-              label: tr('tabLearn'),
-            ),
-            NavigationDestination(
-              icon: const LucideIcon(LucideIcons.layoutGrid,
-                  color: Color(0xFF9CA3AF)),
-              selectedIcon: LucideIcon(LucideIcons.layoutGrid,
-                  color: tabColors[3], threeD: true),
-              label: tr('tabTable'),
-            ),
-            NavigationDestination(
-              icon: const LucideIcon(LucideIcons.userRound,
-                  color: Color(0xFF9CA3AF)),
-              selectedIcon: LucideIcon(LucideIcons.userRound,
-                  color: tabColors[4], threeD: true),
-              label: tr('accountTitle'),
-            ),
-          ],
-        ),
+        bottomNavigationBar: _inSession
+            ? null
+            : NavigationBar(
+                selectedIndex: _index,
+                onDestinationSelected: (i) {
+                  SoundService.tap();
+                  setState(() => _index = i);
+                },
+                // Barra blanca; la pestaña seleccionada lleva su color
+                // (fix2, items 8 y 12): verde en modo oscuro, el color
+                // propio de cada pestaña con el acento verde, o violeta
+                // para todas con el acento violeta; gris si no está.
+                indicatorColor:
+                    (widget.isDark ? BrandColors.mintLight : AppAccent.primary)
+                        .withValues(alpha: 0.15),
+                destinations: [
+                  NavigationDestination(
+                    icon: const LucideIcon(LucideIcons.route,
+                        color: Color(0xFF9CA3AF)),
+                    selectedIcon: LucideIcon(LucideIcons.route,
+                        color: tabColors[0], threeD: true),
+                    label: tr('tabLevels'),
+                  ),
+                  NavigationDestination(
+                    icon: const LucideIcon(LucideIcons.calculator,
+                        color: Color(0xFF9CA3AF)),
+                    selectedIcon: LucideIcon(LucideIcons.calculator,
+                        color: tabColors[1], threeD: true),
+                    label: tr('tabResolver'),
+                  ),
+                  NavigationDestination(
+                    icon: const LucideIcon(LucideIcons.bookOpen,
+                        color: Color(0xFF9CA3AF)),
+                    selectedIcon: LucideIcon(LucideIcons.bookOpen,
+                        color: tabColors[2], threeD: true),
+                    label: tr('tabLearn'),
+                  ),
+                  NavigationDestination(
+                    icon: const LucideIcon(LucideIcons.layoutGrid,
+                        color: Color(0xFF9CA3AF)),
+                    selectedIcon: LucideIcon(LucideIcons.layoutGrid,
+                        color: tabColors[3], threeD: true),
+                    label: tr('tabTable'),
+                  ),
+                  NavigationDestination(
+                    icon: const LucideIcon(LucideIcons.userRound,
+                        color: Color(0xFF9CA3AF)),
+                    selectedIcon: LucideIcon(LucideIcons.userRound,
+                        color: tabColors[4], threeD: true),
+                    label: tr('accountTitle'),
+                  ),
+                ],
+              ),
       ),
     );
   }

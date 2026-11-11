@@ -5,6 +5,8 @@ import '../data/periodic_table.dart';
 import '../data/reference_tables.dart';
 import '../models.dart';
 import '../services/localization.dart';
+import '../services/accent.dart';
+
 import '../services/nav_requests.dart';
 import '../widgets/brand_logo.dart';
 import '../widgets/element_sheet.dart';
@@ -77,9 +79,18 @@ class _TablaScreenState extends State<TablaScreen>
     Color(0xFFE5989B),
   ];
 
+  /// Ancho de la rejilla en modo angosto: 18 columnas × 40 px
+  /// (celda mínima legible, fix3 punto 14).
+  static const double _narrowGridWidth = 18 * 40.0;
+
+  /// Altura completa de la rejilla angosta: 10 filas × (40 / 0,85)
+  /// + padding 8 + 16, para que se vean TODAS las filas sin cortes.
+  static const double _narrowGridHeight = 495.0;
+
   List<ChemicalElement> get _visible {
     return allElements.where((e) {
-      if (_filterCategory != null && e.category != _filterCategory) return false;
+      if (_filterCategory != null && e.category != _filterCategory)
+        return false;
       if (_query.isEmpty) return true;
       final q = _query.toLowerCase();
       return e.name.toLowerCase().contains(q) ||
@@ -112,7 +123,7 @@ class _TablaScreenState extends State<TablaScreen>
         // Gris fijo en oscuro dejaba el texto (blanco) invisible:
         // superficie oscura en modo oscuro (mismo bug que Niveles).
         color: Theme.of(context).brightness == Brightness.dark
-            ? const Color(0xFF122B24)
+            ? AppAccent.darkCard
             : BrandColors.cardGray,
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
@@ -221,22 +232,70 @@ class _TablaScreenState extends State<TablaScreen>
       if (idx >= 0 && idx < grid.length) grid[idx] = e;
     }
     final searching = _query.isNotEmpty || _filterCategory != null;
-
+    // Cabecera común (búsqueda, acciones, chips): la misma en los
+    // tres modos (búsqueda, tabla normal y tabla angosta).
+    final header = <Widget>[
+      _searchField(),
+      _actionCards(context),
+      _chipsRow(context),
+    ];
+    final legend = _legend(context);
+    if (searching) {
+      return Column(
+        children: [
+          ...header,
+          Expanded(child: _searchList(context)),
+          legend,
+        ],
+      );
+    }
+    // Tabla angosta (fix4, punto 1): SOLO cuando el ancho disponible
+    // es realmente estrecho (< 340 dp) la rejilla mide 18 × 40 px y
+    // se desplaza en horizontal. En cualquier teléfono normal la
+    // tabla es la rejilla original de 18 columnas SIN scroll (como
+    // en v6): el modo scroll era solo para teléfonos incompatibles
+    // o angostos, no para todos. En el modo angosto la página entera
+    // se desplaza en vertical y la rejilla tiene su altura completa
+    // (10 filas), así se ven TODAS las filas sin cortes.
+    if (MediaQuery.sizeOf(context).width - 16 < 340) {
+      return SingleChildScrollView(
+        child: Column(
+          children: [
+            ...header,
+            _narrowGrid(context, grid),
+            legend,
+          ],
+        ),
+      );
+    }
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-          child: TextField(
-            decoration: InputDecoration(
-              labelText: tr('searchHint'),
-              // Lupa pequeña (fix2, item 9): el tamaño por defecto
-              // (24) se veía enorme en la cajita de búsqueda.
-              prefixIcon: const LucideIcon(LucideIcons.search, size: 18),
-            ),
-            onChanged: (v) => setState(() => _query = v.trim()),
-          ),
+        ...header,
+        Expanded(child: _normalGrid(context, grid)),
+        legend,
+      ],
+    );
+  }
+
+  /// Campo de búsqueda de elementos (cabecera de la pestaña).
+  Widget _searchField() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: TextField(
+        decoration: InputDecoration(
+          labelText: tr('searchHint'),
+          // Lupa pequeña (fix2, item 9): el tamaño por defecto
+          // (24) se veía enorme en la cajita de búsqueda.
+          prefixIcon: const LucideIcon(LucideIcons.search, size: 18),
         ),
-        // Dos acciones superiores con el MISMO patrón que las tarjetas
+        onChanged: (v) => setState(() => _query = v.trim()),
+      ),
+    );
+  }
+
+  /// Dos acciones superiores: quiz de la tabla y comparación.
+  Widget _actionCards(BuildContext context) {
+    return // Dos acciones superiores con el MISMO patrón que las tarjetas
         // "Practicar de otra forma": icono ARRIBA en un círculo
         // tintado, texto ABAJO centrado. El OutlinedButton.icon
         // anterior ponía icono y texto en horizontal y el título
@@ -244,303 +303,294 @@ class _TablaScreenState extends State<TablaScreen>
         // ("Quiz de la / tabla / periódica"). IntrinsicHeight +
         // stretch igualan ambas tarjetas a la altura de la más alta.
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-          child: IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _actionCard(
-                  context,
-                  icon: LucideIcons.circleHelp,
-                  label: tr('tableQuizTitle'),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                          builder: (_) => const TableQuizScreen()),
-                    );
-                  },
-                ),
-                const SizedBox(width: 8),
-                _actionCard(
-                  context,
-                  icon: LucideIcons.arrowLeftRight,
-                  label: tr('compareTitle'),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                          builder: (_) => const CompareScreen()),
-                    );
-                  },
-                ),
-              ],
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _actionCard(
+              context,
+              icon: LucideIcons.circleHelp,
+              label: tr('tableQuizTitle'),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const TableQuizScreen()),
+                );
+              },
             ),
-          ),
+            const SizedBox(width: 8),
+            _actionCard(
+              context,
+              icon: LucideIcons.arrowLeftRight,
+              label: tr('compareTitle'),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const CompareScreen()),
+                );
+              },
+            ),
+          ],
         ),
-        // Fila de chips con desplazamiento horizontal (fix3, punto 8):
+      ),
+    );
+  }
+
+  /// Fila de chips de filtro con desplazamiento horizontal y un
+  /// degradado claro en el borde derecho (64 px): el chip cortado
+  /// se lee como "hay más" y no como un error.
+  Widget _chipsRow(BuildContext context) {
+    return // Fila de chips con desplazamiento horizontal (fix3, punto 8):
         // "Alcalinotérreo" quedaba cortado a mitad en el borde derecho
         // y parecía un error. El degradado del borde derecho hace que
         // el chip cortado se lea como "hay más", y el respiro final
         // deja que el último chip entre entero en la vista. El fade
         // es solo visual (IgnorePointer): no tapa los toques.
         Stack(
-          children: [
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              child: Row(
-                children: [
-                  ChoiceChip(
-                    label: Text(tr('allWord')),
-                    selected: _filterCategory == null,
-                    onSelected: (_) => setState(() => _filterCategory = null),
-                  ),
-                  for (var i = 0; i < categoryNames.length; i++)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 6),
-                      child: ChoiceChip(
-                        label: Text(categoryNames[i]),
-                        selected: _filterCategory == i,
-                        onSelected: (_) => setState(() =>
-                            _filterCategory = _filterCategory == i ? null : i),
-                      ),
-                    ),
-                  // Respiro final: el último chip puede deslizarse
-                  // entero dentro de la vista sin pegarse al borde.
-                  const SizedBox(width: 24),
-                ],
+      children: [
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Row(
+            children: [
+              ChoiceChip(
+                label: Text(tr('allWord')),
+                selected: _filterCategory == null,
+                onSelected: (_) => setState(() => _filterCategory = null),
               ),
-            ),
-            Positioned(
-              right: 0,
-              top: 0,
-              bottom: 0,
-              child: IgnorePointer(
-                child: Container(
-                  width: 36,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                      colors: [
-                        Theme.of(context)
-                            .scaffoldBackgroundColor
-                            .withValues(alpha: 0),
-                        Theme.of(context).scaffoldBackgroundColor,
-                      ],
-                    ),
+              for (var i = 0; i < categoryNames.length; i++)
+                Padding(
+                  padding: const EdgeInsets.only(left: 6),
+                  child: ChoiceChip(
+                    label: Text(categoryNames[i]),
+                    selected: _filterCategory == i,
+                    onSelected: (_) => setState(() =>
+                        _filterCategory = _filterCategory == i ? null : i),
                   ),
                 ),
-              ),
-            ),
-          ],
+              // Respiro final: el último chip puede deslizarse
+              // entero dentro de la vista sin pegarse al borde.
+              const SizedBox(width: 24),
+            ],
+          ),
         ),
-        Expanded(
-          child: searching
-              ? ListView(
-                  // Padding inferior normal (24): al hacer scroll
-                  // hasta el final el último elemento se ve completo.
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
-                  children: [
-                    Text('${_visible.length} ${tr('elementsWord')}',
-                        style: TextStyle(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurface
-                              .withValues(alpha: 0.7),
-                        )),
-                    for (final e in _visible)
-                      ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: _catColors[e.category],
-                          child: Text(e.symbol,
-                              style: const TextStyle(
-                                  color: Colors.black,
-                                  fontWeight: FontWeight.bold)),
-                        ),
-                        title: Text(localizedElementName(e)),
-                        subtitle: Text(
-                            'Z = ${e.atomicNumber} · ${tr('massWord')} ${e.mass} · ${localizedCategoryName(e.category)}'),
-                        onTap: () => _showDetail(e),
-                      ),
+        Positioned(
+          right: 0,
+          top: 0,
+          bottom: 0,
+          child: IgnorePointer(
+            child: Container(
+              width: 64,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [
+                    Theme.of(context)
+                        .scaffoldBackgroundColor
+                        .withValues(alpha: 0),
+                    Theme.of(context).scaffoldBackgroundColor,
                   ],
-                )
-              : LayoutBuilder(
-                  builder: (context, constraints) {
-                    // Rejilla responsiva (fix3, punto 14; aclaración
-                    // 19:28): con 18 columnas fijas, en un teléfono
-                    // estrecho (~360 px) cada celda quedaba en ~20 px:
-                    // símbolo ilegible y todo apretado y feo. Paso
-                    // mínimo de celda 40 px (contenido ~38 px con los
-                    // márgenes de 1 px). La regla final es explícita:
-                    // si el ancho alcanza para celdas legibles
-                    // (18 × 40 = 720 px), la tabla se muestra ENTERA
-                    // sin scroll horizontal — sin SingleChildScrollView,
-                    // sin física ni barra de desplazamiento — y llena
-                    // todo el ancho disponible. SOLO en teléfono
-                    // angosto la rejilla mide 720 px, se desplaza en
-                    // horizontal y un degradado en el borde derecho
-                    // avisa de que hay más tabla a la derecha. El
-                    // desplazamiento vertical sigue siendo el del
-                    // propio GridView.
-                    const minCellPitch = 40.0;
-                    const minGridWidth = 18 * minCellPitch;
-                    final available = constraints.maxWidth.isFinite
-                        ? constraints.maxWidth - 16
-                        : minGridWidth;
-                    final fits = available >= minGridWidth;
-                    final gridWidth = fits ? available : minGridWidth;
-                    final gridView = SizedBox(
-                      width: gridWidth,
-                      child: GridView.builder(
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 18,
-                          childAspectRatio: 0.85,
-                        ),
-                        itemCount: grid.length,
-                        itemBuilder: (context, i) {
-                          // Marcadores 57–71 y 89–103 en la rejilla principal.
-                          if (i == (6 - 1) * 18 + (3 - 1)) {
-                            return Container(
-                              margin: const EdgeInsets.all(1),
-                              decoration: BoxDecoration(
-                                color: _catColors[8],
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: const FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Text('57–71',
-                                    style: TextStyle(
-                                        fontSize: 7,
-                                        color: Colors.black,
-                                        fontWeight: FontWeight.bold)),
-                              ),
-                            );
-                          }
-                          if (i == (7 - 1) * 18 + (3 - 1)) {
-                            return Container(
-                              margin: const EdgeInsets.all(1),
-                              decoration: BoxDecoration(
-                                color: _catColors[9],
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: const FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Text('89–103',
-                                    style: TextStyle(
-                                        fontSize: 7,
-                                        color: Colors.black,
-                                        fontWeight: FontWeight.bold)),
-                              ),
-                            );
-                          }
-                          return _cell(context, grid[i]);
-                        },
-                      ),
-                    );
-                    // Padding inferior (16): la última fila de la
-                    // rejilla no queda pegada al borde inferior.
-                    if (fits) {
-                      return Padding(
-                        padding: const EdgeInsets.fromLTRB(8, 8, 8, 16),
-                        child: gridView,
-                      );
-                    }
-                    return Stack(
-                      children: [
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.fromLTRB(8, 8, 8, 16),
-                          child: gridView,
-                        ),
-                        Positioned(
-                          right: 0,
-                          top: 0,
-                          bottom: 0,
-                          child: IgnorePointer(
-                            child: Container(
-                              key: const Key('gridScrollFade'),
-                              width: 36,
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.centerLeft,
-                                  end: Alignment.centerRight,
-                                  colors: [
-                                    Theme.of(context)
-                                        .scaffoldBackgroundColor
-                                        .withValues(alpha: 0),
-                                    Theme.of(context)
-                                        .scaffoldBackgroundColor,
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    );
-                  },
                 ),
+              ),
+            ),
+          ),
         ),
-        // Leyenda (fix2, item 10; fix3 punto 2 REVISADO): solo con
-        // el filtro "Todos" (_filterCategory == null). Con cualquier
-        // filtro de categoría activo no se muestra. En flujo normal,
+      ],
+    );
+  }
+
+  /// Lista de resultados al buscar o filtrar por categoría.
+  Widget _searchList(BuildContext context) {
+    return ListView(
+      // Padding inferior normal (24): al hacer scroll
+      // hasta el final el último elemento se ve completo.
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+      children: [
+        Text('${_visible.length} ${tr('elementsWord')}',
+            style: TextStyle(
+              color: Theme.of(context)
+                  .colorScheme
+                  .onSurface
+                  .withValues(alpha: 0.7),
+            )),
+        for (final e in _visible)
+          ListTile(
+            leading: CircleAvatar(
+              backgroundColor: _catColors[e.category],
+              child: Text(e.symbol,
+                  style: const TextStyle(
+                      color: Colors.black, fontWeight: FontWeight.bold)),
+            ),
+            title: Text(localizedElementName(e)),
+            subtitle: Text(
+                'Z = ${e.atomicNumber} · ${tr('massWord')} ${e.mass} · ${localizedCategoryName(e.category)}'),
+            onTap: () => _showDetail(e),
+          ),
+      ],
+    );
+  }
+
+  /// Rejilla de 18 columnas con el ancho dado. Las celdas llevan
+  /// su elemento o el marcador 57–71 / 89–103.
+  Widget _gridView(List<ChemicalElement?> grid, double width) {
+    return SizedBox(
+      width: width,
+      child: GridView.builder(
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 18,
+          childAspectRatio: 0.85,
+        ),
+        itemCount: grid.length,
+        itemBuilder: (context, i) {
+          // Marcadores 57–71 y 89–103 en la rejilla principal.
+          if (i == (6 - 1) * 18 + (3 - 1)) {
+            return Container(
+              margin: const EdgeInsets.all(1),
+              decoration: BoxDecoration(
+                color: _catColors[8],
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text('57–71',
+                    style: TextStyle(
+                        fontSize: 7,
+                        color: Colors.black,
+                        fontWeight: FontWeight.bold)),
+              ),
+            );
+          }
+          if (i == (7 - 1) * 18 + (3 - 1)) {
+            return Container(
+              margin: const EdgeInsets.all(1),
+              decoration: BoxDecoration(
+                color: _catColors[9],
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text('89–103',
+                    style: TextStyle(
+                        fontSize: 7,
+                        color: Colors.black,
+                        fontWeight: FontWeight.bold)),
+              ),
+            );
+          }
+          return _cell(context, grid[i]);
+        },
+      ),
+    );
+  }
+
+  /// Tabla completa SIN scroll (teléfono normal): la rejilla
+  /// original de 18 columnas, como en v6.
+  Widget _normalGrid(BuildContext context, List<ChemicalElement?> grid) {
+    final available = MediaQuery.sizeOf(context).width - 16;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 16),
+      child: _gridView(grid, available),
+    );
+  }
+
+  /// Tabla angosta (< 340 dp): rejilla de 18 × 40 px con scroll
+  /// horizontal y su degradado (64 px) en el borde derecho. La altura
+  /// es la completa de las 10 filas (_narrowGridHeight): la página
+  /// entera se desplaza en vertical y ninguna fila queda cortada.
+  Widget _narrowGrid(BuildContext context, List<ChemicalElement?> grid) {
+    return SizedBox(
+      height: _narrowGridHeight,
+      child: Stack(
+        children: [
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 16),
+            child: _gridView(grid, _narrowGridWidth),
+          ),
+          Positioned(
+            right: 0,
+            top: 0,
+            bottom: 0,
+            child: IgnorePointer(
+              child: Container(
+                key: const Key('gridScrollFade'),
+                width: 64,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: [
+                      Theme.of(context)
+                          .scaffoldBackgroundColor
+                          .withValues(alpha: 0),
+                      Theme.of(context).scaffoldBackgroundColor,
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Leyenda de categorías (solo sin filtro activo, ronda #2): si
+  /// hay un filtro, no se muestra nada.
+  Widget _legend(BuildContext context) {
+    if (_filterCategory != null) return const SizedBox.shrink();
+    return // filtro de categoría activo no se muestra. En flujo normal,
         // debajo de la rejilla/lista — sin Stack ni Positioned, sin
         // flotar ni tapar nada — con padding inferior para que la
         // línea "118 elementos" no quede pegada al borde ni la tape
         // la barra de navegación inferior.
-        if (_filterCategory == null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  tr('legendWord'),
-                  style: const TextStyle(
-                      fontSize: 17, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 8,
-                  children: [
-                    for (var i = 0; i < categoryNames.length; i++)
-                      InkWell(
-                        onTap: () => setState(() => _filterCategory = i),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 12,
-                              height: 12,
-                              decoration: BoxDecoration(
-                                color: _catColors[i],
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(localizedCategoryName(i)),
-                          ],
+        Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            tr('legendWord'),
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            children: [
+              for (var i = 0; i < categoryNames.length; i++)
+                InkWell(
+                  onTap: () => setState(() => _filterCategory = i),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: _catColors[i],
+                          borderRadius: BorderRadius.circular(6),
                         ),
                       ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '118 ${tr('elementsWord')}.',
-                  style: TextStyle(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurface
-                        .withValues(alpha: 0.7),
+                      const SizedBox(width: 6),
+                      Text(localizedCategoryName(i)),
+                    ],
                   ),
                 ),
-              ],
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '118 ${tr('elementsWord')}.',
+            style: TextStyle(
+              color: Theme.of(context)
+                  .colorScheme
+                  .onSurface
+                  .withValues(alpha: 0.7),
             ),
           ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -559,10 +609,8 @@ class _TablaScreenState extends State<TablaScreen>
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Theme.of(context)
-                .colorScheme
-                .primary
-                .withValues(alpha: 0.08),
+            color:
+                Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
@@ -602,11 +650,10 @@ class _TablaScreenState extends State<TablaScreen>
                       fontWeight: FontWeight.bold, fontSize: 13),
                 ),
               ),
-              title: Text(
-                  '${i + 1}. ${_activityName(metalActivitySeries[i])}',
+              title: Text('${i + 1}. ${_activityName(metalActivitySeries[i])}',
                   style: const TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text(localizedReferenceString(
-                  metalActivitySeries[i].reaction)),
+              subtitle: Text(
+                  localizedReferenceString(metalActivitySeries[i].reaction)),
             ),
           ),
       ],
@@ -662,8 +709,8 @@ class _TablaScreenState extends State<TablaScreen>
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(v,
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold)),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold)),
                         ),
                       ),
                   ],
