@@ -6,7 +6,7 @@
 // - Qué preguntas abren el teclado (las 9 generadas de cálculo) y
 //   cuáles siguen con opciones (conceptuales generadas y banco).
 // - El widget NumericKeypad: teclas, borrar, limpiar, Usar resultado.
-// - El runner compartido (SimpleQuizRunner: examen con tiempo y reto)
+// - El runner compartido (SimpleQuizRunner: examen con tiempo)
 //   muestra el teclado con una pregunta de cálculo y las opciones
 //   con una conceptual.
 import 'dart:math';

@@ -38,6 +38,11 @@ void main() {
   setUpAll(() async {
     await loadRobotoFonts();
     await loadMaterialIcons();
+    // Nunito: la pantalla de Cómo se juega (MelliQuiApp) usa Nunito.
+    // Sin cargarla, el texto se dibuja con la fuente cuadrada de
+    // pruebas y el botón Cerrar cae fuera de la pantalla (mismo
+    // artefacto que en fix5_como_se_juega_test.dart).
+    await loadNunitoFonts();
   });
 
   setUp(() async {
@@ -107,8 +112,14 @@ void main() {
   /// proceso lo pilla sin cargar (círculo vacío en vez de la foto).
   Future<void> warmCompanions(WidgetTester tester) async {
     final ctx = tester.element(find.byType(MaterialApp));
+    // Igual que en preview_fix6: la precarga va dentro de
+    // runAsync; sin él, el Future de precacheImage no se
+    // completa en la zona fake-async y el test se cuelga (con la
+    // caché fría, p. ej. al correr solo este test con --name).
     for (final c in Companion.values) {
-      await precacheImage(AssetImage(companionAsset(c)), ctx);
+      await tester.runAsync(() async {
+        await precacheImage(AssetImage(companionAsset(c)), ctx);
+      });
     }
     await tester.pump();
   }
@@ -182,7 +193,7 @@ void main() {
           matching: find.byType(Container),
         ))
         .map(rectOf)
-        .firstWhere((r) => r.width == 64.0 && r.height == 64.0);
+        .firstWhere((r) => r.width == 80.0 && r.height == 80.0);
     expect(nodeRect.top, lessThan(772));
     expect(nodeRect.bottom, lessThanOrEqualTo(772));
     // Y la cabecera del primer tema está justo debajo de la

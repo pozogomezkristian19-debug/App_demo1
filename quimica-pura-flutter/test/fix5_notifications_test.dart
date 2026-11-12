@@ -164,12 +164,10 @@ void main() {
   });
 
   group('Cadenas nuevas (6 idiomas)', () {
-    test('notifEnabledConfirm, notifPermGranted y notifPermDenied existen '
-        'en los 6 idiomas y no están vacías', () {
+    test('notifEnabledConfirm existe en los 6 idiomas y no está '
+        'vacía', () {
       const keys = [
         'notifEnabledConfirm',
-        'notifPermGranted',
-        'notifPermDenied',
         'notifSettingsBody',
       ];
       for (final lang in ['es', 'en', 'fr', 'it', 'pt', 'ru']) {
@@ -345,6 +343,16 @@ void main() {
 
   group('Recordatorios: el interruptor refleja el permiso real', () {
     Future<void> pumpReminders(WidgetTester tester) async {
+      // Ventana ALTA (800x1400): la tarjeta nueva de canales
+      // (corrección ronda #7) alarga la lista y, con el alto por
+      // defecto (600), el botón de prueba quedaba fuera del área
+      // construida del ListView y find.text no lo encontraba.
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
       await tester.pumpWidget(
         const MaterialApp(home: ReminderScreen()),
       );
@@ -353,8 +361,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
     }
 
-    testWidgets('permiso concedido + recordatorios ON: interruptor ON, '
-        'estado "concedido" y próximo aviso visible', (tester) async {
+    testWidgets('permiso concedido + recordatorios ON: interruptor ON '
+        '(sin filas de diagnóstico)', (tester) async {
       final next = DateTime.now().add(const Duration(minutes: 35));
       SharedPreferences.setMockInitialValues({
         'melli_reminder_on': true,
@@ -363,18 +371,13 @@ void main() {
       await UserPrefs.load();
       await pumpReminders(tester);
       expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
-      expect(find.text(tr('notifPermGranted')), findsOneWidget);
-      expect(find.text(tr('notifPermDenied')), findsNothing);
-      expect(find.text('Próximo aviso'), findsOneWidget);
-      final timeStr =
-          '${next.hour.toString().padLeft(2, '0')}:${next.minute.toString().padLeft(2, '0')}';
-      expect(find.textContaining(timeStr), findsOneWidget);
+      expect(find.text('Próximo aviso'), findsNothing);
+      expect(find.text('Diagnóstico'), findsNothing);
       expect(tester.takeException(), isNull);
     });
 
     testWidgets('permiso revocado con recordatorios ON: el interruptor '
-        'queda APAGADO, estado "denegado" y sin próximo aviso',
-        (tester) async {
+        'queda APAGADO', (tester) async {
       fake.permissionGranted = false;
       final next = DateTime.now().add(const Duration(minutes: 35));
       SharedPreferences.setMockInitialValues({
@@ -384,8 +387,6 @@ void main() {
       await UserPrefs.load();
       await pumpReminders(tester);
       expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
-      expect(find.text(tr('notifPermDenied')), findsOneWidget);
-      expect(find.text(tr('notifPermGranted')), findsNothing);
       expect(find.text('Próximo aviso'), findsNothing);
       // Reconciliado: la preferencia ya no dice que están activos.
       expect(UserPrefs.reminderOn, isFalse);
@@ -403,7 +404,6 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       await tester.pump(const Duration(milliseconds: 300));
       expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
-      expect(find.text(tr('notifPermGranted')), findsOneWidget);
       expect(fake.exactAlarmsRequested, isFalse);
       expect(
           fake.shown
@@ -423,7 +423,6 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text(tr('notifSettingsTitle')), findsOneWidget);
       expect(find.text(tr('notifSettingsBody')), findsOneWidget);
-      expect(find.text(tr('notifPermDenied')), findsOneWidget);
       expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
       expect(fake.shown, isEmpty);
       await tester.tap(find.text(tr('notifGoSettings')));
@@ -437,7 +436,7 @@ void main() {
         'el diálogo (no dice "enviado")', (tester) async {
       fake.permissionGranted = false;
       await pumpReminders(tester);
-      await tester.tap(find.text(tr('notifTest')));
+      await tester.tap(find.text(tr('notifTest').toUpperCase()));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text(tr('notifSettingsTitle')), findsOneWidget);
@@ -482,28 +481,41 @@ void main() {
     /// Lleva el onboarding hasta la pantalla de permiso de
     /// notificaciones (después del nombre, antes del idioma).
     Future<void> goToNotificationsPage(WidgetTester tester) async {
+      // Superficie de teléfono (393x852, como el Redmi de Kristian):
+      // a 800x600 la página del perfil no cabe en vertical y la
+      // píldora "Masculino" queda bajo el área visible, fuera del
+      // alcance del toque.
+      tester.view.physicalSize = const Size(393 * 2, 852 * 2);
+      tester.view.devicePixelRatio = 2.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
       await tester.pumpWidget(
         MaterialApp(home: OnboardingScreen(onFinished: () {})),
       );
       await tester.pumpAndSettle();
       for (var i = 0; i < 4; i++) {
-        await tester.tap(find.text('Siguiente'));
+        await tester.tap(find.text('SIGUIENTE'));
         await tester.pumpAndSettle();
       }
       await tester.enterText(find.byType(TextField), 'Kristian');
       await tester.tap(find.text('Masculino'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Siguiente'));
+      await tester.tap(find.text('SIGUIENTE'));
       await tester.pumpAndSettle();
     }
 
     testWidgets('con el permiso concedido, "Activar recordatorios" '
         'dispara la confirmación y avanza al idioma', (tester) async {
       await goToNotificationsPage(tester);
-      expect(find.text('Activar recordatorios'), findsOneWidget);
-      await tester.tap(find.text('Activar recordatorios'));
+      expect(find.text('ACTIVAR RECORDATORIOS'), findsOneWidget);
+      await tester.tap(find.text('ACTIVAR RECORDATORIOS'));
       await tester.pump(const Duration(seconds: 4));
       await tester.pumpAndSettle();
+      // Diseño 7.0: tras notificaciones viene directamente el idioma
+      // (la página de permiso de analítica se quitó: compartir es
+      // automático).
       expect(find.text('Finalizar'), findsOneWidget);
       expect(UserPrefs.reminderOn, isTrue);
       expect(fake.exactAlarmsRequested, isFalse);
@@ -518,7 +530,7 @@ void main() {
         'volver con el permiso dado se activa solo', (tester) async {
       fake.permissionGranted = false;
       await goToNotificationsPage(tester);
-      await tester.tap(find.text('Activar recordatorios'));
+      await tester.tap(find.text('ACTIVAR RECORDATORIOS'));
       await tester.pumpAndSettle();
       expect(find.text('Ir a Ajustes'), findsOneWidget);
       await tester.tap(find.text('Ir a Ajustes'));
@@ -526,7 +538,7 @@ void main() {
       expect(fake.settingsOpened, isTrue);
       // Todavía NO se avanzó: si se avanzara, el PageView destruye
       // esta página y el re-chequeo al volver no podría dispararse.
-      expect(find.text('Activar recordatorios'), findsOneWidget);
+      expect(find.text('ACTIVAR RECORDATORIOS'), findsOneWidget);
       expect(find.text('Finalizar'), findsNothing);
       // El usuario concede en Ajustes y vuelve a la app.
       fake.permissionGranted = true;
@@ -535,6 +547,9 @@ void main() {
       await tester.pump(const Duration(seconds: 4));
       await tester.pumpAndSettle();
       expect(UserPrefs.reminderOn, isTrue);
+      // Diseño 7.0: tras notificaciones viene directamente el idioma
+      // (la página de permiso de analítica se quitó: compartir es
+      // automático).
       expect(find.text('Finalizar'), findsOneWidget);
       expect(
           fake.shown
@@ -547,11 +562,14 @@ void main() {
         'se avanza igual al idioma sin activar nada', (tester) async {
       fake.permissionGranted = false;
       await goToNotificationsPage(tester);
-      await tester.tap(find.text('Activar recordatorios'));
+      await tester.tap(find.text('ACTIVAR RECORDATORIOS'));
       await tester.pumpAndSettle();
       expect(find.text('Ir a Ajustes'), findsOneWidget);
       await tester.tap(find.text(tr('notifSettingsClose')));
       await tester.pumpAndSettle();
+      // Diseño 7.0: tras notificaciones viene directamente el idioma
+      // (la página de permiso de analítica se quitó: compartir es
+      // automático).
       expect(find.text('Finalizar'), findsOneWidget);
       expect(UserPrefs.reminderOn, isFalse);
       expect(fake.settingsOpened, isFalse);

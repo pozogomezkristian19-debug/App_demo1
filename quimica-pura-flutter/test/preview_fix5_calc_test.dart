@@ -38,6 +38,10 @@ void main() {
   });
 
   setUp(() async {
+    // La frase de la burbuja de la mascota rota con un estado
+    // global: sin reiniciarla, el golden depende de qué tests
+    // corrieron antes en el mismo proceso.
+    resetMascotLineRotationForTesting();
     SharedPreferences.setMockInitialValues({});
     await ProgressService.load();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -92,11 +96,16 @@ void main() {
 
   /// Calienta la caché de imágenes de los acompañantes: el PNG se
   /// decodifica de forma asíncrona y, con la caché fría, la primera
-  /// captura lo pilla sin cargar.
+  /// captura lo pilla sin cargar. OJO: sin runAsync la
+  /// decodificación real del motor nunca completa sobre la caché
+  /// fría y el test se queda colgado (mismo aviso que en
+  /// preview_fix8/preview_fix6).
   Future<void> warmCompanions(WidgetTester tester) async {
     final ctx = tester.element(find.byType(MaterialApp));
     for (final c in Companion.values) {
-      await precacheImage(AssetImage(companionAsset(c)), ctx);
+      await tester.runAsync(() async {
+        await precacheImage(AssetImage(companionAsset(c)), ctx);
+      });
     }
     await tester.pump();
   }

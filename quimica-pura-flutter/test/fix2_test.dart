@@ -7,7 +7,6 @@ import 'package:quimica_pura/main.dart';
 import 'package:quimica_pura/data/i18n/content_i18n.dart';
 import 'package:quimica_pura/data/questions.dart';
 import 'package:quimica_pura/screens/account_screen.dart';
-import 'package:quimica_pura/screens/challenge_screen.dart';
 import 'package:quimica_pura/screens/lab_quiz_screen.dart';
 import 'package:quimica_pura/screens/lab_screen.dart';
 import 'package:quimica_pura/screens/onboarding_screen.dart';
@@ -23,6 +22,7 @@ import 'package:quimica_pura/services/user_prefs.dart';
 import 'package:quimica_pura/widgets/avatar.dart';
 import 'package:quimica_pura/widgets/brand_logo.dart';
 import 'package:quimica_pura/widgets/lucide_icons.dart';
+import 'package:quimica_pura/widgets/main_bottom_nav.dart';
 import 'package:quimica_pura/widgets/support_button.dart';
 import 'package:quimica_pura/widgets/twin_avatars.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -225,14 +225,15 @@ void main() {
       expect(find.byType(CompanionAvatar), findsWidgets);
       // El primer nivel del camino se ve sin deslizar (viewport
       // 360x800 con barra y navegación: cabe antes de los 660 px).
-      final firstLevel = tester.getTopLeft(find.text('Nivel 1').first);
+      // La etiqueta "Nivel 1" ya no existe (§3.2.2): se usa el
+      // número del nodo.
+      final firstLevel = tester.getTopLeft(find.text('1').first);
       expect(firstLevel.dy, lessThan(660));
     });
 
     // (fix6, ronda #6): la tarjeta "Practicar de otra forma" (con
     // el mando del Reto) se quitó de Niveles, así que este test se
-    // elimina. El mando del Reto sigue probado en su propia pantalla
-    // ('el mando del Reto va en un círculo de 96', más abajo).
+    // elimina. (7.0: el Reto se quitó entero de la app.)
   });
 
   group('Tabla (items 9 y 10; fix3 punto 2 REVISADO: leyenda solo en "Todos")',
@@ -366,7 +367,7 @@ void main() {
     });
   });
 
-  group('Laboratorio y Reto (items 4 y 7)', () {
+  group('Laboratorio (item 4)', () {
     testWidgets('en Lab, el simulador va ANTES que el cuestionario',
         (tester) async {
       await tester.pumpWidget(
@@ -403,34 +404,6 @@ void main() {
       expect(sizes.first, sizes.last);
     });
 
-    testWidgets('el mando del Reto va en un círculo de 96', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: ThemeData(useMaterial3: true),
-          home: const ChallengeScreen(),
-        ),
-      );
-      await tester.pump();
-      final gamepad = lucide(LucideIcons.gamepad2);
-      expect(gamepad, findsOneWidget);
-      expect(tester.widget<LucideIcon>(gamepad).size, 48);
-      // Algún Container ancestro mide 96x96 y es un círculo.
-      final circles = find.ancestor(
-        of: gamepad,
-        matching: find.byType(Container),
-      );
-      var found = false;
-      for (var i = 0; i < circles.evaluate().length; i++) {
-        final c = tester.widget<Container>(circles.at(i));
-        final dec = c.decoration;
-        if (tester.getSize(circles.at(i)) == const Size(96, 96) &&
-            dec is BoxDecoration &&
-            dec.shape == BoxShape.circle) {
-          found = true;
-        }
-      }
-      expect(found, isTrue);
-    });
   });
 
   group('Encabezado del quiz (bug 6: sin ids internos)', () {
@@ -697,10 +670,10 @@ void main() {
 
     /// El botón atrás en un NIVEL: salir sí cuesta 1 vida.
     /// La sesión de quiz no tiene AppBar ni botón atrás del sistema
-    /// (ronda 2): la única salida es el botón Salir del quiz.
+    /// (ronda 2): la única salida es la X del quiz (§3.3.1).
     Future<void> checkBackWarningLevel(WidgetTester tester) async {
       expect(ProgressService.instance.livesLeft, 5);
-      await tester.tap(find.text(tr('quizExit')));
+      await tester.tap(find.byIcon(Icons.close));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text(tr('exitLevelTitle')), findsOneWidget);
@@ -711,7 +684,7 @@ void main() {
       expect(find.text(tr('exitLevelTitle')), findsNothing);
       expect(find.textContaining('Pregunta 1 de'), findsOneWidget);
       // Salir: −1 vida y vuelta a Niveles.
-      await tester.tap(find.text(tr('quizExit')));
+      await tester.tap(find.byIcon(Icons.close));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       await tester.tap(find.text(tr('exitLevelLeave')));
@@ -728,12 +701,10 @@ void main() {
         'Nivel: el botón atrás pide confirmar y salir cuesta '
         '1 vida (fix4, punto 5)', (tester) async {
       await pumpHomeScreen(tester);
-      // Toca el nodo del Nivel 1 del primer tema: el centro del
-      // nodo está 43 px por encima del centro de su etiqueta
-      // "Nivel 1" (nodo de 64 px + 4 px de hueco + ~7 px de media
-      // etiqueta). La etiqueta en sí no es tocable.
-      final label = find.text('${tr('levelWord')} 1').first;
-      await tester.tapAt(tester.getCenter(label) + const Offset(0, -43));
+      // Toca el nodo del Nivel 1 del primer tema: su número es el
+      // único texto "1" suelto en la pantalla (la etiqueta "Nivel 1"
+      // ya no existe, §3.2.2).
+      await tester.tap(find.text('1').first);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.textContaining('Pregunta 1 de'), findsOneWidget);
@@ -756,10 +727,10 @@ void main() {
       await tester.tap(lucide(LucideIcons.rotateCcw));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      // Sesión activa: sin AppBar ni navbar; sí botón Salir.
+      // Sesión activa: sin AppBar ni navbar; sí botón X de salida.
       expect(find.byType(AppBar), findsNothing);
-      expect(find.byType(NavigationBar), findsNothing);
-      expect(find.text(tr('quizExit')), findsOneWidget);
+      expect(find.byType(MainBottomNav), findsNothing);
+      expect(find.byIcon(Icons.close), findsOneWidget);
       expect(find.textContaining('Pregunta 1 de'), findsOneWidget);
       // Las opciones se leen: el color del texto no es blanco.
       for (final e in find.byType(ElevatedButton).evaluate()) {
@@ -768,29 +739,11 @@ void main() {
         if (fg != null) expect(fg, isNot(Colors.white));
       }
       // Salir del repaso es directo (no es un nivel) y la barra vuelve.
-      await tester.tap(find.text(tr('quizExit')));
+      await tester.tap(find.byIcon(Icons.close));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.byType(AppBar), findsOneWidget);
-      expect(find.byType(NavigationBar), findsOneWidget);
-    });
-
-    testWidgets(
-        'Reto: el botón atrás avisa sin pérdida de vida (fix4, punto 5)',
-        (tester) async {
-      // Fix6, ítem 6: el jugador 1 es fijo (nombre del perfil +
-      // " (tú)"), así que se fija el perfil antes de montar la
-      // pantalla; solo queda 1 TextField, el del jugador 2.
-      UserPrefs.userName = 'Kristian';
-      addTearDown(() => UserPrefs.userName = '');
-      await pumpPushable(tester, const ChallengeScreen());
-      expect(find.text('Kristian (tú)'), findsOneWidget);
-      await tester.enterText(find.byType(TextField), 'Britany');
-      await tester.tap(find.text(tr('challengeStart')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-      expect(find.textContaining('Pregunta 1 de'), findsOneWidget);
-      await checkBackWarningNoLives(tester);
+      expect(find.byType(MainBottomNav), findsOneWidget);
     });
 
     testWidgets(

@@ -271,13 +271,22 @@ void main() {
         (tester) async {
       await pumpTabla(tester, logicalWidth: 360, logicalHeight: 800);
       // A 360 px (modo normal, fix4, punto 1) el único degradado
-      // del borde derecho es el de la fila de chips: la rejilla ya
-      // no desliza, así que no hay fade de rejilla. Un Container con
-      // LinearGradient transparente -> color de fondo.
+      // HORIZONTAL del borde derecho es el de la fila de chips: la
+      // rejilla ya no desliza, así que no hay fade de rejilla. Un
+      // Container con LinearGradient transparente -> color de
+      // fondo, de izquierda a derecha. (Las tarjetas de acción
+      // tienen degradados verticales desde la ronda de diseño 7.0,
+      // por eso el predicado exige horizontal.)
       final fade = find.byWidgetPredicate((w) =>
           w is Container &&
           w.decoration is BoxDecoration &&
-          (w.decoration as BoxDecoration).gradient is LinearGradient);
+          (w.decoration as BoxDecoration).gradient is LinearGradient &&
+          ((w.decoration as BoxDecoration).gradient as LinearGradient)
+                  .begin ==
+              Alignment.centerLeft &&
+          ((w.decoration as BoxDecoration).gradient as LinearGradient)
+                  .end ==
+              Alignment.centerRight);
       expect(fade, findsOneWidget);
       expect(find.byKey(const Key('gridScrollFade')), findsNothing);
       // Respiro final de 24 px tras el último chip.

@@ -179,20 +179,30 @@ void main() {
   /// Lleva el onboarding hasta la pantalla de permiso de
   /// notificaciones (después del nombre, antes del idioma).
   Future<void> goToNotificationsPage(WidgetTester tester) async {
+    // Superficie de teléfono (393x852, como el Redmi de Kristian):
+    // a 800x600 la página del perfil no cabe en vertical y la
+    // píldora "Masculino" queda bajo el área visible, fuera del
+    // alcance del toque (el toque caería sobre el botón SIGUIENTE).
+    tester.view.physicalSize = const Size(393 * 2, 852 * 2);
+    tester.view.devicePixelRatio = 2.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
     await tester.pumpWidget(
       MaterialApp(home: OnboardingScreen(onFinished: () {})),
     );
     await tester.pumpAndSettle();
     // 4 pantallas: bienvenida, resolver, estudiar, practicar.
     for (var i = 0; i < 4; i++) {
-      await tester.tap(find.text('Siguiente'));
+      await tester.tap(find.text('SIGUIENTE'));
       await tester.pumpAndSettle();
     }
     // Pantalla del perfil: nombre + género para poder avanzar.
     await tester.enterText(find.byType(TextField), 'Kristian');
     await tester.tap(find.text('Masculino'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Siguiente'));
+    await tester.tap(find.text('SIGUIENTE'));
     await tester.pumpAndSettle();
   }
 
@@ -201,23 +211,26 @@ void main() {
       (tester) async {
     await goToNotificationsPage(tester);
     expect(find.text('No pierdas la racha'), findsOneWidget);
-    expect(find.text('Activar recordatorios'), findsOneWidget);
+    expect(find.text('ACTIVAR RECORDATORIOS'), findsOneWidget);
     // El botón "Ahora no" se quitó (2026-11-10 20:43): queda un
     // solo botón en la pantalla.
     expect(find.text('Ahora no'), findsNothing);
     // La pantalla de permiso tiene sus propios botones: el
     // "Siguiente" de abajo no sale aquí.
-    expect(find.text('Siguiente'), findsNothing);
+    expect(find.text('SIGUIENTE'), findsNothing);
     // Con el permiso negado (en pruebas enable() devuelve false),
     // "Activar recordatorios" muestra el diálogo con "Ir a
     // Ajustes" (fix4, punto 3, en lugar del aviso de antes) y, al
     // cerrarlo, se avanza igual al idioma, donde está "Finalizar".
-    await tester.tap(find.text('Activar recordatorios'));
+    await tester.tap(find.text('ACTIVAR RECORDATORIOS'));
     await tester.pumpAndSettle();
     expect(find.text('Ir a Ajustes'), findsOneWidget);
     expect(find.text('Finalizar'), findsNothing);
     await tester.tap(find.text('Cerrar'));
     await tester.pumpAndSettle();
+    // Compartir es automático (ronda de diseño 7.0): tras
+    // notificaciones viene el idioma directamente, donde está
+    // "Finalizar" (ya no hay página de permiso de analítica).
     expect(find.text('Finalizar'), findsOneWidget);
   });
 
@@ -228,14 +241,16 @@ void main() {
     FlutterLocalNotificationsPlatform.instance =
         _FakeAndroidNotifications(permissionGranted: true);
     await goToNotificationsPage(tester);
-    await tester.tap(find.text('Activar recordatorios'));
+    await tester.tap(find.text('ACTIVAR RECORDATORIOS'));
     // Al conceder, enable() programa la tanda: la copia del icono
     // grande tiene un tope de 3 s (tiempo falso) y en pruebas la E/S
     // real no completa, así que hay que avanzar el reloj para que el
     // tope dispare y el flujo siga sin icono.
     await tester.pump(const Duration(seconds: 4));
     await tester.pumpAndSettle();
-    // Sin aviso de permiso y se avanza igual al idioma.
+    // Sin aviso de permiso y se avanza igual: al idioma
+    // directamente (compartir es automático, ronda de diseño 7.0:
+    // ya no hay página de permiso de analítica).
     expect(find.byType(SnackBar), findsNothing);
     expect(find.text('Finalizar'), findsOneWidget);
     expect(UserPrefs.reminderOn, isTrue);
@@ -251,12 +266,15 @@ void main() {
     // de antes) y, al cerrarlo, se avanza igual a la pantalla del
     // idioma. Los recordatorios quedan apagados y se pueden
     // activar luego desde Cuenta › Recordatorios.
-    await tester.tap(find.text('Activar recordatorios'));
+    await tester.tap(find.text('ACTIVAR RECORDATORIOS'));
     await tester.pumpAndSettle();
     expect(find.text('Ir a Ajustes'), findsOneWidget);
     expect(find.byType(SnackBar), findsNothing);
     await tester.tap(find.text('Cerrar'));
     await tester.pumpAndSettle();
+    // Tras notificaciones viene el idioma directamente (compartir
+    // es automático, ronda de diseño 7.0: ya no hay página de
+    // permiso de analítica).
     expect(find.text('Finalizar'), findsOneWidget);
     expect(UserPrefs.reminderOn, isFalse);
   });
@@ -287,8 +305,8 @@ void main() {
     expect(await NotificationService.nextNotificationTime(), isNull);
   });
 
-  testWidgets('la pantalla muestra la fecha del próximo aviso',
-      (tester) async {
+  testWidgets('la pantalla simplificada no muestra el próximo aviso '
+      '(solo interruptor y botón de prueba)', (tester) async {
     final next = DateTime.now().add(const Duration(minutes: 30));
     SharedPreferences.setMockInitialValues({
       'melli_reminder_on': true,
@@ -300,10 +318,9 @@ void main() {
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
-    expect(find.text('Próximo aviso'), findsOneWidget);
-    final timeStr =
-        '${next.hour.toString().padLeft(2, '0')}:${next.minute.toString().padLeft(2, '0')}';
-    expect(find.textContaining(timeStr), findsOneWidget);
+    expect(find.text('Próximo aviso'), findsNothing);
+    expect(find.text('Recordatorios activados'), findsOneWidget);
+    expect(find.text('PROBAR UN AVISO AHORA'), findsOneWidget);
   });
 
   testWidgets('sin avisos no se muestra la línea del próximo aviso',

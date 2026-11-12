@@ -51,3 +51,28 @@ Future<void> loadMaterialIcons() async {
   loader.addFont(Future.value(ByteData.view(bytes.buffer)));
   await loader.load();
 }
+
+/// loadNunitoFonts: carga la Nunito REAL empaquetada en la app
+/// (assets/fonts, declarada en pubspec) para las capturas de la
+/// app completa: MelliQuiApp usa Nunito como fuente, así que sin
+/// ella los textos salen como bloques sólidos (la fuente cuadrada
+/// de pruebas) y la captura no se puede leer. Si no se encuentran
+/// los archivos, no rompe nada.
+Future<void> loadNunitoFonts() async {
+  const files = [
+    'assets/fonts/Nunito-Regular.ttf',
+    'assets/fonts/Nunito-SemiBold.ttf',
+    'assets/fonts/Nunito-Bold.ttf',
+    'assets/fonts/Nunito-ExtraBold.ttf',
+  ];
+  final loader = FontLoader('Nunito');
+  var found = 0;
+  for (final path in files) {
+    final f = File(path);
+    if (!await f.exists()) continue;
+    final bytes = await f.readAsBytes();
+    loader.addFont(Future.value(ByteData.view(bytes.buffer)));
+    found++;
+  }
+  if (found > 0) await loader.load();
+}

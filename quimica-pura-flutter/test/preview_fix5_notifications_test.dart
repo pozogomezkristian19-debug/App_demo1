@@ -154,13 +154,13 @@ void main() {
     );
     await tester.pumpAndSettle();
     for (var i = 0; i < 4; i++) {
-      await tester.tap(find.text('Siguiente'));
+      await tester.tap(find.text('SIGUIENTE'));
       await tester.pumpAndSettle();
     }
     await tester.enterText(find.byType(TextField), 'Kristian');
     await tester.tap(find.text('Masculino'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Siguiente'));
+    await tester.tap(find.text('SIGUIENTE'));
     await tester.pumpAndSettle();
   }
 

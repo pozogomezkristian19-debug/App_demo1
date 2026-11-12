@@ -13,6 +13,7 @@ import 'package:quimica_pura/services/progress.dart';
 import 'package:quimica_pura/services/user_prefs.dart';
 import 'package:quimica_pura/widgets/brand_logo.dart';
 import 'package:quimica_pura/widgets/lucide_icons.dart';
+import 'package:quimica_pura/widgets/main_bottom_nav.dart';
 import 'package:quimica_pura/widgets/twin_avatars.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -264,7 +265,8 @@ void main() {
       expect(glyph.size, const Size(28, 28));
     });
 
-    testWidgets('barra inferior: la pestaña activa es 3D, las demás planas',
+    testWidgets(
+        'barra inferior: círculo central sólido y plano (sin anillo ni 3D), las demás pestañas planas',
         (tester) async {
       SharedPreferences.setMockInitialValues({});
       await ProgressService.load();
@@ -292,8 +294,22 @@ void main() {
           .widgetList<LucideIcon>(find.byWidgetPredicate(
               (w) => w is LucideIcon && w.icon == data))
           .any((w) => w.threeD);
-      // Niveles (índice 0) está activa: su icono es 3D.
-      expect(is3D(LucideIcons.route), isTrue);
+      // Niveles (índice 2) está activa: es el círculo central
+      // sólido teal + labio (rediseño Duolingo §3.1, Zona A: sin
+      // degradado, sin anillo brillante) con el icono de ruta en
+      // blanco, plano (no 3D). La clave del centro es
+      // 'nav-center-levels' (la antigua 'nav-center-ring' era
+      // del anillo del diseño anterior, ya eliminado).
+      expect(find.byKey(const ValueKey('nav-center-levels')),
+          findsOneWidget);
+      final routeInNav = find.descendant(
+        of: find.byType(MainBottomNav),
+        matching: find.byWidgetPredicate(
+            (w) => w is LucideIcon && w.icon == LucideIcons.route),
+      );
+      expect(routeInNav, findsOneWidget);
+      expect(tester.widget<LucideIcon>(routeInNav).color, Colors.white);
+      expect(tester.widget<LucideIcon>(routeInNav).threeD, isFalse);
       // Las demás pestañas siguen planas y grises.
       expect(is3D(LucideIcons.calculator), isFalse);
       expect(is3D(LucideIcons.bookOpen), isFalse);
@@ -301,7 +317,7 @@ void main() {
       expect(is3D(LucideIcons.userRound), isFalse);
     });
 
-    testWidgets('menú: icono principal 3D, flecha plana', (tester) async {
+    testWidgets('menú: iconos principales planos, flecha plana', (tester) async {
       SharedPreferences.setMockInitialValues({});
       await ProgressService.load();
       UserPrefs.rulesSeenV6 = true;
@@ -329,13 +345,16 @@ void main() {
       // y el settle nunca termina (patrón de los tests fix2).
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      // La primera fila del menú (ramas) lleva el icono 3D con
-      // el acento de la app; la flechita de la derecha sigue plana.
-      final network =
+      // Rediseño Duolingo (§3.15, Zona A): las filas del menú son
+      // planas — el icono va en un círculo tintado, sin 3D ni
+      // degradado; la flechita de la derecha sigue plana.
+      // Quemia 7.0: hay DOS iconos de red en el menú (Ramas y
+      // Grupos de estudio); los dos son planos ahora.
+      final networks = tester.widgetList<LucideIcon>(
           find.byWidgetPredicate((w) =>
-              w is LucideIcon && w.icon == LucideIcons.network);
-      expect(network, findsOneWidget);
-      expect(tester.widget<LucideIcon>(network).threeD, isTrue);
+              w is LucideIcon && w.icon == LucideIcons.network));
+      expect(networks.length, 2);
+      expect(networks.every((w) => !w.threeD), isTrue);
       final chevron = find.byWidgetPredicate(
           (w) => w is LucideIcon && w.icon == LucideIcons.chevronRight);
       expect(chevron, findsWidgets);

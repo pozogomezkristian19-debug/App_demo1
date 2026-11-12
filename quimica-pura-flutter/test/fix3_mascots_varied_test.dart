@@ -1,8 +1,11 @@
-// Pruebas fix3 — mascotas (ronda #3):
-// - Cabecera de Cuenta restaurada: foto de la compañera del día
-//   (48 px, con su aro de color, junto a la línea "Hoy te
-//   acompaña…"), sin avatar del usuario ni selector y sin repetir
-//   el nombre bajo la foto.
+// Pruebas fix3 — mascotas (ronda #3; rediseño Duolingo 7.0):
+// - Cabecera de Cuenta (restauración 6.3, corrección de Kristian
+//   2026-11-11): tarjeta redondeada con la foto GRANDE de la
+//   compañera del día (96 dp) y la línea "Hoy te acompaña…".
+//   La foto grande ES la compañera (foto y línea coinciden); el
+//   avatar premium equipado ya NO se muestra aquí (sigue en Tabla
+//   de posiciones, Amigos y Torneos). Sin selector de avatar
+//   propio y sin repetir el nombre bajo la foto.
 // - Mensajes de los muñecos variados: 5 variantes por compañero
 //   (Brenda, Britany, Kristian) y categoría (pregunta, ánimo,
 //   consuelo) en los 6 idiomas, rotando sin repetirse seguidas;
@@ -16,6 +19,7 @@ import 'package:quimica_pura/services/localization.dart';
 import 'package:quimica_pura/services/progress.dart';
 import 'package:quimica_pura/services/user_prefs.dart';
 import 'package:quimica_pura/widgets/avatar.dart';
+import 'package:quimica_pura/widgets/social_avatar.dart';
 import 'package:quimica_pura/widgets/twin_avatars.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -144,13 +148,20 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     }
 
-    testWidgets('foto de la compañera del día, 48 px, sin avatar de usuario',
+    testWidgets(
+        'foto grande de la compañera del día (96 dp) en la tarjeta '
+        'de la cabecera, sin avatar premium ni selector',
         (tester) async {
       await pumpAccount(tester);
       final companion = companionOfTheDay();
+      // Restauración 6.3: la foto grande de la cabecera ES la
+      // compañera del día (CompanionAvatar de 96 dp), así foto y
+      // línea "Hoy te acompaña…" coinciden. El avatar premium
+      // equipado (SocialAvatar) ya no se muestra en Cuenta.
       expect(find.byType(CompanionAvatar), findsOneWidget);
       expect(tester.getSize(find.byType(CompanionAvatar)),
-          const Size(48, 48));
+          const Size(96, 96));
+      expect(find.byType(SocialAvatar), findsNothing);
       // La línea "Hoy te acompaña…" dice el nombre UNA vez…
       expect(
           find.text(tr(companionOfDayKey(companion))), findsOneWidget);
@@ -160,7 +171,8 @@ void main() {
       expect(find.byType(MelliAvatar), findsNothing);
       expect(find.text(tr('accountAvatarTitle')), findsNothing);
       expect(find.text(tr('accountAvatarHint')), findsNothing);
-      // El título y el saludo siguen como texto.
+      // El título sigue como texto (sin nombre guardado, el banner
+      // muestra "Cuenta").
       expect(find.text(tr('accountTitle')), findsOneWidget);
     });
 

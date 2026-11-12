@@ -251,9 +251,11 @@ void main() {
       expect(UserPrefs.themeAccent, 'verde');
     });
 
-    testWidgets('círculos paralelos: anillo en las 5, relleno solo la '
+    testWidgets('círculos paralelos: anillo en las 8, relleno solo la '
         'seleccionada', (tester) async {
-      // Verde y Claro seleccionados por defecto: 2 rellenos, 3 huecos.
+      // Verde y Claro seleccionados por defecto: 2 rellenos, 6 huecos.
+      // Quemia 7.0: a Verde y Violeta se suman los 3 temas de la
+      // tienda (Coral, Rosa, Azul) — 8 círculos en total.
       await pumpTheme(tester);
       final circles = find.byWidgetPredicate((w) {
         if (w is! Container) return false;
@@ -265,7 +267,7 @@ void main() {
         final border = d.border;
         return border is Border && border.top.width == 2;
       });
-      expect(circles, findsNWidgets(5));
+      expect(circles, findsNWidgets(8));
       var filled = 0;
       final ringColors = <Color>{};
       for (final e in circles.evaluate()) {
@@ -277,17 +279,19 @@ void main() {
         if (d.color != null && d.color != Colors.transparent) filled++;
       }
       expect(filled, 2);
-      // Los anillos tienen el color propio de cada opción (5
-      // opciones, 5 colores: Verde teal, Violeta violeta, Claro
-      // ámbar, Oscuro pizarra, Sistema azul).
+      // Los anillos tienen el color propio de cada opción (8
+      // opciones, 7 colores distintos: el azul del tema de tienda
+      // y el de Sistema son el mismo 0xFF3B82F6).
       expect(
         ringColors,
         {
           const Color(0xFF00C2A8), // teal (Verde)
           const Color(0xFF8B5CF6), // violeta
+          const Color(0xFFF97316), // coral (tienda)
+          const Color(0xFFEC4899), // rosa (tienda)
           const Color(0xFFF59E0B), // ámbar (Claro)
           const Color(0xFF64748B), // pizarra (Oscuro)
-          const Color(0xFF3B82F6), // azul (Sistema)
+          const Color(0xFF3B82F6), // azul (tienda Azul y Sistema)
         },
       );
     });

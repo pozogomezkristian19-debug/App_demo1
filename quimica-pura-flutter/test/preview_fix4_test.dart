@@ -8,7 +8,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quimica_pura/main.dart';
-import 'package:quimica_pura/models.dart';
 import 'package:quimica_pura/screens/account_screen.dart';
 import 'package:quimica_pura/screens/notifications_screen.dart';
 import 'package:quimica_pura/screens/tabla_screen.dart';
@@ -17,7 +16,6 @@ import 'package:quimica_pura/services/notification_inbox.dart';
 import 'package:quimica_pura/services/progress.dart';
 import 'package:quimica_pura/services/update_check.dart';
 import 'package:quimica_pura/services/user_prefs.dart';
-import 'package:quimica_pura/widgets/simple_quiz.dart';
 import 'package:quimica_pura/widgets/twin_avatars.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -232,72 +230,6 @@ void main() {
     await shot(tester, 'fix4_niveles_no_review.png');
   });
 
-  testWidgets(
-      'fix4_reto_points: resultado del Reto con puntos, sin '
-      'vidas en juego', (tester) async {
-    const items = [
-      QuizQuestion(
-        topic: 'tabla',
-        question: 'Pregunta fácil de prueba',
-        options: ['A fácil', 'B fácil', 'C fácil', 'D fácil'],
-        answer: 0,
-        explanation: 'Por qué la A.',
-        difficulty: 1,
-      ),
-      QuizQuestion(
-        topic: 'tabla',
-        question: 'Pregunta media de prueba',
-        options: ['A media', 'B media', 'C media', 'D media'],
-        answer: 1,
-        explanation: 'Por qué la B.',
-        difficulty: 2,
-      ),
-      QuizQuestion(
-        topic: 'tabla',
-        question: 'Pregunta difícil de prueba',
-        options: ['A difícil', 'B difícil', 'C difícil', 'D difícil'],
-        answer: 2,
-        explanation: 'Por qué la C.',
-        difficulty: 3,
-      ),
-    ];
-    await setPhone(tester);
-    await tester.pumpWidget(
-      MaterialApp(
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(useMaterial3: true),
-        home: Scaffold(
-          body: SimpleQuizRunner(
-            title: 'Reto',
-            items: items,
-            onFinished: (_, __) {},
-            onExit: () {},
-          ),
-        ),
-      ),
-    );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
-    Future<void> answer(String option) async {
-      await tester.tap(find.text(option));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-    }
-
-    await answer('A fácil'); // +3
-    await tester.tap(find.text('Siguiente'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
-    await answer('A media'); // mal: −8
-    await tester.tap(find.text('Siguiente'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
-    await answer('C difícil'); // +8
-    await tester.tap(find.text('Resultado'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-    await shot(tester, 'fix4_reto_points.png');
-  });
 
   testWidgets(
       'fix4_update_dialog: diálogo de la 6.1 (lo que verá el '

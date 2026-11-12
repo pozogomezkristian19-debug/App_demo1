@@ -12,6 +12,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quimica_pura/main.dart';
 import 'package:quimica_pura/services/localization.dart';
+import 'package:quimica_pura/widgets/main_bottom_nav.dart';
 import 'package:quimica_pura/services/notification_inbox.dart';
 import 'package:quimica_pura/services/progress.dart';
 import 'package:quimica_pura/services/user_prefs.dart';
@@ -95,7 +96,7 @@ void main() {
     await tester.pumpWidget(const MelliQuiApp());
     await settle(tester);
     await tester.tap(find.descendant(
-      of: find.byType(NavigationBar),
+      of: find.byType(MainBottomNav),
       matching: find.text(tr('tabTable')),
     ));
     await tester.pump();

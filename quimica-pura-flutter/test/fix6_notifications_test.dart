@@ -14,11 +14,12 @@
 // ScheduledNotificationBootReceiver, tras reiniciar no se
 // reprogramaba nada hasta abrir la app.
 //
-// Diagnóstico nuevo: la pantalla de Recordatorios muestra el
-// permiso real, el próximo aviso (o que no hay ninguno), el ÚLTIMO
-// aviso enviado (bandeja + envíos inmediatos) y el estado del
-// ahorro de batería, con botones para abrir los ajustes de batería
-// y el inicio automático de Xiaomi.
+// Diagnóstico (ronda #6, QUITADO en la simplificación de la ronda
+// #7): la pantalla mostraba el permiso real, el próximo aviso, el
+// ÚLTIMO aviso enviado y el estado del ahorro de batería. La
+// pantalla simplificada solo tiene introducción, interruptor y
+// botón de prueba; el comportamiento (canal propio, prueba honesta,
+// aviso pendiente) sigue igual.
 //
 // Ruta de petición (ronda #6, 02:18 — "la app nunca pide permiso"):
 // la cadena del toque al diálogo está completa; el único retorno
@@ -158,14 +159,6 @@ void main() {
 
   late _Fix6FakeNotifications fake;
 
-  /// Estado simulado del canal de batería (MainActivity.kt):
-  /// false = optimizada (MIUI agresivo), true = sin restricciones.
-  var batteryUnrestricted = false;
-
-  /// ¿Se abrió los ajustes de batería / inicio automático?
-  var batterySettingsOpened = false;
-  var autostartOpened = false;
-
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await UserPrefs.load();
@@ -173,9 +166,6 @@ void main() {
     // Servicio "frío" en cada test: sin inicializar y sin alarmas
     // exactas (como al abrir la app por primera vez).
     NotificationService.resetForTests();
-    batteryUnrestricted = false;
-    batterySettingsOpened = false;
-    autostartOpened = false;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
       const MethodChannel('flutter_timezone'),
@@ -187,24 +177,6 @@ void main() {
       (call) async {
         if (call.method == 'getTemporaryDirectory') return '/tmp';
         return null;
-      },
-    );
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(
-      const MethodChannel('com.melliqui/battery_settings'),
-      (call) async {
-        switch (call.method) {
-          case 'isIgnoringBatteryOptimizations':
-            return batteryUnrestricted;
-          case 'openBatteryOptimizationSettings':
-            batterySettingsOpened = true;
-            return true;
-          case 'openAutostartSettings':
-            autostartOpened = true;
-            return true;
-          default:
-            return null;
-        }
       },
     );
     // Permiso CONCEDIDO por defecto (cada test de negado lo cambia).
@@ -383,7 +355,9 @@ void main() {
       final future = NotificationService.sendTest();
       // La copia del icono grande tiene un tope de 3 s en pruebas.
       await tester.pump(const Duration(seconds: 4));
-      await future;
+      // Ronda #7: sendTest() devuelve Future<bool>: true solo si el
+      // show() completó sin lanzar.
+      expect(await future, isTrue);
       expect(fake.shown.map((s) => s.id), contains(9999));
       final body =
           fake.shown.firstWhere((s) => s.id == 9999).body;
@@ -441,8 +415,17 @@ void main() {
     });
   });
 
-  group('Pantalla Recordatorios: diagnóstico visible', () {
+  group('Pantalla Recordatorios simplificada', () {
     Future<void> pumpReminders(WidgetTester tester) async {
+      // Ventana ALTA (800x1400): con el alto por defecto (600) el
+      // botón de prueba quedaba fuera del área construida del
+      // ListView y find.text no lo encontraba.
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
       await tester.pumpWidget(
         const MaterialApp(home: ReminderScreen()),
       );
@@ -451,96 +434,36 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
     }
 
-    testWidgets('con recordatorios ON y sin tanda: "Sin avisos '
-        'programados" y "Todavía no se ha enviado ningún aviso"',
-        (tester) async {
+    testWidgets('solo se ven la introducción, el interruptor y el '
+        'botón de prueba (nada de diagnóstico)', (tester) async {
       SharedPreferences.setMockInitialValues({'melli_reminder_on': true});
       await UserPrefs.load();
       await pumpReminders(tester);
-      expect(find.text('Diagnóstico'), findsOneWidget);
+      expect(find.text(tr('notifExplain')), findsOneWidget);
+      expect(find.text(tr('notifOn')), findsOneWidget);
+      expect(find.text(tr('notifTest').toUpperCase()), findsOneWidget);
+      expect(find.text('Diagnóstico'), findsNothing);
       expect(find.text('Próximo aviso'), findsNothing);
-      expect(find.text('Sin avisos programados'), findsOneWidget);
-      expect(find.text('Último aviso enviado'), findsOneWidget);
-      expect(find.text('Todavía no se ha enviado ningún aviso'),
-          findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('con tanda programada: "Próximo aviso" con su hora',
-        (tester) async {
-      final next = DateTime.now().add(const Duration(minutes: 35));
-      SharedPreferences.setMockInitialValues({
-        'melli_reminder_on': true,
-        'melli_notif_next': next.toIso8601String(),
-      });
-      await UserPrefs.load();
-      await pumpReminders(tester);
-      expect(find.text('Próximo aviso'), findsOneWidget);
       expect(find.text('Sin avisos programados'), findsNothing);
-      final timeStr =
-          '${next.hour.toString().padLeft(2, '0')}:${next.minute.toString().padLeft(2, '0')}';
-      expect(find.textContaining(timeStr), findsOneWidget);
+      expect(find.text('Último aviso enviado'), findsNothing);
+      expect(find.text('Ahorro de batería'), findsNothing);
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('con un aviso ya enviado en la bandeja, la pantalla '
-        'muestra "Último aviso enviado"', (tester) async {
-      final sent = DateTime.now().subtract(const Duration(minutes: 30));
-      await NotificationInbox.add(
-        id: 'reminder-${sent.millisecondsSinceEpoch}',
-        kind: InboxKind.reminder,
-        title: 'Hora de repasar',
-        body: 'Tenías un recordatorio pendiente.',
-      );
+    testWidgets('"Probar un aviso ahora" envía el aviso (9999) y '
+        'muestra "Aviso enviado"', (tester) async {
       await pumpReminders(tester);
-      expect(find.text('Último aviso enviado'), findsOneWidget);
-      expect(find.text('Todavía no se ha enviado ningún aviso'),
-          findsNothing);
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('la tarjeta de batería muestra "Optimizado" y el '
-        'botón abre los ajustes', (tester) async {
-      batteryUnrestricted = false;
-      await pumpReminders(tester);
-      expect(find.text('Ahorro de batería'), findsOneWidget);
-      expect(find.text('Optimizado: puede retrasar los avisos'),
-          findsOneWidget);
-      await tester.tap(find.text('Abrir ajustes de batería'));
-      await tester.pump();
-      expect(batterySettingsOpened, isTrue);
-      await tester.tap(find.text('Inicio automático'));
-      await tester.pump();
-      expect(autostartOpened, isTrue);
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('con la batería sin restricciones, la tarjeta lo dice',
-        (tester) async {
-      batteryUnrestricted = true;
-      await pumpReminders(tester);
-      expect(find.text('Ahorro de batería'), findsOneWidget);
-      expect(find.text('Sin restricciones'), findsOneWidget);
-      expect(find.text('Optimizado: puede retrasar los avisos'),
-          findsNothing);
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('"Probar un aviso ahora" envía el aviso y actualiza '
-        'el último enviado', (tester) async {
-      await pumpReminders(tester);
-      expect(find.text('Todavía no se ha enviado ningún aviso'),
-          findsOneWidget);
-      await tester.tap(find.text(tr('notifTest')));
+      await tester.tap(find.text(tr('notifTest').toUpperCase()));
       // La copia del icono grande tiene un tope de 3 s en pruebas.
       await tester.pump(const Duration(seconds: 4));
       await tester.pump(const Duration(milliseconds: 300));
       await tester.pump(const Duration(milliseconds: 300));
       expect(fake.shown.map((s) => s.id), contains(9999));
-      expect(find.text('Último aviso enviado'), findsOneWidget);
-      expect(find.text('Todavía no se ha enviado ningún aviso'),
-          findsNothing);
-      expect(find.textContaining('hoy,'), findsOneWidget);
+      expect(find.text(tr('notifSent')), findsOneWidget);
+      // La hora queda registrada en el servicio (ya no se muestra
+      // en la pantalla simplificada).
+      final got = await NotificationService.lastReminderSentTime();
+      expect(got, isNotNull);
       expect(tester.takeException(), isNull);
     });
   });
@@ -577,93 +500,34 @@ void main() {
     });
   });
 
-  group('Textos del diagnóstico en los 6 idiomas', () {
-    testWidgets('cada etiqueta del diagnóstico existe y no está vacía '
-        'en los 6 idiomas', (tester) async {
-      // Las etiquetas las traduce la pantalla (reminder_screen.dart),
-      // no localization.dart: se comprueban montando la pantalla en
-      // cada idioma, con recordatorios ON y sin tanda programada.
+  group('Textos de la pantalla simplificada en los 6 idiomas', () {
+    testWidgets('introducción, interruptor y botón existen en los 6 '
+        'idiomas y no aparece el diagnóstico', (tester) async {
       SharedPreferences.setMockInitialValues({'melli_reminder_on': true});
       await UserPrefs.load();
-      const expected = {
-        'es': [
-          'Diagnóstico',
-          'Sin avisos programados',
-          'Último aviso enviado',
-          'Todavía no se ha enviado ningún aviso',
-          'Ahorro de batería',
-          'Optimizado: puede retrasar los avisos',
-          'Abrir ajustes de batería',
-          'Inicio automático',
-        ],
-        'en': [
-          'Diagnostics',
-          'No reminders scheduled',
-          'Last reminder sent',
-          'No reminder has been sent yet',
-          'Battery optimization',
-          'Optimized: may delay reminders',
-          'Open battery settings',
-          'Autostart',
-        ],
-        'fr': [
-          'Diagnostic',
-          'Aucun rappel programmé',
-          'Dernier rappel envoyé',
-          'Aucun rappel envoyé pour l’instant',
-          'Optimisation de la batterie',
-          'Optimisée : peut retarder les rappels',
-          'Ouvrir les réglages batterie',
-          'Démarrage auto',
-        ],
-        'it': [
-          'Diagnostica',
-          'Nessun promemoria programmato',
-          'Ultimo promemoria inviato',
-          'Non è ancora stato inviato nessun promemoria',
-          'Ottimizzazione batteria',
-          'Ottimizzata: può ritardare i promemoria',
-          'Apri le impostazioni batteria',
-          'Avvio automatico',
-        ],
-        'pt': [
-          'Diagnóstico',
-          'Nenhum lembrete agendado',
-          'Último lembrete enviado',
-          'Nenhum lembrete enviado ainda',
-          'Otimização de bateria',
-          'Otimizada: pode atrasar os lembretes',
-          'Abrir ajustes de bateria',
-          'Início automático',
-        ],
-        'ru': [
-          'Диагностика',
-          'Напоминания не запланированы',
-          'Последнее отправленное напоминание',
-          'Пока не отправлено ни одного напоминания',
-          'Оптимизация батареи',
-          'Оптимизировано: может задерживать напоминания',
-          'Открыть настройки батареи',
-          'Автозапуск',
-        ],
-      };
-      for (final entry in expected.entries) {
-        AppLang.code = entry.key;
+      for (final lang in ['es', 'en', 'fr', 'it', 'pt', 'ru']) {
+        AppLang.code = lang;
         // Clave distinta por idioma: sin ella, pumpWidget con el
         // MISMO widget const reutiliza el árbol y la pantalla no se
         // reconstruye en el idioma nuevo.
         await tester.pumpWidget(
           MaterialApp(
-            home: ReminderScreen(key: ValueKey(entry.key)),
+            home: ReminderScreen(key: ValueKey(lang)),
           ),
         );
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 300));
         await tester.pump(const Duration(milliseconds: 300));
-        for (final label in entry.value) {
-          expect(label.trim(), isNotEmpty);
-          expect(find.text(label), findsOneWidget,
-              reason: '${entry.key}: falta "$label"');
+        expect(find.text(tr('notifExplain')), findsOneWidget,
+            reason: '$lang: falta la introducción');
+        expect(find.text(tr('notifOn')), findsOneWidget,
+            reason: '$lang: falta el interruptor encendido');
+        expect(find.text(tr('notifTest').toUpperCase()), findsOneWidget,
+            reason: '$lang: falta el botón de prueba');
+        if (lang == 'es') {
+          expect(find.text('Diagnóstico'), findsNothing);
+          expect(find.text('Próximo aviso'), findsNothing);
+          expect(find.text('Ahorro de batería'), findsNothing);
         }
         expect(tester.takeException(), isNull);
       }

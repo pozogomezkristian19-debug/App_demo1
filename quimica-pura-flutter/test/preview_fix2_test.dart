@@ -12,7 +12,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quimica_pura/main.dart';
 import 'package:quimica_pura/screens/account_screen.dart';
-import 'package:quimica_pura/screens/challenge_screen.dart';
 import 'package:quimica_pura/screens/lab_screen.dart';
 import 'package:quimica_pura/screens/lab_sim_screen.dart';
 import 'package:quimica_pura/screens/reminder_screen.dart';
@@ -24,6 +23,7 @@ import 'package:quimica_pura/services/localization.dart';
 import 'package:quimica_pura/services/progress.dart';
 import 'package:quimica_pura/services/user_prefs.dart';
 import 'package:quimica_pura/widgets/brand_logo.dart';
+import 'package:quimica_pura/widgets/twin_avatars.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'test_helpers.dart';
@@ -109,6 +109,10 @@ void main() {
   setUpAll(loadRobotoFonts);
 
   setUp(() async {
+    // La frase de la burbuja de la mascota rota con un estado
+    // global: sin reiniciarla, el golden depende de qué tests
+    // corrieron antes en el mismo proceso.
+    resetMascotLineRotationForTesting();
     SharedPreferences.setMockInitialValues({});
     await ProgressService.load();
     UserPrefs.rulesSeenV6 = true;
@@ -280,11 +284,6 @@ void main() {
         ),
         dark: true);
     await shot(tester, 'fix2_cuenta_dark.png');
-  });
-
-  testWidgets('fix2_reto (nombres, mando en círculo)', (tester) async {
-    await pumpScreen(tester, const ChallengeScreen());
-    await shot(tester, 'fix2_reto.png');
   });
 
   // Golden OMITIDO (skip): el quiz no puede tener un golden

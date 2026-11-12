@@ -234,7 +234,9 @@ void main() {
       expect(g.question.question,
           '¿Cuál es la masa molar del ácido sulfúrico (H2SO4)?\nDatos: H = 1.01; S = 32.06; O = 16');
       expect(g.question.explanation,
-          startsWith('M = 2×1.01 (H) + 32.06 (S) + 4×16 (O) = 98.07 g/mol.'));
+          startsWith('M = 2×1.01 (H) + 32.06 (S) + 4×16 (O) = 98.08 g/mol.'));
+      // (7.0): 98,08, no 98,07 — con masas a 2 decimales la suma de
+      // los datos mostrados es la respuesta (antes difería 0,01).
     });
 
     test('en francés la pregunta sale en francés', () {

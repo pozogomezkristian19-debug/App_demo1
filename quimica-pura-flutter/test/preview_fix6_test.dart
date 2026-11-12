@@ -13,8 +13,6 @@
 //   Cómo se juega primero).
 // - fix6_menu: menú hamburguesa rediseñado, en claro.
 // - fix6_menu_dark: menú hamburguesa rediseñado, en oscuro.
-// - fix6_reto: Reto con el jugador 1 fijo ("kristian (tú)", sin
-//   campo editable) y el jugador 2 vacío.
 // - fix6_recordatorios: Recordatorios con la sección de diagnóstico
 //   visible (permiso, próxima, última, "Probar un aviso ahora",
 //   batería).
@@ -26,13 +24,13 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:quimica_pura/main.dart';
-import 'package:quimica_pura/screens/challenge_screen.dart';
 import 'package:quimica_pura/screens/reminder_screen.dart';
 import 'package:quimica_pura/services/accent.dart';
 import 'package:quimica_pura/services/localization.dart';
 import 'package:quimica_pura/services/notification_inbox.dart';
 import 'package:quimica_pura/services/notification_service.dart';
 import 'package:quimica_pura/services/progress.dart';
+import 'package:quimica_pura/services/social_service.dart';
 import 'package:quimica_pura/services/user_prefs.dart';
 import 'package:quimica_pura/widgets/brand_logo.dart';
 import 'package:quimica_pura/widgets/twin_avatars.dart';
@@ -78,6 +76,79 @@ ThemeData melliLightTheme() => ThemeData(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(18),
         ),
+      ),
+      // Como en el tema real: el Divider no es negro.
+      dividerTheme: const DividerThemeData(
+        color: Color(0xFFE8E8E8),
+        thickness: 1,
+      ),
+      // Como en el tema real (ronda de diseño): los botones son
+      // píldoras 3D con borde inferior oscuro, sin bordes negros.
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppAccent.primary,
+          foregroundColor: Colors.white,
+          elevation: 2,
+          shadowColor: AppAccent.primary.withValues(alpha: 0.45),
+          surfaceTintColor: Colors.transparent,
+          shape: DuoPillBorder(
+              edgeColor: AppAccent.primaryDark),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          textStyle: const TextStyle(
+              fontFamily: 'Roboto',
+              fontSize: 16,
+              fontWeight: FontWeight.w800),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: AppAccent.primary,
+          foregroundColor: Colors.white,
+          elevation: 2,
+          shadowColor: AppAccent.primary.withValues(alpha: 0.45),
+          surfaceTintColor: Colors.transparent,
+          shape: DuoPillBorder(
+              edgeColor: AppAccent.primaryDark),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          textStyle: const TextStyle(
+              fontFamily: 'Roboto',
+              fontSize: 16,
+              fontWeight: FontWeight.w800),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppAccent.primary,
+          backgroundColor: Colors.white,
+          side: BorderSide(color: AppAccent.primary, width: 2),
+          shape: DuoPillBorder(
+              edgeColor: AppAccent.primary.withValues(alpha: 0.30)),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          textStyle: const TextStyle(
+              fontFamily: 'Roboto',
+              fontSize: 16,
+              fontWeight: FontWeight.w800),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: AppAccent.primary,
+          textStyle: const TextStyle(
+              fontFamily: 'Roboto',
+              fontSize: 15,
+              fontWeight: FontWeight.w700),
+        ),
+      ),
+      // Como en el tema real: interruptor teal, no violeta.
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith((states) =>
+            states.contains(WidgetState.selected)
+                ? AppAccent.primary
+                : Colors.white),
+        trackColor: WidgetStateProperty.resolveWith((states) =>
+            states.contains(WidgetState.selected)
+                ? AppAccent.primary.withValues(alpha: 0.45)
+                : Colors.black.withValues(alpha: 0.12)),
       ),
     );
 
@@ -137,6 +208,9 @@ void main() {
   setUpAll(() async {
     await loadRobotoFonts();
     await loadMaterialIcons();
+    // La app completa usa Nunito: sin cargarla, la captura de
+    // Cuenta sale con el texto en bloques sólidos.
+    await loadNunitoFonts();
   });
 
   setUp(() async {
@@ -201,6 +275,7 @@ void main() {
     UserPrefs.userName = '';
     NotificationInbox.resetForTests();
     NotificationService.resetForTests();
+    SocialService.resetForTests();
   });
 
   Future<void> setPhone(
@@ -231,8 +306,13 @@ void main() {
 
   Future<void> warmCompanions(WidgetTester tester) async {
     final ctx = tester.element(find.byType(MaterialApp));
+    // Igual que en preview_fix8: la precarga va dentro de
+    // runAsync; sin él, el Future de precacheImage no se
+    // completa en la zona fake-async y el test se cuelga.
     for (final c in Companion.values) {
-      await precacheImage(AssetImage(companionAsset(c)), ctx);
+      await tester.runAsync(() async {
+        await precacheImage(AssetImage(companionAsset(c)), ctx);
+      });
     }
     await tester.pump();
   }
@@ -315,19 +395,30 @@ void main() {
   });
 
   testWidgets('fix6_cuenta: Cuenta reordenada', (tester) async {
+    // Organización 6.3: la cabecera es una tarjeta con la foto
+    // del acompañante del día (no el avatar premium equipado:
+    // ese sigue en Tabla de posiciones, Amigos y Torneos).
     await pumpApp(tester);
     await tester.tap(find.text(tr('accountTitle')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
-    // Las tres primeras filas, en orden.
-    final tiles = tester.widgetList<ListTile>(find.byType(ListTile));
-    final titles =
-        tiles.map((t) => (t.title as Text).data!).toList();
-    expect(titles.sublist(0, 3), [
+    // Las tres primeras filas, en orden: las filas en tarjeta ya
+    // no son ListTile — se leen por sus títulos de texto, en
+    // orden de aparición en la lista.
+    final expectedOrder = [
       tr('accountStats'),
       tr('accountReview'),
       tr('howToPlayTitle'),
-    ]);
+    ];
+    final seenTitles = tester
+        .widgetList<Text>(find.byType(Text))
+        .map((t) => t.data ?? '')
+        .where((data) => expectedOrder.contains(data))
+        .toList();
+    expect(seenTitles, expectedOrder);
+    // Precarga de las fotos de los compañeros: la foto grande de
+    // la cabecera es la del acompañante del día.
+    await warmCompanions(tester);
     await shot(tester, 'fix6_cuenta.png');
   });
 
@@ -349,54 +440,43 @@ void main() {
     await shot(tester, 'fix6_menu_dark.png');
   });
 
-  testWidgets('fix6_reto: Reto con el jugador 1 fijo', (tester) async {
+  testWidgets('fix6_recordatorios: Recordatorios simplificado',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'melli_reminder_on': true,
+    });
+    await UserPrefs.load();
     await setPhone(tester);
     await tester.pumpWidget(
       MaterialApp(
-        debugShowCheckedModeBanner: false,
-        theme: melliLightTheme(),
-        home: const Scaffold(body: ChallengeScreen()),
+        // Interruptor teal (tema Quemia): sin esto sale violeta,
+        // el color por defecto de Material 3.
+        theme: ThemeData(
+          useMaterial3: true,
+          switchTheme: SwitchThemeData(
+            thumbColor: WidgetStateProperty.resolveWith((states) =>
+                states.contains(WidgetState.selected)
+                    ? const Color(0xFF00C2A8)
+                    : Colors.white),
+            trackColor: WidgetStateProperty.resolveWith((states) =>
+                states.contains(WidgetState.selected)
+                    ? const Color(0xFF00C2A8).withValues(alpha: 0.45)
+                    : Colors.black.withValues(alpha: 0.12)),
+          ),
+        ),
+        home: const ReminderScreen(),
       ),
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text('kristian (tú)'), findsOneWidget);
-    expect(find.byType(TextField), findsOneWidget);
-    await shot(tester, 'fix6_reto.png');
-  });
-
-  testWidgets('fix6_recordatorios: Recordatorios con el diagnóstico',
-      (tester) async {
-    // Próximo aviso fijo (mañana, 09:15): el golden es estable.
-    final tomorrow = DateTime.now().add(const Duration(days: 1));
-    final next =
-        DateTime(tomorrow.year, tomorrow.month, tomorrow.day, 9, 15);
-    SharedPreferences.setMockInitialValues({
-      'melli_reminder_on': true,
-      'melli_notif_next': next.toIso8601String(),
-    });
-    await UserPrefs.load();
-    // Un aviso ya enviado, para que "Último aviso enviado" tenga
-    // hora (hace 30 minutos: sale "hoy, HH:MM").
-    final sent = DateTime.now().subtract(const Duration(minutes: 30));
-    await NotificationInbox.add(
-      id: 'reminder-${sent.millisecondsSinceEpoch}',
-      kind: InboxKind.reminder,
-      title: 'Hora de repasar',
-      body: 'Tenías un recordatorio pendiente.',
-    );
-    await setPhone(tester);
-    await tester.pumpWidget(
-      const MaterialApp(home: ReminderScreen()),
-    );
-    await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text('Diagnóstico'), findsOneWidget);
-    expect(find.text('Próximo aviso'), findsOneWidget);
-    expect(find.text('Último aviso enviado'), findsOneWidget);
-    expect(find.text('Ahorro de batería'), findsOneWidget);
-    expect(find.text(tr('notifTest')), findsOneWidget);
+    expect(find.text(tr('notifExplain')), findsOneWidget);
+    expect(find.text(tr('notifOn')), findsOneWidget);
+    expect(find.text(tr('notifTest').toUpperCase()), findsOneWidget);
+    expect(find.text('Diagnóstico'), findsNothing);
+    expect(find.text('Próximo aviso'), findsNothing);
+    expect(find.text('Último aviso enviado'), findsNothing);
+    expect(find.text('Ahorro de batería'), findsNothing);
     await shot(tester, 'fix6_recordatorios.png');
   });
 
@@ -408,6 +488,15 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text(tr('labSimTitle')), findsNothing);
     expect(find.text(tr('menuFormulas')), findsNothing);
+    // Restauración 6.3: el logo de las gemelas vuelve arriba de
+    // Resolver. Se precarga (runAsync) antes de la captura: sin
+    // él, la decodificación no termina a tiempo en la zona
+    // fake-async y el golden saldría con el hueco vacío.
+    final ctx = tester.element(find.byType(MaterialApp));
+    await tester.runAsync(() async {
+      await precacheImage(const AssetImage('assets/logo.png'), ctx);
+    });
+    await tester.pump();
     await shot(tester, 'fix6_resolver.png');
   });
 }

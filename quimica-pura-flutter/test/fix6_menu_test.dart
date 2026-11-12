@@ -82,7 +82,6 @@ void main() {
     'menuBranches',
     'menuLab',
     'timedTitle',
-    'challengeTitle',
     'tableQuizTitle',
     'labSimTitle',
     'menuTables',
@@ -97,7 +96,6 @@ void main() {
     'Orgánica, Inorgánica, Analítica, Química física',
     'Seguridad, cuestionario y simulador',
     tr('timedSub'),
-    tr('challengeSub'),
     'Adivina el elemento',
     'Mezcla, mira el pH y el color',
     'Actividad de metales y solubilidad',
@@ -160,9 +158,11 @@ void main() {
       final tablesY = tester.getTopLeft(find.text(tr('menuTables'))).dy;
       expect(simY, greaterThan(refY));
       expect(simY, lessThan(tablesY));
-      // Las filas viven dentro de tarjetas (bloques redondeados),
-      // no como lista plana suelta sobre el fondo del drawer:
-      // 3 tarjetas (Explorar, Practicar, Referencia).
+      // Rediseño Duolingo (§3.15, Zona A): las filas YA NO viven
+      // dentro de tarjetas (bloques redondeados radio 20) — son
+      // filas planas sobre el fondo del drawer, separadas por un
+      // Divider de 1 pt #E5E5E5. La afirmación de las tarjetas
+      // queda sustituida por esta.
       final cardFinder = find.descendant(
         of: find.byType(Drawer),
         matching: find.byWidgetPredicate(
@@ -173,7 +173,17 @@ void main() {
                   BorderRadius.circular(20),
         ),
       );
-      expect(cardFinder, findsAtLeastNWidgets(3));
+      expect(cardFinder, findsNothing);
+      final dividerFinder = find.descendant(
+        of: find.byType(Drawer),
+        matching: find.byWidgetPredicate(
+          (w) =>
+              w is Divider &&
+              w.color == const Color(0xFFE5E5E5) &&
+              w.height == 1,
+        ),
+      );
+      expect(dividerFinder, findsAtLeastNWidgets(3));
     });
 
     testWidgets('tocar el simulador sigue abriendo el simulador',

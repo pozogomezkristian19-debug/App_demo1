@@ -125,14 +125,16 @@ void main() {
     await tester.tap(optionBtn.first);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
+    // Flujo original: tocar la opción la juzga al momento (sin
+    // COMPROBAR); los puntos y errores ya están registrados.
   }
 
-  /// Botón "Siguiente" (o "Resultado" en la última pregunta).
+  /// Botón "SIGUIENTE" / "RESULTADO" (flujo original).
   Future<void> next(WidgetTester tester) async {
-    final nextBtn = find.text(tr('quizNext'));
-    final resultBtn = find.text(tr('quizResult'));
-    final target =
-        nextBtn.evaluate().isNotEmpty ? nextBtn : resultBtn;
+    final nextFinder = find.text(tr('quizNext').toUpperCase());
+    final target = nextFinder.evaluate().isNotEmpty
+        ? nextFinder
+        : find.text(tr('quizResult').toUpperCase());
     await tester.ensureVisible(target);
     await tester.tap(target);
     await tester.pump();
@@ -177,20 +179,20 @@ void main() {
 
       await playLevelAllCorrect(tester);
       // Resultado: 5/5, +25 puntos (5 medias a +5) y confeti.
-      expect(find.text('5 de 5 Aciertos'), findsOneWidget);
-      expect(find.text('Resultado'), findsOneWidget);
-      expect(find.text('Puntos: +25'), findsOneWidget);
+      expect(find.text(tr('quizLevelPassed')), findsOneWidget);
+      expect(find.text('100%'), findsOneWidget);
+      expect(find.text('+25'), findsWidgets);
       expect(find.byType(CelebrationOverlay), findsOneWidget);
       expect(p.livesLeft, 5);
 
-      await tester.tap(find.text(tr('quizRepeat')));
+      await tester.tap(find.text(tr('quizRepeat').toUpperCase()));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
       // Pregunta 1 de 5, sin rastro del resultado ni del confeti.
       expect(find.textContaining('Pregunta 1 de 5'), findsOneWidget);
-      expect(find.text('5 de 5 Aciertos'), findsNothing);
-      expect(find.text('Puntos: +25'), findsNothing);
+      expect(find.text(tr('quizLevelPassed')), findsNothing);
+      expect(find.text('100%'), findsNothing);
       expect(find.byType(CelebrationOverlay), findsNothing);
       expect(p.livesLeft, 5);
       // Al ganar se programa la campana de racha 900 ms después
@@ -208,39 +210,37 @@ void main() {
       final p = ProgressService.instance;
       await startLevel1(tester);
       await playLevelAllCorrect(tester);
-      expect(find.text('5 de 5 Aciertos'), findsOneWidget);
+      expect(find.text('100%'), findsOneWidget);
 
       // Repetir y ganar OTRA vez: el segundo intento también
       // termina en resultado (el bug dejaba el primero pegado).
-      await tester.tap(find.text(tr('quizRepeat')));
+      await tester.tap(find.text(tr('quizRepeat').toUpperCase()));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.textContaining('Pregunta 1 de 5'), findsOneWidget);
       await playLevelAllCorrect(tester);
-      expect(find.text('5 de 5 Aciertos'), findsOneWidget);
+      expect(find.text('100%'), findsOneWidget);
       // Ganar dos veces el mismo nivel: 25 + 25 puntos.
-      expect(find.text('Puntos: +25'), findsOneWidget);
+      expect(find.text('+25'), findsWidgets);
       expect(p.points, 50);
-      // El resultado tras ganar trae los tres botones (punto 13 +
-      // 15.1): [Pasar de nivel] [Volver] [Repetir]; y la nota del
-      // nivel ya es el promedio de los 2 pases (5,0 + 5,0 = 5,0).
-      expect(find.text('Pasar de nivel'), findsOneWidget);
-      expect(find.text(tr('quizRepeat')), findsOneWidget);
-      expect(find.text(tr('quizBack')), findsOneWidget);
-      expect(
-          find.text('Puntuación del nivel: 5,0 · promedio de 2 intentos'),
-          findsOneWidget);
+      // El resultado tras ganar (§3.4): botón grande PASAR DE NIVEL
+      // + enlaces REPETIR y VOLVER. La nota del nivel ya es el
+      // promedio de los 2 pases (5,0 + 5,0 = 5,0), pero ya no se
+      // muestra en pantalla: solo se guarda (ver asserts abajo).
+      expect(find.text('PASAR DE NIVEL'), findsOneWidget);
+      expect(find.text(tr('quizRepeat').toUpperCase()), findsOneWidget);
+      expect(find.text(tr('quizBack').toUpperCase()), findsOneWidget);
       expect(p.bestScore('level:estequiometria:1'), 100);
       expect(p.unlockedLevel('estequiometria'), 2);
 
       // Volver tras ganar: sale directo a Niveles, sin aviso y
       // sin perder la vida que el bug quitaba.
-      await tester.tap(find.text(tr('quizBack')));
+      await tester.tap(find.text(tr('quizBack').toUpperCase()));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text(tr('exitLevelTitle')), findsNothing);
       expect(find.byType(AlertDialog), findsNothing);
-      expect(find.text('Nivel 1'), findsWidgets);
+      expect(find.text(tr('levelsTitle')), findsOneWidget);
       expect(p.livesLeft, 5);
       expect(tester.takeException(), isNull);
     });
@@ -256,7 +256,9 @@ void main() {
       await next(tester);
       expect(find.textContaining('Pregunta 2 de 5'), findsOneWidget);
 
-      await tester.tap(find.text(tr('quizExit')));
+      // Salir es ahora la X 24 pt de la barra superior (§3.3.1),
+      // no la píldora "Salir".
+      await tester.tap(find.byIcon(Icons.close));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
       // El aviso, con sus dos botones.
@@ -268,7 +270,7 @@ void main() {
       await tester.tap(find.text(tr('exitLevelLeave')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      expect(find.text('Nivel 1'), findsWidgets);
+      expect(find.text(tr('levelsTitle')), findsOneWidget);
       expect(p.livesLeft, 4);
       expect(tester.takeException(), isNull);
     });
@@ -288,9 +290,8 @@ void main() {
       // solo pase es 4,0 y (todavía) no se muestra la línea del
       // promedio: en el primer pase ya está la 'Nota:' arriba.
       await playLevelFourOfFive(tester);
-      expect(find.text('4 de 5 Aciertos'), findsOneWidget);
-      expect(find.text('Nota: 4.0 / 5'), findsOneWidget);
-      expect(find.text('Puntos: +12'), findsOneWidget);
+      expect(find.text('80%'), findsOneWidget);
+      expect(find.text('+12'), findsWidgets);
       expect(p.points, 12);
       expect(p.levelNoteAverage(testId), closeTo(4.0, 0.001));
       expect(p.levelNotePassCount(testId), 1);
@@ -298,48 +299,43 @@ void main() {
       expect(p.unlockedLevel('estequiometria'), 2);
 
       // Segundo pase 5/5: nota 5,0. Promedio (4,0 + 5,0) / 2 = 4,5.
-      await tester.tap(find.text(tr('quizRepeat')));
+      await tester.tap(find.text(tr('quizRepeat').toUpperCase()));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.textContaining('Pregunta 1 de 5'), findsOneWidget);
       await playLevelAllCorrect(tester);
-      expect(find.text('5 de 5 Aciertos'), findsOneWidget);
-      expect(find.text('Nota: 5.0 / 5'), findsOneWidget);
-      expect(find.text('Puntos: +25'), findsOneWidget);
+      expect(find.text('100%'), findsOneWidget);
+      expect(find.text('+25'), findsWidgets);
       expect(p.points, 37);
       expect(p.levelNoteAverage(testId), closeTo(4.5, 0.001));
       expect(p.levelNotePassCount(testId), 2);
-      expect(
-          find.text('Puntuación del nivel: 4,5 · promedio de 2 intentos'),
-          findsOneWidget);
 
       // Replay FALLIDO (0/5): no entra en el promedio, no quita el
       // pase ni re-bloquea el 2, y es neutro en puntos (A3: el
       // saldo vuelve a 37, no cae a 37 − 40 = −3). El resultado
       // muestra Puntos +0: el intento no sumó nada.
-      await tester.tap(find.text(tr('quizRepeat')));
+      await tester.tap(find.text(tr('quizRepeat').toUpperCase()));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       await playLevelAllWrong(tester);
-      expect(find.text('0 de 5 Aciertos'), findsOneWidget);
-      expect(find.text('Nota: 0.0 / 5'), findsOneWidget);
-      expect(find.text('Puntos: +0'), findsOneWidget);
+      expect(find.text('0%'), findsOneWidget);
+      expect(find.text('+0'), findsWidgets);
       expect(p.levelNoteAverage(testId), closeTo(4.5, 0.001));
       expect(p.levelNotePassCount(testId), 2);
       expect(p.bestScore(testId), 100);
       expect(p.unlockedLevel('estequiometria'), 2);
       expect(p.points, 37);
       expect(p.livesLeft, 5);
-      // La puntuación registrada sigue mostrándose tras el fallo.
-      expect(
-          find.text('Puntuación del nivel: 4,5 · promedio de 2 intentos'),
-          findsOneWidget);
+      // La puntuación registrada sigue guardada tras el fallo
+      // (ya no se muestra en la pantalla de resultado, §3.4).
 
-      // Y el nodo del camino muestra el promedio (90 %), no la mejor.
-      await tester.tap(find.text(tr('quizBack')));
+      // Y el nodo del camino ya no lleva etiqueta "Nivel 1 · 90 %"
+      // (§3.2.2): el nodo pasado muestra una estrella blanca y su
+      // corona con 3 estrellas (mejor nota 100 %).
+      await tester.tap(find.text(tr('quizBack').toUpperCase()));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      expect(find.text('Nivel 1 · 90%'), findsOneWidget);
+      expect(find.byIcon(Icons.star), findsWidgets);
       expect(tester.takeException(), isNull);
     });
 
@@ -395,14 +391,14 @@ void main() {
       await startLevel1(tester);
       // Nivel 1 5/5: +25 y desbloquea el Nivel 2.
       await playLevelAllCorrect(tester);
-      expect(find.text('5 de 5 Aciertos'), findsOneWidget);
+      expect(find.text('100%'), findsOneWidget);
       expect(p.points, 25);
       expect(p.unlockedLevel('estequiometria'), 2);
 
       // Volver al camino y entrar al Nivel 2 (su 5.ª pregunta es
       // la difícil: fallarla da 4/5 con nota 3,8 -> 76 % < 81,
       // el agujero de la vieja condición por nota).
-      await tester.tap(find.text(tr('quizBack')));
+      await tester.tap(find.text(tr('quizBack').toUpperCase()));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       await tester.ensureVisible(find.text('2').first);
@@ -416,9 +412,8 @@ void main() {
       // 4/5 fallando la difícil (última): 3 medias y 1 fácil bien
       // (+5+5+5+3) y la difícil mal (−12) = +6; nota 3,8 (76 %).
       await playLevelFourOfFive(tester);
-      expect(find.text('4 de 5 Aciertos'), findsOneWidget);
-      expect(find.text('Nota: 3.8 / 5'), findsOneWidget);
-      expect(find.text('Puntos: +6'), findsOneWidget);
+      expect(find.text('80%'), findsOneWidget);
+      expect(find.text('+6'), findsWidgets);
       expect(p.points, 31);
       expect(p.bestScore('level:estequiometria:2'), 76);
       expect(p.levelNoteAverage('level:estequiometria:2'),
@@ -428,12 +423,12 @@ void main() {
 
       // Repetir y fallar 0/5 (−41 sin protección): el saldo queda
       // en 31, intacto; el promedio, el pase y el desbloqueo, igual.
-      await tester.tap(find.text(tr('quizRepeat')));
+      await tester.tap(find.text(tr('quizRepeat').toUpperCase()));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       await playLevelAllWrong(tester);
-      expect(find.text('0 de 5 Aciertos'), findsOneWidget);
-      expect(find.text('Puntos: +0'), findsOneWidget);
+      expect(find.text('0%'), findsOneWidget);
+      expect(find.text('+0'), findsWidgets);
       expect(p.points, 31);
       expect(p.levelNoteAverage('level:estequiometria:2'),
           closeTo(3.8, 0.001));
@@ -446,8 +441,8 @@ void main() {
   });
 
   group('SimpleQuizRunner: mismo bug al reutilizar el State', () {
-    testWidgets('Repetir con otro lote (como el cambio de turno del '
-        'Reto): pregunta 1 del lote nuevo, marcador y tiempo a cero',
+    testWidgets('Repetir con otro lote: pregunta 1 del lote nuevo, '
+        'marcador y tiempo a cero',
         (tester) async {
       await setPhone(tester);
       await tester.pumpWidget(const MaterialApp(
@@ -461,13 +456,14 @@ void main() {
         await tester.tap(find.text(option));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 100));
+        // Flujo original: tocar la opción la juzga al momento.
       }
 
       Future<void> nextSimple() async {
-        final nextBtn = find.text(tr('quizNext'));
-        final target = nextBtn.evaluate().isNotEmpty
-            ? nextBtn
-            : find.text(tr('quizResult'));
+        final nextFinder = find.text(tr('quizNext').toUpperCase());
+        final target = nextFinder.evaluate().isNotEmpty
+            ? nextFinder
+            : find.text(tr('quizResult').toUpperCase());
         await tester.tap(target);
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 100));
@@ -479,15 +475,13 @@ void main() {
       await answer('A media'); // mal: la buena es la B
       await nextSimple();
       await answer('C difícil');
-      await tester.tap(find.text(tr('quizResult')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
+      await nextSimple();
       // Resultado del primer lote: +3 −8 +8 = +3.
       expect(find.text('Puntos: +3'), findsOneWidget);
 
       // Repetir: el padre cambia el lote (otro objeto de lista, sin
-      // desmontar el runner, como el Reto al cambiar de jugador).
-      await tester.tap(find.text(tr('quizRepeat')));
+      // desmontar el runner, como al cambiar de lote).
+      await tester.tap(find.text(tr('quizRepeat').toUpperCase()));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
@@ -504,8 +498,8 @@ void main() {
 }
 
 /// Padre de prueba que reutiliza el mismo SimpleQuizRunner con otro
-/// lote de preguntas al pulsar Repetir (el Reto hace lo mismo al
-/// pasar del jugador 1 al 2: cambia `items` sin desmontar el runner).
+/// lote de preguntas al pulsar Repetir (cambia `items` sin desmontar
+/// el runner).
 class _SwapHarness extends StatefulWidget {
   const _SwapHarness();
   @override

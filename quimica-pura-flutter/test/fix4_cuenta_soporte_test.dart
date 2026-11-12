@@ -3,11 +3,12 @@
 // última opción, pero como UNA OPCIÓN MÁS, igual que las demás
 // filas: tarjeta gris, icono de mensaje (LucideIcons.messageCircle)
 // en círculo tintado teal, título "Soporte", subtítulo "Escríbeme
-// por WhatsApp", chevron. Nada de botón verde llamativo ni de logo
-// de WhatsApp. Abre el mismo enlace de siempre
-// (wa.me/5356519431, sin texto pre-escrito). El botón flotante
-// viejo (support_button.dart) no se toca: en lib/ ya nadie lo
-// referencia (solo lo importan tests).
+// en la app", chevron. Nada de botón verde llamativo ni de logo
+// de WhatsApp.
+// 7.0 (Kristian 09:52): la fila YA NO abre WhatsApp directo —
+// abre la ventanita de Soporte dentro de la app (ruta 'support').
+// El botón flotante viejo (support_button.dart) no se toca: en
+// lib/ ya nadie lo referencia (solo lo importan tests).
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -46,6 +47,7 @@ void main() {
   setUpAll(loadRobotoFonts);
 
   late _FakeUrlLauncher fakeLauncher;
+  late List<String> opened;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({'melli_rules_seen_v6': true});
@@ -62,6 +64,7 @@ void main() {
             const MethodChannel('xyz.luan/audioplayers'), (m) async => null);
     fakeLauncher = _FakeUrlLauncher();
     UrlLauncherPlatform.instance = fakeLauncher;
+    opened = <String>[];
   });
 
   Future<void> pumpAccount(WidgetTester tester) async {
@@ -77,7 +80,7 @@ void main() {
         theme: ThemeData(useMaterial3: true),
         home: Scaffold(
           body: AccountScreen(
-            onOpenScreen: (_) {},
+            onOpenScreen: (key) => opened.add(key),
             onShowAbout: () {},
             onShowShareApp: () {},
             trackTopics: const [],
@@ -124,9 +127,10 @@ void main() {
       );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      // Título y subtítulo pedidos.
+      // Título y subtítulo pedidos (7.0: la fila abre la ventanita
+      // en la app, ya no WhatsApp).
       expect(find.text(tr('supportWord')), findsOneWidget);
-      expect(find.text('Escríbeme por WhatsApp'), findsOneWidget);
+      expect(find.text(tr('supportSub')), findsOneWidget);
       // El icono es un mensaje (burbuja de chat), teal, no el logo.
       final icon = find.byWidgetPredicate((w) =>
           w is LucideIcon && w.icon == LucideIcons.messageCircle);
@@ -146,15 +150,26 @@ void main() {
             (w.image as AssetImage).assetName == 'assets/whatsapp.png'),
         findsNothing,
       );
-      // La fila es una tarjeta (_Row) con chevron, como las demás.
+      // La fila es una TARJETA redondeada (_Row), como las
+      // demás (organización 6.3): con tarjeta, pero sin sombra
+      // (estilo Duolingo aprobado). Ningún contenedor con sombra
+      // encima de "Soporte".
       final card = find.ancestor(
         of: find.text(tr('supportWord')),
-        matching: find.byType(Card),
+        matching: find.byWidgetPredicate((w) =>
+            w is Container &&
+            w.decoration is BoxDecoration &&
+            (w.decoration as BoxDecoration).boxShadow != null),
       );
-      expect(card, findsOneWidget);
+      expect(card, findsNothing);
+      // ...y sigue con su chevron a la derecha.
+      final row = find.ancestor(
+        of: find.text(tr('supportWord')),
+        matching: find.byType(InkWell),
+      );
       expect(
         find.descendant(
-          of: card,
+          of: row,
           matching: find.byWidgetPredicate((w) =>
               w is LucideIcon && w.icon == LucideIcons.chevronRight),
         ),
@@ -162,7 +177,8 @@ void main() {
       );
     });
 
-    testWidgets('abre el enlace de siempre, vacío (sin texto)', (tester) async {
+    testWidgets('abre la ventanita de Soporte, sin abrir WhatsApp',
+        (tester) async {
       await pumpAccount(tester);
       await tester.scrollUntilVisible(
         find.text(tr('supportWord')),
@@ -174,7 +190,10 @@ void main() {
       await tester.tap(find.text(tr('supportWord')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      expect(fakeLauncher.launched, ['https://wa.me/5356519431']);
+      // La fila abre la ruta 'support' (la ventanita en la app) y
+      // NO lanza wa.me ni ningún enlace.
+      expect(opened, ['support']);
+      expect(fakeLauncher.launched, isEmpty);
     });
   });
 

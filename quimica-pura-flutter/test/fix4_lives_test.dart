@@ -1,19 +1,19 @@
 // Pruebas de la ronda #4, punto 5: VIDAS SOLO EN NIVELES.
 // Las vidas se pierden SOLO en los niveles (salir a mitad de un nivel
 // −1 vida; pasar el nivel +1 hasta 5; 0 vidas bloquea niveles nuevos).
-// El Reto, el examen con tiempo, el quiz de la tabla, el cuestionario
-// del laboratorio, el repaso y el examen mixto NO quitan vidas nunca:
+// El examen con tiempo, el quiz de la tabla, el cuestionario del
+// laboratorio, el repaso y el examen mixto NO quitan vidas nunca:
 // usan SOLO puntos (fácil +3/−5, medio +5/−8, difícil +8/−12).
-// El abandono de Reto / examen con tiempo / lab / tabla sin pérdida
-// de vida ya se cubre en fix2_test.dart (checkBackWarningNoLives);
-// aquí se prueban los puntos por dificultad, el invitado del Reto
-// (sin cuenta, sin puntos) y que 0 vidas no bloquea las actividades
-// sin vidas.
+// El abandono de examen con tiempo / lab / tabla sin pérdida de vida
+// ya se cubre en fix2_test.dart (checkBackWarningNoLives); aquí se
+// prueban los puntos por dificultad y que 0 vidas no bloquea las
+// actividades sin vidas.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quimica_pura/models.dart';
 import 'package:quimica_pura/screens/table_quiz_screen.dart';
+import 'package:quimica_pura/services/localization.dart';
 import 'package:quimica_pura/services/points.dart';
 import 'package:quimica_pura/services/progress.dart';
 import 'package:quimica_pura/services/user_prefs.dart';
@@ -74,10 +74,7 @@ void main() {
     difficulty: 3,
   );
 
-  Future<void> pumpRunner(
-    WidgetTester tester, {
-    bool trackProgress = true,
-  }) async {
+  Future<void> pumpRunner(WidgetTester tester) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData(useMaterial3: true),
@@ -87,7 +84,6 @@ void main() {
             items: const [qEasy, qMedium, qHard],
             onFinished: (_, __) {},
             onExit: () {},
-            trackProgress: trackProgress,
           ),
         ),
       ),
@@ -100,23 +96,22 @@ void main() {
     await tester.tap(find.text(optionText));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
+    // Flujo original: tocar la opción la juzga al momento (sin
+    // COMPROBAR); los puntos ya están registrados al salir de aquí.
   }
 
   Future<void> next(WidgetTester tester) async {
-    await tester.tap(find.text('Siguiente'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
-  }
-
-  /// Las tres respuestas (fácil bien, media mal, difícil bien) y el
-  /// botón final: deja la pantalla de resultado visible.
-  Future<void> playAll(WidgetTester tester) async {
-    await answer(tester, 'A fácil'); // bien: +3
-    await next(tester);
-    await answer(tester, 'A media'); // mal (la buena es la B): −8
-    await next(tester);
-    await answer(tester, 'C difícil'); // bien: +8
-    await tester.tap(find.text('Resultado'));
+    // El cuestionario es un ListView: el botón de abajo puede
+    // quedar fuera del viewport (botones 3D más altos que los
+    // planos viejos) y hay que hacer scroll hasta él, como haría
+    // el usuario en el teléfono.
+    final nextFinder = find.text(tr('quizNext').toUpperCase());
+    final nextBtn = nextFinder.evaluate().isNotEmpty
+        ? nextFinder
+        : find.text(tr('quizResult').toUpperCase());
+    await tester.ensureVisible(nextBtn);
+    await tester.pumpAndSettle();
+    await tester.tap(nextBtn);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
   }
@@ -154,26 +149,12 @@ void main() {
       expect(p.points, 3);
       expect(p.livesLeft, 5);
 
-      await tester.tap(find.text('Resultado'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
+      // La última pregunta se cierra con el botón "RESULTADO"
+      // (flujo original): al salir del bloque ya está el resultado.
+      await next(tester);
       // El resultado muestra los puntos ganados en la partida.
       expect(find.text('Puntos: +3'), findsOneWidget);
       expect(p.livesLeft, 5);
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('turno del invitado (trackProgress: false): no toca '
-        'puntos ni estadísticas y el resultado no muestra la línea '
-        'de puntos', (tester) async {
-      await pumpRunner(tester, trackProgress: false);
-      final p = ProgressService.instance;
-      await playAll(tester);
-      expect(p.points, 0);
-      expect(p.livesLeft, 5);
-      // En el resultado no hay línea de puntos (el invitado no tiene
-      // cuenta): "Puntos" no aparece en ningún texto.
-      expect(find.textContaining('Puntos'), findsNothing);
       expect(tester.takeException(), isNull);
     });
   });

@@ -31,6 +31,12 @@ void main() {
   setUpAll(() async {
     await loadRobotoFonts();
     await loadMaterialIcons();
+    // Nunito: MelliQuiApp usa Nunito como fuente. Sin cargarla, el
+    // texto se dibuja con la fuente cuadrada de pruebas (mucho más
+    // ancha) y las reglas ocupan ~1140 pt: el botón Cerrar queda
+    // fuera de la pantalla y el tap falla. En el teléfono real
+    // Nunito va empaquetada, así que la pantalla cabe (ver probe).
+    await loadNunitoFonts();
   });
 
   setUp(() async {

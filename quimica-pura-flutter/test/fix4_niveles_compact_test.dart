@@ -92,8 +92,9 @@ void main() {
         (tester) async {
       await pumpNiveles(tester);
       // La pantalla es 360x800 lógicos. En la ronda fix5 el camino
-      // va primero: la cabecera del primer tema (en mayúsculas) y
-      // su primer nodo se ven al abrir, sin desplazar.
+      // va primero: la cabecera del primer tema (MAYÚSCULAS,
+      // decisión de Kristian, ronda 3; rediseño Duolingo §3.2.4)
+      // y su primer nodo se ven al abrir, sin desplazar.
       const height = 800.0;
       final firstTopic = tester.getRect(find.text(
           localizedTopicTitle(bachTopics.first).toUpperCase()));
@@ -117,7 +118,8 @@ void main() {
             matching: find.byType(Container),
           )
           .first);
-      // El nodo 1: el círculo de 64x64 que envuelve su número.
+      // El nodo 1: el círculo de 80x80 que envuelve su número
+      // (rediseño Duolingo §3.2.1).
       Rect rectOf(Element e) {
         final box = e.renderObject! as RenderBox;
         return box.localToGlobal(Offset.zero) & box.size;
@@ -131,9 +133,10 @@ void main() {
             matching: find.byType(Container),
           ))
           .map(rectOf)
-          .firstWhere((r) => r.width == 64.0 && r.height == 64.0);
+          .firstWhere((r) => r.width == 80.0 && r.height == 80.0);
       // Aire visible: la bolita empieza al menos 15 px debajo del
-      // cartel (el hueco es de 28 px; la bolita, 32).
+      // cartel (el hueco es de 28 px; la bolita, 38: 28 + 10 de
+      // centrado del nodo de 80 en su fila de 100).
       expect(nodeRect.top - headerRect.bottom, greaterThanOrEqualTo(15));
     });
   });

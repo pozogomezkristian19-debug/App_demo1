@@ -111,13 +111,47 @@ void main() {
       // FadeSlideIn con retardo de 80 ms.
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Las filas son ListTile dentro de _Row, en orden de
-      // construcción: su título dice qué fila es cada una.
-      final titles = tester
-          .widgetList<ListTile>(find.byType(ListTile))
-          .map((tile) => (tile.title as Text).data!)
+      // Las filas son tarjetas redondeadas (organización 6.3, ya
+      // no ListTile): se leen por sus títulos de texto, en orden
+      // de aparición en la lista. Quemia 7.0: 19 filas — tras Tema
+      // entran las 6 nuevas (Tabla, Vincular con Google, Amigos,
+      // Torneos, Tienda, Grupos); las 3 primeras no cambian.
+      // (Diseño 7.0: la fila "Compartir mi progreso" se quitó;
+      // compartir es automático.)
+      final expectedOrder = [
+        tr('accountStats'),
+        tr('accountReview'),
+        tr('howToPlayTitle'),
+        tr('themeTitle'),
+        tr('accountLeaderboard'),
+        tr('accountLinkGoogle'),
+        tr('accountFriends'),
+        tr('accountTournaments'),
+        tr('accountShop'),
+        tr('accountGroups'),
+        tr('accountLanguage'),
+        tr('accountVersion'),
+        tr('accountFavorites'),
+        tr('accountReminder'),
+        tr('accountShareProgress'),
+        tr('accountShareApp'),
+        tr('checkUpdateTitle'),
+        tr('accountAbout'),
+        tr('supportWord'),
+      ];
+      expect(expectedOrder.length, 19);
+      final texts = tester
+          .widgetList<Text>(find.byType(Text))
+          .map((t) => t.data ?? '')
           .toList();
-      expect(titles.length, 13);
+      // La fila "Compartir la app" repite su título como subtítulo
+      // (menuShare): se quitan los duplicados seguidos, no las filas.
+      final titles = <String>[];
+      for (final data in texts.where(expectedOrder.contains)) {
+        if (titles.isEmpty || titles.last != data) titles.add(data);
+      }
+      expect(titles, expectedOrder);
+      // Las 3 primeras no cambian.
       expect(titles.sublist(0, 3), [
         tr('accountStats'),
         tr('accountReview'),
@@ -126,6 +160,12 @@ void main() {
       // El resto sigue en su mismo orden relativo.
       expect(titles.sublist(3), [
         tr('themeTitle'),
+        tr('accountLeaderboard'),
+        tr('accountLinkGoogle'),
+        tr('accountFriends'),
+        tr('accountTournaments'),
+        tr('accountShop'),
+        tr('accountGroups'),
         tr('accountLanguage'),
         tr('accountVersion'),
         tr('accountFavorites'),

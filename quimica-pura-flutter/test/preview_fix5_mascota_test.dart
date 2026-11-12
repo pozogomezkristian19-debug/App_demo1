@@ -29,6 +29,10 @@ void main() {
   });
 
   setUp(() async {
+    // La frase de la burbuja de la mascota rota con un estado
+    // global: sin reiniciarla, el golden depende de qué tests
+    // corrieron antes en el mismo proceso.
+    resetMascotLineRotationForTesting();
     SharedPreferences.setMockInitialValues({});
     await ProgressService.load();
     await NotificationInbox.load();
@@ -97,10 +101,15 @@ void main() {
   /// proceso lo pilla sin cargar (círculo vacío en vez de la foto).
   /// En el teléfono la foto va empaquetada y sale siempre; el
   /// círculo vacío es solo un artefacto del render, no un bug.
+  // OJO: sin runAsync la decodificación real del motor nunca
+  // completa sobre la caché fría y el test se queda colgado (mismo
+  // aviso que en preview_fix8/preview_fix6).
   Future<void> warmCompanions(WidgetTester tester) async {
     final ctx = tester.element(find.byType(MaterialApp));
     for (final c in Companion.values) {
-      await precacheImage(AssetImage(companionAsset(c)), ctx);
+      await tester.runAsync(() async {
+        await precacheImage(AssetImage(companionAsset(c)), ctx);
+      });
     }
     await tester.pump();
   }

@@ -2,7 +2,7 @@
 // PANTALLA COMPLETA con Navigator.push, no panel inline.
 //
 // - El icono (botoncito de teclado) sale en (casi) TODAS las
-//   preguntas: niveles, repaso de errores, examen cronometrado, Reto,
+//   preguntas: niveles, repaso de errores, examen cronometrado,
 //   cuestionario de laboratorio, quiz de la tabla y diálogo de la
 //   pregunta del día. Sin heurística de detección: no se decide qué
 //   pregunta "necesita" calculadora.
@@ -465,7 +465,7 @@ void main() {
     });
   });
 
-  group('SimpleQuizRunner (examen con tiempo y Reto)', () {
+  group('SimpleQuizRunner (examen con tiempo)', () {
     Future<void> pumpRunner(
       WidgetTester tester,
       List<QuizQuestion> items, {
@@ -562,12 +562,6 @@ void main() {
       expect(find.byType(NumericKeypad), findsNothing);
     });
 
-    testWidgets('Reto: el mismo runner lleva el icono', (tester) async {
-      await pumpRunner(tester, [yieldQuestion], playerName: 'Kristian');
-      expect(find.byKey(const Key('calculator-toggle')), findsOneWidget);
-      expect(find.byType(NumericKeypad), findsNothing);
-    });
-
     testWidgets('la ida y vuelta NO resetea el quiz: índice, selección '
         'y marcador siguen', (tester) async {
       await pumpRunner(tester, [yieldQuestion, conceptualQuestion]);
@@ -582,7 +576,7 @@ void main() {
       await tester.pump();
       expect(find.text(tr('quizCorrect')), findsOneWidget);
       // Pasar a la 2: sigue siendo la 2 (el índice no se reseteó).
-      await tester.tap(find.text(tr('quizNext')));
+      await tester.tap(find.text(tr('quizNext').toUpperCase()));
       await tester.pump();
       expect(find.text(conceptualQuestion.question), findsOneWidget);
       // Abrir y cerrar en la 2: sigue la 2, sin contestar.
@@ -596,7 +590,7 @@ void main() {
       await tester.tap(find.text('El que se agota primero'));
       await tester.pump();
       expect(find.text(tr('quizCorrect')), findsOneWidget);
-      await tester.tap(find.text(tr('quizResult')));
+      await tester.tap(find.text(tr('quizResult').toUpperCase()));
       await tester.pump();
       expect(find.text('2 ${tr('quizOf')} 2 ${tr('quizScore')}'),
           findsOneWidget);
@@ -670,8 +664,9 @@ void main() {
       await tester.pump(const Duration(seconds: 2));
     }
 
-    /// El nodo 1 del primer tema: el Container de 64×64 que
-    /// envuelve su número (patrón de fix4_niveles_compact_test).
+    /// El nodo 1 del primer tema: el Container de 80×80 que
+    /// envuelve su número (patrón de fix4_niveles_compact_test;
+    /// 80 dp desde el rediseño Duolingo §3.2, antes 64).
     Rect nodeOneRect(WidgetTester tester) {
       Rect rectOf(Element e) {
         final box = e.renderObject! as RenderBox;
@@ -684,7 +679,7 @@ void main() {
             matching: find.byType(Container),
           ))
           .map(rectOf)
-          .firstWhere((r) => r.width == 64.0 && r.height == 64.0);
+          .firstWhere((r) => r.width == 80.0 && r.height == 80.0);
     }
 
     testWidgets('nivel: icono y pantalla; la vuelta deja el nivel intacto',

@@ -6,7 +6,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quimica_pura/main.dart';
-import 'package:quimica_pura/screens/challenge_screen.dart';
 import 'package:quimica_pura/screens/stats_screen.dart';
 import 'package:quimica_pura/screens/timed_exam_screen.dart';
 import 'package:quimica_pura/services/localization.dart';
@@ -203,73 +202,6 @@ void main() {
       expect(find.textContaining('Niveles pasados'), findsNWidgets(2));
       expect(find.textContaining('Examen mixto'), findsOneWidget);
       expect(find.textContaining('Días practicando'), findsOneWidget);
-    });
-  });
-
-  group('fix3 pulido: punto 4 segunda pasada (Reto)', () {
-    test('los placeholders tienen clave i18n en los 6 idiomas', () {
-      final maps = AppLang.allStrings;
-      for (final e in maps.entries) {
-        expect(e.value['challengePlayer1Placeholder'], isNotEmpty,
-            reason: e.key);
-        expect(e.value['challengePlayer2Placeholder'], isNotEmpty,
-            reason: e.key);
-      }
-    });
-
-    testWidgets('jugador 1 fijo con nombre + (tú) y CTA relleno',
-        (tester) async {
-      UserPrefs.userName = 'Kristian';
-      addTearDown(() => UserPrefs.userName = '');
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: ThemeData(useMaterial3: true),
-          home: const ChallengeScreen(),
-        ),
-      );
-      await tester.pump();
-      // Fix6, ítem 6: el jugador 1 ya NO es un campo de texto: es un
-      // texto fijo con el nombre del perfil + "(tú)". Solo queda
-      // 1 TextField: el del jugador 2, que empieza vacío.
-      expect(find.text('Kristian (tú)'), findsOneWidget);
-      expect(
-          find.descendant(
-              of: find.byType(TextField),
-              matching: find.text('Kristian (tú)')),
-          findsNothing);
-      final fields = tester.widgetList<TextField>(find.byType(TextField));
-      expect(fields.length, 1);
-      expect(fields.first.controller?.text, '');
-      // El CTA principal es una pastilla rellena, como el del examen.
-      expect(find.byType(ElevatedButton), findsNothing);
-      expect(
-          find.ancestor(
-              of: find.text(tr('challengeStart')),
-              matching: find.byType(FilledButton)),
-          findsOneWidget);
-    });
-
-    testWidgets('con el perfil vacío, el jugador 1 fijo muestra su ayuda '
-        'y el único campo es el del jugador 2', (tester) async {
-      UserPrefs.userName = '';
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: ThemeData(useMaterial3: true),
-          home: const ChallengeScreen(),
-        ),
-      );
-      await tester.pump();
-      // Fix6, ítem 6: solo queda 1 TextField (jugador 2, hint
-      // 'Nombre de la otra persona'). La fila fija del jugador 1
-      // muestra su ayuda ('Tu nombre') como texto, no como hint.
-      expect(find.text(tr('challengePlayer1Placeholder')), findsOneWidget);
-      final fields = tester.widgetList<TextField>(find.byType(TextField));
-      expect(fields.length, 1);
-      expect(fields.first.controller?.text, '');
-      expect(fields.first.decoration?.hintText,
-          tr('challengePlayer2Placeholder'));
-      // Icono de persona en la fila fija y en el campo.
-      expect(lucide(LucideIcons.userRound), findsNWidgets(2));
     });
   });
 

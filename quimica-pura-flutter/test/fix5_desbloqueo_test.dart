@@ -34,7 +34,13 @@ import 'test_helpers.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  setUpAll(loadRobotoFonts);
+  // MaterialIcons además de Roboto: el nodo pasado lleva una
+  // estrella Material (Icons.star); sin la fuente, la captura
+  // muestra un cuadrado vacío en vez de la estrella.
+  setUpAll(() async {
+    await loadRobotoFonts();
+    await loadMaterialIcons();
+  });
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({'melli_rules_seen_v6': true});
@@ -80,10 +86,17 @@ void main() {
     );
   }
 
+  /// Precarga las imágenes de los compañeros. OJO: sin runAsync la
+  /// decodificación real del motor nunca completa sobre la caché
+  /// fría y el test se queda colgado (mismo aviso que en
+  /// preview_fix8/preview_fix6: solo funcionaba antes porque otros
+  /// tests del archivo ya habían calentado la caché).
   Future<void> warmCompanions(WidgetTester tester) async {
     final ctx = tester.element(find.byType(MaterialApp));
     for (final c in Companion.values) {
-      await precacheImage(AssetImage(companionAsset(c)), ctx);
+      await tester.runAsync(() async {
+        await precacheImage(AssetImage(companionAsset(c)), ctx);
+      });
     }
     await tester.pump();
   }
@@ -142,14 +155,17 @@ void main() {
     await tester.tap(find.text(option).first);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
+    // Flujo original: tocar la opción la juzga al momento (sin
+    // COMPROBAR); los puntos y errores ya están registrados.
   }
 
-  /// Botón "Siguiente" (o "Resultado" en la última pregunta).
+  /// Botón "SIGUIENTE" / "RESULTADO" (flujo original): avanza a la
+  /// siguiente pregunta (o al resultado en la última).
   Future<void> next(WidgetTester tester) async {
-    final nextBtn = find.text(tr('quizNext'));
-    final resultBtn = find.text(tr('quizResult'));
-    final target =
-        nextBtn.evaluate().isNotEmpty ? nextBtn : resultBtn;
+    final nextFinder = find.text(tr('quizNext').toUpperCase());
+    final target = nextFinder.evaluate().isNotEmpty
+        ? nextFinder
+        : find.text(tr('quizResult').toUpperCase());
     await tester.ensureVisible(target);
     await tester.tap(target);
     await tester.pump();
@@ -212,11 +228,11 @@ void main() {
       // 4 aciertos y 1 fallo: el caso exacto que reportó Kristian.
       await playLevel1(tester, [true, true, true, true, false]);
 
-      // Resultado: 4 de 5, +12 puntos (4×5 − 8), nota 4,0 / 5.
-      expect(find.text('4 de 5 Aciertos'), findsOneWidget);
-      expect(find.text('Puntos: +12'), findsOneWidget);
-      expect(find.text('Nota: 4.0 / 5'), findsOneWidget);
-      expect(find.text('¡Nivel superado! Nivel 2.'), findsOneWidget);
+      // Resultado (§3.4): título amarillo, XP grande "+12" (arriba
+      // y en la tarjeta PUNTOS) y tarjeta PRECISIÓN "80 %".
+      expect(find.text(tr('quizLevelPassed')), findsOneWidget);
+      expect(find.text('+12'), findsWidgets);
+      expect(find.text('80%'), findsOneWidget);
       expect(find.byType(CelebrationOverlay), findsOneWidget);
       // La nota guardada es 80, no 81: con la vieja deducción por
       // nota el nodo se habría visto como no pasado.
@@ -224,14 +240,17 @@ void main() {
       // Pero el desbloqueo es real: el nivel 2 está abierto.
       expect(p.unlockedLevel('estequiometria'), 2);
       // Y el botón para saltar ahí mismo está en pantalla.
-      expect(find.text('Pasar de nivel'), findsOneWidget);
-      // Orden tras ganar (punto 15.1): [Pasar de nivel] [Volver]
-      // [Repetir], de arriba abajo.
-      final yPass = tester.getCenter(find.text('Pasar de nivel')).dy;
-      final yBack = tester.getCenter(find.text(tr('quizBack'))).dy;
-      final yRepeat = tester.getCenter(find.text(tr('quizRepeat'))).dy;
+      expect(find.text('PASAR DE NIVEL'), findsOneWidget);
+      // Orden tras ganar (§3.4.5): el botón grande [PASAR DE NIVEL]
+      // arriba; [REPETIR] y [VOLVER] son enlaces en una fila debajo.
+      final yPass = tester.getCenter(find.text('PASAR DE NIVEL')).dy;
+      final yBack =
+          tester.getCenter(find.text(tr('quizBack').toUpperCase())).dy;
+      final yRepeat =
+          tester.getCenter(find.text(tr('quizRepeat').toUpperCase())).dy;
       expect(yPass, lessThan(yBack));
-      expect(yBack, lessThan(yRepeat));
+      expect(yPass, lessThan(yRepeat));
+      expect((yBack - yRepeat).abs(), lessThan(2));
       expect(tester.takeException(), isNull);
     });
 
@@ -254,12 +273,15 @@ void main() {
       expect(jsonDecode(stored)['estequiometria'], 2);
 
       // Volver al camino y tocar el nodo 2: empieza el Nivel 2.
-      await tester.tap(find.text(tr('quizBack')));
+      await tester.tap(find.text(tr('quizBack').toUpperCase()));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 600));
-      await tester.ensureVisible(find.text('2').first);
+      // El '2' primero en el árbol es la corona del nodo 1 pasado:
+      // su conteo de estrellas es "2" (mejor nota 80 % → 2 estrellas,
+      // §3.2.1). El nodo 2 es el segundo '2'.
+      await tester.ensureVisible(find.text('2').at(1));
       await tester.pump();
-      await tester.tap(find.text('2').first);
+      await tester.tap(find.text('2').at(1));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
       expect(find.textContaining('Pregunta 1 de 5'), findsOneWidget);
@@ -272,14 +294,14 @@ void main() {
       await pumpNiveles(tester);
       await startLevel1(tester);
       await playLevel1(tester, [true, true, true, true, false]);
-      expect(find.text('Pasar de nivel'), findsOneWidget);
+      expect(find.text('PASAR DE NIVEL'), findsOneWidget);
 
-      await tester.tap(find.text('Pasar de nivel'));
+      await tester.tap(find.text('PASAR DE NIVEL'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.textContaining('Pregunta 1 de 5'), findsOneWidget);
       expect(find.textContaining('Nivel 2'), findsWidgets);
-      expect(find.text('4 de 5 Aciertos'), findsNothing);
+      expect(find.text(tr('quizLevelPassed')), findsNothing);
       expect(find.byType(CelebrationOverlay), findsNothing);
       expect(tester.takeException(), isNull);
     });
@@ -292,9 +314,9 @@ void main() {
       await startLevel1(tester);
       await playLevel1(tester, [true, true, true, false, false]);
 
-      expect(find.text('3 de 5 Aciertos'), findsOneWidget);
+      expect(find.text('60%'), findsOneWidget);
       expect(find.text(tr('quizLevelFailed')), findsOneWidget);
-      expect(find.text('Pasar de nivel'), findsNothing);
+      expect(find.text('PASAR DE NIVEL'), findsNothing);
       expect(find.byType(CelebrationOverlay), findsNothing);
       expect(p.unlockedLevel('estequiometria'), 1);
       expect(tester.takeException(), isNull);
@@ -302,14 +324,14 @@ void main() {
   });
 
   group('Previews fix5 punto 13', () {
-    testWidgets('fix5_resultado_pasar_nivel: resultado 4/5 con los '
-        'tres botones [Pasar de nivel] [Volver] [Repetir]',
+    testWidgets('fix5_resultado_pasar_nivel: resultado 4/5 con el '
+        'botón PASAR DE NIVEL y las 3 tarjetas (§3.4)',
         (tester) async {
       await pumpNiveles(tester);
       await warmCompanions(tester);
       await startLevel1(tester);
       await playLevel1(tester, [true, true, true, true, false]);
-      expect(find.text('Pasar de nivel'), findsOneWidget);
+      expect(find.text('PASAR DE NIVEL'), findsOneWidget);
       // El confeti dura 4,2 s: pasado ese tiempo se desmonta y la
       // captura es determinista (solo el resultado y el botón).
       await tester.pump(const Duration(seconds: 5));
@@ -323,7 +345,7 @@ void main() {
       await startLevel1(tester);
       await playLevel1(tester, [true, true, true, true, false]);
       await tester.pump(const Duration(seconds: 5));
-      await tester.tap(find.text(tr('quizBack')));
+      await tester.tap(find.text(tr('quizBack').toUpperCase()));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 600));
       expect(ProgressService.instance.unlockedLevel('estequiometria'), 2);

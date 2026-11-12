@@ -191,6 +191,16 @@ void main() {
 
   group('Recordatorios: el interruptor y la prueba', () {
     Future<void> pumpReminders(WidgetTester tester) async {
+      // Ventana ALTA (800x1400): la tarjeta nueva de canales
+      // (corrección ronda #7) alarga la lista y, con el alto por
+      // defecto (600), el botón de prueba quedaba fuera del área
+      // construida del ListView y find.text no lo encontraba.
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
       await tester.pumpWidget(
         const MaterialApp(home: ReminderScreen()),
       );
@@ -220,7 +230,7 @@ void main() {
     testWidgets('"Probar un aviso ahora" con el permiso denegado muestra '
         'el diálogo (no dice "enviado")', (tester) async {
       await pumpReminders(tester);
-      await tester.tap(find.text(tr('notifTest')));
+      await tester.tap(find.text(tr('notifTest').toUpperCase()));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text(tr('notifSettingsTitle')), findsOneWidget);

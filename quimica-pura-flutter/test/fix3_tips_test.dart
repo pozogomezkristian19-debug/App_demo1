@@ -20,7 +20,7 @@
 // introducciones de Aprender que usaban el mismo patrón sin estilo
 // llevan ahora el estilo explícito del tema. Estas pruebas
 // comprueban el estilo EFECTIVO (el que pinta RichText) en claro y
-// en oscuro: cuerpo 16 Roboto con el color del tema, título de
+// en oscuro: cuerpo 16 Nunito con el color del tema, título de
 // AppBar 20 w800, sin subrayado, sin rojo y sin monoespaciada. Las
 // pantallas se montan SIN Scaffold exterior a propósito, para que
 // un Text sin estilo no quede tapado por el bodyMedium del
@@ -41,11 +41,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'test_helpers.dart';
 
 /// Réplica mínima y fiel del textTheme y la AppBar de MelliQuiApp
-/// (main.dart): cuerpo 16 Roboto con el color del tema, título de
+/// (main.dart): cuerpo 16 Nunito con el color del tema, título de
 /// pantalla 22 y título de AppBar 20 w800.
 ThemeData melliTextTheme({required bool dark}) => ThemeData(
       useMaterial3: true,
-      fontFamily: 'Roboto',
+      fontFamily: 'Nunito',
       brightness: dark ? Brightness.dark : Brightness.light,
       scaffoldBackgroundColor:
           dark ? const Color(0xFF0A1F1A) : Colors.white,
@@ -68,7 +68,7 @@ ThemeData melliTextTheme({required bool dark}) => ThemeData(
         elevation: 0,
         scrolledUnderElevation: 0,
         titleTextStyle: TextStyle(
-          fontFamily: 'Roboto',
+          fontFamily: 'Nunito',
           fontSize: 20,
           fontWeight: FontWeight.w800,
           color: dark ? const Color(0xFFE6F4EE) : BrandColors.ink,
@@ -90,12 +90,15 @@ ThemeData melliTextTheme({required bool dark}) => ThemeData(
             fontWeight: FontWeight.w800,
             color:
                 dark ? const Color(0xFFE6F4EE) : BrandColors.ink),
-      ).apply(fontFamily: 'Roboto'),
+      ).apply(fontFamily: 'Nunito'),
     );
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  setUpAll(loadRobotoFonts);
+  setUpAll(() async {
+    await loadRobotoFonts();
+    await loadNunitoFonts();
+  });
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -114,7 +117,17 @@ void main() {
       MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: melliTextTheme(dark: dark),
-        home: child,
+        // Aprender y otras pantallas son un ListView sin Scaffold
+        // (cuerpos de pestaña): sin un Material ancestro, el texto
+        // hereda el DefaultTextStyle de emergencia de Flutter
+        // (monospace 48 w900 con doble subrayado) y no el del tema.
+        // El Material transparente aporta el DefaultTextStyle del
+        // tema sin pintar nada; las pantallas con Scaffold propio
+        // no se ven afectadas.
+        home: Material(
+          type: MaterialType.transparency,
+          child: child,
+        ),
       ),
     );
     await tester.pump();
@@ -137,7 +150,7 @@ void main() {
   void expectNormalBody(TextStyle style, Color color,
       {String? reason}) {
     expect(style.fontSize, 16, reason: reason);
-    expect(style.fontFamily, 'Roboto', reason: reason);
+    expect(style.fontFamily, 'Nunito', reason: reason);
     expect(style.color, color, reason: reason);
     // Sin subrayado: el estilo fusionado pone decoration en
     // TextDecoration.none (nunca underline) y jamás el doble
@@ -148,8 +161,8 @@ void main() {
   }
 
   void expectNormalTitle(TextStyle style, Color color) {
-    expect(style.fontSize, 22);
-    expect(style.fontFamily, 'Roboto');
+    expect(style.fontSize, 28);
+    expect(style.fontFamily, 'Nunito');
     expect(style.color, color);
     expect(style.decoration, TextDecoration.none);
     expect(style.decorationStyle,
@@ -161,7 +174,7 @@ void main() {
   void expectAppBarTitle(TextStyle style, Color color) {
     expect(style.fontSize, 20);
     expect(style.fontWeight, FontWeight.w800);
-    expect(style.fontFamily, 'Roboto');
+    expect(style.fontFamily, 'Nunito');
     expect(style.color, color);
     // Sin subrayado: null o none (nunca underline); jamás el doble
     // amarillo de la captura rota.
@@ -193,7 +206,7 @@ void main() {
             effectiveStyle(tester, 'Método para cualquier problema');
         expect(cardTitle.fontSize, 17);
         expect(cardTitle.fontWeight, FontWeight.bold);
-        expect(cardTitle.fontFamily, 'Roboto');
+        expect(cardTitle.fontFamily, 'Nunito');
         expect(cardTitle.color, color);
         expect(cardTitle.decoration, TextDecoration.none);
       });
@@ -221,7 +234,7 @@ void main() {
             dark ? const Color(0xFFE6F4EE) : BrandColors.ink;
         for (final topic in topics) {
           await pumpScreen(
-              tester, TopicDetailView(topic: topic), dark);
+              tester, TopicDetailScreen(topic: topic), dark);
           for (final p in topic.summary) {
             expectNormalBody(
                 effectiveStyle(tester, p), color,

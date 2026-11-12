@@ -94,7 +94,7 @@ void main() {
 
   });
 
-  testWidgets('fix 3: Cuenta tiene UNA tarjeta de estadísticas, sin duplicar',
+  testWidgets('fix 3: Cuenta tiene UNA fila de estadísticas, sin duplicar',
       (tester) async {
     tester.view.physicalSize = const Size(800, 1800);
     tester.view.devicePixelRatio = 1.0;
@@ -117,12 +117,21 @@ void main() {
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
+    // Restauración 6.3 (corrección de Kristian 2026-11-11): la
+    // tarjeta StatsCard VUELVE como la ÚNICA fila de estadísticas:
+    // 5 columnas CON ICONOS (Vidas con corazón, Puntos, Racha,
+    // Meta del día, Logros x/10). Las 3 columnas planas sin
+    // iconos del rediseño Duolingo 7.0 (NIVELES/PUNTOS/RACHA en
+    // mayúsculas) se quitaron; nada se duplica.
     expect(find.byType(StatsCard), findsOneWidget);
     expect(find.text('Vidas'), findsOneWidget);
     expect(find.text('Puntos'), findsOneWidget);
     expect(find.text('Racha'), findsOneWidget);
     expect(find.text('Meta del día'), findsOneWidget);
     expect(find.text('Logros'), findsOneWidget);
-    expect(find.byType(LivesHeart), findsWidgets);
+    expect(find.text('NIVELES'), findsNothing);
+    expect(find.text('PUNTOS'), findsNothing);
+    expect(find.text('RACHA'), findsNothing);
+    expect(find.byType(LivesHeart), findsOneWidget);
   });
 }

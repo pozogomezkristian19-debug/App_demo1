@@ -71,8 +71,8 @@ void main() {
   }
 
   /// Busca un texto SOLO dentro de la pantalla Niveles (el menú
-  /// hamburguesa, cerrado, sigue teniendo "Examen con tiempo" y
-  /// "Reto" como entradas, y la barra inferior repite "Niveles").
+  /// hamburguesa, cerrado, sigue teniendo "Examen con tiempo" como
+  /// entrada, y la barra inferior repite "Niveles").
   Finder inNiveles(String text) => find.descendant(
         of: find.byType(PracticarScreen),
         matching: find.text(text),
@@ -93,25 +93,28 @@ void main() {
 
     testWidgets(
         'ya no sale "Practicar de otra forma" en Niveles, pero el '
-        'Examen con tiempo y el Reto siguen en el menú', (tester) async {
+        'Examen con tiempo sigue en el menú', (tester) async {
       await pumpNiveles(tester);
       expect(inNiveles(tr('practiceOtherWays')), findsNothing);
       expect(inNiveles(tr('timedTitle')), findsNothing);
-      expect(inNiveles(tr('challengeTitle')), findsNothing);
-      // Las dos pantallas siguen existiendo: el menú las abre. El
-      // cajón no está en el árbol cerrado: hay que abrirlo para ver
-      // sus entradas (como en test/fix4_drawer_sim_test.dart).
+      // La pantalla sigue existiendo: el menú la abre. El cajón no
+      // está en el árbol cerrado: hay que abrirlo para ver sus
+      // entradas (como en test/fix4_drawer_sim_test.dart).
       tester.state<ScaffoldState>(find.byType(Scaffold)).openDrawer();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text(tr('timedTitle')), findsOneWidget);
-      expect(find.text(tr('challengeTitle')), findsOneWidget);
     });
 
     testWidgets('el camino de niveles sigue presente', (tester) async {
       await pumpNiveles(tester);
       expect(inNiveles(tr('levelsTitle')), findsOneWidget);
-      expect(find.text('${tr('levelWord')} 1'), findsWidgets);
+      // Rediseño Duolingo §3.2.2: ya NO hay etiqueta "Nivel N" bajo
+      // cada nodo. El nodo actual sigue mostrando su número "1" y el
+      // banner lleva "NIVEL 1 DE 6 · MEJOR: 0 %" (mayúsculas,
+      // decisión de Kristian, ronda 3).
+      expect(find.text('1'), findsWidgets);
+      expect(find.textContaining('NIVEL 1 DE 6'), findsWidgets);
       // El trofeo final del camino y el texto del banco siguen.
       expect(find.text(tr('mixedTitle')), findsWidgets);
       expect(find.textContaining(tr('bankWord')), findsWidgets);
