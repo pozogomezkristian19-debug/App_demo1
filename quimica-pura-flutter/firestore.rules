@@ -1,0 +1,663 @@
+rules_version = '2';
+
+// ============================================================================
+//  Reglas de Firestore — Quemia (Melli-Qui) v7.0
+//  Proyecto Firebase: "Quemia" (id: quemia-8410a, plan Spark gratuito)
+//  ----------------------------------------------------------------------------
+//  ESTAS REGLAS NO SE APLICAN SOLAS: las aplica el agente principal copiándolas
+//  en la consola de Firebase → Firestore Database → pestaña "Reglas" → "Publicar".
+//  Este archivo es solo el texto oficial de las reglas, versionado junto al código.
+//
+//  Novedades 7.0: colecciones 'duels', 'tournaments', 'reports',
+//  'announcements', 'groups', 'friends', 'levels' y 'support_messages',
+//  y campos nuevos en 'users' (purchases, friends, tournamentMedals,
+//  bestTournamentScores) y en 'settings/app' (supportNumber, showWhatsApp).
+//  Ronda 2d: colección 'friend_requests' (solicitudes de amistad) y la
+//  excepción estrecha en 'users' para que al confirmar una solicitud el
+//  destinatario añada solo su propio uid a la 'friends' del remitente.
+//  Ver FIREBASE_SETUP.md para el modelo de datos y las decisiones de seguridad.
+//  ----------------------------------------------------------------------------
+//  ESTAS REGLAS NO SE APLICAN SOLAS: las aplica el agente principal copiándolas
+//  en la consola de Firebase → Firestore Database → pestaña "Reglas" → "Publicar".
+//  Este archivo es solo el texto oficial de las reglas, versionado junto al código.
+// ============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -------------------------------------------------------------------------
+    //  Funciones auxiliares
+    // -------------------------------------------------------------------------
+
+    // ¿Hay un usuario autenticado con Firebase Auth? La app principal inicia
+    // sesión ANÓNIMA automáticamente al abrir (sin que el usuario haga nada);
+    // la app de admin usa inicio de sesión con Google. En ambos casos
+    // request.auth.uid es el id del documento del usuario en 'users'.
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // ¿Es el dueño de la app? Se comprueba por el correo de la cuenta de Google
+    // con la que se inicia sesión en la app de admin, NO por el documento de
+    // 'admins', para que el dueño pueda crear su propio documento la primera
+    // vez (arranque inicial: si no existe ningún admin, nadie podría crear el
+    // primero si dependiéramos del documento).
+    // Dueño: pozogomezkristian19@gmail.com
+    function isOwner() {
+      return isSignedIn()
+        && request.auth.token.email == 'pozogomezkristian19@gmail.com';
+    }
+
+    // ¿Es administrador? El dueño siempre cuenta como admin (aunque su documento
+    // de 'admins' todavía no exista), y si no, quien tenga un documento en
+    // 'admins/{uid}' con su uid de Firebase Auth.
+    function isAdmin() {
+      return isOwner()
+        || (isSignedIn()
+          && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    }
+
+    // ¿Puede este admin gestionar otros admins? (permiso 'manageAdmins').
+    // El dueño siempre puede. Se usa get() solo después de comprobar con
+    // isAdmin() que el documento existe, para no leer un documento inexistente.
+    function canManageAdmins() {
+      return isOwner()
+        || (isAdmin()
+          && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.permissions.manageAdmins == true);
+    }
+
+    // Campos que un cliente normal puede escribir en su documento de 'users'.
+    // NUNCA incluye 'banned' ni 'bannedReason': esos solo los escriben admins.
+    // Novedades 7.0: 'purchases' (compras de la tienda), 'friends' (lista de
+    // amigos, si se guarda en el doc de usuario además de la colección
+    // 'friends'), 'tournamentMedals' (medallas de torneos) y
+    // 'bestTournamentScores' (mejores puntajes de torneos).
+    // AVISO: la lectura de 'users' es pública por la tabla de posiciones
+    // (ver nota al final del archivo), así que estos campos nuevos también
+    // los puede leer cualquiera: 'purchases' debe guardar SOLO ids de
+    // artículos, nunca precios ni datos de pago, y si la lista de amigos
+    // debe ser privada, hay que guardarla SOLO en la colección 'friends'
+    // (lectura privada) y NO en este documento.
+    function userWritableFields() {
+      return ['username', 'joinedAt', 'lastActive', 'levelsPassed',
+              'points', 'streak', 'track', 'appVersion',
+              'purchases', 'friends', 'tournamentMedals',
+              'bestTournamentScores'];
+    }
+
+    // -------------------------------------------------------------------------
+    //  Colección 'users' — un documento por usuario. El ID del documento es
+    //  el UID de Firebase Auth: la app principal inicia sesión ANÓNIMA
+    //  automáticamente al abrir, y al enlazar la cuenta con Google ("Continuar
+    //  con Google") el uid NO cambia, por eso el progreso se recupera en un
+    //  teléfono nuevo. Campos: username, joinedAt, lastActive,
+    //  levelsPassed (map {bach, uni}), points, streak, track, appVersion,
+    //  purchases, friends, tournamentMedals, bestTournamentScores,
+    //  banned (bool), bannedReason.
+    // -------------------------------------------------------------------------
+    match /users/{uid} {
+
+      // LECTURA PÚBLICA (intencionada, ver nota al final del archivo):
+      // la tabla de posiciones de la app principal lee el progreso de los
+      // usuarios que dieron su consentimiento para compartirlo. En Firestore
+      // SOLO existen los datos de quienes aceptaron compartir: la app
+      // principal no sube nada sin permiso explícito del usuario. Los campos
+      // son solo progreso de estudio (nombre, puntos, niveles, racha), nunca
+      // datos sensibles (sin correo, sin teléfono, sin ubicación, sin
+      // contraseñas). Leer no permite modificar nada.
+      allow read: if true;
+
+      // CREAR / ACTUALIZAR: solo el propio usuario, y solo su documento.
+      // La sesión anónima de Firebase Auth identifica al escritor: el uid de
+      // la sesión tiene que ser igual al id del documento (request.auth.uid
+      // == uid). Nadie puede escribir en el documento de otro usuario.
+      // Además, el usuario solo puede escribir los campos de la lista blanca:
+      // si intenta escribir 'banned' o 'bannedReason' (o cualquier otro campo
+      // fuera de la lista), la escritura se rechaza entera: hasOnly() exige
+      // que TODAS las claves del documento resultante estén en la lista.
+      // Un admin puede escribir en CUALQUIER documento de 'users' y además
+      // puede escribir 'banned' (bool) y 'bannedReason' (texto) para vetar a
+      // un usuario; si los escribe, deben tener el tipo correcto. Un usuario
+      // vetado lo sigue viendo todo en local, pero su progreso deja de
+      // contar (la app principal y la app de admin lo comprueban al leer
+      // 'banned').
+      //
+      // EXCEPCIÓN ESTRECHA (ronda 2d, amistad por solicitud): al confirmar
+      // una solicitud, el destinatario añade SOLO su propio uid a la
+      // 'friends' del remitente. La escritura solo puede cambiar el campo
+      // 'friends', tiene que conservar todos los amigos que ya había y
+      // solo puede añadir el propio uid (como mucho uno más): no se toca
+      // ningún otro campo ni se quita a nadie. Sin esto, la amistad
+      // quedaría de un solo lado hasta que el otro escriba por su cuenta.
+      // (La amistad también es mutua por la solicitud 'aceptada' en sí:
+      // ver 'friend_requests'.)
+      allow create, update: if (isSignedIn() && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(userWritableFields())
+          && !('banned' in request.resource.data)
+          && !('bannedReason' in request.resource.data))
+        || (isSignedIn()
+          && request.resource.data.keys().hasOnly(userWritableFields())
+          && request.resource.data.diff(resource.data)
+              .affectedKeys().hasOnly(['friends'])
+          && request.resource.data.friends.hasAll(
+              ('friends' in resource.data) ? resource.data.friends : [])
+          && request.resource.data.friends.hasAll([request.auth.uid])
+          && request.resource.data.friends.size() <=
+              (('friends' in resource.data)
+                  ? resource.data.friends.size()
+                  : 0) + 1)
+        || (isAdmin()
+          && request.resource.data.keys().hasOnly(
+            ['username', 'joinedAt', 'lastActive', 'levelsPassed',
+             'points', 'streak', 'track', 'appVersion',
+             'purchases', 'friends', 'tournamentMedals',
+             'bestTournamentScores', 'banned', 'bannedReason'])
+          && (!('banned' in request.resource.data)
+              || request.resource.data.banned is bool)
+          && (!('bannedReason' in request.resource.data)
+              || request.resource.data.bannedReason is string));
+
+      // BORRAR: nadie desde un cliente. Si hay que borrar un documento de
+      // usuario, se hace a mano desde la consola de Firebase.
+      allow delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    //  Colección 'admins' — un documento por administrador (id = uid de
+    //  Firebase Auth). Campos: email, displayName, role ('owner' | 'admin'),
+    //  permissions {viewUsers, viewProgress, banUsers, manageAdmins},
+    //  createdAt, createdBy.
+    // -------------------------------------------------------------------------
+    match /admins/{uid} {
+
+      // LECTURA: solo administradores (el dueño incluido). Nadie más puede
+      // ver quién administra la app ni con qué permisos.
+      allow read: if isAdmin();
+
+      // CREAR: solo el dueño o un admin con manageAdmins == true. El role
+      // tiene que ser 'owner' o 'admin', y solo el dueño puede crear un
+      // documento con role 'owner' (nadie puede autonombrarse dueño).
+      allow create: if (isOwner() || (isAdmin() && canManageAdmins()))
+        && request.resource.data.role in ['owner', 'admin']
+        && (request.resource.data.role != 'owner' || isOwner());
+
+      // ACTUALIZAR: el dueño puede editar cualquier documento de admin, pero
+      // nunca puede cambiar su propio role a 'admin' (o dejaría de haber
+      // dueño); un admin con manageAdmins puede editar a otros admins, pero
+      // NUNCA tocar el documento del dueño.
+      allow update: if (isOwner()
+          && !(resource.data.role == 'owner'
+            && request.resource.data.role == 'admin'))
+        || (isAdmin() && canManageAdmins()
+          && resource.data.role != 'owner');
+
+      // BORRAR: el dueño o un admin con manageAdmins pueden borrar admins,
+      // pero NADIE puede borrar el documento del dueño (role 'owner').
+      allow delete: if (isOwner() || (isAdmin() && canManageAdmins()))
+        && resource.data.role != 'owner';
+    }
+
+    // -------------------------------------------------------------------------
+    //  Documento 'settings/app' — ajustes remotos de la app (umbral de
+    //  aprobado, puntos por dificultad, vidas máximas...). Campos:
+    //  passThreshold, pointsEasyGain, pointsEasyLoss, pointsMediumGain,
+    //  pointsMediumLoss, pointsHardGain, pointsHardLoss, maxLives,
+    //  supportNumber, showWhatsApp.
+    //  'supportNumber' (string: número de soporte en formato internacional,
+    //  p. ej. '5356519431', sin '+' ni espacios) y 'showWhatsApp' (bool:
+    //  muestra o no la opción de WhatsApp en la ventanita de Soporte) son
+    //  ajustes de Soporte editables desde la app de admin; el documento
+    //  sigue siendo solo-escritura para admins (ver FIREBASE_SETUP.md),
+    //  por eso esta regla NO cambia por ellos.
+    // -------------------------------------------------------------------------
+    match /settings/app {
+
+      // LECTURA PÚBLICA: la app principal lee estos ajustes al abrir, sin
+      // sesión. Son solo números de configuración del juego, nada sensible.
+      allow read: if true;
+
+      // ESCRITURA: solo administradores (el dueño incluido). Si un ajuste
+      // queda mal, se corrige desde la app de admin o desde la consola.
+      allow create, update: if isAdmin();
+
+      // BORRAR: nunca desde un cliente; el documento siempre debe existir.
+      allow delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    //  Colección 'duels' — un documento por duelo entre 2 jugadores. Campos:
+    //  participants (lista de 2 uid), questions (lista de ids de pregunta),
+    //  status (string, p. ej. 'esperando' / 'en curso' / 'terminado'),
+    //  answers (map por uid: respuestas y tiempos de cada jugador),
+    //  winner (uid del ganador, o null mientras no hay ganador).
+    // -------------------------------------------------------------------------
+    match /duels/{duelId} {
+
+      // LECTURA: solo los 2 participantes. Nadie más (ni siquiera otros
+      // usuarios autenticados) puede ver un duelo ajeno: ni las preguntas,
+      // ni las respuestas, ni los tiempos.
+      allow read: if isSignedIn()
+        && request.auth.uid in resource.data.participants;
+
+      // CREAR: solo un participante, y tiene que incluirse a sí mismo.
+      // participants tiene que ser exactamente 2 uid distintos, uno de
+      // ellos el creador; questions, una lista de ids de pregunta. La
+      // validez de las preguntas y de las transiciones de estado se
+      // comprueba en la app: las reglas no conocen el banco de preguntas.
+      allow create: if isSignedIn()
+        && request.resource.data.participants is list
+        && request.resource.data.participants.size() == 2
+        && request.auth.uid in request.resource.data.participants
+        && request.resource.data.participants[0] != request.resource.data.participants[1]
+        && request.resource.data.questions is list;
+
+      // ACTUALIZAR: solo un participante del duelo, y solo puede cambiar
+      // el desarrollo (respuestas, tiempos, estado, ganador). participants
+      // y questions son INMUTABLES: nadie puede meter a un tercero en un
+      // duelo en curso ni cambiar las preguntas una vez creado. Además,
+      // cada jugador solo puede tocar SU propia entrada en 'answers'
+      // (mapa por uid): un participante NO puede escribir ni cambiar las
+      // respuestas/tiempos del otro jugador, y tampoco puede borrar el
+      // campo 'answers' entero. Lo que las reglas NO pueden impedir es que
+      // un participante infle sus PROPIOS tiempos/respuestas, o que
+      // declare el 'winner'/'status' a su favor sin haber ganado de verdad
+      // (las reglas no conocen las respuestas correctas): eso se detecta
+      // en la app de admin.
+      allow update: if isSignedIn()
+        && request.auth.uid in resource.data.participants
+        && request.auth.uid in request.resource.data.participants
+        && request.resource.data.participants == resource.data.participants
+        && request.resource.data.questions == resource.data.questions
+        && (!('answers' in resource.data)
+          || ('answers' in request.resource.data))
+        && (!('answers' in request.resource.data)
+          || request.resource.data.answers.diff(
+              resource.data.get('answers', {})).affectedKeys()
+                .hasOnly([request.auth.uid]));
+
+      // BORRAR: nadie desde un cliente; el historial de duelos se conserva.
+      allow delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    //  Colección 'tournaments' — torneos. Campos: title, theme, dates
+    //  (inicio/fin), questions (lista de ids de pregunta), prize (premio).
+    //  Los torneos reales los crea el agente principal desde Firebase
+    //  (consola o Admin SDK, que no pasan por estas reglas); la app
+    //  principal NO escribe torneos nunca. Las reglas solo dejan escribir
+    //  a los admins, por si algún día la app de admin los gestiona.
+    // -------------------------------------------------------------------------
+    match /tournaments/{tournamentId} {
+
+      // LECTURA PÚBLICA: todos ven los torneos activos y próximos (título,
+      // tema, fechas, premio) sin iniciar sesión. No hay datos personales:
+      // los resultados por jugador viven en 'users' (bestTournamentScores,
+      // tournamentMedals), no aquí.
+      allow read: if true;
+
+      // ESCRITURA: solo administradores (el dueño incluido). Nadie más
+      // puede crear, cambiar ni borrar un torneo.
+      allow create, update, delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    //  Colección 'reports' — reportes de preguntas. Campos: questionId,
+    //  authorUid (uid del usuario que reporta), note (nota del usuario),
+    //  createdAt (fecha), status ('pendiente' | 'en revisión' |
+    //  'arreglado' | 'rechazado').
+    // -------------------------------------------------------------------------
+    match /reports/{reportId} {
+
+      // LECTURA: solo los admins y el propio autor. Un usuario NO puede
+      // leer los reportes de otros usuarios.
+      allow read: if isAdmin()
+        || (isSignedIn() && resource.data.authorUid == request.auth.uid);
+
+      // CREAR: cualquier usuario autenticado, pero solo como autor de su
+      // propio reporte: authorUid tiene que ser su uid, el estado inicial
+      // tiene que ser 'pendiente' y questionId, un texto. La app debe
+      // rellenar authorUid con el uid de la sesión; si escribe otro uid,
+      // la creación se rechaza.
+      allow create: if isSignedIn()
+        && request.resource.data.authorUid == request.auth.uid
+        && request.resource.data.status == 'pendiente'
+        && request.resource.data.questionId is string;
+
+      // ACTUALIZAR: solo los admins, y SOLO el estado. Ningún otro campo
+      // (pregunta, autor, nota, fecha) se puede tocar después de creado:
+      // si un admin intenta cambiar algo más, la escritura se rechaza.
+      // Un usuario no puede editar ni cerrar su propio reporte.
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+        && request.resource.data.status in ['pendiente', 'en revisión', 'arreglado', 'rechazado'];
+
+      // BORRAR: nadie desde un cliente; los reportes se conservan como
+      // historial (cerrados quedan con status 'arreglado' o 'rechazado').
+      allow delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    //  Colección 'support_messages' — mensajes de Soporte. Campos
+    //  CANÓNICOS (fijados en esta ronda, ver FIREBASE_SETUP.md):
+    //  authorUid (uid del usuario que escribe), username (nombre que
+    //  muestra en la bandeja del admin), message (texto del usuario),
+    //  createdAt (fecha de envío), status ('abierto' | 'respondido'),
+    //  reply (respuesta del admin; ausente o vacía mientras el
+    //  mensaje está 'abierto'), replyAt (fecha de la respuesta, la
+    //  escribe el admin al responder).
+    //  El usuario escribe en una ventanita dentro de la app (ya NO abre
+    //  WhatsApp directo); sin internet el mensaje se guarda en local y se
+    //  envía al volver la conexión. La app de admin tiene una bandeja de
+    //  Soporte para leer y responder; la respuesta la ve el usuario en su
+    //  ventanita. Es el mismo patrón que 'reports' (autor + estado que
+    //  solo tocan los admins), pero con respuesta visible para el autor.
+    // -------------------------------------------------------------------------
+    match /support_messages/{messageId} {
+
+      // LECTURA: solo los admins y el propio autor. Un usuario NO puede
+      // leer los mensajes de Soporte de otros usuarios (ni siquiera
+      // sabiendo el id del documento: una lectura directa también exige
+      // ser el autor o admin). Los admins ven toda la bandeja.
+      allow read: if isAdmin()
+        || (isSignedIn() && resource.data.authorUid == request.auth.uid);
+
+      // CREAR: solo un usuario autenticado, como autor de su propio
+      // mensaje: authorUid tiene que ser su uid, el estado inicial tiene
+      // que ser 'abierto', message tiene que ser un texto no vacío y
+      // username, un texto. El usuario NO puede crear un mensaje ya
+      // con respuesta: 'reply' no puede venir en la creación (la
+      // respuesta solo la escribe un admin después, con 'update').
+      allow create: if isSignedIn()
+        && request.resource.data.authorUid == request.auth.uid
+        && request.resource.data.status == 'abierto'
+        && request.resource.data.message is string
+        && request.resource.data.message.size() > 0
+        && request.resource.data.username is string
+        && !('reply' in request.resource.data);
+
+      // ACTUALIZAR: SOLO los admins, y SOLO los campos de respuesta y
+      // estado ('reply', 'status', 'replyAt'). Ningún otro campo
+      // (autor, nombre, mensaje, fecha de envío) se puede tocar después
+      // de creado: si un admin intenta cambiar algo más, la escritura se
+      // rechaza. El usuario NO puede editar su propio mensaje una vez
+      // enviado ni cambiar el estado (ni marcarlo 'respondido' él mismo,
+      // ni reabrirlo). Si el estado pasa a 'respondido', tiene que haber
+      // una respuesta de texto ('reply' presente y string); un
+      // mensaje 'abierto' puede no tenerla todavía.
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reply', 'replyAt'])
+        && request.resource.data.status in ['abierto', 'respondido']
+        && (request.resource.data.status != 'respondido'
+          || ('reply' in request.resource.data
+            && request.resource.data.reply is string
+            && request.resource.data.reply.size() > 0));
+
+      // BORRAR: nadie desde un cliente. Los mensajes de Soporte se
+      // conservan como historial (cerrados quedan con status
+      // 'respondido'); si hay que borrar uno, se hace a mano desde la
+      // consola de Firebase.
+      allow delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    //  Colección 'announcements' — anuncios para todos los usuarios.
+    //  Campos: title, body (texto), createdAt (fecha).
+    // -------------------------------------------------------------------------
+    match /announcements/{announcementId} {
+
+      // LECTURA PÚBLICA: la app principal los muestra a todos sin sesión.
+      allow read: if true;
+
+      // ESCRITURA: solo administradores (el dueño incluido).
+      allow create, update, delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    //  Colección 'groups' — grupos de estudio. Campos: name, inviteCode
+    //  (código de invitación), members (lista de uid), creatorUid (uid del
+    //  creador).
+    //  ------------------------------------------------------------------
+    //  CÓMO SE ENTRA CON EL CÓDIGO (leer antes de programar la app):
+    //  la lectura es SOLO para miembros, así que alguien que todavía no es
+    //  miembro NO puede buscar el grupo por su código (una consulta por
+    //  inviteCode fallaría: las reglas no pueden comparar el código que
+    //  el usuario escribe con el del documento). Por eso el DOCUMENTO
+    //  TIENE QUE SER LOCALIZABLE SIN BUSCAR: la app debe usar el propio
+    //  código de invitación como id del documento (o compartir el id del
+    //  documento junto con el código). Quien conoce el código puede unirse;
+    //  el código ES la llave, como el enlace de un grupo de WhatsApp: no
+    //  hay verificación del código en el servidor. La app debe comprobar
+    //  en local que el código escrito coincide con inviteCode antes de
+    //  intentar unirse, y si algún día hace falta una unión verificada en
+    //  servidor, hará falta una Cloud Function (no existe en esta ronda;
+    //  plan Spark: las funciones no están incluidas en el plan gratuito).
+    // -------------------------------------------------------------------------
+    match /groups/{groupId} {
+
+      // LECTURA: solo los miembros del grupo. Nadie más puede ver ni el
+      // nombre, ni los miembros, ni el código de invitación.
+      allow read: if isSignedIn()
+        && request.auth.uid in resource.data.members;
+
+      // CREAR: el creador es quien crea el grupo y su único miembro
+      // inicial; creatorUid tiene que ser su uid, y name e inviteCode,
+      // texto.
+      allow create: if isSignedIn()
+        && request.resource.data.creatorUid == request.auth.uid
+        && request.resource.data.members == [request.auth.uid]
+        && request.resource.data.name is string
+        && request.resource.data.inviteCode is string;
+
+      // ACTUALIZAR: el creador (creatorUid) NUNCA cambia. Tres casos:
+      //   1. El CREADOR edita nombre, código o miembros, y sigue siendo
+      //      miembro (puede añadir o quitar a otros, no quitarse a sí mismo).
+      //   2. UNIRSE: quien NO era miembro se añade SOLO a sí mismo a
+      //      members, sin tocar ningún otro campo. Así entra con el código.
+      //   3. SALIRSE: un miembro se quita SOLO a sí mismo de members, sin
+      //      tocar ningún otro campo.
+      // Un miembro que no es creador NO puede editar el nombre, el código
+      // ni a otros miembros, y nadie puede cambiar el creador del grupo.
+      allow update: if isSignedIn()
+        && request.resource.data.creatorUid == resource.data.creatorUid
+        && ((resource.data.creatorUid == request.auth.uid
+            && request.auth.uid in request.resource.data.members)
+          || (!(request.auth.uid in resource.data.members)
+            && request.auth.uid in request.resource.data.members
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members'])
+            && request.resource.data.members.hasAll(resource.data.members)
+            && request.resource.data.members.size() == resource.data.members.size() + 1)
+          || ((request.auth.uid in resource.data.members)
+            && !(request.auth.uid in request.resource.data.members)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members'])
+            && resource.data.members.hasAll(request.resource.data.members)
+            && request.resource.data.members.size() == resource.data.members.size() - 1));
+
+      // BORRAR: solo el creador del grupo.
+      allow delete: if isSignedIn()
+        && resource.data.creatorUid == request.auth.uid;
+    }
+
+    // -------------------------------------------------------------------------
+    //  Colección 'friends' — lista de amigos por usuario. Un documento
+    //  por usuario, con el mismo id que su uid. Campos: friends (lista
+    //  de uid o de usernames de los amigos).
+    //  NOTA: 'friends' también está en la lista blanca de 'users' (por si
+    //  la app lo guarda en el documento de usuario), pero ESO ES PÚBLICO
+    //  (la lectura de 'users' es pública por la tabla de posiciones). Si
+    //  la lista de amigos debe ser privada, hay que guardarla SOLO aquí,
+    //  nunca en el documento de 'users'.
+    // -------------------------------------------------------------------------
+    match /friends/{uid} {
+
+      // LECTURA y ESCRITURA: solo el propio usuario (uid de la sesión
+      // igual al id del documento). Nadie más ve ni toca la lista de
+      // amigos de otro. friends tiene que ser una lista.
+      allow read: if isSignedIn() && request.auth.uid == uid;
+
+      allow create, update: if isSignedIn() && request.auth.uid == uid
+        && request.resource.data.friends is list;
+
+      // BORRAR: nadie desde un cliente; vaciar la lista se hace con una
+      // actualización (friends: []).
+      allow delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    //  Colección 'friend_requests' — solicitudes de amistad (ronda 2d).
+    //  Campos: senderUid, senderUsername, receiverUid, receiverUsername,
+    //  status ('pendiente' | 'aceptada' | 'rechazada'), createdAtMs.
+    //  La amistad confirmada vive en la 'friends' de cada usuario (ver
+    //  'users'); la solicitud 'aceptada' es además la prueba de que los
+    //  dos son amigos aunque la escritura espejo aún no haya llegado.
+    // -------------------------------------------------------------------------
+    match /friend_requests/{requestId} {
+
+      // LECTURA: solo el remitente y el destinatario. Nadie más ve
+      // quién le pidió amistad a quién.
+      allow read: if isSignedIn()
+        && (request.auth.uid == resource.data.senderUid
+          || request.auth.uid == resource.data.receiverUid);
+
+      // CREAR: solo el remitente, con su propio uid como senderUid,
+      // estado inicial 'pendiente', y sin poder pedirse amistad a
+      // sí mismo. Solo los 6 campos del contrato.
+      allow create: if isSignedIn()
+        && request.auth.uid == request.resource.data.senderUid
+        && request.resource.data.keys().hasOnly(['senderUid',
+            'senderUsername', 'receiverUid', 'receiverUsername',
+            'status', 'createdAtMs'])
+        && request.resource.data.senderUid is string
+        && request.resource.data.senderUsername is string
+        && request.resource.data.receiverUid is string
+        && request.resource.data.receiverUsername is string
+        && request.resource.data.status == 'pendiente'
+        && request.resource.data.createdAtMs is int
+        && request.resource.data.senderUid
+            != request.resource.data.receiverUid;
+
+      // ACTUALIZAR: solo cambia el estado, nada más.
+      //   - El destinatario confirma ('aceptada') o elimina
+      //     ('rechazada') la solicitud que le llegó.
+      //   - El remitente cancela la suya ('rechazada').
+      // Nadie más cambia nada: ni el remitente puede aceptarse
+      // solo, ni el destinatario puede cambiar quién la envió.
+      allow update: if isSignedIn()
+        && request.resource.data.diff(resource.data)
+            .affectedKeys().hasOnly(['status'])
+        && ((request.auth.uid == resource.data.receiverUid
+            && request.resource.data.status in ['aceptada', 'rechazada'])
+          || (request.auth.uid == resource.data.senderUid
+            && request.resource.data.status == 'rechazada'));
+
+      // BORRAR: nadie desde un cliente. Rechazar o cancelar es un
+      // cambio de estado ('rechazada'), nunca un borrado: la
+      // solicitud queda guardada pero ya no se muestra.
+      allow delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    //  Colección 'levels' — contenido remoto de preguntas (editor de
+    //  contenido de la app de admin). Campos: text (texto de la pregunta),
+    //  options (opciones), answer (respuesta correcta), difficulty
+    //  (dificultad), level (nivel al que pertenece).
+    //  El contenido remoto lo escriben los admins desde la app de admin o
+    //  desde la consola; la app principal solo lo lee y siempre guarda una
+    //  copia local, así que sin internet sigue funcionando con el contenido
+    //  incluido en la app.
+    // -------------------------------------------------------------------------
+    match /levels/{levelId} {
+
+      // LECTURA PÚBLICA: la app principal lee las preguntas remotas sin
+      // sesión. Son contenido de estudio, nada personal.
+      allow read: if true;
+
+      // ESCRITURA: solo administradores (el dueño incluido).
+      allow create, update, delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    //  Todo lo demás: denegado por defecto. Cualquier colección o documento
+    //  que no esté en el contrato (users, admins, settings/app, duels,
+    //  tournaments, reports, announcements, groups, friends, friend_requests,
+    //  levels, support_messages) no se puede leer ni escribir desde ningún cliente.
+    //  HUECO FUTURO: el modelo admite ampliaciones (p. ej. más colecciones
+    //  de la 7.0 o de versiones posteriores), pero cada colección nueva
+    //  tiene que añadirse aquí con su propio bloque 'match' y volver a
+    //  publicarse: hasta entonces, la denegación por defecto la bloquea.
+    //  No se inventa ninguna colección más en esta ronda: 'tournaments'
+    //  ya está cubierto arriba, y el resto de ideas (duelos, grupos,
+    //  reportes, anuncios, amigos, niveles remotos) también.
+    // -------------------------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
+// ============================================================================
+//  NOTA IMPORTANTE — leer antes de publicar estas reglas
+//  ----------------------------------------------------------------------------
+//  1. QUIÉN LAS APLICA: estas reglas NO se aplican solas ni las aplica ningún
+//     agente desde el código. Las aplica el agente principal a mano en la
+//     consola de Firebase → Firestore Database → pestaña "Reglas" → pegar el
+//     contenido de este archivo → "Publicar". Hasta que no se publiquen, la
+//     base de datos sigue con las reglas que tenga ahora (modo producción:
+//     denegado por defecto).
+//
+//  2. LECTURA PÚBLICA DE 'users' ES INTENCIONADA: la tabla de posiciones de la
+//     app principal necesita leer el progreso de todos los usuarios que
+//     aceptaron compartirlo, y por eso 'users' se lee sin sesión. Esto es
+//     seguro porque:
+//     a) en Firestore solo existen los datos de quienes dieron permiso
+//        explícito en la app (nadie se sube sin aceptar);
+//     b) los campos son solo progreso de estudio: nombre, puntos, niveles,
+//        racha, fecha de registro. Nunca hay correo, teléfono, ubicación ni
+//        contraseñas en esta colección.
+//     A diferencia de la primera versión de estas reglas, la app principal YA
+//     usa Firebase Auth anónimo (el usuario inicia sesión anónima al abrir y
+//     su uid es el id de su documento), así que la ESCRITURA sí está
+//     protegida por identidad (ver punto 3). Solo la LECTURA sigue siendo
+//     pública, a propósito, por la tabla de posiciones: restringirla haría
+//     falta solo si algún día la tabla dejara de ser pública.
+//
+//  3. ESCRITURA DE 'users' CON IDENTIDAD: cada escritura exige sesión
+//     (anónima o con Google enlazado) y que el uid de la sesión sea igual al
+//     id del documento (request.auth.uid == uid). Nadie puede escribir en el
+//     documento de otro usuario, y el propio usuario nunca puede escribir
+//     'banned' ni 'bannedReason' (solo los admins). Lo que un atacante SÍ
+//     puede hacer es crear su propia cuenta anónima e inventar su propio
+//     progreso (puntos inflados); eso se detecta en la app de admin y se
+//     corrige vetando (banned = true). La lectura pública no permite
+//     modificar nada.
+//
+//  4. EL DUEÑO SE IDENTIFICA POR SU CORREO: pozogomezkristian19@gmail.com.
+//     Si algún día cambia la cuenta de Google del dueño, hay que cambiar
+//     también la función isOwner() de este archivo y volver a publicar.
+//
+//  5. NOVEDADES 7.0 Y SUS LÍMITES (ver FIREBASE_SETUP.md para el detalle):
+//     a) 'duels': solo los 2 participantes leen/escriben; participants y
+//        questions son inmutables. Lo que las reglas NO pueden impedir es
+//        que un participante infle sus propios tiempos/respuestas en su
+//        duelo: eso se detecta en la app de admin.
+//     b) 'groups': unirse con el código solo funciona si la app usa el
+//        código como id del documento (o comparte el id con el código),
+//        porque la lectura es solo para miembros y no se puede buscar por
+//        código. El código es la única llave: quien lo conoce puede unirse.
+//     c) 'reports': el autor es authorUid (tiene que ser el uid de la
+//        sesión); los admins solo cambian 'status'.
+//     d) 'users' sigue siendo de lectura pública: los campos nuevos
+//        'purchases' y 'friends' también se pueden leer públicamente.
+//        'purchases' debe guardar SOLO ids de artículos (nunca precios ni
+//        datos de pago); la lista de amigos privada vive SOLO en la
+//        colección 'friends', nunca en el documento de 'users'.
+//     e) 'tournaments', 'announcements' y 'levels' son de lectura pública
+//        y escritura solo de admins; los torneos reales los crea el agente
+//        principal desde Firebase (consola/Admin SDK), no la app.
+//     f) 'support_messages': el autor es authorUid (tiene que ser el uid
+//        de la sesión) y el estado inicial es 'abierto'; solo el autor
+//        y los admins leen cada mensaje, y SOLO los admins responden
+//        ('reply' + 'replyAt' + status 'respondido'). El usuario nunca
+//        edita su mensaje ni cambia el estado. Borrado prohibido.
+//     g) 'settings/app' suma 'supportNumber' y 'showWhatsApp' (Soporte);
+//        sus reglas NO cambian: lectura pública, escritura solo admins.
+// ============================================================================

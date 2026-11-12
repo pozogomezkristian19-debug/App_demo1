@@ -2,6 +2,9 @@ plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+    // Ronda fix8 (analítica Firebase): el plugin de Google Services
+    // lee google-services.json (proyecto quemia-8410a).
+    id("com.google.gms.google-services")
 }
 
 android {
