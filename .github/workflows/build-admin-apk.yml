@@ -79,6 +79,21 @@ jobs:
           # android/app/google-services.json; nada que restaurar aquí.
           ls -la android/app/google-services.json
 
+      - name: Restore release keystore
+        run: |
+          if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > quemia-admin/android/app/quemia-release.keystore
+            cat > quemia-admin/android/key.properties <<'PROPEOF'
+            storePassword=${{ secrets.KEYSTORE_PASSWORD }}
+            keyPassword=${{ secrets.KEY_PASSWORD }}
+            keyAlias=${{ secrets.KEY_ALIAS }}
+            storeFile=quemia-release.keystore
+            PROPEOF
+            echo "Keystore release restaurado (firma permanente Quemia)"
+          else
+            echo "Sin secreto ANDROID_KEYSTORE_BASE64: se firmara con claves debug"
+          fi
+
       - name: Install dependencies
         run: flutter pub get
         working-directory: quemia-admin
