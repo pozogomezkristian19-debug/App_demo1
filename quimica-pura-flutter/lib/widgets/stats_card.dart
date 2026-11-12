@@ -64,6 +64,13 @@ class StatsCard extends StatelessWidget {
     const valueStyle = TextStyle(fontSize: 16, fontWeight: FontWeight.bold);
     return Card(
       margin: EdgeInsets.zero,
+      // Tarjeta con vida: radio 16 + sombra suave tintada teal
+      // (antes plana, radio 4 por defecto y sin sombra).
+      elevation: 2,
+      shadowColor: const Color(0xFF00C2A8).withValues(alpha: 0.2),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
         child: Row(

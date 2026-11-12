@@ -113,12 +113,16 @@ String sup(int n) {
 // ---------------------------------------------------------------------------
 
 const Map<String, double> _atomicMass = {
-  'H': 1.008,
-  'C': 12.011,
-  'N': 14.007,
-  'O': 15.999,
+  // Valores de libro con 2 decimales: el cálculo tiene que coincidir
+  // con los datos que se muestran ("Datos: H = 1,01...") — con 3
+  // decimales la suma de los datos mostrados difería 0,01 g/mol de
+  // la respuesta (7.0: Al₂(SO₄)₃, H₂SO₄, Ca(OH)₂, C₆H₁₂O₆, CH₄, NH₃).
+  'H': 1.01,
+  'C': 12.01,
+  'N': 14.01,
+  'O': 16.0,
   'Na': 22.99,
-  'Mg': 24.305,
+  'Mg': 24.31,
   'Al': 26.98,
   'S': 32.06,
   'Cl': 35.45,
@@ -516,8 +520,10 @@ GeneratedQuestion generateDilution(Random rng) {
     final v2 = (5 + rng.nextInt(36)) * 50.0; // 250 a 2000 mL
     return buildDilution('c2', c1, v1, v2);
   }
-  final c1 = (5 + rng.nextInt(56)) * 0.1;
-  final c2 = (1 + rng.nextInt(20)) * 0.1; // 0.10 a 2.00 M
+  // 'v1': al diluir, C2 SIEMPRE es menor que C1 (7.0: antes C2 podía
+  // superar a C1 y pedía V1 > V2, o sea concentrar al diluir, imposible).
+  final c1 = (10 + rng.nextInt(51)) * 0.1; // 1.00 a 6.00 M
+  final c2 = (1 + rng.nextInt(9)) * 0.1; // 0.10 a 0.90 M, siempre < C1
   final v2 = (5 + rng.nextInt(36)) * 50.0;
   return buildDilution('v1', c1, c2, v2);
 }
@@ -953,11 +959,18 @@ GeneratedQuestion buildPeriodic(String form, String symbol) {
   late final String explanation;
   if (form == 'z') {
     question = gt('periodicZQ', {'name': genElementName(e.atomicNumber, e.name)});
+    // (7.0): los distractores tienen que ser números atómicos reales
+    // (1–118): Z−1 era 0 para el hidrógeno y Z+1/Z+10 se pasaban de
+    // 118 para el oganesón. Se rodean dentro del rango válido.
+    final z = e.atomicNumber;
+    final plus1 = z + 1 <= 118 ? z + 1 : z - 2;
+    final minus1 = z - 1 >= 1 ? z - 1 : z + 2;
+    final plus10 = z + 10 <= 118 ? z + 10 : z - 10;
     candidates = [
-      e.atomicNumber.toString(),
-      (e.atomicNumber + 1).toString(),
-      (e.atomicNumber - 1).toString(),
-      (e.atomicNumber + 10).toString(),
+      z.toString(),
+      plus1.toString(),
+      minus1.toString(),
+      plus10.toString(),
     ];
     explanation =
         gt('periodicZE', {'name': genElementName(e.atomicNumber, e.name), 'z': '${e.atomicNumber}'});

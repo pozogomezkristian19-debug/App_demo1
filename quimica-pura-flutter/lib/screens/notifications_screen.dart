@@ -25,6 +25,7 @@ import '../services/localization.dart';
 import '../services/notification_inbox.dart';
 import '../services/notification_service.dart';
 import '../services/update_check.dart';
+import '../widgets/duo_button.dart';
 import '../widgets/lucide_icons.dart';
 import '../widgets/notification_settings_dialog.dart';
 
@@ -117,6 +118,15 @@ class _NotificationsScreenState extends State<NotificationsScreen>
       case InboxKind.streak:
         // La racha se salva practicando: volver a Niveles.
         Navigator.of(context).pop();
+      case InboxKind.support:
+        // Respuesta del admin a un mensaje de soporte: solo se
+        // marca como leída (la charla vive en Soporte, B la abre
+        // desde Cuenta o el drawer).
+        break;
+      case InboxKind.friendRequest:
+        // Solicitud de amistad: se confirma o se elimina en Amigos.
+        Navigator.of(context).pop();
+        widget.onOpenScreen('friends');
     }
   }
 
@@ -131,7 +141,15 @@ class _NotificationsScreenState extends State<NotificationsScreen>
             padding: const EdgeInsets.all(16),
             children: [
               if (!_notifEnabled) ...[
-                Card(
+                // Diseño Duolingo §3.15: fila plana con borde 2 pt
+                // #E5E5E5 y radio 16, sin tarjeta con sombra.
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border:
+                        Border.all(color: const Color(0xFFE5E5E5), width: 2),
+                  ),
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
@@ -140,16 +158,23 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                         Text(
                           tr('notifSettingsTitle'),
                           style: const TextStyle(
-                              fontSize: 17, fontWeight: FontWeight.bold),
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF4B4B4B)),
                         ),
                         const SizedBox(height: 6),
-                        Text(tr('notifSettingsBody')),
+                        Text(tr('notifSettingsBody'),
+                            style: const TextStyle(
+                                fontSize: 16, color: Color(0xFF4B4B4B))),
                         const SizedBox(height: 12),
-                        FilledButton.icon(
-                          onPressed: _enableNotifications,
-                          icon: const LucideIcon(LucideIcons.bell,
-                              size: 20, threeD: true),
-                          label: Text(tr('inboxEnableButton')),
+                        SizedBox(
+                          width: double.infinity,
+                          child: DuoButton.primary(
+                            label: tr('inboxEnableButton').toUpperCase(),
+                            onPressed: _enableNotifications,
+                            icon: LucideIcons.bell,
+                            fontSize: 17,
+                          ),
                         ),
                       ],
                     ),
@@ -170,20 +195,25 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                 )
               else
                 for (final entry in entries)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: _EntryTile(
-                      entry: entry,
-                      onTap: () => _openEntry(entry),
-                    ),
+                  _EntryTile(
+                    entry: entry,
+                    onTap: () => _openEntry(entry),
                   ),
               const SizedBox(height: 8),
+              // Fila plana de acceso a Recordatorios (antes una
+              // tarjeta con sombra): sin tarjeta, con línea #E5E5E5.
+              const Divider(height: 1, thickness: 1, color: Color(0xFFE5E5E5)),
               ListTile(
                 key: const Key('inboxOpenReminders'),
-                leading: const LucideIcon(LucideIcons.bellRing,
-                    size: 24, threeD: true),
-                title: Text(tr('inboxOpenReminders')),
-                trailing: const Icon(Icons.chevron_right),
+                contentPadding: EdgeInsets.zero,
+                leading: const LucideIcon(LucideIcons.bellRing, size: 24),
+                title: Text(tr('inboxOpenReminders'),
+                    style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF4B4B4B))),
+                trailing:
+                    const Icon(Icons.chevron_right, color: Color(0xFFAFAFAF)),
                 onTap: () => widget.onOpenScreen('reminder'),
               ),
             ],
@@ -194,13 +224,11 @@ class _NotificationsScreenState extends State<NotificationsScreen>
   }
 }
 
-/// Una entrada de la bandeja (fix4, punto 10, rediseño): tarjeta
-/// grande y tintada según el tipo (actualización = tinte teal,
-/// recordatorio = tinte ámbar, logro = tinte violeta, racha = tinte
-/// naranja), esquinas de 18, icono 3D en su círculo tintado, flecha
-/// a la derecha y hora en gris pequeño. Sin leer: título en negrita,
-/// tinte más fuerte y puntito del color del tipo; leída: atenuada
-/// (tinte suave, título normal, cuerpo más apagado).
+/// Una entrada de la bandeja (diseño Duolingo §3.15): fila plana,
+/// sin tarjeta y sin sombra — icono en su círculo tintado, flecha
+/// a la derecha y hora en gris pequeño, separada por una línea
+/// #E5E5E5. Sin leer: título en negrita y puntito del color del
+/// tipo; leída: atenuada (título normal, cuerpo más apagado).
 class _EntryTile extends StatelessWidget {
   const _EntryTile({required this.entry, required this.onTap});
 
@@ -215,98 +243,99 @@ class _EntryTile extends StatelessWidget {
       InboxKind.reminder => (LucideIcons.bell, const Color(0xFFF59E0B)),
       InboxKind.achievement => (LucideIcons.trophy, const Color(0xFF8B5CF6)),
       InboxKind.streak => (LucideIcons.flame, const Color(0xFFF97316)),
+      InboxKind.support => (LucideIcons.messageCircle, const Color(0xFF00C2A8)),
+      InboxKind.friendRequest => (
+          LucideIcons.userRound,
+          const Color(0xFF00C2A8)
+        ),
     };
     final unread = !entry.read;
-    return Container(
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: unread ? 0.16 : 0.07),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: color.withValues(alpha: unread ? 0.35 : 0.15),
-        ),
-      ),
-      child: Material(
-        type: MaterialType.transparency,
-        borderRadius: BorderRadius.circular(18),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.18),
-                    shape: BoxShape.circle,
+    return Column(
+      children: [
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.18),
+                      shape: BoxShape.circle,
+                    ),
+                    child: LucideIcon(icon, size: 24, color: color),
                   ),
-                  child: LucideIcon(icon, size: 24, color: color, threeD: true),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        entry.title,
-                        style: TextStyle(
-                          fontWeight:
-                              unread ? FontWeight.w700 : FontWeight.w500,
-                          color: scheme.onSurface,
-                        ),
-                      ),
-                      if (entry.body.isNotEmpty) ...[
-                        const SizedBox(height: 2),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                         Text(
-                          entry.body,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                          entry.title,
                           style: TextStyle(
-                            color: scheme.onSurface
-                                .withValues(alpha: unread ? 0.85 : 0.65),
+                            fontSize: 16,
+                            fontWeight:
+                                unread ? FontWeight.w700 : FontWeight.w500,
+                            color: const Color(0xFF4B4B4B),
+                          ),
+                        ),
+                        if (entry.body.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            entry.body,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 15,
+                              color: scheme.onSurface
+                                  .withValues(alpha: unread ? 0.85 : 0.65),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 4),
+                        Text(
+                          _formatTime(entry.createdAt),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: scheme.onSurfaceVariant,
                           ),
                         ),
                       ],
-                      const SizedBox(height: 4),
-                      Text(
-                        _formatTime(entry.createdAt),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Column(
+                    children: [
+                      if (unread)
+                        Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: color,
+                            shape: BoxShape.circle,
+                          ),
                         ),
+                      if (unread) const SizedBox(height: 10),
+                      Icon(
+                        Icons.chevron_right,
+                        size: 20,
+                        color: scheme.onSurfaceVariant,
                       ),
                     ],
                   ),
-                ),
-                const SizedBox(width: 8),
-                Column(
-                  children: [
-                    if (unread)
-                      Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: color,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    if (unread) const SizedBox(height: 10),
-                    Icon(
-                      Icons.chevron_right,
-                      size: 20,
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ],
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
-      ),
+        const Divider(height: 1, thickness: 1, color: Color(0xFFE5E5E5)),
+      ],
     );
   }
 }

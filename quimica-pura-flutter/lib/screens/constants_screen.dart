@@ -134,7 +134,12 @@ class _ConstantsScreenState extends State<ConstantsScreen> {
             children: [
               for (var i = 0; i < _categories.length; i++)
                 ChoiceChip(
-                  label: Text(_categories[i].name),
+                  label: Text(_categories[i].name,
+                      style: TextStyle(
+                          color: !_temperature && _catIndex == i
+                              ? Colors.white
+                              : const Color(0xFF1F2937),
+                          fontWeight: FontWeight.w700)),
                   selected: !_temperature && _catIndex == i,
                   onSelected: (_) => setState(() {
                     _temperature = false;
@@ -143,14 +148,49 @@ class _ConstantsScreenState extends State<ConstantsScreen> {
                     _to = _categories[i].units.last.$1;
                     _result = null;
                   }),
+                  // Píldora 3D (ronda de diseño 7.0): teal + texto
+                  // blanco + sombra tintada al seleccionar; blanco
+                  // con sombra suave y borde gris claro sin
+                  // seleccionar. Se mantiene ChoiceChip.
+                  selectedColor: const Color(0xFF00C2A8),
+                  backgroundColor: Colors.white,
+                  elevation: 3,
+                  shadowColor:
+                      const Color(0xFF00C2A8).withValues(alpha: 0.35),
+                  selectedShadowColor:
+                      const Color(0xFF00C2A8).withValues(alpha: 0.45),
+                  checkmarkColor: Colors.white,
+                  side: BorderSide(
+                      color: !_temperature && _catIndex == i
+                          ? const Color(0xFF00A18D)
+                          : const Color(0xFFE8E8E8)),
+                  shape: const StadiumBorder(),
                 ),
               ChoiceChip(
-                label: const Text('Temperatura'),
+                label: Text('Temperatura',
+                    style: TextStyle(
+                        color: _temperature
+                            ? Colors.white
+                            : const Color(0xFF1F2937),
+                        fontWeight: FontWeight.w700)),
                 selected: _temperature,
                 onSelected: (_) => setState(() {
                   _temperature = true;
                   _result = null;
                 }),
+                selectedColor: const Color(0xFF00C2A8),
+                backgroundColor: Colors.white,
+                elevation: 3,
+                shadowColor:
+                    const Color(0xFF00C2A8).withValues(alpha: 0.35),
+                selectedShadowColor:
+                    const Color(0xFF00C2A8).withValues(alpha: 0.45),
+                checkmarkColor: Colors.white,
+                side: BorderSide(
+                    color: _temperature
+                        ? const Color(0xFF00A18D)
+                        : const Color(0xFFE8E8E8)),
+                shape: const StadiumBorder(),
               ),
             ],
           ),
@@ -234,6 +274,11 @@ class _ConstantsScreenState extends State<ConstantsScreen> {
           if (_result != null) ...[
             const SizedBox(height: 16),
             Card(
+              elevation: 4,
+              shadowColor: Theme.of(context)
+                  .colorScheme
+                  .primary
+                  .withValues(alpha: 0.30),
               color: Theme.of(context)
                   .colorScheme
                   .primary

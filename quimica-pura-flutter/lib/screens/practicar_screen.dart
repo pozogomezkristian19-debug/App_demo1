@@ -1,3 +1,4 @@
+import '../widgets/duo_button.dart';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../widgets/lucide_icons.dart';
@@ -16,6 +17,8 @@ import '../services/sound_service.dart';
 import '../services/user_prefs.dart';
 import '../widgets/brand_logo.dart';
 import '../widgets/celebration.dart';
+import '../widgets/report_question.dart';
+import '../widgets/simple_quiz.dart';
 import '../screens/calculator_screen.dart';
 import '../widgets/twin_avatars.dart';
 
@@ -88,43 +91,30 @@ const List<String> bachTopics = [
 
 // ---- Camino de niveles (estilo Duolingo / Candy Crush) ----
 
-// Alturas fijas del camino: el pintor del sendero y las filas usan las
-// mismas, así la línea pasa justo por el centro de cada nodo.
-const double _headerH = 76.0;
+// Alturas fijas del camino: las filas usan las mismas, así el
+// camino queda centrado en cada nodo.
+const double _headerH = 140.0; // banner de unidad Duolingo (§3.2.4)
 const double _rowH = 100.0;
 // Aire entre el cartel del tema y el primer nodo (fix4, punto 13
 // REVISADO y retoque del halo): la bolita del nivel 1 chocaba con
 // el cartel; con 28 px el halo del nodo actual queda a 26 px del
 // cartel en reposo y a ~21 px en su pulso máximo, y la bolita a 32.
 const double _pathTopGap = 28.0;
-const double _nodeSize = 64.0;
-const double _nodeCenterY = 36.0; // centro del nodo dentro de su fila
+// Nodo Duolingo (§3.2.1): 80 dp, cara sólida teal + labio 4 px.
+const double _nodeSize = 80.0;
+const double _nodeCenterY = 50.0; // centro del nodo dentro de su fila
 
 // Desplazamiento horizontal de cada nodo (px desde el centro): el camino
 // serpentea izquierda-centro-derecha, como en Duolingo.
 const List<double> _pathOffsets = [0, -52, -78, -52, 0, 52, 78, 52];
 
-const Map<String, LucideIconData> _topicIcons = {
-  'estequiometria': LucideIcons.sigma,
-  'gases': LucideIcons.wind,
-  'disoluciones': LucideIcons.droplet,
-  'acido-base': LucideIcons.flaskConical,
-  'equilibrio': LucideIcons.scale,
-  'termo-cinetica': LucideIcons.thermometer,
-  'tabla': LucideIcons.layoutGrid,
-  'enlace': LucideIcons.link,
-  'organica': LucideIcons.hexagon,
-  'laboratorio': LucideIcons.dna,
-  'bach-estequiometria': LucideIcons.sigma,
-  'bach-gases': LucideIcons.wind,
-  'bach-disoluciones': LucideIcons.droplet,
-  'bach-acido-base': LucideIcons.flaskConical,
-};
+
 
 // Rediseño claro estilo Duolingo (color propio, teal de Melli-Qui):
 // el camino, sus nodos y las cabeceras de tema usan todos el mismo
-// teal de la marca; no hay un color distinto por tema. El icono de
-// cada tema sigue distinto (ver _topicIcons).
+// teal de la marca; no hay un color distinto por tema. (El mapa de
+// iconos por tema se quitó en el rediseño: el banner lleva la
+// mascota ilustrada en lugar del círculo con el símbolo del tema.)
 
 String bankId(QuizQuestion q) => 'bank:${q.topic}:${q.question}';
 
@@ -254,30 +244,6 @@ class _PracticarScreenState extends State<PracticarScreen> {
       }
     }
     return null;
-  }
-
-  int _totalLevelCount() {
-    var total = 0;
-    for (final topic in _byTopic.keys) {
-      total += _levelCount(topic);
-    }
-    return total;
-  }
-
-  int _passedLevelCount() {
-    final progress = ProgressService.instance;
-    var passed = 0;
-    for (final topic in _byTopic.keys) {
-      for (var level = 1; level <= _levelCount(topic); level++) {
-        // Pasado = desbloqueado el siguiente (fix5, punto 13): con la
-        // regla por conteo, un 4/5 puede guardar 73-80 % de nota y la
-        // nota ya no dice si se pasó; unlockedLevel sí, siempre.
-        if (progress.unlockedLevel(topic) > level) {
-          passed++;
-        }
-      }
-    }
-    return passed;
   }
 
   /// Desplaza el camino hasta el nodo actual (o al trofeo final si ya
@@ -651,8 +617,6 @@ class _PracticarScreenState extends State<PracticarScreen> {
     final mixedUnlocked = _mixedUnlocked();
     final level1Done = topics.length - _missingLevel1Topics().length;
     final current = _firstUnpassed();
-    final passedCount = _passedLevelCount();
-    final totalCount = _totalLevelCount();
     if (!_scrolledToCurrent) {
       _scrolledToCurrent = true;
       WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToCurrent());
@@ -702,38 +666,14 @@ class _PracticarScreenState extends State<PracticarScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Cabecera compacta (fix2, item 3): título + progreso en
-          // una sola fila, sin el párrafo de introducción. El
-          // camino va justo debajo (fix5, punto 2): al abrir
-          // Niveles lo primero que se ve es el primer tema con su
-          // nodo 1, sin deslizar. Los dos textos son flexibles con
-          // puntos suspensivos (auditoría): sin eso, en otro idioma
-          // o con fuente grande se desbordaba la fila 42 px a la
-          // derecha.
-          Row(
-            children: [
-              Flexible(
-                child: Text(tr('levelsTitle'),
-                    style: const TextStyle(
-                        fontSize: 20, fontWeight: FontWeight.bold),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
-              ),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  '${tr('passedWord')}: $passedCount / $totalCount',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.right,
-                ),
-              ),
-            ],
-          ),
+          // Cabecera compacta (fix2, item 3): solo el título, sin
+          // el párrafo de introducción y sin el "Superado: 0 / 55"
+          // (rediseño Duolingo §3.2.5: ese dato vive en Estadísticas
+          // y en el HUD). El camino va justo debajo (fix5, punto 2).
+          Text(tr('levelsTitle'),
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis),
           const SizedBox(height: 10),
           // El recordatorio ("es hora de practicar") sigue aquí arriba
           // cuando toca; la tarjeta de estadísticas (vidas/puntos/
@@ -751,8 +691,17 @@ class _PracticarScreenState extends State<PracticarScreen> {
           topicSection(0),
           const SizedBox(height: 20),
           // Repaso inteligente: errores de días anteriores que resurgen.
+          // Tarjeta 3D (ronda de diseño 7.0): sombra suave tintada y
+          // radio 16 en vez de la Card plana de antes.
           if (progress.dueFailed().isNotEmpty)
             Card(
+              elevation: 3,
+              shadowColor: Theme.of(context)
+                  .colorScheme
+                  .primary
+                  .withValues(alpha: 0.20),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
               child: ListTile(
                 // Icono 3D (fix3, punto 6): ámbar con degradado +
                 // brillito, como el corazón de las vidas.
@@ -775,7 +724,7 @@ class _PracticarScreenState extends State<PracticarScreen> {
           // dos abren el repaso general, sin grupos por nivel).
           // (fix6, ronda #6): Niveles es SOLO el camino. La
           // "Pregunta del día" se eliminó por completo de la app;
-          // "Practicar de otra forma" (Examen con tiempo y Reto)
+          // "Practicar de otra forma" (Examen con tiempo)
           // sigue existiendo y se abre desde la búsqueda.
           // El resto de temas del camino.
           for (var i = 1; i < topics.length; i++) topicSection(i),
@@ -819,66 +768,8 @@ class _PracticarScreenState extends State<PracticarScreen> {
   }
 }
 
-/// Pinta el sendero que une los nodos de una sección: una línea curva
-/// punteada que va SOLO entre los nodos, nunca a través de ellos.
-///
-/// La línea se dibuja primero (está detrás de los nodos) y, además, cada
-/// tramo punteado se recorta para que no entre dentro de ningún círculo:
-/// se conserva un guión solo si su punto medio queda fuera de todos los
-/// círculos (radio del nodo + margen). Así, dentro de cada círculo no hay
-/// línea, ni siquiera en los nodos bloqueados, que son semitransparentes.
-class _PathPainter extends CustomPainter {
-  const _PathPainter({required this.levelCount, required this.color});
-  final int levelCount;
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (levelCount < 2) return;
-    final centers = <Offset>[
-      for (var i = 0; i < levelCount; i++)
-        Offset(size.width / 2 + _pathOffsets[i % _pathOffsets.length],
-            _headerH + _pathTopGap + i * _rowH + _nodeCenterY),
-    ];
-    // Curva suave que pasa por los centros: cada tramo va del punto
-    // anterior al punto medio con el siguiente.
-    final path = Path()..moveTo(centers.first.dx, centers.first.dy);
-    for (var i = 1; i < centers.length; i++) {
-      final prev = centers[i - 1];
-      final curr = centers[i];
-      final mid = Offset((prev.dx + curr.dx) / 2, (prev.dy + curr.dy) / 2);
-      path.quadraticBezierTo(prev.dx, prev.dy, mid.dx, mid.dy);
-    }
-    path.lineTo(centers.last.dx, centers.last.dy);
-    // Línea punteada, solo en los huecos entre nodos.
-    final keepOut = _nodeSize / 2 + 10; // radio del círculo + margen
-    final dashed = Path();
-    for (final metric in path.computeMetrics()) {
-      var distance = 0.0;
-      while (distance < metric.length) {
-        final len = min(12.0, metric.length - distance);
-        final mid = metric.getTangentForOffset(distance + len / 2)?.position;
-        final outside =
-            mid != null && centers.every((c) => (mid - c).distance > keepOut);
-        if (outside) {
-          dashed.addPath(
-              metric.extractPath(distance, distance + len), Offset.zero);
-        }
-        distance += 20.0;
-      }
-    }
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = 5
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-    canvas.drawPath(dashed, paint);
-  }
-
-  @override
-  bool shouldRepaint(_PathPainter old) =>
-      old.levelCount != levelCount || old.color != color;
-}
+// (Rediseño Duolingo §3.2.3: la línea discontinua que conectaba los
+// nodos se borró — el _PathPainter que la pintaba se eliminó.)
 
 /// Una sección del camino: un tema con su cabecera y sus niveles en
 /// camino serpenteante, como una unidad de Duolingo. El camino de cada
@@ -910,7 +801,6 @@ class _TopicPathSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final progress = ProgressService.instance;
-    final scheme = Theme.of(context).colorScheme;
     final unlocked = locked ? 0 : progress.unlockedLevel(topic);
     var best = 0;
     for (var i = 1; i <= levelCount; i++) {
@@ -919,64 +809,40 @@ class _TopicPathSection extends StatelessWidget {
     }
     // Cabecera y camino en el color de acento (fix2, item 12; gris
     // si el tema está bloqueado): todos los temas comparten el color.
+    // Las linecitas punteadas entre nodos volvieron (corrección de
+    // Kristian, 2026-11-11): el camino serpenteante las llevaba en
+    // la 6.3 y el rediseño Duolingo las había quitado.
     return SizedBox(
       height: _headerH + _pathTopGap + levelCount * _rowH,
-      child: Stack(
+      child: Column(
         children: [
-          Positioned.fill(
-            child: CustomPaint(
-              painter: _PathPainter(
-                levelCount: levelCount,
-                color: locked
-                    ? const Color(0xFFD1D5DB)
-                    : scheme.primary.withValues(alpha: 0.35),
-              ),
-            ),
-          ),
-          Column(
-            children: [
               SizedBox(
                 height: _headerH,
                 child: Container(
+                  // Banner de unidad Duolingo (§3.2.4): teal SÓLIDO
+                  // (sin degradado, sin brillo, sin sombra), 140 pt
+                  // de alto, radio 16. Título en MAYÚSCULAS 22 pt
+                  // peso 800 blanco (decisión de Kristian, ronda 3:
+                  // los nombres de tema del camino van en mayúsculas,
+                  // y el subtítulo también); subtítulo 15 pt peso 500
+                  // blanco al 85 %. A la derecha, la mascota ilustrada
+                  // (Brenda/Britany, sin aro) en lugar del círculo
+                  // blanco con el símbolo del tema.
                   decoration: BoxDecoration(
-                    color: locked ? const Color(0xFFE5E7EB) : scheme.primary,
+                    color: locked
+                        ? const Color(0xFFE5E5E5)
+                        : const Color(0xFF00C2A8),
                     borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.08),
-                        blurRadius: 6,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   child: Row(
                     children: [
-                      CircleAvatar(
-                        radius: 22,
-                        backgroundColor: Colors.white,
-                        child: LucideIcon(
-                            locked
-                                ? LucideIcons.lock
-                                : (_topicIcons[topic] ??
-                                    LucideIcons.circleHelp),
-                            color: locked
-                                ? const Color(0xFF9CA3AF)
-                                : scheme.primary),
-                      ),
-                      const SizedBox(width: 12),
                       Expanded(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Nombre del tema en MAYÚSCULAS (fix3,
-                            // punto 12): el nombre completo se lee
-                            // entero. La cabecera mide 76 px fijos:
-                            // con 16 px caben 2 líneas del título
-                            // más el subtítulo sin desbordar (antes
-                            // el título a 18 px en 1 línea se
-                            // recortaba con puntos suspensivos).
                             // Cabecera del camino (fix3): el título
                             // COMPLETO del tema (topics.dart), nunca
                             // el id interno: 'bach-disoluciones' se
@@ -984,27 +850,46 @@ class _TopicPathSection extends StatelessWidget {
                             // también en la tarjeta bloqueada.
                             Text(localizedTopicTitle(topic).toUpperCase(),
                                 style: TextStyle(
-                                    fontSize: 16,
+                                    fontSize: 22,
                                     fontWeight: FontWeight.w800,
                                     color: locked
-                                        ? BrandColors.ink.withValues(alpha: 0.6)
+                                        ? BrandColors.ink
+                                            .withValues(alpha: 0.6)
                                         : Colors.white),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis),
+                            const SizedBox(height: 4),
                             Text(
-                              (locked
-                                      ? tr('lockedWord')
-                                      : '${tr('levelWord')} ${unlocked > levelCount ? levelCount : unlocked} ${tr('quizOf')} $levelCount · ${tr('bestWord')}: $best%')
-                                  .toUpperCase(),
+                              locked
+                                  ? tr('lockedWord').toUpperCase()
+                                  : '${tr('levelWord')} ${unlocked > levelCount ? levelCount : unlocked} ${tr('quizOf')} $levelCount · ${tr('bestWord')}: $best%'
+                                      .toUpperCase(),
                               style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
                                 color: locked
                                     ? BrandColors.ink.withValues(alpha: 0.6)
-                                    : Colors.white.withValues(alpha: 0.9),
+                                    : Colors.white.withValues(alpha: 0.85),
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
                           ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      // Mascota ilustrada a la derecha (sin aro, sin
+                      // círculo blanco): Brenda los días pares y
+                      // Britany los impares.
+                      ClipOval(
+                        child: Image.asset(
+                          companionAsset(DateTime.now().day.isEven
+                              ? Companion.brenda
+                              : Companion.britany),
+                          width: 104,
+                          height: 104,
+                          fit: BoxFit.cover,
+                          filterQuality: FilterQuality.medium,
                         ),
                       ),
                     ],
@@ -1021,12 +906,11 @@ class _TopicPathSection extends StatelessWidget {
                   topic: topic,
                   level: level,
                   bankCount: bankCount,
+                  isLast: level == levelCount,
                   unlocked: !locked && level <= unlocked,
                   isCurrent: level == currentLevel,
                   onLevelTap: onLevelTap,
                 ),
-            ],
-          ),
         ],
       ),
     );
@@ -1037,12 +921,53 @@ class _TopicPathSection extends StatelessWidget {
 /// o derecha para que el camino serpentee. El nodo actual respira con
 /// una animación suave (halo que crece y encoge), para que se vea dónde
 /// va el usuario sin buscarlo.
+/// La linecilla punteada que une un nodo con el siguiente (como
+/// en la 6.3): puntos a lo largo del segmento que va del centro de
+/// este nodo al centro del siguiente. Se pinta detrás de los
+/// nodos, así que los círculos tapan los puntos que caen debajo
+/// de ellos y solo se ve el tramo del hueco entre nodos.
+class _NodeConnectorPainter extends CustomPainter {
+  const _NodeConnectorPainter({
+    required this.fromX,
+    required this.toX,
+    required this.color,
+  });
+
+  final double fromX;
+  final double toX;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final from = Offset(fromX, _nodeCenterY);
+    final to = Offset(toX, _nodeCenterY + _rowH);
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+    final dist = (to - from).distance;
+    const step = 10.0;
+    const radius = 2.5;
+    if (dist <= 0) return;
+    final count = (dist / step).floor();
+    for (var i = 0; i <= count; i++) {
+      final t = (i * step) / dist;
+      final p = Offset.lerp(from, to, t)!;
+      canvas.drawCircle(p, radius, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_NodeConnectorPainter old) =>
+      fromX != old.fromX || toX != old.toX || color != old.color;
+}
+
 class _LevelNodeRow extends StatefulWidget {
   const _LevelNodeRow({
     super.key,
     required this.topic,
     required this.level,
     required this.bankCount,
+    required this.isLast,
     required this.unlocked,
     required this.isCurrent,
     required this.onLevelTap,
@@ -1051,6 +976,10 @@ class _LevelNodeRow extends StatefulWidget {
   final String topic;
   final int level;
   final int bankCount;
+
+  /// true si es el último nivel del tema: no hay conector hacia
+  /// ningún nodo siguiente.
+  final bool isLast;
   final bool unlocked;
   final bool isCurrent;
   final void Function(int level, bool unlocked) onLevelTap;
@@ -1095,62 +1024,75 @@ class _LevelNodeRowState extends State<_LevelNodeRow>
 
   @override
   Widget build(BuildContext context) {
+    const teal = Color(0xFF00C2A8);
+    const tealLip = Color(0xFF00A18D);
     final progress = ProgressService.instance;
-    final scheme = Theme.of(context).colorScheme;
     final best = progress.bestScore('level:${widget.topic}:${widget.level}');
-    // La etiqueta es la PUNTUACIÓN del nivel (fix5, punto 15):
-    // el promedio de todos los pases, no la mejor; sin registro
-    // de promedio (pase anterior a esta versión) se sigue viendo
-    // la mejor de antes.
-    final avgNote =
-        progress.levelNoteAverage('level:${widget.topic}:${widget.level}');
-    final labelPercent =
-        avgNote == null ? best : (avgNote * 20).round();
     // Pasado = desbloqueado el siguiente (fix5, punto 13): con la
     // regla por conteo, un 4/5 puede guardar 73-80 % de nota y la
-    // nota ya no dice si se pasó; unlockedLevel sí, siempre. El
-    // best solo se usa para la etiqueta "Nivel N · X %".
+    // nota ya no dice si se pasó; unlockedLevel sí, siempre.
     final passed = progress.unlockedLevel(widget.topic) > widget.level;
-    // Niveles sin preguntas del banco: solo preguntas nuevas generadas.
-    final generatedOnly = (widget.level - 1) * _levelSize >= widget.bankCount;
+    // Estrellas de la corona del nodo pasado (§3.2.1): de la mejor
+    // nota del nivel (≥90 %: 3, ≥70 %: 2, si no: 1).
+    final stars = best >= 90 ? 3 : (best >= 70 ? 2 : 1);
     final offset = _pathOffsets[(widget.level - 1) % _pathOffsets.length];
-    final Color bg;
+    // Nodo Duolingo (§3.2.1): 80 dp, cara SÓLIDA teal + labio 4 px
+    // #00A18D (sombra sólida sin desenfoque), sin degradado, sin
+    // brillo, sin halo. Bloqueado: #E5E5E5 + candado #AFAFAF.
+    final bool nodeLit = passed || widget.unlocked;
     final Widget inner;
     if (passed) {
-      // Nivel pasado: color de acento con palomita blanca.
-      bg = scheme.primary;
-      inner =
-          const LucideIcon(LucideIcons.check, color: Colors.white, size: 34);
+      // Nivel pasado: estrella blanca rellena (nunca el número).
+      inner = const Icon(Icons.star, color: Colors.white, size: 36);
     } else if (widget.unlocked) {
-      bg = scheme.primary;
       inner = Text('${widget.level}',
           style: const TextStyle(
-              fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white));
+              fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white));
     } else {
       // Nodo bloqueado: gris claro con candado gris.
-      bg = const Color(0xFFE5E7EB);
       inner = const LucideIcon(LucideIcons.lock,
-          color: Color(0xFF9CA3AF), size: 28);
+          color: Color(0xFFAFAFAF), size: 32);
     }
     return SizedBox(
       height: _rowH,
       child: LayoutBuilder(
         builder: (context, constraints) {
           final cx = constraints.maxWidth / 2 + offset;
+          // Centro del nodo siguiente en las coordenadas de esta
+          // fila (una fila más abajo): la linecilla punteada va
+          // del centro de este nodo a ese centro.
+          final nextOffset =
+              _pathOffsets[widget.level % _pathOffsets.length];
+          final nextCx = constraints.maxWidth / 2 + nextOffset;
           // Sin recorte (Clip.none): el halo del nodo actual mide
-          // 76 px centrado en el nodo (36 px arriba y abajo) y en
-          // su pulso máximo llega a 85 px, así que sobresale ~7 px
-          // por encima de la fila; con el recorte por defecto del
-          // Stack salía cortado en plano por arriba (la bolita no
-          // se veía completa). El hueco _pathTopGap (28 px) lo
+          // 92 px centrado en el nodo y en su pulso máximo llega a
+          // ~103 px, así que sobresale un poco por encima de la
+          // fila; con el recorte por defecto del Stack salía cortado
+          // en plano por arriba. El hueco _pathTopGap (28 px) lo
           // absorbe sin tocar el cartel del tema.
           return Stack(
             clipBehavior: Clip.none,
             children: [
+              // Linecilla punteada hacia el nodo siguiente
+              // (corrección de Kristian, 2026-11-11): detrás de
+              // todo, para que los nodos la tapen por donde pasan.
+              if (!widget.isLast)
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: _NodeConnectorPainter(
+                      fromX: cx,
+                      toX: nextCx,
+                      color: Theme.of(context).brightness ==
+                              Brightness.dark
+                          ? const Color(0xFF667885)
+                          : const Color(0xFFBDBDBD),
+                    ),
+                  ),
+                ),
               if (widget.isCurrent)
                 Positioned(
-                  left: cx - 38,
-                  top: _nodeCenterY - 38,
+                  left: cx - 46,
+                  top: _nodeCenterY - 46,
                   child: AnimatedBuilder(
                     animation: _scale,
                     builder: (context, child) => Transform.scale(
@@ -1158,11 +1100,11 @@ class _LevelNodeRowState extends State<_LevelNodeRow>
                       child: child,
                     ),
                     child: Container(
-                      width: 76,
-                      height: 76,
-                      decoration: BoxDecoration(
+                      width: 92,
+                      height: 92,
+                      decoration: const BoxDecoration(
                         shape: BoxShape.circle,
-                        color: scheme.primary.withValues(alpha: 0.18),
+                        color: Color(0x2E00C2A8),
                       ),
                     ),
                   ),
@@ -1175,14 +1117,17 @@ class _LevelNodeRowState extends State<_LevelNodeRow>
               // mismo a ambos lados y no se sale de la pantalla en
               // ningún desplazamiento del camino: el nodo más a la
               // izquierda lleva la mascota a la derecha y al revés.
+              // Rediseño Duolingo (§3.2.7): sin anillo teal.
               if (widget.isCurrent)
                 Positioned(
                   left: offset >= 0
                       ? cx - _nodeSize / 2 - 72
                       : cx + _nodeSize / 2 + 32,
                   top: _nodeCenterY - 20,
-                  child:
-                      CompanionAvatar(companion: companionOfTheDay(), size: 40),
+                  child: CompanionAvatar(
+                      companion: companionOfTheDay(),
+                      size: 40,
+                      ring: false),
                 ),
               Positioned(
                 left: cx - _nodeSize / 2,
@@ -1197,53 +1142,58 @@ class _LevelNodeRowState extends State<_LevelNodeRow>
                     height: _nodeSize,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: bg,
-                      // El nodo actual lleva un anillo blanco (y un
-                      // aro teal por fuera, para que el blanco se vea
-                      // sobre el fondo blanco), además del halo.
-                      border: widget.isCurrent
-                          ? Border.all(color: Colors.white, width: 3)
+                      color: nodeLit
+                          ? teal
+                          : const Color(0xFFE5E5E5),
+                      // Labio 4 px: sombra sólida (sin desenfoque)
+                      // del color oscuro, solo en nodos con color.
+                      boxShadow: nodeLit
+                          ? const [
+                              BoxShadow(
+                                color: tealLip,
+                                offset: Offset(0, 4),
+                              ),
+                            ]
                           : null,
-                      boxShadow: [
-                        BoxShadow(
-                          color: widget.isCurrent
-                              ? scheme.primary.withValues(alpha: 0.35)
-                              : Colors.black.withValues(alpha: 0.15),
-                          blurRadius: widget.isCurrent ? 0 : 4,
-                          spreadRadius: widget.isCurrent ? 2 : 0,
-                          offset: Offset(0, widget.isCurrent ? 0 : 3),
-                        ),
-                      ],
                     ),
                     alignment: Alignment.center,
                     child: inner,
                   ),
                 ),
               ),
-              Positioned(
-                left: cx - 50,
-                top: _nodeCenterY + _nodeSize / 2 + 4,
-                width: 100,
-                child: Text(
-                  passed
-                      ? '${tr('levelWord')} ${widget.level} · $labelPercent%'
-                      : generatedOnly && widget.unlocked
-                          ? '${tr('levelWord')} ${widget.level} · ${tr('newWord')}'
-                          : '${tr('levelWord')} ${widget.level}',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight:
-                        widget.isCurrent ? FontWeight.bold : FontWeight.normal,
-                    color: widget.isCurrent
-                        ? scheme.primary
-                        : Theme.of(context)
-                            .colorScheme
-                            .onSurface
-                            .withValues(alpha: 0.7),
+              // Corona amarilla con el conteo de estrellas encima
+              // del nodo pasado (§3.2.1).
+              if (passed)
+                Positioned(
+                  left: cx - 34,
+                  top: _nodeCenterY - _nodeSize / 2 - 20,
+                  width: 68,
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                            color: const Color(0xFFE5E5E5)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const LucideIcon(LucideIcons.crown,
+                              size: 18, color: Color(0xFFFFC800)),
+                          const SizedBox(width: 2),
+                          Text('$stars',
+                              style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF4B4B4B))),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-              ),
             ],
           );
         },
@@ -1307,25 +1257,31 @@ class _FinalExamSection extends StatelessWidget {
         GestureDetector(
           key: isCurrent ? currentKey : null,
           onTap: onTap,
+          // Trofeo Duolingo (§3.2.1, mismo patrón que los nodos):
+          // cara sólida teal + labio 4 px, sin degradado, sin
+          // brillo, sin sombra borrosa.
           child: Container(
             width: 84,
             height: 84,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: unlocked ? scheme.primary : const Color(0xFFE5E7EB),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.15),
-                  blurRadius: 4,
-                  offset: const Offset(0, 3),
-                ),
-              ],
+              color: unlocked
+                  ? const Color(0xFF00C2A8)
+                  : const Color(0xFFE5E5E5),
+              boxShadow: unlocked
+                  ? const [
+                      BoxShadow(
+                        color: Color(0xFF00A18D),
+                        offset: Offset(0, 4),
+                      ),
+                    ]
+                  : null,
             ),
             alignment: Alignment.center,
             child: LucideIcon(
               unlocked ? LucideIcons.trophy : LucideIcons.lock,
               size: 44,
-              color: unlocked ? Colors.white : const Color(0xFF9CA3AF),
+              color: unlocked ? Colors.white : const Color(0xFFAFAFAF),
             ),
           ),
         ),
@@ -1370,8 +1326,14 @@ class _ReminderCard extends StatelessWidget {
     if (!reminderDue) return const SizedBox.shrink();
     return Column(
       children: [
+        // Tarjeta 3D (ronda de diseño 7.0): sombra suave tintada y
+        // radio 16 en vez de la Card plana de antes.
         Card(
           margin: EdgeInsets.zero,
+          elevation: 3,
+          shadowColor: BrandColors.amber.withValues(alpha: 0.25),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16)),
           child: const ListTile(
             // Icono 3D (fix3, punto 6): ámbar con degradado + brillo.
             leading: LucideIcon(LucideIcons.alarmClock,
@@ -1460,6 +1422,11 @@ class _QuizRunnerState extends State<_QuizRunner> {
   /// ¿Este nivel aprobado devolvió una vida? (Se muestra en el resultado.)
   var _lifeRestored = false;
 
+  /// Cronómetro del intento (para la tarjeta TIEMPO del resultado,
+  /// §3.4): arranca al empezar el quiz y se para al terminarlo.
+  final _stopwatch = Stopwatch();
+  var _elapsedMs = 0;
+
   /// Entradas del repaso que se dieron por superadas en esta sesión
   /// (3 aciertos seguidos en sus variantes).
   final Set<String> _clearedReview = {};
@@ -1468,6 +1435,13 @@ class _QuizRunnerState extends State<_QuizRunner> {
   void initState() {
     super.initState();
     _shuffleOptions();
+    _stopwatch.start();
+  }
+
+  @override
+  void dispose() {
+    _stopwatch.stop();
+    super.dispose();
   }
 
   @override
@@ -1486,8 +1460,12 @@ class _QuizRunnerState extends State<_QuizRunner> {
       _correct.clear();
       _quizPoints = 0;
       _lifeRestored = false;
+      _elapsedMs = 0;
       _clearedReview.clear();
       _shuffleOptions();
+      _stopwatch
+        ..reset()
+        ..start();
     }
   }
 
@@ -1500,8 +1478,15 @@ class _QuizRunnerState extends State<_QuizRunner> {
 
   QuizQuestion get _q => _item.question;
 
+  /// Tocar una opción la juzga AL MOMENTO (flujo original, v6):
+  /// puntos, errores y sonidos se registran al tocar, sin paso
+  /// intermedio de COMPROBAR ni panel de inundación. La regla dura
+  /// de Kristian (2026-11-11) prohíbe reestructurar este flujo con
+  /// un cambio de diseño: el rediseño es solo aspecto (§3.3.6 y
+  /// §3.3.7 quedan pendientes como cambios de flujo).
   void _answer(int displayedIndex) {
     if (_selected != null) return;
+    _selected = displayedIndex;
     final realIndex = _order[displayedIndex];
     final correct = realIndex == _q.answer;
     final progress = ProgressService.instance;
@@ -1532,14 +1517,12 @@ class _QuizRunnerState extends State<_QuizRunner> {
           progress.recordReviewAnswer(_item.reviewEntryId!, correct);
       if (cleared) _clearedReview.add(_item.reviewEntryId!);
       setState(() {
-        _selected = displayedIndex;
         if (correct) _score++;
       });
     } else if (correct) {
       // Acertar un error lo saca de la lista de repaso.
       progress.removeFailed(_item.id);
       setState(() {
-        _selected = displayedIndex;
         _score++;
       });
     } else {
@@ -1550,23 +1533,29 @@ class _QuizRunnerState extends State<_QuizRunner> {
         question: _q.question,
         level: widget.spec.kind == 'level' ? widget.spec.level : 0,
       ));
-      setState(() => _selected = displayedIndex);
+      setState(() {});
     }
   }
 
   /// Respuesta de una pregunta de cálculo (fix3, punto 7): el valor
   /// tecleado en el teclado numérico se traduce al índice de opción
-  /// que le corresponde y pasa por el mismo `_answer` de siempre, con
+  /// que le corresponde y pasa por el mismo `_check` de siempre, con
   /// los mismos puntos y repaso de errores (incluida la racha
-  /// de variantes del repaso).
+  /// de variantes del repaso). Sin opciones que seleccionar, el
+  /// valor tecleado selecciona y comprueba en un solo paso.
   void _answerNumeric(double value) {
     if (_selected != null) return;
+    // Las preguntas de cálculo no tienen opciones que seleccionar:
+    // el valor tecleado se responde en un solo paso.
     _answer(displayedIndexForNumericAnswer(
         typed: value, question: _q, order: _order));
   }
 
   void _next() {
     if (_index + 1 >= widget.quiz.items.length) {
+      // Fin del quiz: se para el cronómetro (tarjeta TIEMPO, §3.4).
+      _stopwatch.stop();
+      _elapsedMs = _stopwatch.elapsedMilliseconds;
       // Los puntos ya se sumaron al saldo total al contestar cada
       // pregunta (fix4, punto 5): aquí no se añade nada más.
       final progress = ProgressService.instance;
@@ -1637,288 +1626,380 @@ class _QuizRunnerState extends State<_QuizRunner> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     if (_finished) {
-      final total = widget.quiz.items.length;
-      final percent = ((100 * _score) / total).round();
-      final isLevel = widget.spec.kind == 'level';
-      // Nota por puntos (v6): solo se muestra; pasar es acertar 4
-      // o más de 5 preguntas (fix5, punto 13).
-      final nota5 = levelScore5(
-        widget.quiz.items.map((it) => it.question.difficulty).toList(),
-        _correct,
-      );
-      final passedLevel = isLevel && levelPassed(_score, total);
-      final remaining = ProgressService.instance.failedCount;
-      // Puntuación del nivel (fix5, punto 15, CORREGIDO): el
-      // promedio de todas las notas con las que se pasó. Se lee en
-      // vivo del servicio (ya se registró en _next() antes de
-      // llegar aquí) y vale también tras un replay fallido: la
-      // puntuación registrada no se movió con el fallo.
-      final noteAvg = isLevel
-          ? ProgressService.instance.levelNoteAverage(widget.quiz.testId)
-          : null;
-      final notePasses = isLevel
-          ? ProgressService.instance.levelNotePassCount(widget.quiz.testId)
-          : 0;
-      // Celebración al pasar de nivel: confeti cayendo sobre el
-      // resultado durante unos segundos.
-      final resultBody = Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(tr('quizResult'),
-                style:
-                    const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center),
-            const SizedBox(height: 12),
-            Text('$_score ${tr('quizOf')} $total ${tr('quizScore')}',
-                style: const TextStyle(fontSize: 20),
-                textAlign: TextAlign.center),
-            Text('$percent%',
-                style: TextStyle(
-                    fontSize: 48,
-                    fontWeight: FontWeight.bold,
-                    color: scheme.primary),
-                textAlign: TextAlign.center),
-            if (isLevel)
-              Text(
-                'Nota: ${nota5.toStringAsFixed(1)} / 5',
-                style:
-                    const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center,
-              ),
-            // A4: la nota no es la puerta; se pasa con 4 de 5 aciertos.
-            if (isLevel && passedLevel)
-              Text(
-                tr('quizPassNote'),
-                style: const TextStyle(fontSize: 14),
-                textAlign: TextAlign.center,
-              ),
-            // Puntuación del nivel (fix5, punto 15): solo a partir
-            // del segundo pase; en el primero el promedio es la
-            // nota de este intento y ya está arriba en 'Nota:'.
-            if (isLevel && noteAvg != null && notePasses >= 2)
-              Text(
-                tr('quizLevelAvg')
-                    .replaceAll(
-                        '{avg}',
-                        noteAvg
-                            .toStringAsFixed(1)
-                            .replaceAll('.', ','))
-                    .replaceAll('{n}', '$notePasses'),
-                style: const TextStyle(fontSize: 16),
-                textAlign: TextAlign.center,
-              ),
-            Text(
-              '${tr('pointsTitle')}: ${_quizPoints >= 0 ? '+' : ''}$_quizPoints',
-              style: const TextStyle(fontSize: 16),
-              textAlign: TextAlign.center,
-            ),
-            if (_lifeRestored)
-              Text(
-                tr('livesRestored'),
-                style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: scheme.primary),
-                textAlign: TextAlign.center,
-              ),
-            const SizedBox(height: 8),
-            Text(
-              passedLevel
-                  ? '${tr('quizLevelPassed')} ${tr('levelWord')} ${widget.spec.level + 1}.'
-                  : isLevel
-                      ? tr('quizLevelFailed')
-                      : widget.spec.kind == 'review'
-                          ? remaining == 0
-                              ? tr('quizNoErrors')
-                              : _clearedReview.isNotEmpty
-                                  ? '${tr('reviewCleared')} ($remaining ${tr('reviewQuestions')})'
-                                  : '$remaining ${tr('reviewQuestions')}'
-                          : percent >= _passPercent
-                              ? tr('quizExcellent')
-                              : percent >= 60
-                                  ? tr('quizGood')
-                                  : tr('quizKeepGoing'),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            MascotBubble(
-              companion: companionForTurn(total - 1),
-              mood: passedLevel ? TwinMood.happy : TwinMood.soft,
-              text: tr(mascotLineKey(companionForTurn(total - 1),
-                  passedLevel ? MascotLine.praise : MascotLine.console, total)),
-            ),
-            const SizedBox(height: 24),
-            // Botones tras GANAR un nivel (fix5, punto 13 + punto
-            // 15.1, en este orden): [Pasar de nivel] [Volver]
-            // [Repetir]. "Pasar de nivel" arranca el N+1 directo,
-            // sin preguntar nada.
-            if (passedLevel && widget.onNextLevel != null) ...[
-              ElevatedButton(
-                onPressed: widget.onNextLevel,
-                child: Text(tr('quizPassLevel')),
-              ),
-              const SizedBox(height: 8),
-              OutlinedButton(
-                  onPressed: widget.onExit, child: Text(tr('quizBack'))),
-              const SizedBox(height: 8),
-              ElevatedButton(
-                onPressed: widget.onRepeat,
-                child: Text(tr('quizRepeat')),
-              ),
-            ] else ...[
-              ElevatedButton(
-                onPressed: widget.onRepeat,
-                child: Text(tr('quizRepeat')),
-              ),
-              const SizedBox(height: 8),
-              OutlinedButton(
-                  onPressed: widget.onExit, child: Text(tr('quizBack'))),
-            ],
-          ],
-        ),
-      );
-      if (!passedLevel) return resultBody;
-      return Stack(
-        children: [
-          resultBody,
-          const Positioned.fill(child: CelebrationOverlay()),
-        ],
-      );
+      return _buildResult(context);
     }
 
     final total = widget.quiz.items.length;
-    return ListView(
-      padding: const EdgeInsets.all(16),
+    final wasCorrect =
+        _selected != null && _order[_selected!] == _q.answer;
+    return Column(
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                '${widget.quiz.title} · ${tr('quizQuestion')} ${_index + 1} ${tr('quizOf')} $total',
-                style: const TextStyle(fontWeight: FontWeight.bold),
-                maxLines: 2,
-              ),
-            ),
-            const SizedBox(width: 8),
-            // Botón Salir de verdad: grande, con borde y con icono.
-            OutlinedButton.icon(
-              onPressed: widget.onExit,
-              icon: const LucideIcon(LucideIcons.logOut, size: 20),
-              label: Text(tr('quizExit'), style: const TextStyle(fontSize: 16)),
-              style: OutlinedButton.styleFrom(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        LinearProgressIndicator(value: (_index + 1) / total),
-        const SizedBox(height: 16),
-        MascotBubble(
-          companion: companionForTurn(_index),
-          mood: _selected == null
-              ? TwinMood.happy
-              : (_order[_selected!] == _q.answer
-                  ? TwinMood.happy
-                  : TwinMood.soft),
-          text: tr(_selected == null
-              ? mascotLineKey(companionForTurn(_index), MascotLine.ask, _index)
-              : (_order[_selected!] == _q.answer
-                  ? mascotLineKey(
-                      companionForTurn(_index), MascotLine.praise, _index)
-                  : mascotLineKey(
-                      companionForTurn(_index), MascotLine.console, _index))),
-        ),
-        const SizedBox(height: 16),
-        // Botoncito de teclado (fix5, punto B, corrección 00:26):
-        // sale en (casi) todas las preguntas, a un ladito del
-        // texto; al tocarlo se abre la PANTALLA de la calculadora
-        // (página completa, no un panel inline) y al cerrarla se
-        // vuelve a la pregunta intacta. Científica en las de
-        // cálculo (al volver se responde con el valor), normal en
-        // las demás (solo para calcular a mano). Este runner es el
-        // mismo para niveles, repaso de errores y examen mixto,
-        // así que el icono llega a los tres.
-        QuestionCalculatorButton(
-          question: Text(_q.question,
-              style:
-                  const TextStyle(fontSize: 19, fontWeight: FontWeight.w600)),
-          scientific: _q.isNumeric,
-          unit: _q.numericUnit,
-          onResult: _q.isNumeric ? _answerNumeric : null,
-        ),
-        const SizedBox(height: 16),
-        // En las preguntas de cálculo las opciones dejan paso al
-        // teclado (que ahora se abre con el icono); las
-        // conceptuales siguen con las opciones de siempre.
-        if (!_q.isNumeric)
-          for (var i = 0; i < 4; i++)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _selected == null
-                      ? Theme.of(context).colorScheme.surfaceContainerHighest
-                      : (_order[i] == _q.answer
-                          ? scheme.primary
-                          : (_selected == i
-                              ? Colors.redAccent
-                              : Theme.of(context)
-                                  .colorScheme
-                                  .surfaceContainerHighest)),
-                  // El texto SIEMPRE legible (capturas 2026-11-10):
-                  // antes heredaba el blanco del tema y sobre el
-                  // fondo gris claro no se leía nada. Sobre fondo
-                  // claro va tinta oscura; sobre teal/rojo, blanco.
-                  foregroundColor: _selected != null &&
-                          (_order[i] == _q.answer || _selected == i)
-                      ? Colors.white
-                      : Theme.of(context).colorScheme.onSurface,
-                  alignment: Alignment.centerLeft,
-                  padding: const EdgeInsets.all(14),
-                ),
-                onPressed: () => _answer(i),
-                child: Text(_q.options[_order[i]],
-                    style: const TextStyle(fontSize: 16)),
-              ),
-            ),
-        if (_selected != null) ...[
-          const SizedBox(height: 8),
-          Card(
-            color: _order[_selected!] == _q.answer
-                ? scheme.primary.withValues(alpha: 0.2)
-                : Colors.redAccent.withValues(alpha: 0.15),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              // Barra superior Duolingo (§3.3.1): título en una sola
+              // línea pequeña encima de la barra; X de cierre a la
+              // izquierda y barra de progreso de 12 pt.
+              DuoQuizTitle(
+                  text:
+                      '${widget.quiz.title} · ${tr('quizQuestion')} ${_index + 1} ${tr('quizOf')} $total'),
+              const SizedBox(height: 8),
+              Row(
                 children: [
-                  Text(
-                    _order[_selected!] == _q.answer
-                        ? tr('quizCorrect')
-                        : '${tr('quizIncorrect')}. ${tr('quizCorrectIs')} ${_q.options[_q.answer]}',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  DuoCloseButton(onPressed: widget.onExit),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DuoProgressBar(value: (_index + 1) / total),
                   ),
-                  const SizedBox(height: 6),
-                  Text(_q.explanation),
                 ],
               ),
-            ),
+              const SizedBox(height: 16),
+              MascotBubble(
+                companion: companionForTurn(_index),
+                mood: _selected == null
+                    ? TwinMood.happy
+                    : (wasCorrect ? TwinMood.happy : TwinMood.soft),
+                text: tr(_selected == null
+                    ? mascotLineKey(
+                        companionForTurn(_index), MascotLine.ask, _index)
+                    : (wasCorrect
+                        ? mascotLineKey(companionForTurn(_index),
+                            MascotLine.praise, _index)
+                        : mascotLineKey(companionForTurn(_index),
+                            MascotLine.console, _index))),
+              ),
+              const SizedBox(height: 16),
+              // Botoncito de teclado (fix5, punto B, corrección 00:26):
+              // sale en (casi) todas las preguntas, a un ladito del
+              // texto; al tocarlo se abre la PANTALLA de la calculadora
+              // (página completa, no un panel inline) y al cerrarla se
+              // vuelve a la pregunta intacta. Científica en las de
+              // cálculo (al volver se responde con el valor), normal en
+              // las demás (solo para calcular a mano). Este runner es el
+              // mismo para niveles, repaso de errores y examen mixto,
+              // así que el icono llega a los tres.
+              QuestionCalculatorButton(
+                question: Text(_q.question,
+                    style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF4B4B4B))),
+                scientific: _q.isNumeric,
+                unit: _q.numericUnit,
+                onResult: _q.isNumeric ? _answerNumeric : null,
+              ),
+              const SizedBox(height: 16),
+              // En las preguntas de cálculo las opciones dejan paso al
+              // teclado (que ahora se abre con el icono); las
+              // conceptuales siguen con las opciones de siempre.
+              if (!_q.isNumeric)
+                for (var i = 0; i < 4; i++)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: QuizOptionButton(
+                      text: _q.options[_order[i]],
+                      state: _selected == null
+                          ? QuizOptionState.normal
+                          : (_order[i] == _q.answer
+                              ? QuizOptionState.correct
+                              : (_selected == i
+                                  ? QuizOptionState.wrong
+                                  : QuizOptionState.normal)),
+                      // El color del texto lo fija el estado dentro
+                      // de QuizOptionButton (spec §2); se pasa el
+                      // de siempre solo por compatibilidad.
+                      textColor: Theme.of(context).colorScheme.onSurface,
+                      onPressed: () => _answer(i),
+                    ),
+                  ),
+              // Quemia 7.0: reportar la pregunta — opción pequeña y
+              // discreta bajo las opciones (regla 1: solo este texto).
+              ReportQuestionButton(questionId: _item.id),
+              // Retroalimentación (flujo original): al contestar se
+              // muestra el resultado con la explicación, dentro de
+              // la lista. Sin panel de inundación (§3.3.6, pendiente).
+              if (_selected != null) ...[
+                const SizedBox(height: 16),
+                Text(
+                  wasCorrect
+                      ? tr('quizCorrect')
+                      : '${tr('quizIncorrect')}. ${tr('quizCorrectIs')} ${_q.options[_q.answer]}',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    color: wasCorrect
+                        ? const Color(0xFF00A18D)
+                        : const Color(0xFFEA2B2B),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(_q.explanation,
+                    style: const TextStyle(
+                        fontSize: 16, color: Color(0xFF4B4B4B))),
+                const SizedBox(height: 16),
+              ],
+            ],
           ),
-          const SizedBox(height: 12),
-          ElevatedButton(
-            onPressed: _next,
-            child:
-                Text(_index + 1 >= total ? tr('quizResult') : tr('quizNext')),
+        ),
+        // Botón inferior fijado (siempre visible, como en Duolingo):
+        // gris sin acción hasta contestar; teal al contestar.
+        // Etiqueta en mayúsculas dentro de DuoCheckButton.
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+              16, 0, 16, 16 + MediaQuery.of(context).padding.bottom),
+          child: DuoCheckButton(
+            label: _index + 1 >= widget.quiz.items.length
+                ? tr('quizResult')
+                : tr('quizNext'),
+            onPressed: _selected == null ? null : _next,
           ),
-        ],
+        ),
       ],
     );
   }
+
+  /// Pantalla de resultado de nivel (spec §3.4): celebración a
+  /// pantalla completa con fondo oscuro #131F24, mascota grande
+  /// celebrando, confeti, título amarillo, XP grande y 3 tarjetas
+  /// de color sólido (PUNTOS amarilla, PRECISIÓN teal, TIEMPO azul).
+  /// Un solo botón grande azul + "Repetir"/"Volver" como enlaces de
+  /// texto discretos. El mismo patrón cubre el repaso y el examen
+  /// mixto (sin "Pasar de nivel": su botón grande es REPETIR).
+  Widget _buildResult(BuildContext context) {
+    const dark = Color(0xFF131F24);
+    const muted = Color(0xFFAFAFAF);
+    final total = widget.quiz.items.length;
+    final percent = ((100 * _score) / total).round();
+    final isLevel = widget.spec.kind == 'level';
+    final passedLevel = isLevel && levelPassed(_score, total);
+    final remaining = ProgressService.instance.failedCount;
+    final pointsText = '${_quizPoints >= 0 ? '+' : ''}$_quizPoints';
+    final elapsed = _fmtElapsed(_elapsedMs);
+    // Título: al pasar, "¡Nivel superado!" en amarillo; si no, el
+    // mensaje que ya mostraba la pantalla (fallo, repaso, mixto).
+    final String title;
+    final Color titleColor;
+    if (passedLevel) {
+      title = tr('quizLevelPassed');
+      titleColor = const Color(0xFFFFC800);
+    } else if (isLevel) {
+      title = tr('quizLevelFailed');
+      titleColor = Colors.white;
+    } else if (widget.spec.kind == 'review') {
+      title = remaining == 0
+          ? tr('quizNoErrors')
+          : _clearedReview.isNotEmpty
+              ? '${tr('reviewCleared')} ($remaining ${tr('reviewQuestions')})'
+              : '$remaining ${tr('reviewQuestions')}';
+      titleColor = Colors.white;
+    } else {
+      title = percent >= _passPercent
+          ? tr('quizExcellent')
+          : percent >= 60
+              ? tr('quizGood')
+              : tr('quizKeepGoing');
+      titleColor = Colors.white;
+    }
+    // Botón grande: "PASAR DE NIVEL" solo tras pasarlo y si hay un
+    // nivel siguiente (fix5, punto 13); si no, REPETIR.
+    final bool canPass = passedLevel && widget.onNextLevel != null;
+    final ctaLabel = canPass ? tr('quizPassLevel') : tr('quizRepeat');
+    final VoidCallback ctaAction =
+        canPass ? widget.onNextLevel! : widget.onRepeat;
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      color: dark,
+      child: Stack(
+        children: [
+          LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                child: ConstrainedBox(
+                  constraints:
+                      BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Mascota grande celebrando (200+ dp, sin aro),
+                        // título y XP grande.
+                        Column(
+                          children: [
+                            Center(
+                              child: ClipOval(
+                                child: Image.asset(
+                                  companionAsset(companionForTurn(total - 1)),
+                                  width: 200,
+                                  height: 200,
+                                  fit: BoxFit.cover,
+                                  filterQuality: FilterQuality.medium,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            Text(title,
+                                style: TextStyle(
+                                    fontSize: 28,
+                                    fontWeight: FontWeight.w800,
+                                    color: titleColor),
+                                textAlign: TextAlign.center),
+                            const SizedBox(height: 8),
+                            // XP grande: los puntos del intento.
+                            Text(pointsText,
+                                style: const TextStyle(
+                                    fontSize: 56,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.white),
+                                textAlign: TextAlign.center),
+                            if (_lifeRestored) ...[
+                              const SizedBox(height: 4),
+                              Text(tr('livesRestored'),
+                                  style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF14D3B8)),
+                                  textAlign: TextAlign.center),
+                            ],
+                          ],
+                        ),
+                        // Las 3 tarjetas EXACTAMENTE iguales (mismo
+                        // alto y ancho, texto blanco en negrita sobre
+                        // el color, también en la amarilla de PUNTOS).
+                        Row(
+                          children: [
+                            _ResultStatCard(
+                              color: const Color(0xFFFFC800),
+                              label: tr('pointsTitle'),
+                              value: pointsText,
+                            ),
+                            const SizedBox(width: 12),
+                            _ResultStatCard(
+                              color: const Color(0xFF00C2A8),
+                              label: tr('quizAccuracy'),
+                              value: '$percent%',
+                            ),
+                            const SizedBox(width: 12),
+                            _ResultStatCard(
+                              color: const Color(0xFF1CB0F6),
+                              label: tr('quizTime'),
+                              value: elapsed,
+                            ),
+                          ],
+                        ),
+                        // Un solo botón grande azul + "Repetir" y
+                        // "Volver" como enlaces de texto discretos.
+                        Column(
+                          children: [
+                            SizedBox(
+                              width: double.infinity,
+                              child: DuoButton.primary(
+                                label: ctaLabel.toUpperCase(),
+                                onPressed: ctaAction,
+                                topColor: const Color(0xFF1CB0F6),
+                                bottomColor: const Color(0xFF1CB0F6),
+                                edgeColor: const Color(0xFF1899D6),
+                                fontSize: 17,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            // "Repetir" y "Volver" como enlaces
+                            // discretos, no botones (§3.4.5). Si el
+                            // botón grande ya es REPETIR, no se repite
+                            // el enlace.
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                if (canPass)
+                                  TextButton(
+                                    onPressed: widget.onRepeat,
+                                    child: Text(tr('quizRepeat').toUpperCase(),
+                                        style: const TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w700,
+                                            color: muted)),
+                                  ),
+                                TextButton(
+                                  onPressed: widget.onExit,
+                                  child: Text(tr('quizBack').toUpperCase(),
+                                      style: const TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w700,
+                                          color: muted)),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+          if (passedLevel)
+            const Positioned.fill(child: CelebrationOverlay()),
+        ],
+      ),
+    );
+  }
+}
+
+/// Una tarjeta de estadística del resultado (§3.4.4): color sólido
+/// con el texto BLANCO en negrita dentro (también en la amarilla
+/// de PUNTOS; la lección de Kristian: texto oscuro sobre tarjeta
+/// de color no se lee). Las 3 tarjetas son idénticas en tamaño.
+class _ResultStatCard extends StatelessWidget {
+  const _ResultStatCard(
+      {required this.color, required this.label, required this.value});
+
+  final Color color;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          children: [
+            Text(label.toUpperCase(),
+                style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 4),
+            Text(value,
+                style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// ms → "1:23" o "48 s".
+String _fmtElapsed(int ms) {
+  final s = (ms / 1000).round();
+  if (s < 60) return '$s s';
+  return '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}';
 }

@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import '../services/advanced_solvers.dart';
 import '../services/localization.dart';
+import 'shadows.dart';
 
 class SolverCard extends StatelessWidget {
   const SolverCard(
@@ -12,7 +13,12 @@ class SolverCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Tarjeta con vida (ronda de diseño 7.0): sombra tintada teal
+    // sobre la del tema (radio 18 y fondo ya los pone el tema).
     return Card(
+      elevation: 3,
+      shadowColor:
+          Theme.of(context).colorScheme.primary.withValues(alpha: 0.25),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -123,7 +129,10 @@ class SolverResultView extends StatelessWidget {
                 .colorScheme
                 .primary
                 .withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              standardShadow(Theme.of(context).colorScheme.primary),
+            ],
           ),
           child: Text(result.summary,
               style:

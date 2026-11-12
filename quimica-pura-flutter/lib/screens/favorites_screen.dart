@@ -50,6 +50,12 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                   for (final e in elements)
                     Card(
                       margin: const EdgeInsets.only(bottom: 6),
+                      elevation: 2,
+                      shadowColor: const Color(0xFF00C2A8)
+                          .withValues(alpha: 0.15),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
                       child: ListTile(
                         leading: CircleAvatar(
                           child: Text(e.symbol,
@@ -73,6 +79,12 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                   for (final t in topics)
                     Card(
                       margin: const EdgeInsets.only(bottom: 6),
+                      elevation: 2,
+                      shadowColor: const Color(0xFF00C2A8)
+                          .withValues(alpha: 0.15),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
                       child: ListTile(
                         leading: const LucideIcon(LucideIcons.bookOpen),
                         title: Text(t.title),
@@ -96,6 +108,12 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                   for (final name in formulas)
                     Card(
                       margin: const EdgeInsets.only(bottom: 6),
+                      elevation: 2,
+                      shadowColor: const Color(0xFF00C2A8)
+                          .withValues(alpha: 0.15),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
                       child: ListTile(
                         leading: const LucideIcon(LucideIcons.sigma),
                         title: Text(name),

@@ -1,17 +1,23 @@
-// Pantalla Cuenta (v6, rediseño claro 2026-11-10): el perfil del usuario.
-// - Cabecera con la FOTO de la compañera del día (48 px, con su aro
-//   de color, junto a la línea "Hoy te acompaña [nombre]") + título
-//   "Cuenta" y saludo con el nombre. Sin etiqueta de nombre bajo la
-//   foto: el nombre ya está en la línea, no se repite.
-// - El avatar del USUARIO (su foto y el selector) sigue QUITADO
-//   (fix2, item 6): eso fue lo único que Kristian pidió quitar. La
-//   foto de la compañera del día NO es el avatar del usuario y se
-//   queda (corrección fix3: un agente anterior la quitó por error).
-// - La tarjeta de estadísticas (Vidas/Puntos/Racha/Meta del día/
-//   Logros) vive AHORA aquí, debajo de la cabecera (fix 3): antes
-//   estaba en Niveles, y la cabecera tenía su propia fila de
-//   Puntos/Vidas/Racha/Logros. Ahora hay UNA sola presentación de
-//   las estadísticas, en la tarjeta compartida (widgets/stats_card).
+// Pantalla Cuenta (v6, rediseño claro 2026-11-10; rediseño
+// Duolingo 7.0, Zona C; ORGANIZACIÓN 6.3 restaurada 2026-11-11):
+// el perfil del usuario.
+// - Cabecera en TARJETA redondeada (no banner teal a todo lo
+//   ancho): título "Cuenta" + la FOTO GRANDE DEL ACOMPAÑANTE
+//   del día (96 dp, con su aro) + "Bienvenido/a [nombre] ·
+//   [género]" + la línea "Hoy te acompaña [compañero]" en el
+//   color del compañero. La foto grande ES el acompañante, así
+//   foto y línea coinciden; la miniatura de 22 px ya no hace
+//   falta. El avatar premium equipado ya NO va aquí: sigue
+//   mostrándose en Tabla de posiciones, Amigos y Torneos.
+// - Estadísticas: UNA tarjeta (StatsCard) con 5 columnas CON
+//   ICONOS: Vidas, Puntos, Racha, Meta del día y Logros (x/10).
+// - Las 19 filas van cada una en su propia TARJETA redondeada
+//   con separación (organización 6.3), con el icono en un chip
+//   tintado — no filas planas con divisores.
+// - El selector de foto del usuario (para subir una foto propia)
+//   sigue QUITADO (fix2, item 6: eso fue lo único que Kristian
+//   pidió quitar) — la única foto de usuario es la comprada en
+//   la tienda, no una subida.
 // - Aquí viven Idioma, Estadísticas, Cambiar versión y Errores, que
 //   antes estaban sueltos en el menú hamburguesa: el menú queda libre
 //   para el contenido. También están Favoritos, Recordatorio,
@@ -19,16 +25,24 @@
 //   actualización (fix4, punto 7: chequeo manual con la versión
 //   instalada) y Acerca de.
 //
-// La cabecera se dibuja con colores explícitos (fondo blanco, tarjeta
-// blanca con borde y sombra suave) y sin animación de entrada, para
-// que siempre se vea completa desde el primer fotograma: nada de la
-// cabecera depende del tema ni de un FadeIn.
+// El contenido lleva padding inferior = altura de la barra
+// (MainBottomNav.barHeight, 64) + 16 pt, para que la barra no
+// tape la última fila.
+//
+// El HUD superior (chips de vidas/repaso/campana) vive en el
+// AppBar de main.dart, no en esta pantalla: su cambio a fondo
+// transparente es de la zona que toca main.dart, no de esta.
+//
+// La cabecera se dibuja con colores explícitos y sin animación
+// de entrada, para que siempre se vea completa desde el primer
+// fotograma: nada de la cabecera depende del tema ni de un FadeIn.
 
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../widgets/lucide_icons.dart';
 
 import '../services/achievements.dart';
+import '../services/analytics_sync.dart';
+import '../services/auth_service.dart';
 import '../services/localization.dart';
 import '../services/accent.dart';
 
@@ -37,35 +51,35 @@ import '../services/sound_service.dart';
 import '../services/update_check.dart';
 import '../services/user_prefs.dart';
 import '../widgets/brand_logo.dart';
-import '../widgets/icon_animations.dart';
+import '../widgets/main_bottom_nav.dart';
 import '../widgets/stats_card.dart';
 import '../widgets/twin_avatars.dart';
 import 'theme_screen.dart';
 
-/// Tokens claros (paleta propia de Melli-Qui, sin verde Duolingo):
-/// teal #00C2A8 como color principal, teal oscuro #00A18D.
+/// Tokens claros (rediseño Duolingo 7.0): texto #4B4B4B,
+/// terciario #777777, líneas #E5E5E5; teal #00C2A8 como color
+/// principal, teal oscuro #00A18D.
 const _teal = Color(0xFF00C2A8);
-const _ink = Color(0xFF3C3C3C);
-const _inkSoft = Color(0xFF6E6E6E);
-const _card = Color(0xFFF7F7F7);
-const _border = Color(0xFFE8E8E8);
+const _ink = Color(0xFF4B4B4B);
+const _inkSoft = Color(0xFF777777);
+const _border = Color(0xFFE5E5E5);
 const _violet = Color(0xFF8B5CF6);
 const _blue = Color(0xFF3B82F6);
 const _amber = Color(0xFFF59E0B);
 
 /// Colores de Cuenta según el tema (auditoría fix2): en claro son los
-/// de siempre (fondo blanco, tarjeta #F7F7F7, tinta oscura); en oscuro
-/// son verdes oscuros, para que Cuenta no se quede blanca en modo
-/// oscuro (item 8: oscuro verde, sin violeta/azul/ámbar). Las
-/// gemelas (Brenda violeta, Britany azul) NO cambian: son las
-/// mascotas, no el acento del tema.
+/// de siempre (fondo blanco, tinta #4B4B4B, gris #777777, líneas
+/// #E5E5E5); en oscuro son verdes oscuros, para que Cuenta no se
+/// quede blanca en modo oscuro (item 8: oscuro verde, sin
+/// violeta/azul/ámbar). Las gemelas (Brenda violeta, Britany azul)
+/// NO cambian: son las mascotas, no el acento del tema.
 class _CuentaColors {
   const _CuentaColors({
     required this.bg,
-    required this.card,
     required this.ink,
     required this.inkSoft,
     required this.border,
+    required this.card,
   });
 
   factory _CuentaColors.of(BuildContext context) {
@@ -73,26 +87,29 @@ class _CuentaColors {
       // Fondo y tarjetas según el acento (fix4, punto 2).
       return _CuentaColors(
         bg: AppAccent.darkBackground,
-        card: AppAccent.darkCard,
         ink: Colors.white,
         inkSoft: AppAccent.darkInkSoft,
         border: AppAccent.darkBorder,
+        card: AppAccent.darkCard,
       );
     }
     return const _CuentaColors(
       bg: Colors.white,
-      card: _card,
       ink: _ink,
       inkSoft: _inkSoft,
       border: _border,
+      card: Colors.white,
     );
   }
 
   final Color bg;
-  final Color card;
   final Color ink;
   final Color inkSoft;
   final Color border;
+
+  /// Fondo de las tarjetas (cabecera y filas): blanco en claro,
+  /// superficie oscura en oscuro (6.3).
+  final Color card;
 }
 
 class AccountScreen extends StatefulWidget {
@@ -119,6 +136,86 @@ class _AccountScreenState extends State<AccountScreen> {
   /// Comprobación manual en curso (para no lanzar dos a la vez).
   bool _checkingUpdate = false;
 
+  @override
+  void initState() {
+    super.initState();
+    _loadGoogleState();
+  }
+
+  /// Estado del enlace con Google (ronda #8, cambio 09:08).
+  bool _googleLinked = false;
+  String? _googleEmail;
+
+  Future<void> _loadGoogleState() async {
+    final linked = AuthService.isGoogleLinked;
+    final String? email = AuthService.googleEmail;
+    if (!mounted) return;
+    setState(() {
+      _googleLinked = linked;
+      _googleEmail = email;
+    });
+  }
+
+  /// Fila "Vincular con Google" tocada (09:13): mientras se firma,
+  /// la fila muestra "Vinculando…" y no acepta otro toque; si
+  /// linkWithGoogle() devuelve false, UNA sola línea con el motivo
+  /// (sin internet, o fallo al iniciar sesión), sin diálogo de
+  /// error y sin quedarse en carga. Si devuelve true, se trae el
+  /// respaldo y la fila muestra el correo.
+  var _googleBusy = false;
+
+  Future<void> _onGoogleRowTap() async {
+    if (_googleBusy) return;
+    if (_googleLinked) {
+      await _showUnlinkDialog();
+      return;
+    }
+    setState(() => _googleBusy = true);
+    final ok = await AuthService.linkWithGoogle();
+    if (!mounted) return;
+    if (!ok) {
+      setState(() => _googleBusy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AnalyticsSync.firebaseReady
+              ? tr('googleSignInFailed')
+              : tr('googleNeedInternet')),
+        ),
+      );
+      return;
+    }
+    await AnalyticsSync.restoreFromCloud();
+    if (!mounted) return;
+    await _loadGoogleState();
+    if (!mounted) return;
+    setState(() => _googleBusy = false);
+  }
+
+  /// Diálogo de desvincular: muestra el correo vinculado y pide
+  /// confirmar; desvincular NO borra el progreso del teléfono.
+  Future<void> _showUnlinkDialog() async {
+    final unlink = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(tr('accountLinkGoogle')),
+        content: Text(_googleEmail ?? ''),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(tr('closeWord')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(tr('accountUnlinkGoogle')),
+          ),
+        ],
+      ),
+    );
+    if (unlink != true || !mounted) return;
+    await AuthService.unlinkGoogle();
+    await _loadGoogleState();
+  }
+
   /// Comprobación manual de actualización (fix4, punto 7): fuerza
   /// el chequeo y dice qué pasó. El diálogo ya salió solo si hay
   /// versión nueva; si no, un aviso abajo.
@@ -143,49 +240,6 @@ class _AccountScreenState extends State<AccountScreen> {
     }
   }
 
-  /// Abre el chat de WhatsApp del creador (fix4, punto 11): el mismo
-  /// enlace de siempre, https://wa.me/5356519431, sin texto
-  /// pre-escrito. Igual que _openWhatsApp en main.dart: primero
-  /// wa.me (en Android lo abre directo en WhatsApp si está
-  /// instalada) y, si falla, el esquema propio de WhatsApp.
-  Future<void> _openWhatsApp() async {
-    final waMe = Uri.parse('https://wa.me/5356519431');
-    final appScheme = Uri.parse('whatsapp://send?phone=5356519431');
-    var opened = false;
-    try {
-      if (await canLaunchUrl(waMe)) {
-        opened = await launchUrl(waMe, mode: LaunchMode.platformDefault);
-      }
-    } catch (_) {
-      opened = false;
-    }
-    if (!opened) {
-      try {
-        if (await canLaunchUrl(appScheme)) {
-          opened =
-              await launchUrl(appScheme, mode: LaunchMode.externalApplication);
-        }
-      } catch (_) {
-        opened = false;
-      }
-    }
-    if (!opened && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('No se pudo abrir WhatsApp: revisa tu conexión')),
-      );
-    }
-  }
-
-  int get _achievementsUnlocked {
-    final p = ProgressService.instance;
-    var n = 0;
-    for (final a in allAchievements) {
-      if (achievementUnlocked(a.id, p, widget.trackTopics)) n++;
-    }
-    return n;
-  }
-
   @override
   Widget build(BuildContext context) {
     final p = ProgressService.instance;
@@ -193,73 +247,83 @@ class _AccountScreenState extends State<AccountScreen> {
     // verde oscura, no blanca.
     final c = _CuentaColors.of(context);
     // La compañera del día (API nueva: los tres, incluido Kristian):
-    // su foto de 48 px con el aro de su color, junto a la línea
-    // "Hoy te acompaña…". El avatar del USUARIO y su selector siguen
-    // quitados (fix2, item 6: eso fue lo único que pidió quitar);
-    // la foto de la compañera no es el avatar del usuario.
+    // su FOTO GRANDE (96 dp) es la foto de la tarjeta de cabecera,
+    // y la línea "Hoy te acompaña…" dice su nombre: foto y línea
+    // son el mismo compañero, así no se contradicen (organización
+    // 6.3). El avatar premium equipado ya no va aquí.
     final companion = companionOfTheDay();
     final accent = companionAccent(companion);
-    final genderLabel =
-        UserPrefs.userGender.isEmpty ? '' : ' · ${UserPrefs.userGender}';
+    // Logros desbloqueados de los 10 que hay (Mis estadísticas
+    // usa la misma cuenta): la tarjeta de estadísticas muestra
+    // "x/10".
+    final unlockedCount = allAchievements
+        .where((a) => achievementUnlocked(a.id, p, widget.trackTopics))
+        .length;
+    final greetingLine = UserPrefs.userGender.isEmpty
+        ? UserPrefs.greeting
+        : '${UserPrefs.greeting} · ${UserPrefs.userGender}';
+    // greeting ya devuelve "Hola" sin nombre guardado: no hace
+    // falta (ni se debe) caer al título "Cuenta", que repetiría
+    // el título de la tarjeta.
 
     return Container(
       color: c.bg,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 90),
+        // Con padding lateral: cabecera, estadísticas y filas son
+        // tarjetas contenidas. El padding inferior es altura de
+        // la barra (64) + 16 pt.
+        padding: EdgeInsets.fromLTRB(
+            16, 16, 16, MainBottomNav.barHeight + 16),
         children: [
-          // Cabecera del perfil: foto de la compañera del día (48 px,
-          // con su aro de color, auditoría de tamaños: como el
-          // banner de Niveles 36 y la burbuja 52, 48 es la foto de
-          // cabecera de perfil) JUNTO A los textos — título
-          // "Cuenta", saludo con el nombre ("Bienvenido/a [nombre]"
-          // o "Hola" sin nombre) y la línea "Hoy te acompaña…".
-          // Sin nombre bajo la foto: el nombre ya está en la línea.
-          // El avatar del usuario y su selector NO están aquí
-          // (quitados en fix2, item 6). Las estadísticas van en la
-          // tarjeta de abajo (fix 3).
+          // Tarjeta de cabecera redondeada (organización 6.3):
+          // título "Cuenta" + foto grande del acompañante del
+          // día + saludo con género + línea "Hoy te acompaña…".
           Container(
             decoration: BoxDecoration(
-              color: c.bg,
-              borderRadius: BorderRadius.circular(20),
+              color: c.card,
+              borderRadius: BorderRadius.circular(16),
               border: Border.all(color: c.border),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x14000000),
-                  blurRadius: 12,
-                  offset: Offset(0, 4),
-                ),
-              ],
             ),
             padding: const EdgeInsets.all(16),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                CompanionAvatar(companion: companion, size: 48),
-                const SizedBox(width: 12),
+                CompanionAvatar(companion: companion, size: 96),
+                const SizedBox(width: 16),
                 Expanded(
                   child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         tr('accountTitle'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 22,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w800,
                           color: c.ink,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        greetingLine,
+                        maxLines: 2,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: c.inkSoft,
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '${UserPrefs.greeting}$genderLabel',
-                        style: TextStyle(color: c.inkSoft),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
                         tr(companionOfDayKey(companion)),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
                           color: accent,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
                         ),
                       ),
                     ],
@@ -268,18 +332,16 @@ class _AccountScreenState extends State<AccountScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 16),
-          // Tarjeta de estadísticas (fix 3): la de Niveles, mudada.
-          // Vidas (corazón + número), Puntos, Racha, Meta del día y
-          // Logros: cada número UNA sola vez en toda la Cuenta.
-          FadeSlideIn(
-            delay: const Duration(milliseconds: 80),
+          // Estadísticas: UNA tarjeta con 5 columnas CON ICONOS
+          // (StatsCard, organización 6.3): Vidas, Puntos, Racha,
+          // Meta del día y Logros.
+          Padding(
+            padding: const EdgeInsets.only(top: 12, bottom: 12),
             child: StatsCard(
               achievementsLabel:
-                  '$_achievementsUnlocked/${allAchievements.length}',
+                  '$unlockedCount/${allAchievements.length}',
             ),
           ),
-          const SizedBox(height: 16),
           // Orden de Cuenta (ronda fix6, ítem 4): las TRES primeras
           // filas son Estadísticas, Mis errores y Cómo se juega. El
           // resto sigue en su mismo orden de siempre (Tema, Idioma,
@@ -325,7 +387,64 @@ class _AccountScreenState extends State<AccountScreen> {
               onTap: () => widget.onOpenScreen('theme'),
             ),
           ),
-          const SizedBox(height: 16),
+          // Ronda #8 (Quemia 6.5): tabla de posiciones, justo
+          // después del grupo principal (Estadísticas, Mis
+          // errores, Cómo se juega, Tema) y antes de Idioma.
+          // (Diseño 7.0: la fila "Compartir mi progreso" se quitó:
+          // compartir es automático con Google vinculada, sin
+          // preguntar nada.)
+          _Row(
+            icon: LucideIcons.trophy,
+            iconColor: _amber,
+            title: tr('accountLeaderboard'),
+            subtitle: tr('accountLeaderboardSub'),
+            onTap: () => widget.onOpenScreen('leaderboard'),
+          ),
+          // Ronda #8 (cambio 09:08): vincular con Google — respaldo
+          // con la cuenta de Google (el mismo uid recupera el
+          // progreso en otro teléfono). Si está vinculada, la fila
+          // muestra el correo y al tocar ofrece desvincular.
+          _Row(
+            icon: LucideIcons.link,
+            iconColor: _blue,
+            title: tr('accountLinkGoogle'),
+            subtitle: _googleBusy
+                ? tr('googleLinking')
+                : _googleLinked && _googleEmail != null
+                    ? _googleEmail!
+                    : tr('accountLinkGoogleSub'),
+            onTap: _onGoogleRowTap,
+          ),
+          // Quemia 7.0: social (amigos, torneos, tienda, grupos),
+          // justo después de Google y antes de Idioma.
+          _Row(
+            icon: LucideIcons.userRound,
+            iconColor: _teal,
+            title: tr('accountFriends'),
+            subtitle: tr('accountFriendsSub'),
+            onTap: () => widget.onOpenScreen('friends'),
+          ),
+          _Row(
+            icon: LucideIcons.award,
+            iconColor: _amber,
+            title: tr('accountTournaments'),
+            subtitle: tr('accountTournamentsSub'),
+            onTap: () => widget.onOpenScreen('tournaments'),
+          ),
+          _Row(
+            icon: LucideIcons.gift,
+            iconColor: _violet,
+            title: tr('accountShop'),
+            subtitle: tr('accountShopSub'),
+            onTap: () => widget.onOpenScreen('shop'),
+          ),
+          _Row(
+            icon: LucideIcons.network,
+            iconColor: _blue,
+            title: tr('accountGroups'),
+            subtitle: tr('accountGroupsSub'),
+            onTap: () => widget.onOpenScreen('groups'),
+          ),
           _Row(
             icon: LucideIcons.globe,
             iconColor: _blue,
@@ -389,21 +508,19 @@ class _AccountScreenState extends State<AccountScreen> {
             subtitle: tr('appSubtitle'),
             onTap: widget.onShowAbout,
           ),
-          // Soporte, última opción de Cuenta (fix4, punto 11,
-          // corrección final): UNA OPCIÓN MÁS, igual que las demás
-          // filas — tarjeta gris, icono de mensaje en círculo
-          // tintado teal, título "Soporte", subtítulo "Escríbeme por
-          // WhatsApp", chevron. Nada de botón verde llamativo ni de
-          // logo de WhatsApp. El enlace es el de siempre (wa.me
-          // vacío, sin texto pre-escrito). El Soporte del menú
-          // hamburguesa está ELIMINADO (no hay versión normal
-          // tampoco).
+          // Soporte (7.0, Kristian 09:52): ya NO abre WhatsApp
+          // directo — abre la ventanita dentro de la app (hilo +
+          // compositor); la opción de WhatsApp vive DENTRO de la
+          // ventanita y solo si el interruptor remoto está
+          // encendido. La fila sigue siendo una opción más, igual
+          // que las demás: fila plana, icono de mensaje teal,
+          // título "Soporte", chevron.
           _Row(
             icon: LucideIcons.messageCircle,
             iconColor: _teal,
             title: tr('supportWord'),
-            subtitle: tr('supportWriteMe'),
-            onTap: _openWhatsApp,
+            subtitle: tr('supportSub'),
+            onTap: () => widget.onOpenScreen('support'),
           ),
           const SizedBox(height: 16),
           Center(
@@ -429,6 +546,11 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 }
 
+/// Una fila de Cuenta como TARJETA redondeada (organización
+/// 6.3): cada fila en su propia tarjeta con separación, icono
+/// en un chip tintado, título 17 pt peso 700, subtítulo 15 pt
+/// gris, chevron gris a la derecha. Sin sombra borrosa (estilo
+/// Duolingo aprobado): la tarjeta es plana, con borde de 1 pt.
 class _Row extends StatelessWidget {
   const _Row({
     required this.icon,
@@ -455,36 +577,70 @@ class _Row extends StatelessWidget {
     final iconColor = Theme.of(context).brightness == Brightness.dark
         ? Theme.of(context).colorScheme.primary
         : this.iconColor;
-    return Card(
-      color: c.card,
-      elevation: 0,
-      margin: const EdgeInsets.only(bottom: 10),
-      shape: RoundedRectangleBorder(
+    // Tarjeta (organización 6.3): radio 16, borde de 1 pt, sin
+    // sombra borrosa. La separación entre tarjetas la da el
+    // margen inferior de 12 pt.
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: c.card,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: c.border),
       ),
       child: Material(
         type: MaterialType.transparency,
-        borderRadius: BorderRadius.circular(16),
-        clipBehavior: Clip.antiAlias,
-        child: ListTile(
-          leading: Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: LucideIcon(icon, color: iconColor, size: 22),
-          ),
-          title: Text(title,
-              style: TextStyle(fontWeight: FontWeight.w600, color: c.ink)),
-          subtitle: Text(subtitle, style: TextStyle(color: c.inkSoft)),
-          trailing:
-              LucideIcon(LucideIcons.chevronRight, size: 18, color: c.inkSoft),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
           onTap: () {
             SoundService.tap();
             onTap();
           },
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: iconColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  alignment: Alignment.center,
+                  child: LucideIcon(icon, color: iconColor, size: 24),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                          color: c.ink,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: 15,
+                          color: c.inkSoft,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                LucideIcon(
+                  LucideIcons.chevronRight,
+                  size: 20,
+                  color: c.inkSoft,
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

@@ -109,7 +109,17 @@ class _TablaScreenState extends State<TablaScreen>
   /// ellipsis, envuelve libremente ("Quiz de la tabla periódica"
   /// ocupa 3 líneas en español) y el alto mínimo de 3 líneas
   /// (51 px) más IntrinsicHeight + stretch hacen que ambas
-  /// tarjetas midan exactamente lo mismo.
+  /// tarjetas midan exactamente lo mismo. Diseño Duolingo §3.13:
+  /// borde 2 pt #E5E5E5, cara blanca sólida, sin degradado y sin
+  /// sombra borrosa. Sigue siendo un Card (los tests lo buscan
+  /// por tipo).
+  ///
+  /// Compacta (re-verificación Zona D, test grande 430x900): la
+  /// leyenda con Nunito creció ~90 dp y la línea "118 elementos"
+  /// quedaba 89,5 dp fuera del viewport. El ajuste mínimo es de
+  /// espaciados: padding vertical 10 (antes 14) y círculo 48
+  /// (antes 54); las dos tarjetas siguen midiendo exactamente lo
+  /// mismo (regla 8) y el tap no cambia.
   Widget _actionCard(
     BuildContext context, {
     required LucideIconData icon,
@@ -117,28 +127,39 @@ class _TablaScreenState extends State<TablaScreen>
     required VoidCallback onTap,
   }) {
     final accent = Theme.of(context).colorScheme.primary;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Expanded(
+      // Tarjeta plana (diseño Duolingo §3.13): cara sólida + borde
+      // 2 pt #E5E5E5, sin degradado y sin sombra borrosa. Sigue
+      // siendo un Card (los tests lo buscan por tipo).
       child: Card(
         margin: EdgeInsets.zero,
-        // Gris fijo en oscuro dejaba el texto (blanco) invisible:
-        // superficie oscura en modo oscuro (mismo bug que Niveles).
-        color: Theme.of(context).brightness == Brightness.dark
-            ? AppAccent.darkCard
-            : BrandColors.cardGray,
+        // Superficie sólida (sin degradado): blanca en claro,
+        // superficie oscura en modo oscuro (mismo bug que Niveles:
+        // gris fijo en oscuro dejaba el texto blanco invisible).
+        color: isDark ? AppAccent.darkCard : Colors.white,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+              color: isDark ? const Color(0xFF37464F) : const Color(0xFFE5E5E5),
+              width: 2),
+        ),
+        clipBehavior: Clip.antiAlias,
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 6),
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Container(
-                  width: 54,
-                  height: 54,
+                  width: 48,
+                  height: 48,
                   decoration: BoxDecoration(
-                    color: accent.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(27),
+                    color: accent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(24),
                   ),
                   alignment: Alignment.center,
                   child: LucideIcon(icon, size: 28, color: accent),
@@ -175,7 +196,9 @@ class _TablaScreenState extends State<TablaScreen>
               ? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.08)
               : _catColors[e.category],
           borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: Colors.black.withValues(alpha: 0.15)),
+          // Sin negro: el borde es blanco suave (la celda ya es de
+          // color; el blanco la define sin la línea negra fea).
+          border: Border.all(color: Colors.white.withValues(alpha: 0.45)),
         ),
         // Solo símbolo + número atómico, con FittedBox: nada puede
         // salirse de la cuadrícula, por estrecha que sea la pantalla.
@@ -291,13 +314,30 @@ class _TablaScreenState extends State<TablaScreen>
   /// Campo de búsqueda de elementos (cabecera de la pestaña).
   Widget _searchField() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      // Compacto (re-verificación Zona D, test grande 430x900):
+      // padding superior 4 (antes 8); el campo sigue midiendo
+      // 56 pt de alto (§1.6) y el tap no cambia.
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
       child: TextField(
         decoration: InputDecoration(
           labelText: tr('searchHint'),
           // Lupa pequeña (fix2, item 9): el tamaño por defecto
           // (24) se veía enorme en la cajita de búsqueda.
           prefixIcon: const LucideIcon(LucideIcons.search, size: 18),
+          // Campo de texto Duolingo §1.6: radio 16, borde 2 pt
+          // #E5E5E5; al enfocar, borde #5EEAD4. Sin sombra.
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: const BorderSide(color: Color(0xFFE5E5E5), width: 2),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: const BorderSide(color: Color(0xFFE5E5E5), width: 2),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: const BorderSide(color: Color(0xFF5EEAD4), width: 2),
+          ),
         ),
         onChanged: (v) => setState(() => _query = v.trim()),
       ),
@@ -368,22 +408,64 @@ class _TablaScreenState extends State<TablaScreen>
       children: [
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          // Compacto (re-verificación Zona D, test grande 430x900):
+          // vertical 4 (antes 6); los chips no cambian de tamaño.
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           child: Row(
             children: [
               ChoiceChip(
-                label: Text(tr('allWord')),
+                label: Text(tr('allWord'),
+                    style: TextStyle(
+                        color: _filterCategory == null
+                            ? Colors.white
+                            : BrandColors.ink,
+                        fontWeight: FontWeight.w700)),
                 selected: _filterCategory == null,
                 onSelected: (_) => setState(() => _filterCategory = null),
+                // Píldora 3D (ronda de diseño 7.0): teal + texto
+                // blanco + sombra tintada al seleccionar; blanco con
+                // sombra suave y borde gris claro sin seleccionar.
+                // Se mantiene ChoiceChip (los tests lo buscan por tipo);
+                // el degradado no cabe en un chip de Material.
+                selectedColor: const Color(0xFF00C2A8),
+                backgroundColor: Colors.white,
+                elevation: 3,
+                shadowColor: const Color(0xFF00C2A8).withValues(alpha: 0.35),
+                selectedShadowColor:
+                    const Color(0xFF00C2A8).withValues(alpha: 0.45),
+                checkmarkColor: Colors.white,
+                side: BorderSide(
+                    color: _filterCategory == null
+                        ? const Color(0xFF00A18D)
+                        : const Color(0xFFE8E8E8)),
+                shape: const StadiumBorder(),
               ),
               for (var i = 0; i < categoryNames.length; i++)
                 Padding(
                   padding: const EdgeInsets.only(left: 6),
                   child: ChoiceChip(
-                    label: Text(categoryNames[i]),
+                    label: Text(categoryNames[i],
+                        style: TextStyle(
+                            color: _filterCategory == i
+                                ? Colors.white
+                                : BrandColors.ink,
+                            fontWeight: FontWeight.w700)),
                     selected: _filterCategory == i,
                     onSelected: (_) => setState(() =>
                         _filterCategory = _filterCategory == i ? null : i),
+                    selectedColor: const Color(0xFF00C2A8),
+                    backgroundColor: Colors.white,
+                    elevation: 3,
+                    shadowColor:
+                        const Color(0xFF00C2A8).withValues(alpha: 0.35),
+                    selectedShadowColor:
+                        const Color(0xFF00C2A8).withValues(alpha: 0.45),
+                    checkmarkColor: Colors.white,
+                    side: BorderSide(
+                        color: _filterCategory == i
+                            ? const Color(0xFF00A18D)
+                            : const Color(0xFFE8E8E8)),
+                    shape: const StadiumBorder(),
                   ),
                 ),
               // Respiro final: el último chip puede deslizarse
@@ -536,7 +618,9 @@ class _TablaScreenState extends State<TablaScreen>
     final cellW = available / 18;
     final aspect = (cellW / 22.5).clamp(0.85, 1.02).toDouble();
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+      // Compacto (re-verificación Zona D, test grande 430x900):
+      // vertical 4 (antes 8); la rejilla no cambia de geometría.
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
       child: _gridView(
         grid,
         available,
@@ -598,8 +682,18 @@ class _TablaScreenState extends State<TablaScreen>
         // flotar ni tapar nada — con padding inferior para que la
         // línea "118 elementos" no quede pegada al borde ni la tape
         // la barra de navegación inferior.
+        //
+        // Compacta (re-verificación Zona D, test grande 430x900):
+        // con Nunito la leyenda creció ~90 dp y la línea final
+        // quedaba 89,5 dp fuera del viewport. Ajuste mínimo de
+        // espaciados: huecos 4 (antes 8), padding inferior 4
+        // (antes 8), runSpacing 3 (antes 8) y etiquetas a 13 pt
+        // (antes el cuerpo por defecto), para que el Wrap ocupe
+        // menos filas. La primera pasada ahorró ~91 dp y quedaban
+        // 2,5 dp fuera: el runSpacing 3 (antes 4) los compensa.
+        // El tap de cada categoría no cambia.
         Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -607,10 +701,10 @@ class _TablaScreenState extends State<TablaScreen>
             tr('legendWord'),
             style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           Wrap(
             spacing: 12,
-            runSpacing: 8,
+            runSpacing: 3,
             children: [
               for (var i = 0; i < categoryNames.length; i++)
                 InkWell(
@@ -627,13 +721,16 @@ class _TablaScreenState extends State<TablaScreen>
                         ),
                       ),
                       const SizedBox(width: 6),
-                      Text(localizedCategoryName(i)),
+                      Text(
+                        localizedCategoryName(i),
+                        style: const TextStyle(fontSize: 13),
+                      ),
                     ],
                   ),
                 ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           Text(
             '118 ${tr('elementsWord')}.',
             style: TextStyle(
@@ -665,7 +762,11 @@ class _TablaScreenState extends State<TablaScreen>
           decoration: BoxDecoration(
             color:
                 Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? const Color(0xFF37464F)
+                    : const Color(0xFFE5E5E5)),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,

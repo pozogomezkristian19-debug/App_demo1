@@ -56,7 +56,7 @@ import 'notification_service.dart';
 /// Versión actual de la app: ÚNICA fuente de verdad en el código.
 /// Debe coincidir con `latest` de version.json en la build que se
 /// publica, para que no salga un aviso falso nada más instalar.
-const String kAppVersion = '6.3';
+const String kAppVersion = '7.0';
 
 /// version.json en la raíz del repo, servido en crudo por GitHub.
 const String kUpdateCheckUrl =
@@ -840,11 +840,14 @@ class UpdateCheckService {
                   width: double.infinity,
                   child: FilledButton(
                     // Teal fijo (no el acento elegido en Cuenta): el
-                    // diálogo de actualización es siempre teal.
+                    // diálogo de actualización es siempre teal. La
+                    // elevación le da vida 3D; el color de fondo NO
+                    // se toca (lo afirma el test de actualización).
                     style: FilledButton.styleFrom(
                       backgroundColor: BrandColors.teal,
                       foregroundColor: Colors.white,
                       shadowColor: BrandColors.tealDark,
+                      elevation: 4,
                     ),
                     onPressed: () =>
                         Navigator.of(dialogContext).pop('update'),

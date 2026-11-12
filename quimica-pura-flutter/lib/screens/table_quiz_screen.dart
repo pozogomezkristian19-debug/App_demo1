@@ -7,6 +7,7 @@
 // juego: salir a mitad no cuesta vida, solo termina el quiz y los
 // puntos ganados hasta ahí se quedan.
 
+import '../widgets/shadows.dart';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -18,6 +19,7 @@ import '../screens/calculator_screen.dart';
 import '../services/localization.dart';
 import '../services/points.dart';
 import '../services/progress.dart';
+import '../widgets/simple_quiz.dart';
 
 class TableQuizScreen extends StatefulWidget {
   const TableQuizScreen({super.key});
@@ -175,6 +177,11 @@ class _TableQuizScreenState extends State<TableQuizScreen> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                // Selector de modo 3D (ronda de diseño 7.0): segmento
+                // elegido en teal con texto blanco, resto en blanco
+                // con sombra suave y borde gris claro. El degradado
+                // no cabe en un SegmentedButton, así que el elegido
+                // es teal liso con su sombra tintada.
                 SegmentedButton<bool>(
                   segments: [
                     ButtonSegment(
@@ -187,6 +194,20 @@ class _TableQuizScreenState extends State<TableQuizScreen> {
                   selected: {_symbolToName},
                   onSelectionChanged: (s) =>
                       setState(() => _symbolToName = s.first),
+                  style: SegmentedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor:
+                        Theme.of(context).colorScheme.onSurface,
+                    selectedBackgroundColor: const Color(0xFF00C2A8),
+                    selectedForegroundColor: Colors.white,
+                    side: const BorderSide(color: Color(0xFFE5E7EB)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    elevation: 2,
+                    shadowColor:
+                        const Color(0xFF00C2A8).withValues(alpha: 0.30),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 Text(
@@ -208,11 +229,38 @@ class _TableQuizScreenState extends State<TableQuizScreen> {
                 // completa, no un panel inline) y al cerrarla se
                 // vuelve a la pregunta intacta.
                 QuestionCalculatorButton(
-                  question: Card(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .primary
-                        .withValues(alpha: 0.12),
+                  // Tarjeta de la pregunta 3D (ronda de diseño 7.0):
+                  // antes era una Card plana de color liso.
+                  question: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Theme.of(context)
+                              .colorScheme
+                              .primary
+                              .withValues(alpha: 0.16),
+                          Theme.of(context)
+                              .colorScheme
+                              .primary
+                              .withValues(alpha: 0.06),
+                        ],
+                      ),
+                      border: Border(
+                        bottom: BorderSide(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .primary
+                              .withValues(alpha: 0.40),
+                          width: 3,
+                        ),
+                      ),
+                      boxShadow: [
+                        standardShadow(Theme.of(context).colorScheme.primary),
+                      ],
+                    ),
                     child: Padding(
                       padding: const EdgeInsets.all(24),
                       child: Text(
@@ -230,40 +278,34 @@ class _TableQuizScreenState extends State<TableQuizScreen> {
                   scientific: false,
                 ),
                 const SizedBox(height: 16),
+                // Opciones 3D (ronda de diseño 7.0): tarjeta blanca
+                // con sombra en reposo, degradado teal/rojo con
+                // borde inferior oscuro al acertar/fallar (ver
+                // QuizOptionButton en simple_quiz.dart).
                 for (var i = 0; i < 4; i++)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _selected == null
-                            ? Theme.of(context)
-                                .colorScheme
-                                .surfaceContainerHighest
-                            : (_options[_index][i] == _rounds[_index]
-                                ? Colors.teal
-                                : (_selected == i
-                                    ? Colors.redAccent
-                                    : Theme.of(context)
-                                        .colorScheme
-                                        .surfaceContainerHighest)),
-                        // Texto legible (capturas 2026-11-10): sobre
-                        // fondo claro va tinta oscura; sobre teal o
-                        // rojo, blanco. Sin esto heredaba blanco.
-                        foregroundColor: _selected != null &&
-                                (_options[_index][i] == _rounds[_index] ||
-                                    _selected == i)
-                            ? Colors.white
-                            : Theme.of(context).colorScheme.onSurface,
-                        padding: const EdgeInsets.all(14),
-                        alignment: Alignment.centerLeft,
-                      ),
+                    child: QuizOptionButton(
+                      text: _symbolToName
+                          ? localizedElementName(_options[_index][i])
+                          : _options[_index][i].symbol,
+                      state: _selected == null
+                          ? QuizOptionState.normal
+                          : (_options[_index][i] == _rounds[_index]
+                              ? QuizOptionState.correct
+                              : (_selected == i
+                                  ? QuizOptionState.wrong
+                                  : QuizOptionState.normal)),
+                      // Texto legible (capturas 2026-11-10): sobre
+                      // fondo claro va tinta oscura; sobre teal o
+                      // rojo, blanco. Sin esto heredaba blanco.
+                      textColor: _selected != null &&
+                              (_options[_index][i] == _rounds[_index] ||
+                                  _selected == i)
+                          ? Colors.white
+                          : Theme.of(context).colorScheme.onSurface,
                       onPressed: () => _answer(i),
-                      child: Text(
-                        _symbolToName
-                            ? localizedElementName(_options[_index][i])
-                            : _options[_index][i].symbol,
-                        style: const TextStyle(fontSize: 17),
-                      ),
+                      fontSize: 17,
                     ),
                   ),
                 if (_selected != null) ...[

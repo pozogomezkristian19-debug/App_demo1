@@ -223,6 +223,30 @@ class NotificationService {
   static const _channelId = 'melli_study_reminders';
   static const _channelName = 'Recordatorios de estudio';
 
+  /// Canal propio de los avisos INMEDIATOS (prueba 9999 y
+  /// confirmación 9998) — ronda #7 (6.4). Antes compartían el canal
+  /// de los recordatorios programados: si el usuario silenciaba ese
+  /// canal en Ajustes, la prueba tampoco llegaba y no había forma de
+  /// saber si el problema era el permiso o el canal. Con canal
+  /// propio, la prueba es una señal limpia (canal nuevo = nunca
+  /// silenciado por el usuario) y [isTestChannelBlocked] puede
+  /// diagnosticar si el usuario lo desactivó después.
+  static const _testChannelId = 'quemia_prueba_avisos';
+  static const _testChannelName = 'Aviso de prueba';
+
+  /// Nombre del canal de prueba, tal y como lo muestra el sistema en
+  /// Ajustes (etiqueta fija en español, igual en todos los idiomas):
+  /// la pantalla lo usa para componer las filas de estado de canal
+  /// ("Canal «Aviso de prueba»: activado/desactivado").
+  static String get testChannelName => _testChannelName;
+
+  /// Nombre del canal de recordatorios, tal y como lo muestra el
+  /// sistema en Ajustes (etiqueta fija en español, igual en todos
+  /// los idiomas). Es el canal viejo ('melli_study_reminders'): si
+  /// está desactivado en Ajustes, los avisos programados no llegan
+  /// aunque el permiso general esté concedido.
+  static String get remindersChannelName => _channelName;
+
   /// Payload de TODAS las notificaciones: tocar la notificación (o su
   /// acción "Repasar ahora") abre el repaso de errores.
   static const reviewPayload = 'review_mistakes';
@@ -263,6 +287,116 @@ class NotificationService {
 
   static bool _ready = false;
 
+  // --- Avisos pendientes tras ir a Ajustes (ronda #7, 6.4) ---
+  //
+  // Bug de la 6.3: Kristian negó el permiso dos veces en la 6.0/6.1
+  // (denegación permanente en Android 13+: el sistema ya no muestra
+  // su diálogo), fue a Ajustes, lo permitió y volvió... y el aviso
+  // nunca se mandó solo: había que tocar "Probar un aviso ahora"
+  // otra vez y nada se lo decía. Así que la prueba parecía no
+  // funcionar aunque el permiso ya estuviera concedido.
+  //
+  // La pantalla pone el flag al mandar al usuario a Ajustes (con el
+  // texto 'notifTestPending') y lo consume al volver con el permiso
+  // concedido: [takePendingTest] / [takePendingConfirmation]
+  // devuelven true UNA SOLA VEZ y limpian el flag, así que el aviso
+  // pendiente se envía una sola vez, nunca en bucle. Solo viven en
+  // memoria (no en SharedPreferences): si la app se cierra, el
+  // pendiente se pierde, pero el usuario puede tocar el botón de
+  // prueba de nuevo; guardarlos persistentes haría que un aviso
+  // viejo se disparara días después sin que nadie lo pidiera.
+  static bool _pendingTest = false;
+  static bool _pendingConfirmation = false;
+
+  /// La pantalla marca que, al volver de Ajustes con el permiso
+  /// concedido, hay que enviar sola la prueba (9999).
+  static void markTestPending() {
+    _pendingTest = true;
+  }
+
+  /// ¿Había una prueba pendiente? Devuelve true una sola vez y
+  /// limpia el flag.
+  static bool takePendingTest() {
+    if (!_pendingTest) return false;
+    _pendingTest = false;
+    return true;
+  }
+
+  /// La pantalla marca que, al volver de Ajustes con el permiso
+  /// concedido, hay que enviar sola la confirmación (9998).
+  static void markConfirmationPending() {
+    _pendingConfirmation = true;
+  }
+
+  /// ¿Había una confirmación pendiente? Devuelve true una sola vez
+  /// y limpia el flag.
+  static bool takePendingConfirmation() {
+    if (!_pendingConfirmation) return false;
+    _pendingConfirmation = false;
+    return true;
+  }
+
+  /// ¿Está BLOQUEADO el canal de prueba ('quemia_prueba_avisos')?
+  /// Mismo criterio que [isRemindersChannelBlocked]: true SOLO si
+  /// el canal existe y su importancia es [Importance.none] (el
+  /// usuario lo desactivó en Ajustes de notificaciones: en ese canal
+  /// no llega nada aunque el permiso general esté concedido).
+  static Future<bool> isTestChannelBlocked() =>
+      _isChannelBlocked(_testChannelId);
+
+  /// ¿Está BLOQUEADO el canal de recordatorios
+  /// ('melli_study_reminders')? Mismo criterio que
+  /// [isTestChannelBlocked]: true SOLO si el canal existe y su
+  /// importancia es [Importance.none]. Es el canal viejo: si está
+  /// desactivado en Ajustes, los avisos programados no llegan aunque
+  /// el permiso general esté concedido (corrección de la ronda #7).
+  static Future<bool> isRemindersChannelBlocked() =>
+      _isChannelBlocked(_channelId);
+
+  /// ¿Está BLOQUEADO el canal con id [channelId]?
+  /// Devuelve true SOLO si el canal existe y su importancia es
+  /// [Importance.none]. En no-Android, si el canal no existe
+  /// (nunca se creó: aún no se envió ningún aviso por él) o si
+  /// algo falla, devuelve false (no bloqueado).
+  ///
+  /// NOTA: flutter_local_notifications 23.0.0 no tiene
+  /// getNotificationChannel(id) (singular); solo
+  /// getNotificationChannels() (lista). Se busca el canal por id en
+  /// esa lista: el resultado es el mismo.
+  static Future<bool> _isChannelBlocked(String channelId) async {
+    try {
+      // defaultTargetPlatform, no Platform.isAndroid (ronda #7): en
+      // `flutter test` el host es Linux pero el target es Android,
+      // así que la detección de canal bloqueado sí tiene cobertura
+      // en tests. En el teléfono el comportamiento es el mismo
+      // (Android → se consulta; resto → false).
+      if (defaultTargetPlatform != TargetPlatform.android) return false;
+      final android = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      if (android == null) return false;
+      // Tope de 100 ms (como areNotificationsEnabled en
+      // isPermissionGranted): si el canal no responde, el botón no se
+      // puede quedar esperando (en tests, los fakes viejos no
+      // implementan getNotificationChannels y su Future no se resuelve
+      // nunca): se asume que no está bloqueado y el aviso se intenta
+      // igualmente. El TimeoutException lo traga el catch de abajo.
+      final channels = await android
+          .getNotificationChannels()
+          .timeout(const Duration(milliseconds: 100));
+      if (channels == null) return false;
+      for (final channel in channels) {
+        if (channel.id == channelId) {
+          return channel.importance == Importance.none;
+        }
+      }
+      // El canal no existe todavía: aún no se envió ningún aviso
+      // por él, así que nadie pudo bloquearlo.
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Reinicia el estado estático (solo para tests): sin inicializar
   /// y sin alarmas exactas. Permite probar la ruta de petición con
   /// el servicio "frío", como al abrir la app por primera vez.
@@ -270,6 +404,8 @@ class NotificationService {
   static void resetForTests() {
     _ready = false;
     _exactAlarms = false;
+    _pendingTest = false;
+    _pendingConfirmation = false;
   }
 
   /// ¿Se pueden usar alarmas exactas? Se PRUEBAN al programar la
@@ -730,6 +866,32 @@ class NotificationService {
     );
   }
 
+  /// Detalles de los avisos INMEDIATOS (prueba 9999): como
+  /// [_details] (icono pequeño blanco, color teal, icono grande con
+  /// el compañero del día y acción "Repasar ahora"), pero en el canal
+  /// propio de prueba ([_testChannelId]) con Importance.high y
+  /// Priority.high, para que el aviso de prueba no se pierda entre
+  /// los recordatorios ni lo silencie el canal de repaso. Los
+  /// recordatorios PROGRAMADOS siguen en 'melli_study_reminders'
+  /// con [_details] sin tocar.
+  static Future<NotificationDetails> _testDetails() async {
+    final largeIcon = await _twinLargeIcon();
+    return NotificationDetails(
+      android: AndroidNotificationDetails(
+        _testChannelId,
+        _testChannelName,
+        importance: Importance.high,
+        priority: Priority.high,
+        icon: _smallIcon,
+        color: const Color(0xFF00C2A8),
+        largeIcon: largeIcon,
+        actions: <AndroidNotificationAction>[
+          AndroidNotificationAction(_reviewActionId, tr('notifActionReview')),
+        ],
+      ),
+    );
+  }
+
   /// Icono grande: el compañero del día (Brenda, Britany o
   /// Kristian). El PNG del asset se copia a un archivo temporal y se
   /// usa con FilePathAndroidBitmap: los binarios del repo viajan como
@@ -773,8 +935,14 @@ class NotificationService {
     // devolvía false sin mostrar nada). Mostrarlo no necesita que
     // el servicio esté inicializado; el init() solo se intenta
     // para que el toque abra la app con el handler correcto.
+    // Ronda #7 (6.4): el init() va en try/catch — si lanza, se sigue
+    // al show() igual: un init() que falle NUNCA bloquea el aviso.
     if (!_ready) {
-      await init();
+      try {
+        await init();
+      } catch (_) {
+        // Sin inicializar, el aviso se intenta igual.
+      }
     }
     try {
       await _plugin.show(
@@ -792,16 +960,17 @@ class NotificationService {
     }
   }
 
-  /// Detalles de la confirmación inmediata: mismo canal, icono
-  /// pequeño blanco y acento teal que los avisos, pero sin icono
-  /// grande (sin espera) y sin la acción "Repasar ahora".
+  /// Detalles de la confirmación inmediata: canal propio de avisos
+  /// inmediatos ([_testChannelId], ronda #7) con Importance.high,
+  /// icono pequeño blanco y acento teal, pero sin icono grande (sin
+  /// espera) y sin la acción "Repasar ahora".
   static NotificationDetails _confirmationDetails() {
     return const NotificationDetails(
       android: AndroidNotificationDetails(
-        _channelId,
-        _channelName,
-        importance: Importance.defaultImportance,
-        priority: Priority.defaultPriority,
+        _testChannelId,
+        _testChannelName,
+        importance: Importance.high,
+        priority: Priority.high,
         icon: _smallIcon,
         color: Color(0xFF00C2A8),
       ),
@@ -810,19 +979,29 @@ class NotificationService {
 
   /// Una notificación de prueba, ahora mismo (botón "Probar" del
   /// recordatorio). Sirve para comprobar en el teléfono que los avisos
-  /// llegan y que el permiso está dado. Usa los mismos detalles que
-  /// los avisos programados (icono, gemela y acción). Si sale, queda
-  /// anotada la hora para el diagnóstico (ronda #6, punto 2): si
-  /// esta llega y los programados no, el problema era la
-  /// programación, no el permiso. "Lo mejor posible": si el canal
-  /// falla, no rompe la pantalla (antes la excepción subía).
-  static Future<void> sendTest() async {
+  /// llegan y que el permiso está dado. Usa los detalles de prueba
+  /// ([_testDetails]: icono, gemela y acción, en el canal propio de
+  /// prueba con Importance.high, ronda #7). Devuelve true SOLO si el
+  /// show() completó sin lanzar: ANTES decía "Aviso enviado" aunque
+  /// fallara, porque se tragaba todas las excepciones y devolvía
+  /// void. Si sale, queda anotada la hora para el diagnóstico
+  /// (ronda #6, punto 2): si esta llega y los programados no, el
+  /// problema era la programación, no el permiso. Si el show()
+  /// lanza, devuelve false y NO se anota la hora (no hubo aviso).
+  /// "Lo mejor posible": si el canal falla, no rompe la pantalla.
+  static Future<bool> sendTest() async {
     // El aviso de prueba se intenta SIEMPRE (ronda #6, punto 2):
     // si init() fallara, la prueba no debe perderse con él (antes
     // se salía sin mostrar nada). Mostrarlo no necesita que el
-    // servicio esté inicializado.
+    // servicio esté inicializado. Ronda #7 (6.4): el init() va en
+    // try/catch — si lanza, se sigue al show() igual: el booleano
+    // devuelto refleja el show(), no el init().
     if (!_ready) {
-      await init();
+      try {
+        await init();
+      } catch (_) {
+        // Sin inicializar, la prueba se intenta igual.
+      }
     }
     try {
       await _plugin.show(
@@ -830,11 +1009,14 @@ class NotificationService {
         title: 'Quemia',
         body: _pickMessage(Random()),
         payload: reviewPayload,
-        notificationDetails: await _details(),
+        notificationDetails: await _testDetails(),
       );
       await _recordLastSent();
+      return true;
     } catch (_) {
-      // Sin plugin o sin permiso, no hay aviso que anotar.
+      // Sin plugin, sin permiso o canal bloqueado: no hay aviso
+      // que anotar y la pantalla debe decirlo (false).
+      return false;
     }
   }
 

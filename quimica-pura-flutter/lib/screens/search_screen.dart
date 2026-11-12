@@ -15,7 +15,11 @@ const Map<String, LucideIconData> _icons = {
   'bar_chart': LucideIcons.chartColumn,
   'style': LucideIcons.layers,
   'timer': LucideIcons.timer,
-  'sports_esports': LucideIcons.gamepad2,
+  'leaderboard': LucideIcons.trophy,
+  'friends': LucideIcons.userRound,
+  'tournament': LucideIcons.award,
+  'shop': LucideIcons.gift,
+  'groups': LucideIcons.network,
   'book': LucideIcons.bookOpen,
   'compare_arrows': LucideIcons.arrowLeftRight,
   'note': LucideIcons.notebookPen,
@@ -124,7 +128,15 @@ class _SearchScreenState extends State<SearchScreen> {
                         padding: const EdgeInsets.all(8),
                         children: [
                           for (final e in results)
-                            ListTile(
+                            Card(
+                              margin: const EdgeInsets.only(bottom: 6),
+                              elevation: 1,
+                              shadowColor: const Color(0xFF00C2A8)
+                                  .withValues(alpha: 0.12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: ListTile(
                               leading: CircleAvatar(
                                 backgroundColor: Theme.of(context)
                                     .colorScheme
@@ -146,6 +158,7 @@ class _SearchScreenState extends State<SearchScreen> {
                                 widget.onEntryTap(e);
                               },
                             ),
+                          ),
                         ],
                       ),
           ),
@@ -179,11 +192,21 @@ class _RecentSearches extends StatelessWidget {
           Text(tr('noRecentSearches'))
         else
           for (final q in recent)
-            ListTile(
-              leading: const LucideIcon(LucideIcons.history),
-              title: Text(q),
-              trailing: const LucideIcon(LucideIcons.chevronRight, size: 18),
-              onTap: () => onPick(q),
+            Card(
+              margin: const EdgeInsets.only(bottom: 6),
+              elevation: 1,
+              shadowColor:
+                  const Color(0xFF00C2A8).withValues(alpha: 0.12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: ListTile(
+                leading: const LucideIcon(LucideIcons.history),
+                title: Text(q),
+                trailing:
+                    const LucideIcon(LucideIcons.chevronRight, size: 18),
+                onTap: () => onPick(q),
+              ),
             ),
       ],
     );

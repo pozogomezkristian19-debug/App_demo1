@@ -6,6 +6,7 @@
 // progreso y lo pone en el portapapeles (y, si se quiere, lo comparte
 // por WhatsApp). Así no se pierde al cambiar de teléfono.
 
+import '../widgets/shadows.dart';
 import 'dart:convert';
 import 'dart:ui' as ui;
 
@@ -391,12 +392,8 @@ class _StatsScreenState extends State<StatsScreen> {
                 color: c.surface,
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: c.border),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x14000000),
-                    blurRadius: 12,
-                    offset: Offset(0, 4),
-                  ),
+                boxShadow: [
+                  standardShadow(const Color(0xFF6B7280)),
                 ],
               ),
               padding: const EdgeInsets.all(16),
@@ -439,12 +436,8 @@ class _StatsScreenState extends State<StatsScreen> {
               color: c.surface,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: c.border),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x14000000),
-                  blurRadius: 12,
-                  offset: Offset(0, 4),
-                ),
+              boxShadow: [
+                standardShadow(const Color(0xFF6B7280)),
               ],
             ),
             padding: const EdgeInsets.all(16),
@@ -506,6 +499,10 @@ class _StatsScreenState extends State<StatsScreen> {
             decoration: BoxDecoration(
               color: c.card,
               borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: c.border),
+              boxShadow: [
+                standardShadow(const Color(0xFF6B7280)),
+              ],
             ),
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -536,7 +533,8 @@ class _StatsScreenState extends State<StatsScreen> {
             for (final t in weakest)
               Card(
                 color: c.card,
-                elevation: 0,
+                elevation: 2,
+                shadowColor: c.accent.withValues(alpha: 0.22),
                 margin: const EdgeInsets.only(bottom: 6),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
@@ -582,7 +580,8 @@ class _StatsScreenState extends State<StatsScreen> {
               final unlocked = achievementUnlocked(a.id, p, topics);
               return Card(
                 color: unlocked ? c.unlockedBg : c.card,
-                elevation: 0,
+                elevation: 2,
+                shadowColor: c.accent.withValues(alpha: 0.2),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
                 ),
@@ -622,6 +621,10 @@ class _StatsScreenState extends State<StatsScreen> {
             decoration: BoxDecoration(
               color: c.card,
               borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: c.border),
+              boxShadow: [
+                standardShadow(const Color(0xFF6B7280)),
+              ],
             ),
             child: Material(
               type: MaterialType.transparency,

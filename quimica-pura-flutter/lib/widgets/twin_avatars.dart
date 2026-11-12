@@ -92,8 +92,23 @@ String mascotLineKeyAt(Companion c, MascotLine kind, int i) {
 /// misma pregunta o un mismo día reconstruye la pantalla con la
 /// MISMA frase, y la siguiente vez sale otra distinta — nunca la
 /// misma dos veces seguidas.
+///
+/// Reinicio solo para tests ([resetMascotLineRotationForTesting]):
+/// sin él, la frase de la burbuja depende del historial GLOBAL de
+/// llamadas y los goldens con burbuja salen distintos según el
+/// orden de ejecución (p. ej. fix8_duelo_desconexion mostraba la
+/// variante 0 o la 4 según qué tests corrieran antes).
 final _mascotLastTurn = <String, int>{};
 final _mascotLastIndex = <String, int>{};
+
+/// Pone a cero la rotación de frases de la mascota (SOLO tests).
+/// No cambia ningún comportamiento de la app: en producción la
+/// rotación sigue avanzando con normalidad.
+@visibleForTesting
+void resetMascotLineRotationForTesting() {
+  _mascotLastTurn.clear();
+  _mascotLastIndex.clear();
+}
 
 /// Clave de la variante que toca para este compañero, momento y
 /// turno (índice de pregunta, día del mes, nº de errores…).
@@ -181,18 +196,21 @@ String twinOfDayKey(bool twinA) =>
 /// Avatar redondo de una gemela a partir de su imagen ilustrada.
 ///
 /// La imagen tiene fondo sólido, así que se recorta en círculo con
-/// ClipOval y se enmarca con un aro del color de la gemela para que
-/// se vea limpio sobre cualquier fondo.
+/// ClipOval. El aro del color de cada una es opcional ([ring]);
+/// el rediseño Duolingo (§3.2.7/§3.3.2) lo quita en la burbuja de
+/// la pregunta y en la muñeca junto al camino: la cara va sin aro.
 class _TwinAvatarImage extends StatelessWidget {
   const _TwinAvatarImage({
     required this.asset,
     required this.accent,
     required this.size,
+    this.ring = true,
   });
 
   final String asset;
   final Color accent;
   final double size;
+  final bool ring;
 
   @override
   Widget build(BuildContext context) {
@@ -201,7 +219,7 @@ class _TwinAvatarImage extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: accent, width: size * 0.05),
+        border: ring ? Border.all(color: accent, width: size * 0.05) : null,
         color: Colors.white,
       ),
       child: ClipOval(
@@ -276,18 +294,21 @@ class KristianAvatar extends StatelessWidget {
 }
 
 /// Avatar redondo de cualquiera de los tres compañeros, con el aro
-/// de su color. Reutiliza el mismo marco que TwinAvatarA/B.
+/// de su color (o sin aro si [ring] es false: rediseño Duolingo).
+/// Reutiliza el mismo marco que TwinAvatarA/B.
 class CompanionAvatar extends StatelessWidget {
   const CompanionAvatar({
     super.key,
     required this.companion,
     this.size = 52,
     this.mood = TwinMood.happy,
+    this.ring = true,
   });
 
   final Companion companion;
   final double size;
   final TwinMood mood;
+  final bool ring;
 
   @override
   Widget build(BuildContext context) {
@@ -295,6 +316,7 @@ class CompanionAvatar extends StatelessWidget {
       asset: companionAsset(companion),
       accent: companionAccent(companion),
       size: size,
+      ring: ring,
     );
   }
 }
@@ -344,27 +366,33 @@ class MascotBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final accent = companionAccent(_companion);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // (fix5) Solo la foto, sin el nombre debajo.
+        // (fix5) Solo la foto, sin el nombre debajo. Rediseño
+        // Duolingo (§3.3.2): sin el anillo de color de la mascota.
         CompanionAvatar(
-            companion: _companion, size: size, mood: mood),
+            companion: _companion, size: size, mood: mood, ring: false),
         const SizedBox(width: 10),
         Expanded(
           child: Container(
             padding:
                 const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: scheme.surfaceContainerHighest.withValues(alpha: 0.55),
+              // Burbuja blanca con borde #E5E5E5 (§3.3.2): antes era
+              // gris tintada con borde del color de la mascota.
+              color: isDark ? scheme.surfaceContainerHighest : Colors.white,
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(4),
                 topRight: Radius.circular(16),
                 bottomLeft: Radius.circular(16),
                 bottomRight: Radius.circular(16),
               ),
-              border: Border.all(color: accent.withValues(alpha: 0.45)),
+              border: Border.all(
+                  color: isDark
+                      ? const Color(0xFF37464F)
+                      : const Color(0xFFE5E5E5)),
             ),
             // (fix5) Solo el texto del mensaje, sin la firma
             // "— Nombre" abajo a la derecha. Siempre [text]:

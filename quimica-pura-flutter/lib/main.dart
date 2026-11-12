@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'widgets/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'data/periodic_table.dart';
@@ -7,16 +10,18 @@ import 'data/search_index.dart';
 import 'screens/account_screen.dart';
 import 'screens/aprender_screen.dart';
 import 'screens/branches_screen.dart';
-import 'screens/challenge_screen.dart';
 import 'screens/compare_screen.dart';
 import 'screens/constants_screen.dart';
 import 'screens/favorites_screen.dart';
 import 'screens/formula_screen.dart';
+import 'screens/friends_screen.dart';
 import 'screens/glossary_screen.dart';
+import 'screens/groups_screen.dart';
 import 'screens/how_to_play_screen.dart';
 import 'screens/lab_screen.dart';
 import 'screens/lab_sim_screen.dart';
 import 'screens/language_screen.dart';
+import 'screens/leaderboard_screen.dart';
 import 'screens/notes_screen.dart';
 import 'screens/notifications_screen.dart';
 import 'screens/onboarding_screen.dart';
@@ -25,13 +30,16 @@ import 'screens/reference_tables_screen.dart';
 import 'screens/reminder_screen.dart';
 import 'screens/resolver_screen.dart';
 import 'screens/search_screen.dart';
+import 'screens/shop_screen.dart';
 import 'screens/stats_screen.dart';
+import 'screens/support_screen.dart';
 import 'screens/tabla_screen.dart';
 import 'screens/table_quiz_screen.dart';
 import 'screens/theme_screen.dart';
 import 'screens/timed_exam_screen.dart';
 import 'screens/tips_screen.dart';
 import 'screens/topic_detail_screen.dart';
+import 'screens/tournaments_screen.dart';
 import 'screens/version_screen.dart';
 import 'data/i18n/content_i18n.dart';
 import 'services/favorites.dart';
@@ -42,13 +50,26 @@ import 'services/notification_service.dart';
 import 'services/nav_requests.dart';
 import 'services/notes.dart';
 import 'services/progress.dart';
+import 'services/social_service.dart';
 import 'services/sound_service.dart';
 import 'services/update_check.dart';
 import 'services/user_prefs.dart';
 import 'services/accent.dart';
+import 'services/analytics_sync.dart';
+import 'services/auth_service.dart';
+import 'services/duels_service.dart';
+import 'services/firestore_social_repository.dart';
+import 'services/friends_groups_service.dart';
+import 'services/remote_content_service.dart';
+import 'services/reports_service.dart';
+import 'services/shop_service.dart';
+import 'services/support_service.dart';
+import 'services/tournaments_service.dart';
+import 'widgets/banned_screen.dart';
 import 'widgets/brand_logo.dart';
 import 'widgets/element_sheet.dart';
 import 'widgets/lives_chip.dart';
+import 'widgets/main_bottom_nav.dart';
 
 /// URL de la página de descarga de Melli-Qui (landing en GitHub Pages).
 const String kLandingUrl =
@@ -56,7 +77,24 @@ const String kLandingUrl =
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Firebase (ronda fix8, analítica): si falla, la app arranca igual
+  // 100% offline; la analítica y el bloqueo remoto quedan apagados.
+  try {
+    await Firebase.initializeApp();
+    AnalyticsSync.markFirebaseReady();
+  } catch (_) {
+    // Sin Firebase: todo sigue local, como antes.
+  }
+  // Sesión anónima automática (ronda fix8): el uid es la identidad
+  // del documento de Firestore. Si falla (sin internet), la app
+  // sigue 100% offline y la analítica usa el id temporal.
+  await AuthService.ensureAnonymous();
+  await AnalyticsSync.init();
   await UserPrefs.load();
+  // Compras y cosméticos de la tienda (Quemia 7.0): se cargan
+  // antes de arrancar para que el tema equipado tiña la app
+  // desde el primer fotograma.
+  await SocialService.init();
   // La pista guardada (Bachillerato o Universidad) se carga antes del
   // progreso, porque las claves de guardado dependen de la pista.
   ProgressService.track = UserPrefs.track;
@@ -73,7 +111,42 @@ Future<void> main() async {
   // Primera carga de datos del widget de inicio (pregunta del día,
   // racha, vidas y puntos). Si no hay widget, no pasa nada.
   await HomeWidgetService.update();
-  runApp(const MelliQuiApp());
+  // Puerta de bloqueo (ronda fix8): si el creador baneó esta cuenta,
+  // la app arranca en la pantalla de suspensión. La lectura lleva
+  // timeout: sin internet no se queda esperando. Los ajustes remotos
+  // y la primera subida corren en segundo plano y fallan en silencio.
+  final banned = await AnalyticsSync.fetchBanned()
+      .timeout(const Duration(seconds: 5), onTimeout: () => false);
+  unawaited(AnalyticsSync.applyRemoteSettings());
+  unawaited(AnalyticsSync.uploadProgress());
+  // Respaldo con Google (backupToCloud es hoy un alias de
+  // uploadProgress con force: con Google enlazado sube aunque no
+  // haya permiso de compartir, en privado).
+  unawaited(AnalyticsSync.backupToCloud());
+  // Capa online 7.0: el repositorio Firestore detrás de las
+  // pantallas sociales (amigos, duelos, torneos, tienda, grupos,
+  // reportes). Sin Google o sin red, cada servicio devuelve vacío
+  // y no hace nada (Regla 2). Los reintentos de lo que quedó
+  // pendiente sin internet y el cobro de premios de torneos
+  // terminados corren en segundo plano y fallan en silencio.
+  SocialService.setRepositoryForTests(FirestoreSocialRepository());
+  unawaited(RemoteContentService.refreshRemoteContent());
+  unawaited(ReportsService.retryPendingReports());
+  unawaited(DuelService.retryPendingDuels());
+  unawaited(TournamentsService.retryPendingScores());
+  unawaited(ShopService.retryPendingPurchases());
+  unawaited(FriendsGroupsService.retryPendingFriendRequests());
+  unawaited(TournamentsService.claimAllEndedPrizes());
+  // Soporte (7.0, Kristian 09:52): enviar lo que quedó encolado sin
+  // internet y vigilar si el admin ya respondió a mis mensajes.
+  // Con try/catch y sin bloquear el arranque.
+  try {
+    unawaited(SupportService.instance.retryPendingSupport());
+    SupportService.instance.listenForReplies();
+  } catch (_) {
+    // Sin soporte online: la app sigue.
+  }
+  runApp(MelliQuiApp(banned: banned));
 }
 
 /// Transición suave para TODAS las pantallas (v6): fundido + pequeño
@@ -108,9 +181,16 @@ class _FadeSlideTransitionsBuilder extends PageTransitionsBuilder {
 /// 4 px en teal oscuro, que hace el efecto 3D (el botón parece
 /// levantado). Material pinta el ShapeBorder del botón, así que el
 /// borde inferior se dibuja de verdad, no es solo una sombra.
-class _DuoPillBorder extends RoundedRectangleBorder {
-  const _DuoPillBorder({
+///
+/// También sirve para los botones con contorno (OutlinedButton):
+/// el `side` (contorno teal de 2 px) se pinta encima del borde
+/// inferior, y `copyWith` conserva el tipo para que el marco no lo
+/// pierda al fusionar el contorno (sin esto, el botón con contorno
+/// volvía a ser una píldora plana).
+class DuoPillBorder extends RoundedRectangleBorder {
+  const DuoPillBorder({
     super.borderRadius = const BorderRadius.all(Radius.circular(999)),
+    super.side = BorderSide.none,
     this.edgeColor = BrandColors.tealDark,
   });
 
@@ -120,6 +200,8 @@ class _DuoPillBorder extends RoundedRectangleBorder {
 
   @override
   void paint(Canvas canvas, Rect rect, {TextDirection? textDirection}) {
+    // Primero el contorno (si lo hay), luego el borde inferior 3D.
+    super.paint(canvas, rect, textDirection: textDirection);
     final rrect = borderRadius.resolve(textDirection).toRRect(rect);
     canvas.save();
     canvas.clipPath(Path()..addRRect(rrect));
@@ -131,14 +213,29 @@ class _DuoPillBorder extends RoundedRectangleBorder {
   }
 
   @override
-  ShapeBorder scale(double t) => _DuoPillBorder(
+  RoundedRectangleBorder copyWith(
+          {BorderSide? side, BorderRadiusGeometry? borderRadius}) =>
+      DuoPillBorder(
+        borderRadius: borderRadius ?? this.borderRadius,
+        side: side ?? this.side,
+        edgeColor: edgeColor,
+      );
+
+  @override
+  ShapeBorder scale(double t) => DuoPillBorder(
         borderRadius: borderRadius * t,
+        side: side,
         edgeColor: edgeColor,
       );
 }
 
 class MelliQuiApp extends StatefulWidget {
-  const MelliQuiApp({super.key});
+  const MelliQuiApp({super.key, this.banned = false});
+
+  /// La cuenta está baneada: arrancar en la pantalla de suspensión
+  /// en vez de en la app normal (ronda fix8).
+  final bool banned;
+
   @override
   State<MelliQuiApp> createState() => _MelliQuiAppState();
 }
@@ -147,9 +244,15 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
   bool _isDark = UserPrefs.isDark;
   bool _onboardingDone = UserPrefs.onboardingDone;
 
+  /// ¿La cuenta está baneada ahora? Se re-chequea al volver a primer
+  /// plano (ronda fix8): un baneo aplicado mientras la app estaba
+  /// abierta se ve al volver, sin reiniciar.
+  late bool _banned;
+
   @override
   void initState() {
     super.initState();
+    _banned = widget.banned;
     // El modo de tema vive SOLO en Cuenta (fix3, punto 13): cuando
     // cambia, este aviso reconstruye el tema en el acto, igual que
     // hacía el icono de sol/luna de la AppBar. Sin este listener, el
@@ -180,6 +283,43 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
     }
   }
 
+  /// Al volver a primer plano: re-chequear si la cuenta fue baneada
+  /// (ronda fix8) y reintentar la subida que quedó pendiente sin
+  /// internet (Regla 2). Con timeout, para no quedarse esperando sin
+  /// internet; si falla, el estado queda como estaba.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_recheckBanned());
+      unawaited(AnalyticsSync.retryPending());
+      // Reintentos online 7.0 (Regla 2): lo que quedó encolado sin
+      // internet se sincroniza al volver, en segundo plano.
+      unawaited(RemoteContentService.refreshRemoteContent());
+      unawaited(ReportsService.retryPendingReports());
+      unawaited(DuelService.retryPendingDuels());
+      unawaited(TournamentsService.retryPendingScores());
+      unawaited(ShopService.retryPendingPurchases());
+      unawaited(FriendsGroupsService.retryPendingFriendRequests());
+      unawaited(TournamentsService.claimAllEndedPrizes());
+      // Soporte (7.0): reenviar lo encolado y mirar si el admin
+      // respondió mientras la app estaba en segundo plano.
+      try {
+        unawaited(SupportService.instance.retryPendingSupport());
+        SupportService.instance.listenForReplies();
+      } catch (_) {
+        // Sin soporte online: la app sigue.
+      }
+    }
+  }
+
+  Future<void> _recheckBanned() async {
+    final banned = await AnalyticsSync.fetchBanned()
+        .timeout(const Duration(seconds: 5), onTimeout: () => _banned);
+    if (mounted && banned != _banned) {
+      setState(() => _banned = banned);
+    }
+  }
+
   /// ThemeMode real: 'sistema' sigue al teléfono; 'oscuro' y 'claro'
   /// son fijos.
   ThemeMode get _themeMode => switch (UserPrefs.themeMode) {
@@ -202,8 +342,10 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
   // Antes era verde fijo y el violeta no se veía nunca en oscuro.
   // Verde oscuro de siempre: fondo y superficie del modo oscuro
   // con el acento Verde.
-  static const _deepGreen = Color(0xFF0A1F1A);
-  static const _surfaceGreen = Color(0xFF122B24);
+  // Modo oscuro Duolingo (§2): lienzo #131F24, superficie #1F2C34.
+  // La variante violeta (#17112A/#241B3D) se queda como está.
+  static const _deepGreen = Color(0xFF131F24);
+  static const _surfaceGreen = Color(0xFF1F2C34);
   ThemeData _darkTheme() {
     // Paleta oscura según el acento (fix4, punto 2): Verde usa el
     // verde oscuro de siempre; Violeta usa fondo con tinte violeta,
@@ -226,7 +368,7 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
         violet ? const Color(0xFF9B8FC4) : const Color(0xFF8A9A93);
     return ThemeData(
       useMaterial3: true,
-      fontFamily: 'Roboto',
+      fontFamily: 'Nunito',
       brightness: Brightness.dark,
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
@@ -242,7 +384,8 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
         surface: surface,
         onSurface: onSurface,
         surfaceContainerHighest: containerHighest,
-        error: Color(0xFFEF4444),
+        // Rojo Cardinal de Duolingo (§2): #FF4B4B, no #EF4444.
+        error: Color(0xFFFF4B4B),
       ),
       appBarTheme: AppBarTheme(
         backgroundColor: bg,
@@ -250,7 +393,7 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
         elevation: 0,
         scrolledUnderElevation: 0,
         titleTextStyle: TextStyle(
-          fontFamily: 'Roboto',
+          fontFamily: 'Nunito',
           fontSize: 20,
           fontWeight: FontWeight.w800,
           color: onSurface,
@@ -258,22 +401,19 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: bg,
-        elevation: 2,
-        shadowColor: Colors.black.withValues(alpha: 0.30),
-        indicatorColor: buttonBg.withValues(alpha: 0.25),
+        elevation: 0,
+        indicatorColor: primary.withValues(alpha: 0.20),
         iconTheme: WidgetStateProperty.resolveWith(
           (states) => IconThemeData(
             color: states.contains(WidgetState.selected) ? primary : unselected,
-            size: 26,
+            size: 28,
           ),
         ),
         labelTextStyle: WidgetStateProperty.resolveWith(
           (states) => TextStyle(
-            fontFamily: 'Roboto',
-            fontSize: 12,
-            fontWeight: states.contains(WidgetState.selected)
-                ? FontWeight.w800
-                : FontWeight.w600,
+            fontFamily: 'Nunito',
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
             color: states.contains(WidgetState.selected) ? primary : unselected,
           ),
         ),
@@ -282,6 +422,15 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
         color: surface,
         elevation: 0,
         margin: const EdgeInsets.symmetric(vertical: 6),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Color(0xFF37464F), width: 2),
+        ),
+      ),
+      // Las líneas divisorias NO son negras: divisor oscuro #37464F.
+      dividerTheme: const DividerThemeData(
+        color: Color(0xFF37464F),
+        thickness: 1,
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: surface,
@@ -290,13 +439,13 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
           borderRadius: BorderRadius.all(Radius.circular(20)),
         ),
         titleTextStyle: TextStyle(
-          fontFamily: 'Roboto',
+          fontFamily: 'Nunito',
           fontSize: 20,
           fontWeight: FontWeight.w800,
           color: onSurface,
         ),
         contentTextStyle: TextStyle(
-          fontFamily: 'Roboto',
+          fontFamily: 'Nunito',
           fontSize: 16,
           height: 1.45,
           color: onSurface,
@@ -309,10 +458,10 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
           elevation: 2,
           shadowColor: buttonShadow,
           surfaceTintColor: Colors.transparent,
-          shape: const _DuoPillBorder(),
+          shape: const DuoPillBorder(),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           textStyle: const TextStyle(
-              fontFamily: 'Roboto', fontSize: 16, fontWeight: FontWeight.w800),
+              fontFamily: 'Nunito', fontSize: 16, fontWeight: FontWeight.w800),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
@@ -322,10 +471,10 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
           elevation: 2,
           shadowColor: buttonShadow,
           surfaceTintColor: Colors.transparent,
-          shape: const _DuoPillBorder(),
+          shape: const DuoPillBorder(),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           textStyle: const TextStyle(
-              fontFamily: 'Roboto', fontSize: 16, fontWeight: FontWeight.w800),
+              fontFamily: 'Nunito', fontSize: 16, fontWeight: FontWeight.w800),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -333,30 +482,59 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
           foregroundColor: primary,
           backgroundColor: surface,
           side: BorderSide(color: buttonBg, width: 2),
-          shape: const StadiumBorder(),
+          shape: DuoPillBorder(
+              edgeColor: primary.withValues(alpha: 0.35)),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           textStyle: const TextStyle(
-              fontFamily: 'Roboto', fontSize: 16, fontWeight: FontWeight.w800),
+              fontFamily: 'Nunito', fontSize: 16, fontWeight: FontWeight.w800),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: primary,
           textStyle: const TextStyle(
-              fontFamily: 'Roboto', fontSize: 15, fontWeight: FontWeight.w700),
+              fontFamily: 'Nunito', fontSize: 15, fontWeight: FontWeight.w700),
         ),
+      ),
+      // Interruptor teal (sistema Quemia): sin esto sale violeta,
+      // el color por defecto de Material 3.
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith((states) =>
+            states.contains(WidgetState.selected)
+                ? primary
+                : Colors.white),
+        trackColor: WidgetStateProperty.resolveWith((states) =>
+            states.contains(WidgetState.selected)
+                ? primary.withValues(alpha: 0.45)
+                : Colors.white.withValues(alpha: 0.20)),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: inputFill,
+        // Campo §1.6 también en oscuro: radio 16, borde 2 pt
+        // #37464F (divisor oscuro); al enfocar, #84D8FF. Sin borde
+        // negro por defecto y con altura mínima 56 pt.
+        constraints: const BoxConstraints(minHeight: 56),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
+          borderSide:
+              const BorderSide(color: Color(0xFF37464F), width: 2),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide:
+              const BorderSide(color: Color(0xFF37464F), width: 2),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide:
+              const BorderSide(color: Color(0xFF84D8FF), width: 2),
         ),
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: onSurface,
         contentTextStyle:
-            TextStyle(fontFamily: 'Roboto', color: bg, fontSize: 15),
+            TextStyle(fontFamily: 'Nunito', color: bg, fontSize: 15),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.all(Radius.circular(12)),
@@ -373,7 +551,7 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
             fontSize: 18, fontWeight: FontWeight.w600, color: onSurface),
         titleLarge: TextStyle(
             fontSize: 22, fontWeight: FontWeight.bold, color: onSurface),
-      ).apply(fontFamily: 'Roboto'),
+      ).apply(fontFamily: 'Nunito'),
     );
   }
 
@@ -381,11 +559,11 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
   /// (teal #00C2A8, NUNCA verde Duolingo): fondo blanco, texto
   /// oscuro, tarjetas blancas muy redondeadas con sombra suave,
   /// tipografía gruesa y amistosa, y botones píldora teal con borde
-  /// inferior oscuro (efecto 3D, ver _DuoPillBorder).
+  /// inferior oscuro (efecto 3D, ver DuoPillBorder).
   ThemeData _lightTheme() {
     return ThemeData(
       useMaterial3: true,
-      fontFamily: 'Roboto',
+      fontFamily: 'Nunito',
       brightness: Brightness.light,
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
@@ -404,7 +582,8 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
         surface: Colors.white,
         onSurface: BrandColors.ink,
         surfaceContainerHighest: BrandColors.cardGray,
-        error: Color(0xFFEF4444),
+        // Rojo Cardinal de Duolingo (§2): #FF4B4B, no #EF4444.
+        error: Color(0xFFFF4B4B),
       ),
       appBarTheme: const AppBarTheme(
         backgroundColor: Colors.white,
@@ -412,7 +591,7 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
         elevation: 0,
         scrolledUnderElevation: 0,
         titleTextStyle: TextStyle(
-          fontFamily: 'Roboto',
+          fontFamily: 'Nunito',
           fontSize: 20,
           fontWeight: FontWeight.w800,
           color: BrandColors.ink,
@@ -420,38 +599,42 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: Colors.white,
-        elevation: 2,
-        shadowColor: Colors.black.withValues(alpha: 0.08),
-        indicatorColor: AppAccent.primary.withValues(alpha: 0.15),
+        elevation: 0,
+        indicatorColor: const Color(0xFFCCFBF1),
         iconTheme: WidgetStateProperty.resolveWith(
           (states) => IconThemeData(
             color: states.contains(WidgetState.selected)
                 ? AppAccent.primary
-                : const Color(0xFF9CA3AF),
-            size: 26,
+                : const Color(0xFFAFAFAF),
+            size: 28,
           ),
         ),
         labelTextStyle: WidgetStateProperty.resolveWith(
           (states) => TextStyle(
-            fontFamily: 'Roboto',
-            fontSize: 12,
-            fontWeight: states.contains(WidgetState.selected)
-                ? FontWeight.w800
-                : FontWeight.w600,
+            fontFamily: 'Nunito',
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
             color: states.contains(WidgetState.selected)
                 ? AppAccent.primary
-                : const Color(0xFF9CA3AF),
+                : const Color(0xFFAFAFAF),
           ),
         ),
       ),
       cardTheme: CardThemeData(
         color: Colors.white,
-        elevation: 2,
-        shadowColor: Colors.black.withValues(alpha: 0.10),
+        elevation: 0,
         margin: const EdgeInsets.symmetric(vertical: 6),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Color(0xFFE5E5E5), width: 2),
         ),
+      ),
+      // Las líneas divisorias NO son negras: gris muy claro.
+      // (El Divider por defecto usa colorScheme.outline, que en los
+      // previews salía negro puro: esa era una de las "líneas negras".)
+      dividerTheme: const DividerThemeData(
+        color: Color(0xFFE5E5E5),
+        thickness: 1,
       ),
       dialogTheme: const DialogThemeData(
         backgroundColor: Colors.white,
@@ -460,13 +643,13 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
           borderRadius: BorderRadius.all(Radius.circular(20)),
         ),
         titleTextStyle: TextStyle(
-          fontFamily: 'Roboto',
+          fontFamily: 'Nunito',
           fontSize: 20,
           fontWeight: FontWeight.w800,
           color: BrandColors.ink,
         ),
         contentTextStyle: TextStyle(
-          fontFamily: 'Roboto',
+          fontFamily: 'Nunito',
           fontSize: 16,
           height: 1.45,
           color: BrandColors.ink,
@@ -480,10 +663,10 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
           elevation: 2,
           shadowColor: AppAccent.primaryDark,
           surfaceTintColor: Colors.transparent,
-          shape: _DuoPillBorder(edgeColor: AppAccent.primaryDark),
+          shape: DuoPillBorder(edgeColor: AppAccent.primaryDark),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           textStyle: const TextStyle(
-              fontFamily: 'Roboto', fontSize: 16, fontWeight: FontWeight.w800),
+              fontFamily: 'Nunito', fontSize: 16, fontWeight: FontWeight.w800),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
@@ -494,10 +677,10 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
           elevation: 2,
           shadowColor: AppAccent.primaryDark,
           surfaceTintColor: Colors.transparent,
-          shape: _DuoPillBorder(edgeColor: AppAccent.primaryDark),
+          shape: DuoPillBorder(edgeColor: AppAccent.primaryDark),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           textStyle: const TextStyle(
-              fontFamily: 'Roboto', fontSize: 16, fontWeight: FontWeight.w800),
+              fontFamily: 'Nunito', fontSize: 16, fontWeight: FontWeight.w800),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -505,45 +688,65 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
           foregroundColor: AppAccent.primary,
           backgroundColor: Colors.white,
           side: BorderSide(color: AppAccent.primary, width: 2),
-          shape: const StadiumBorder(),
+          shape: DuoPillBorder(
+              edgeColor: AppAccent.primary.withValues(alpha: 0.30)),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           textStyle: const TextStyle(
-              fontFamily: 'Roboto', fontSize: 16, fontWeight: FontWeight.w800),
+              fontFamily: 'Nunito', fontSize: 16, fontWeight: FontWeight.w800),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: AppAccent.primary,
           textStyle: const TextStyle(
-              fontFamily: 'Roboto', fontSize: 15, fontWeight: FontWeight.w700),
+              fontFamily: 'Nunito', fontSize: 15, fontWeight: FontWeight.w700),
         ),
+      ),
+      // Interruptor teal (sistema Quemia): sin esto sale violeta,
+      // el color por defecto de Material 3.
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith((states) =>
+            states.contains(WidgetState.selected)
+                ? AppAccent.primary
+                : Colors.white),
+        trackColor: WidgetStateProperty.resolveWith((states) =>
+            states.contains(WidgetState.selected)
+                ? AppAccent.primary.withValues(alpha: 0.45)
+                : Colors.black.withValues(alpha: 0.12)),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: Colors.white,
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        // Campo §1.6 (rediseño Duolingo 7.0, Zona A): borde 2 pt
+        // #E5E5E5 por defecto (no teal); al enfocar, #84D8FF;
+        // altura mínima 56 pt. Sin sombra.
+        constraints: const BoxConstraints(minHeight: 56),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(
-            color: AppAccent.primary.withValues(alpha: 0.40),
+          borderSide: const BorderSide(
+            color: Color(0xFFE5E5E5),
+            width: 2,
           ),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(
-            color: AppAccent.primary.withValues(alpha: 0.40),
+          borderSide: const BorderSide(
+            color: Color(0xFFE5E5E5),
+            width: 2,
           ),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: const BorderRadius.all(Radius.circular(16)),
-          borderSide: BorderSide(color: AppAccent.primary, width: 2),
+          borderSide:
+              const BorderSide(color: Color(0xFF84D8FF), width: 2),
         ),
       ),
       snackBarTheme: const SnackBarThemeData(
         backgroundColor: BrandColors.ink,
         contentTextStyle:
-            TextStyle(fontFamily: 'Roboto', color: Colors.white, fontSize: 15),
+            TextStyle(fontFamily: 'Nunito', color: Colors.white, fontSize: 15),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.all(Radius.circular(12)),
@@ -564,7 +767,7 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
             fontSize: 22, fontWeight: FontWeight.w800, color: BrandColors.ink),
         headlineSmall: TextStyle(
             fontSize: 24, fontWeight: FontWeight.w800, color: BrandColors.ink),
-      ).apply(fontFamily: 'Roboto'),
+      ).apply(fontFamily: 'Nunito'),
     );
   }
 
@@ -594,18 +797,21 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
           theme: _lightTheme(),
           darkTheme: _darkTheme(),
           themeMode: _themeMode,
-          home: _onboardingDone
-              ? KeyedSubtree(
-                  key: ValueKey('home-$_reloadToken'),
-                  child: HomeScreen(
-                    isDark: _isDark,
-                    onToggleTheme: _toggleTheme,
-                    onTrackChanged: _reloadApp,
-                  ),
-                )
-              : OnboardingScreen(
-                  onFinished: () => setState(() => _onboardingDone = true),
-                ),
+          home: _banned
+              ? const BannedScreen()
+              : _onboardingDone
+                  ? KeyedSubtree(
+                      key: ValueKey('home-$_reloadToken'),
+                      child: HomeScreen(
+                        isDark: _isDark,
+                        onToggleTheme: _toggleTheme,
+                        onTrackChanged: _reloadApp,
+                      ),
+                    )
+                  : OnboardingScreen(
+                      onFinished: () =>
+                          setState(() => _onboardingDone = true),
+                    ),
         ),
       ),
     );
@@ -616,6 +822,10 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
 /// cantidad de errores por repasar, con el color del tema.
 /// Icono ARRIBA del texto no: en la barra va en línea, como el chip
 /// de vidas, para que quepa junto a la campana.
+/// Rediseño Duolingo (§3.9.5, Zona A): FONDO TRANSPARENTE (sin
+/// píldora tintada), icono 20 pt + número 18 pt peso 800 — igual
+/// que el chip de vidas (LivesChip). El padding (9/5) es solo el
+/// área táctil, sin fondo.
 class _ReviewChip extends StatelessWidget {
   const _ReviewChip({required this.count, required this.onTap});
   final int count;
@@ -629,22 +839,18 @@ class _ReviewChip extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(999),
         onTap: onTap,
-        child: Container(
+        child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-          decoration: BoxDecoration(
-            color: scheme.primary.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(999),
-          ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               LucideIcon(LucideIcons.rotateCcw,
-                  size: 17, color: scheme.primary),
+                  size: 20, color: scheme.primary),
               const SizedBox(width: 4),
               Text(
                 '$count',
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: 18,
                   fontWeight: FontWeight.w800,
                   color: scheme.primary,
                 ),
@@ -667,10 +873,10 @@ class _ReviewChip extends StatelessWidget {
 const double _kTopBarGap = 6.0;
 
 /// Campana de notificaciones en la AppBar (fix4, puntos 8 y 9):
-/// una PÍLDORA como los otros dos chips (mismo fondo tintado, mismo
-/// padding horizontal 9 y vertical 5, icono de 17 px), no un
-/// IconButton suelto, para que el hueco entre los tres controles sea
-/// igual. Lleva el numerito rojo de no leídos de la bandeja (como
+/// FONDO TRANSPARENTE (rediseño Duolingo §3.9.5, Zona A: sin
+/// píldora tintada, igual que los otros dos chips), padding
+/// horizontal 9 y vertical 5 como área táctil, icono de 20 px.
+/// Lleva el numerito rojo de no leídos de la bandeja (como
 /// Facebook); sin no leídos, no hay numerito. Abre la bandeja de
 /// Notificaciones (ya no Recordatorios).
 class _NotificationBell extends StatelessWidget {
@@ -695,15 +901,11 @@ class _NotificationBell extends StatelessWidget {
               children: [
                 Tooltip(
                   message: tr('inboxTitle'),
-                  child: Container(
+                  child: Padding(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: scheme.primary.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
                     child: LucideIcon(LucideIcons.bell,
-                        size: 17, color: scheme.primary, threeD: true),
+                        size: 20, color: scheme.primary, threeD: true),
                   ),
                 ),
                 if (unread > 0)
@@ -715,7 +917,8 @@ class _NotificationBell extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 5, vertical: 1),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFEF4444),
+                        // Rojo Cardinal de Duolingo (§2): #FF4B4B.
+                        color: const Color(0xFFFF4B4B),
                         borderRadius: BorderRadius.circular(999),
                         border: Border.all(
                           color: scheme.surface,
@@ -757,7 +960,10 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  int _index = 0;
+  // Ronda #8 (Quemia 6.5): Niveles es el centro de la barra (índice
+  // 2 en el orden nuevo: Resolver, Aprender, Niveles, Tabla,
+  // Cuenta), así que la app arranca en Niveles, como siempre.
+  int _index = 2;
 
   /// ¿Hay una sesión de juego en curso (quiz de nivel, repaso o
   /// examen mixto en línea)? Mientras la hay, la barra de arriba,
@@ -812,7 +1018,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _onNotificationReviewRequest() {
     if (_inSession) return;
     if (!mounted) return;
-    _goToTab(0, startReview: true);
+    _goToTab(2, startReview: true);
   }
 
   /// Recordatorio de actualización tocado (fix3, punto 20): la app
@@ -836,7 +1042,12 @@ class _HomeScreenState extends State<HomeScreen> {
   // Duolingo; Resolver queda como una opción más. Niveles lleva la
   // pista como clave: al cambiar de versión se crea de nuevo.
   // La quinta pestaña es Cuenta (v6): Tips se mudó a Aprender.
+  // Ronda #8 (Quemia 6.5): orden nuevo de la barra inferior,
+  // con Niveles en el centro (índice 2): Resolver, Aprender,
+  // Niveles, Tabla, Cuenta.
   List<Widget> get _pages => [
+        const ResolverScreen(),
+        const AprenderScreen(),
         PracticarScreen(
             key: ValueKey(ProgressService.track),
             onOpenScreen: _openScreenKey,
@@ -845,8 +1056,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 setState(() => _inSession = inSession);
               }
             }),
-        const ResolverScreen(),
-        const AprenderScreen(),
         const TablaScreen(),
         AccountScreen(
           onOpenScreen: _openScreenKey,
@@ -887,7 +1096,7 @@ class _HomeScreenState extends State<HomeScreen> {
       );
       return;
     }
-    _goToTab(0, startReview: true);
+    _goToTab(2, startReview: true);
   }
 
   /// Abre una pantalla del menú o de la búsqueda por su clave.
@@ -902,8 +1111,21 @@ class _HomeScreenState extends State<HomeScreen> {
         page = StatsScreen(trackTopics: _trackTopics);
       case 'timed':
         page = const TimedExamScreen();
-      case 'challenge':
-        page = const ChallengeScreen();
+      case 'leaderboard':
+        page = const LeaderboardScreen();
+      // Quemia 7.0: social (amigos, torneos, tienda, grupos).
+      case 'friends':
+        page = const FriendsScreen();
+      case 'tournaments':
+        page = const TournamentsScreen();
+      case 'shop':
+        page = const ShopScreen();
+      case 'groups':
+        page = const GroupsScreen();
+      // Soporte en la app (7.0, Kristian 09:52): ventanita con hilo
+      // y compositor (ya no abre WhatsApp directo).
+      case 'support':
+        page = const SupportScreen();
       case 'glossary':
         page = const GlossaryScreen();
       case 'compare':
@@ -939,7 +1161,7 @@ class _HomeScreenState extends State<HomeScreen> {
       case 'tips':
         page = const TipsScreen();
       case 'review':
-        _goToTab(0, startReview: true);
+        _goToTab(2, startReview: true);
         return;
     }
     if (page != null) {
@@ -961,10 +1183,10 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       case 'levels':
         Navigator.of(context).pop();
-        _goToTab(0);
+        _goToTab(2);
       case 'solver':
         Navigator.of(context).pop();
-        _goToTab(1, openSolver: entry.target);
+        _goToTab(0, openSolver: entry.target);
       case 'element':
         final z = int.tryParse(entry.target) ?? 0;
         final element =
@@ -1039,8 +1261,22 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Hoja "Acerca de Melli-Qui" con los datos de soporte.
-  void _showAbout(BuildContext context) {
+  /// Teléfono para mostrar: +5356519431 (o '+53 5 9999999' con
+  /// espacios) → +53 56519431, como antes; otros formatos, tal cual.
+  String _formatSupportPhone(String raw) {
+    final digits = raw.replaceAll(RegExp(r'[\s-]'), '');
+    final m = RegExp(r'^\+53(\d{8})$').firstMatch(digits);
+    return m == null ? raw.trim() : '+53 ${m.group(1)}';
+  }
+
+  /// Hoja "Acerca de Melli-Qui" con los datos de soporte. El
+  /// teléfono es el número REMOTO de Soporte (7.0, 09:52; por
+  /// defecto +5356519431), no un número fijo en el código.
+  Future<void> _showAbout(BuildContext context) async {
+    final settings = await SupportService.instance.fetchSupportSettings();
+    if (!context.mounted) return;
+    final number = settings.supportNumber;
+    final display = _formatSupportPhone(number);
     showModalBottomSheet<void>(
       context: context,
       builder: (sheetContext) => Padding(
@@ -1074,15 +1310,14 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 16),
             Text('${tr('creatorWord')}: CraigKamer',
                 style: const TextStyle(fontSize: 16)),
-            Text('${tr('phoneWord')}: +53 56519431',
+            Text('${tr('phoneWord')}: $display',
                 style: const TextStyle(fontSize: 16)),
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
                 onPressed: () async {
-                  await Clipboard.setData(
-                      const ClipboardData(text: '+5356519431'));
+                  await Clipboard.setData(ClipboardData(text: number));
                   if (!context.mounted) return;
                   Navigator.of(sheetContext).pop();
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -1101,10 +1336,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Una fila del menú de hamburguesa: solo abre su pantalla. Nada de
   /// listas sueltas dentro del menú: cada cosa tiene su pantalla propia.
-  /// Ronda #6, ítem 5: la fila vive dentro de una tarjeta de sección
-  /// (_drawerCard); el icono va en un chip redondeado con tinte del
-  /// acento y el subtítulo se envuelve en tantas líneas como necesite
-  /// (sin ellipsis: ningún subtítulo se corta, p. ej. el del simulador).
+  /// Rediseño Duolingo (§3.15, Zona A): fila PLANA, sin tarjeta —
+  /// el icono va en un círculo tintado (sin 3D ni degradado), el
+  /// título es 17 pt peso 700 #4B4B4B, el subtítulo 15 pt #777777
+  /// (se envuelve en tantas líneas como necesite, sin ellipsis) y
+  /// el chevron es gris #AFAFAF. En oscuro los textos siguen el
+  /// tema (onSurface / onSurfaceVariant).
   /// Sigue siendo un ListTile, para que el cableado de navegación y los
   /// tests que invocan su onTap no cambien.
   Widget _drawerItem({
@@ -1114,28 +1351,31 @@ class _HomeScreenState extends State<HomeScreen> {
     required VoidCallback onTap,
   }) {
     final scheme = Theme.of(context).colorScheme;
+    final isDark = widget.isDark;
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
       // Tres líneas de alto cuando hay subtítulo: así un subtítulo de
       // dos líneas (p. ej. el del simulador) cabe sin recortarse.
       isThreeLine: subtitle != null,
-      // Icono 3D (fix3, punto 6) con el acento de la app: relleno
-      // con degradado + brillito, como el corazón de las vidas,
-      // sobre un chip redondeado con tinte del acento.
+      // Icono en círculo tintado, PLANO (sin threeD, sin degradado).
       // La flecha de la derecha sigue plana (es solo una pista).
       leading: Container(
         width: 44,
         height: 44,
         decoration: BoxDecoration(
+          shape: BoxShape.circle,
           color: scheme.primary.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(14),
         ),
         alignment: Alignment.center,
-        child: LucideIcon(icon,
-            size: 22, color: scheme.primary, threeD: true),
+        child: LucideIcon(icon, size: 22, color: scheme.primary),
       ),
       title: Text(title,
-          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+          style: TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+            color:
+                isDark ? scheme.onSurface : const Color(0xFF4B4B4B),
+          )),
       subtitle: subtitle == null
           ? null
           : Text(
@@ -1146,13 +1386,15 @@ class _HomeScreenState extends State<HomeScreen> {
               maxLines: null,
               overflow: TextOverflow.visible,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: 15,
                 height: 1.35,
-                color: scheme.onSurfaceVariant,
+                color: isDark
+                    ? scheme.onSurfaceVariant
+                    : const Color(0xFF777777),
               ),
             ),
-      trailing: LucideIcon(LucideIcons.chevronRight,
-          size: 18, color: scheme.onSurfaceVariant),
+      trailing: const LucideIcon(LucideIcons.chevronRight,
+          size: 18, color: Color(0xFFAFAFAF)),
       onTap: () {
         SoundService.tap();
         Navigator.of(context).pop();
@@ -1161,38 +1403,35 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Título pequeño de una sección del menú (Practicar, Referencia...).
-  /// Ronda #6, ítem 5: barrita de acento + texto en mayúsculas +
-  /// separador suave, para que la sección no sea una lista plana.
+  /// Título de una sección del menú (Practicar, Referencia...).
+  /// Rediseño Duolingo (§3.15, Zona A): título 20 pt peso 800
+  /// #4B4B4B (en oscuro, onSurface), sin barrita, con divisor
+  /// #E5E5E5 (oscuro #37464F). El título SIGUE en mayúsculas
+  /// (toUpperCase): los tests del menú lo exigen y es solo aspecto.
   Widget _drawerSection(String title) {
     final scheme = Theme.of(context).colorScheme;
+    final dividerColor = widget.isDark
+        ? const Color(0xFF37464F)
+        : const Color(0xFFE5E5E5);
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 20, 16, 8),
       child: Row(
         children: [
-          Container(
-            width: 4,
-            height: 14,
-            decoration: BoxDecoration(
-              color: scheme.primary,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(width: 8),
           Text(
             title.toUpperCase(),
             style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.2,
-              color: scheme.primary,
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: widget.isDark
+                  ? scheme.onSurface
+                  : const Color(0xFF4B4B4B),
             ),
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Divider(
               height: 1,
-              color: scheme.onSurface.withValues(alpha: 0.10),
+              color: dividerColor,
             ),
           ),
         ],
@@ -1200,13 +1439,18 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Una tarjeta de sección del menú: agrupa varias filas (_drawerItem)
-  /// en un bloque redondeado con separadores suaves entre filas, en
-  /// lugar de la lista plana sobre el fondo del drawer. El color sale
-  /// del tema (surfaceContainerHighest), así que en claro es gris muy
-  /// claro sobre blanco y en oscuro, superficie oscura sobre el fondo.
+  /// Filas del menú SIN tarjeta (rediseño Duolingo §3.15, Zona A):
+  /// la tarjeta de sección (Material gris + radio 20 + borde) se
+  /// borra — las filas van directamente sobre el fondo del drawer,
+  /// separadas por un Divider de 1 pt #E5E5E5 (oscuro #37464F).
+  /// El ListTile sigue pintando su splash sobre el Material del
+  /// propio Drawer, así que no hace falta envolverlo.
+  /// (La tarjeta se quitó también en los tests de aspecto del menú;
+  /// la navegación y el orden no cambian.)
   Widget _drawerCard(List<Widget> items) {
-    final scheme = Theme.of(context).colorScheme;
+    final dividerColor = widget.isDark
+        ? const Color(0xFF37464F)
+        : const Color(0xFFE5E5E5);
     final children = <Widget>[];
     for (var i = 0; i < items.length; i++) {
       if (i > 0) {
@@ -1214,32 +1458,14 @@ class _HomeScreenState extends State<HomeScreen> {
           height: 1,
           indent: 68,
           endIndent: 16,
-          color: scheme.onSurface.withValues(alpha: 0.08),
+          color: dividerColor,
         ));
       }
       children.add(items[i]);
     }
-    // Material (no un Container con color): el ListTile pinta su fondo
-    // y el splash del toque sobre el Material más cercano; con un
-    // DecoratedBox de por medio el splash quedaba invisible y Flutter
-    // lo marcaba como error. El Material recorta el splash a la
-    // tarjeta con clipBehavior.
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 2, 12, 4),
-      child: Material(
-        color: scheme.surfaceContainerHighest,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: BorderSide(
-            color: scheme.onSurface.withValues(alpha: 0.06),
-          ),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: children,
-        ),
-      ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: children,
     );
   }
 
@@ -1251,13 +1477,18 @@ class _HomeScreenState extends State<HomeScreen> {
     // violeta claro con Violeta. En claro, el color propio de cada
     // pestaña con el acento verde, o violeta para todas con el
     // acento violeta.
+    // Ronda #8 (Quemia 6.5): la lista va en el orden NUEVO de la
+    // barra (Resolver, Aprender, Niveles, Tabla, Cuenta), así que
+    // cada pestaña conserva SU color de antes: Resolver era la 1,
+    // Aprender la 2, Niveles la 0, Tabla la 3 y Cuenta la 4.
+    const _navOldIndex = [1, 2, 0, 3, 4];
     final tabColors = List<Color>.generate(
       5,
       (i) => widget.isDark
           ? (AppAccent.isViolet
               ? BrandColors.violetLight
               : BrandColors.mintLight)
-          : AppAccent.tabColor(i),
+          : AppAccent.tabColor(_navOldIndex[i]),
     );
     return PopScope(
       // Botón atrás: primero cierra lo abierto por dentro (quiz,
@@ -1267,8 +1498,8 @@ class _HomeScreenState extends State<HomeScreen> {
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         if (BackNav.handle()) return;
-        if (_index != 0) {
-          setState(() => _index = 0);
+        if (_index != 2) {
+          setState(() => _index = 2);
           return;
         }
         SystemNavigator.pop();
@@ -1284,6 +1515,11 @@ class _HomeScreenState extends State<HomeScreen> {
         drawer: _inSession
             ? null
             : Drawer(
+                // Fondo plano del drawer (rediseño Duolingo §3.15):
+                // blanco en claro, superficie oscura en oscuro — las
+                // filas van directamente sobre este fondo, sin tarjeta.
+                backgroundColor:
+                    widget.isDark ? scheme.surface : Colors.white,
                 child: SafeArea(
                   child: Column(
                     children: [
@@ -1301,7 +1537,29 @@ class _HomeScreenState extends State<HomeScreen> {
                             prefixIcon:
                                 const LucideIcon(LucideIcons.search, size: 18),
                             contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 10),
+                                horizontal: 16, vertical: 16),
+                            // Campo §1.6: radio 16, borde 2 pt #E5E5E5;
+                            // al enfocar, #84D8FF. Sin sombra. El
+                            // padding vertical 16 (como el campo de
+                            // Amigos) hace que la caja PINTADA mida
+                            // ≥ 56 pt de alto (mínimo §1.6): el
+                            // minHeight del tema solo agranda el
+                            // hueco, no la caja visible.
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              borderSide: const BorderSide(
+                                  color: Color(0xFFE5E5E5), width: 2),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              borderSide: const BorderSide(
+                                  color: Color(0xFFE5E5E5), width: 2),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              borderSide: const BorderSide(
+                                  color: Color(0xFF84D8FF), width: 2),
+                            ),
                           ),
                         ),
                       ),
@@ -1314,26 +1572,13 @@ class _HomeScreenState extends State<HomeScreen> {
                             // el subtítulo, si se parte en 2 líneas, lo desbordaba
                             // 11 px: con fuente grande o en otro idioma se cortaba
                             // el texto. Este Container crece con su contenido.
-                            // Ronda #6, ítem 5: degradado suave del acento,
-                            // esquinas inferiores redondeadas, logo algo mayor
-                            // y más aire y jerarquía entre nombre y subtítulo.
+                            // Rediseño Duolingo (§3.15, Zona A): PLANO, sin
+                            // degradado ni radios inferiores — fondo blanco
+                            // (superficie oscura en oscuro). Se quedan el
+                            // logo (72), "Quemia" 28 pt w800 y el subtítulo.
                             Container(
                               width: double.infinity,
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    scheme.primary.withValues(alpha: 0.22),
-                                    scheme.secondary
-                                        .withValues(alpha: 0.10),
-                                  ],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                                borderRadius: const BorderRadius.only(
-                                  bottomLeft: Radius.circular(24),
-                                  bottomRight: Radius.circular(24),
-                                ),
-                              ),
+                              color: scheme.surface,
                               padding:
                                   const EdgeInsets.fromLTRB(20, 20, 20, 18),
                               child: Column(
@@ -1392,10 +1637,29 @@ class _HomeScreenState extends State<HomeScreen> {
                                 onTap: () => _openScreenKey('timed'),
                               ),
                               _drawerItem(
-                                icon: LucideIcons.gamepad2,
-                                title: tr('challengeTitle'),
-                                subtitle: tr('challengeSub'),
-                                onTap: () => _openScreenKey('challenge'),
+                                icon: LucideIcons.trophy,
+                                title: tr('accountLeaderboard'),
+                                subtitle: tr('accountLeaderboardSub'),
+                                onTap: () => _openScreenKey('leaderboard'),
+                              ),
+                              // Quemia 7.0: social junto a la tabla.
+                              _drawerItem(
+                                icon: LucideIcons.userRound,
+                                title: tr('accountFriends'),
+                                subtitle: tr('accountFriendsSub'),
+                                onTap: () => _openScreenKey('friends'),
+                              ),
+                              _drawerItem(
+                                icon: LucideIcons.award,
+                                title: tr('accountTournaments'),
+                                subtitle: tr('accountTournamentsSub'),
+                                onTap: () => _openScreenKey('tournaments'),
+                              ),
+                              _drawerItem(
+                                icon: LucideIcons.network,
+                                title: tr('accountGroups'),
+                                subtitle: tr('accountGroupsSub'),
+                                onTap: () => _openScreenKey('groups'),
                               ),
                               _drawerItem(
                                 icon: LucideIcons.circleHelp,
@@ -1508,7 +1772,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   // Campana de notificaciones (fix4, punto 8): abre la
                   // bandeja de Notificaciones (ya no Recordatorios).
-                  // Píldora como los otros dos chips (fix4, punto 9).
+                  // Fondo transparente como los otros dos chips
+                  // (§3.9.5, Zona A), no píldora.
                   Center(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
@@ -1542,56 +1807,18 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         bottomNavigationBar: _inSession
             ? null
-            : NavigationBar(
+            // Ronda #8 (Quemia 6.5): barra propia con Niveles en el
+            // centro como círculo grande (MainBottomNav), en vez
+            // del NavigationBar con 5 destinos en fila. El orden
+            // nuevo es Resolver, Aprender, Niveles, Tabla, Cuenta.
+            : MainBottomNav(
                 selectedIndex: _index,
-                onDestinationSelected: (i) {
+                onSelected: (i) {
                   SoundService.tap();
                   setState(() => _index = i);
                 },
-                // Barra blanca; la pestaña seleccionada lleva su color
-                // (fix2, items 8 y 12): verde en modo oscuro, el color
-                // propio de cada pestaña con el acento verde, o violeta
-                // para todas con el acento violeta; gris si no está.
-                indicatorColor:
-                    (widget.isDark ? BrandColors.mintLight : AppAccent.primary)
-                        .withValues(alpha: 0.15),
-                destinations: [
-                  NavigationDestination(
-                    icon: const LucideIcon(LucideIcons.route,
-                        color: Color(0xFF9CA3AF)),
-                    selectedIcon: LucideIcon(LucideIcons.route,
-                        color: tabColors[0], threeD: true),
-                    label: tr('tabLevels'),
-                  ),
-                  NavigationDestination(
-                    icon: const LucideIcon(LucideIcons.calculator,
-                        color: Color(0xFF9CA3AF)),
-                    selectedIcon: LucideIcon(LucideIcons.calculator,
-                        color: tabColors[1], threeD: true),
-                    label: tr('tabResolver'),
-                  ),
-                  NavigationDestination(
-                    icon: const LucideIcon(LucideIcons.bookOpen,
-                        color: Color(0xFF9CA3AF)),
-                    selectedIcon: LucideIcon(LucideIcons.bookOpen,
-                        color: tabColors[2], threeD: true),
-                    label: tr('tabLearn'),
-                  ),
-                  NavigationDestination(
-                    icon: const LucideIcon(LucideIcons.layoutGrid,
-                        color: Color(0xFF9CA3AF)),
-                    selectedIcon: LucideIcon(LucideIcons.layoutGrid,
-                        color: tabColors[3], threeD: true),
-                    label: tr('tabTable'),
-                  ),
-                  NavigationDestination(
-                    icon: const LucideIcon(LucideIcons.userRound,
-                        color: Color(0xFF9CA3AF)),
-                    selectedIcon: LucideIcon(LucideIcons.userRound,
-                        color: tabColors[4], threeD: true),
-                    label: tr('accountTitle'),
-                  ),
-                ],
+                isDark: widget.isDark,
+                tabColors: tabColors,
               ),
       ),
     );

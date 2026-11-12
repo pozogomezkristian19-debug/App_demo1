@@ -64,63 +64,69 @@ class _TopicDetailViewState extends State<TopicDetailView> {
   @override
   Widget build(BuildContext context) {
     final topic = localizedTopic(widget.topic);
+    // Diseño Duolingo §3.14 (solo tokens): secciones 20 pt peso 800
+    // #4B4B4B, cuerpo 16 pt #4B4B4B, secciones planas separadas por
+    // líneas #E5E5E5, sin sombras.
+    // Tinta según el tema: en oscuro el #4B4B4B fijo no se leía sobre
+    // el fondo oscuro (bug del rediseño). onSurface es #4B4B4B en
+    // claro y #E6F4EE (o #EDE9F7 violeta) en oscuro.
+    final ink = Theme.of(context).colorScheme.onSurface;
+    final section =
+        TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: ink);
+    final body = TextStyle(fontSize: 16, color: ink);
+    const divider = Divider(height: 25, thickness: 1, color: Color(0xFFE5E5E5));
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         Text(topic.level,
             style: TextStyle(
-              color: Theme.of(context).colorScheme.primary,
-              fontWeight: FontWeight.bold,
+              color: ink.withValues(alpha: 0.8),
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
             )),
         const SizedBox(height: 8),
         for (final p in topic.summary)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: Text(p,
-                style: Theme.of(context).textTheme.bodyMedium),
+            child: Text(p, style: body),
           ),
-        const SizedBox(height: 8),
-        Text(tr('formulasWord'),
-            style: const TextStyle(fontWeight: FontWeight.bold)),
+        divider,
+        Text(tr('formulasWord'), style: section),
         for (final f in topic.formulas)
           Padding(
             padding: const EdgeInsets.only(top: 6),
-            child: Text('• ${f.name}: ${f.expr} — ${f.note}'),
+            child: Text('• ${f.name}: ${f.expr} — ${f.note}', style: body),
           ),
         // Diagramas 3D de moléculas (tema de química orgánica).
         if (topic.molecules.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          Text(tr('moleculesWord'),
-              style: const TextStyle(fontWeight: FontWeight.bold)),
-          for (final key in topic.molecules)
-            MoleculeCard(moleculeKey: key),
+          divider,
+          Text(tr('moleculesWord'), style: section),
+          for (final key in topic.molecules) MoleculeCard(moleculeKey: key),
         ],
-        const SizedBox(height: 12),
-        Text('${tr('exampleWord')}: ${topic.exampleTitle}',
-            style: const TextStyle(fontWeight: FontWeight.bold)),
+        divider,
+        Text('${tr('exampleWord')}: ${topic.exampleTitle}', style: section),
         for (var i = 0; i < topic.exampleSteps.length; i++)
           Padding(
             padding: const EdgeInsets.only(top: 4),
-            child: Text('${i + 1}. ${topic.exampleSteps[i]}'),
+            child: Text('${i + 1}. ${topic.exampleSteps[i]}', style: body),
           ),
         Padding(
           padding: const EdgeInsets.only(top: 8),
           child: Text(topic.exampleAnswer,
               style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).colorScheme.primary)),
+                  fontSize: 16, fontWeight: FontWeight.w700, color: ink)),
         ),
-        const SizedBox(height: 12),
-        Text(tr('errorsWord'),
-            style: const TextStyle(fontWeight: FontWeight.bold)),
+        divider,
+        Text(tr('errorsWord'), style: section),
         for (final e in topic.errors)
           Padding(
             padding: const EdgeInsets.only(top: 4),
-            child: Text('• $e'),
+            child: Text('• $e', style: body),
           ),
-        const SizedBox(height: 12),
+        divider,
         Text('${tr('tipWord')}: ${topic.tip}',
-            style: const TextStyle(fontStyle: FontStyle.italic)),
+            style: TextStyle(
+                fontSize: 16, fontStyle: FontStyle.italic, color: ink)),
         const SizedBox(height: 12),
         // Cuestionario de laboratorio: 20 preguntas del tema.
         if (topic.slug == 'laboratorio')
@@ -131,8 +137,7 @@ class _TopicDetailViewState extends State<TopicDetailView> {
               child: ElevatedButton.icon(
                 onPressed: () {
                   Navigator.of(context).push(
-                    MaterialPageRoute(
-                        builder: (_) => const LabQuizPage()),
+                    MaterialPageRoute(builder: (_) => const LabQuizPage()),
                   );
                 },
                 icon: const LucideIcon(LucideIcons.circleHelp),

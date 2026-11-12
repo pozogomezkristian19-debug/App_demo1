@@ -28,37 +28,25 @@
 // cuesta nada. Con 0 vidas no se puede empezar ningún nivel hasta
 // mañana: cada día nuevo las vidas vuelven a 5.
 //
-// Las vidas son SOLO de los niveles (fix4, punto 5): el Reto, el
+// Las vidas son SOLO de los niveles (fix4, punto 5): el
 // examen con tiempo, el quiz de la tabla periódica, el cuestionario
 // del laboratorio, el repaso de errores y el examen mixto NUNCA
 // quitan vidas — ni al salir ni al fallar — usan solo el sistema de
 // puntos. Con 0 vidas solo se bloquean los niveles nuevos; las demás
 // actividades se pueden jugar siempre.
+//
+// Ronda fix8: los valores de esta tabla ya no son constantes fijas:
+// salen de RemoteTuning, que el servidor (settings/app) puede
+// cambiar; sin valores remotos, mandan los locales de siempre.
+
+import 'remote_tuning.dart';
 
 /// Puntos que suma acertar una pregunta de esta dificultad (1-3).
-int pointsForCorrect(int difficulty) {
-  switch (difficulty) {
-    case 1:
-      return 3;
-    case 3:
-      return 8;
-    default:
-      return 5;
-  }
-}
+int pointsForCorrect(int difficulty) => RemoteTuning.correctFor(difficulty);
 
 /// Puntos que RESTA fallar una pregunta de esta dificultad (negativo).
 /// El fallo pesa más que el acierto: se pierde ~1,5 veces lo ganado.
-int pointsForWrong(int difficulty) {
-  switch (difficulty) {
-    case 1:
-      return -5;
-    case 3:
-      return -12;
-    default:
-      return -8;
-  }
-}
+int pointsForWrong(int difficulty) => RemoteTuning.wrongFor(difficulty);
 
 /// Puntos máximos de una pregunta de un nivel (para la nota sobre 5).
 int levelMaxPoints(int difficulty) {
@@ -89,15 +77,17 @@ double levelScore5(List<int> difficulties, List<bool> correct) {
   return earned / max * 5.0;
 }
 
-/// ¿Se pasa el nivel? Acertar 4 o más de 5 preguntas, por conteo de
-/// aciertos y sin importar la dificultad: 4/5 siempre pasa (falle la
-/// fácil, la media o la difícil) y 3/5 nunca pasa. [correct] aciertos,
-/// [total] preguntas del nivel.
+/// ¿Se pasa el nivel? Acertar [RemoteTuning.passRequired] o más de 5
+/// preguntas, por conteo de aciertos y sin importar la dificultad:
+/// 4/5 siempre pasa (falle la fácil, la media o la difícil) y 3/5
+/// nunca pasa, con el umbral local de 4. [correct] aciertos, [total]
+/// preguntas del nivel.
 bool levelPassed(int correct, int total) =>
-    total > 0 && correct * 5 >= total * 4;
+    total > 0 && correct * 5 >= total * RemoteTuning.passRequired;
 
-/// Vidas: 5 como máximo, se reponen cada día nuevo.
-const int maxLives = 5;
+/// Vidas: 5 como máximo, se reponen cada día nuevo. El máximo puede
+/// venir del servidor (RemoteTuning); sin él, 5, como siempre.
+int get maxLives => RemoteTuning.maxLives;
 
 /// Vidas que quedan hoy, según las guardadas y la fecha guardada.
 /// Si la fecha guardada no es hoy, hay día nuevo: vidas llenas.

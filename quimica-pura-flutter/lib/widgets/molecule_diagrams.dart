@@ -272,6 +272,10 @@ class MoleculeCard extends StatelessWidget {
     final theme = Theme.of(context);
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 6),
+      // Sombra tintada teal sobre la del tema (el dibujo 3D de la
+      // molécula NO se toca).
+      elevation: 3,
+      shadowColor: theme.colorScheme.primary.withValues(alpha: 0.20),
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(

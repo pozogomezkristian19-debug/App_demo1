@@ -468,6 +468,9 @@ class _LabSimScreenState extends State<LabSimScreen> {
       ),
       const SizedBox(height: 16),
       Card(
+        elevation: 4,
+        shadowColor:
+            Theme.of(context).colorScheme.primary.withValues(alpha: 0.30),
         color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -558,6 +561,9 @@ class _LabSimScreenState extends State<LabSimScreen> {
       ),
       const SizedBox(height: 16),
       Card(
+        elevation: 4,
+        shadowColor:
+            Theme.of(context).colorScheme.primary.withValues(alpha: 0.30),
         color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
         child: Padding(
           padding: const EdgeInsets.all(16),

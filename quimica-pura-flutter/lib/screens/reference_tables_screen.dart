@@ -2,6 +2,7 @@
 // de solubilidad, en su propia pantalla del menú. Los mismos datos de
 // siempre (lib/data/reference_tables.dart).
 
+import '../widgets/shadows.dart';
 import 'package:flutter/material.dart';
 
 import '../data/reference_tables.dart';
@@ -57,7 +58,10 @@ class _ActivityTab extends StatelessWidget {
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: scheme.primary.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              standardShadow(scheme.primary),
+            ],
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,

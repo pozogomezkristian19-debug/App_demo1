@@ -486,6 +486,53 @@ class ProgressService {
     _save();
   }
 
+  /// Ronda fix8 (analítica): aplica un progreso recuperado del
+  /// servidor (otro teléfono del mismo usuario, buscado por nombre).
+  /// [levelsByTrack]: {'bach': {tema: nivelDesbloqueado}, 'uni':
+  /// {...}}; [practiceDays]: días 'yyyy-MM-dd' con práctica.
+  /// Solo SUMA: por tema se queda el nivel mayor entre el local y
+  /// el recuperado, los puntos quedan en el mayor de los dos y los
+  /// días de práctica se unen (la racha sale de esa unión). Nunca
+  /// borra ni baja el progreso local: si el servidor trae menos,
+  /// manda lo del teléfono.
+  static Future<void> applyRecoveredData({
+    Map<String, Map<String, int>> levelsByTrack = const {},
+    int? points,
+    Iterable<String> practiceDays = const [],
+  }) async {
+    final prefs = instance._prefs ?? await SharedPreferences.getInstance();
+    instance._prefs = prefs;
+    // Niveles por pista: se mezcla en las claves guardadas de cada
+    // pista (la otra pista no vive en memoria, solo en prefs).
+    for (final entry in levelsByTrack.entries) {
+      final t = entry.key;
+      if (t != trackBach && t != trackUni) continue;
+      final key = t == trackBach
+          ? 'melli_progress_bach_levels'
+          : 'melli_progress_levels';
+      final current = _readIntMap(prefs.getString(key));
+      var changed = false;
+      entry.value.forEach((topic, level) {
+        if (level > (current[topic] ?? 1)) {
+          current[topic] = level;
+          changed = true;
+        }
+      });
+      if (changed) await prefs.setString(key, jsonEncode(current));
+    }
+    // Releer (la pista actual refleja la mezcla) y luego puntos/racha.
+    instance._readAll(prefs);
+    var changed = false;
+    if (points != null && points > instance._pointsBalance) {
+      instance._pointsBalance = points;
+      changed = true;
+    }
+    for (final d in practiceDays) {
+      if (instance.practiceDays.add(d)) changed = true;
+    }
+    if (changed) instance._save();
+  }
+
   // ---- Aciertos por tema (sistema adaptativo) ----
 
   /// Registra una respuesta de un tema. Se guarda en cada respuesta.

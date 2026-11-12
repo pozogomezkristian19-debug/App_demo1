@@ -8,6 +8,7 @@
 // en juego: salir a mitad no cuesta vida, solo termina el
 // cuestionario y los puntos ganados hasta ahí se quedan.
 
+import '../widgets/shadows.dart';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -21,6 +22,7 @@ import '../services/localization.dart';
 import '../services/numeric_answer.dart';
 import '../services/points.dart';
 import '../services/progress.dart';
+import '../widgets/simple_quiz.dart';
 
 class LabQuizPage extends StatefulWidget {
   const LabQuizPage({super.key});
@@ -268,44 +270,66 @@ class _LabQuizPageState extends State<LabQuizPage> {
                 // En las preguntas de cálculo las opciones dejan paso
                 // al teclado (que ahora se abre con el icono); las
                 // conceptuales siguen con las opciones de siempre.
+                // Opciones 3D (ronda de diseño 7.0): tarjeta blanca
+                // con sombra en reposo, degradado teal/rojo con
+                // borde inferior oscuro al acertar/fallar (ver
+                // QuizOptionButton en simple_quiz.dart).
                 if (!_q.isNumeric)
                   for (var i = 0; i < 4; i++)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _selected == null
-                            ? Theme.of(context)
-                                .colorScheme
-                                .surfaceContainerHighest
-                            : (_order[i] == _q.answer
-                                ? Colors.teal
-                                : (_selected == i
-                                    ? Colors.redAccent
-                                    : Theme.of(context)
-                                        .colorScheme
-                                        .surfaceContainerHighest)),
-                        // Texto legible (capturas 2026-11-10): sobre
-                        // fondo claro va tinta oscura; sobre teal o
-                        // rojo, blanco. Sin esto heredaba blanco.
-                        foregroundColor: _selected != null &&
-                                (_order[i] == _q.answer || _selected == i)
-                            ? Colors.white
-                            : Theme.of(context).colorScheme.onSurface,
-                        alignment: Alignment.centerLeft,
-                        padding: const EdgeInsets.all(14),
-                      ),
+                    child: QuizOptionButton(
+                      text: _q.options[_order[i]],
+                      state: _selected == null
+                          ? QuizOptionState.normal
+                          : (_order[i] == _q.answer
+                              ? QuizOptionState.correct
+                              : (_selected == i
+                                  ? QuizOptionState.wrong
+                                  : QuizOptionState.normal)),
+                      // Texto legible (capturas 2026-11-10): sobre
+                      // fondo claro va tinta oscura; sobre teal o
+                      // rojo, blanco. Sin esto heredaba blanco.
+                      textColor: _selected != null &&
+                              (_order[i] == _q.answer || _selected == i)
+                          ? Colors.white
+                          : Theme.of(context).colorScheme.onSurface,
                       onPressed: () => _answer(i),
-                      child: Text(_q.options[_order[i]],
-                          style: const TextStyle(fontSize: 16)),
                     ),
                   ),
                 if (_selected != null) ...[
                   const SizedBox(height: 8),
-                  Card(
-                    color: _order[_selected!] == _q.answer
-                        ? Colors.teal.withValues(alpha: 0.2)
-                        : Colors.redAccent.withValues(alpha: 0.15),
+                  // Tarjeta de explicación 3D (ronda de diseño 7.0):
+                  // antes era una Card plana de color liso.
+                  Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: _order[_selected!] == _q.answer
+                            ? [
+                                Colors.teal.withValues(alpha: 0.18),
+                                Colors.teal.withValues(alpha: 0.08),
+                              ]
+                            : [
+                                Colors.redAccent.withValues(alpha: 0.18),
+                                Colors.redAccent.withValues(alpha: 0.08),
+                              ],
+                      ),
+                      border: Border(
+                        bottom: BorderSide(
+                          color: (_order[_selected!] == _q.answer
+                                  ? Colors.teal
+                                  : Colors.redAccent)
+                              .withValues(alpha: 0.45),
+                          width: 3,
+                        ),
+                      ),
+                      boxShadow: [
+                        standardShadow((_order[_selected!] == _q.answer ? Colors.teal : Colors.redAccent)),
+                      ],
+                    ),
                     child: Padding(
                       padding: const EdgeInsets.all(14),
                       child: Column(

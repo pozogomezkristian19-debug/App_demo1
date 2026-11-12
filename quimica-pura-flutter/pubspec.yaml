@@ -12,6 +12,9 @@ environment:
 # para repasar) se guardan en el teléfono con SharedPreferences.
 dependencies:
   audioplayers: ^6.8.1
+  cloud_firestore: ^5.6.0
+  firebase_auth: ^5.7.0
+  firebase_core: ^3.13.0
   flutter:
     sdk: flutter
   flutter_local_notifications: ^23.0.0
@@ -22,6 +25,7 @@ dependencies:
   shared_preferences: ^2.5.6
   timezone: ^0.11.2
   url_launcher: ^6.3.1
+  uuid: ^4.5.1
 
 dev_dependencies:
   flutter_test:
@@ -36,8 +40,28 @@ flutter:
     - assets/britany.png
     - assets/kristian.png
     - assets/whatsapp.png
+    - assets/laurel_oro.png
+    - assets/laurel_plata.png
+    - assets/laurel_bronce.png
+    - assets/avatar_dorado.png
+    - assets/avatar_violeta.png
+    - assets/avatar_teal.png
+    - assets/avatar_default.png
+    - assets/google_g.png
     - assets/sounds/correct.wav
     - assets/sounds/wrong.wav
     - assets/sounds/levelup.wav
     - assets/sounds/streak.wav
     - assets/sounds/click.wav
+
+  fonts:
+    - family: Nunito
+      fonts:
+        - asset: assets/fonts/Nunito-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Nunito-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Nunito-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Nunito-ExtraBold.ttf
+          weight: 800

@@ -33,6 +33,12 @@ class _NotesScreenState extends State<NotesScreen> {
           for (final (slug, title) in all)
             Card(
               margin: const EdgeInsets.only(bottom: 8),
+              elevation: 2,
+              shadowColor:
+                  const Color(0xFF00C2A8).withValues(alpha: 0.15),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
               child: ListTile(
                 leading: LucideIcon(
                   NotesService.instance.hasNote(slug)

@@ -29,6 +29,12 @@ class LanguageScreen extends StatelessWidget {
           for (final (code, name) in AppLang.supported)
             Card(
               margin: const EdgeInsets.only(bottom: 8),
+              elevation: 2,
+              shadowColor:
+                  const Color(0xFF00C2A8).withValues(alpha: 0.15),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
               child: ListTile(
                 leading: FlagWidget(code: code),
                 title: Text(name,

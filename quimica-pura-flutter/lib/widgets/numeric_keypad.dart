@@ -44,6 +44,7 @@ import 'package:flutter/material.dart';
 import '../services/calculator.dart';
 import '../services/localization.dart';
 import '../services/numeric_answer.dart';
+import 'shadows.dart';
 
 /// Calculadora para responder una pregunta de cálculo o para calcular
 /// a mano en una de opción múltiple (ver la cabecera del archivo).
@@ -292,29 +293,61 @@ class _NumericKeypadState extends State<NumericKeypad> {
     bool accent = false,
   }) {
     final scheme = Theme.of(context).colorScheme;
+    final disabled = !widget.enabled;
+    // Tecla 3D (ronda de diseño 7.0): degradado + borde inferior
+    // oscuro + sombra suave tintada; antes era un color plano con un
+    // borde fino gris todo alrededor. El degradado y el borde los
+    // pinta el Container de fuera: el FilledButton de dentro es
+    // transparente (los tests buscan las teclas por FilledButton).
+    // Dígitos en blanco, operadores con tinte teal.
+    final top = accent
+        ? scheme.primary.withValues(alpha: 0.22)
+        : Colors.white;
+    final bottom = accent
+        ? scheme.primary.withValues(alpha: 0.08)
+        : const Color(0xFFF1F5F9);
+    final edge = accent
+        ? scheme.primary.withValues(alpha: 0.45)
+        : const Color(0xFFE5E7EB);
+    final shadow = accent ? scheme.primary : const Color(0xFF64748B);
+    final fg = accent ? scheme.primary : scheme.onSurface;
     return SizedBox(
       height: height,
-      child: FilledButton(
-        onPressed: widget.enabled ? onTap : null,
-        style: FilledButton.styleFrom(
-          backgroundColor: accent
-              ? scheme.primary.withValues(alpha: 0.14)
-              : scheme.surfaceContainerHighest,
-          foregroundColor:
-              accent ? scheme.primary : scheme.onSurface,
-          disabledBackgroundColor: scheme.surfaceContainerHighest
-              .withValues(alpha: 0.6),
-          // Borde fino: sobre fondo claro la tecla gris se distingue
-          // poco sin él y el teclado se ve "flojo".
-          side: BorderSide(color: scheme.outlineVariant),
-          shape: RoundedRectangleBorder(
+      child: Opacity(
+        opacity: disabled ? 0.45 : 1,
+        child: Container(
+          decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [top, bottom],
+            ),
+            border: Border(bottom: BorderSide(color: edge, width: 3)),
+            boxShadow: [
+              standardShadow(shadow),
+            ],
           ),
-          padding: EdgeInsets.zero,
-        ),
-        child: Text(
-          label,
-          style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.bold),
+          child: FilledButton(
+            onPressed: widget.enabled ? onTap : null,
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.transparent,
+              disabledBackgroundColor: Colors.transparent,
+              shadowColor: Colors.transparent,
+              elevation: 0,
+              foregroundColor: fg,
+              disabledForegroundColor: fg.withValues(alpha: 0.5),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              padding: EdgeInsets.zero,
+            ),
+            child: Text(
+              label,
+              style:
+                  TextStyle(fontSize: fontSize, fontWeight: FontWeight.bold),
+            ),
+          ),
         ),
       ),
     );
@@ -328,47 +361,96 @@ class _NumericKeypadState extends State<NumericKeypad> {
   }) {
     final scheme = Theme.of(context).colorScheme;
     final onPressed = widget.enabled && enabled ? onTap : null;
+    // Tecla pequeña 3D (ronda de diseño 7.0): degradado + borde
+    // inferior oscuro + sombra suave tintada; antes era un color
+    // plano. El botón de dentro es transparente: el degradado lo
+    // pinta el Container (los tests buscan las teclas por
+    // FilledButton/OutlinedButton). '=' en teal, resto en blanco.
     if (primary) {
       return SizedBox(
         height: 48,
-        child: FilledButton(
-          onPressed: onPressed,
-          style: FilledButton.styleFrom(
-            backgroundColor: scheme.primary,
-            foregroundColor: scheme.onPrimary,
-            disabledBackgroundColor:
-                scheme.primary.withValues(alpha: 0.45),
-            shape: RoundedRectangleBorder(
+        child: Opacity(
+          opacity: onPressed == null ? 0.45 : 1,
+          child: Container(
+            decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
+              gradient: const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFF14D3B8), Color(0xFF00C2A8)],
+              ),
+              border: const Border(
+                  bottom:
+                      BorderSide(color: Color(0xFF00A18D), width: 3)),
+              boxShadow: [
+                standardShadow(scheme.primary),
+              ],
             ),
-            // Padding corto: en modo normal hay 4 teclas pequeñas y
-            // con el padding por defecto "Limpiar" no cabe y se parte
-            // en dos líneas.
-            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: FilledButton(
+              onPressed: onPressed,
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.transparent,
+                disabledBackgroundColor: Colors.transparent,
+                shadowColor: Colors.transparent,
+                elevation: 0,
+                foregroundColor: Colors.white,
+                disabledForegroundColor: Colors.white70,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                // Padding corto: en modo normal hay 4 teclas pequeñas y
+                // con el padding por defecto "Limpiar" no cabe y se parte
+                // en dos líneas.
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+              ),
+              child: Text(label,
+                  style: const TextStyle(
+                      fontSize: 20, fontWeight: FontWeight.bold)),
+            ),
           ),
-          child: Text(label,
-              style: const TextStyle(
-                  fontSize: 20, fontWeight: FontWeight.bold)),
         ),
       );
     }
     return SizedBox(
       height: 48,
-      child: OutlinedButton(
-        onPressed: onPressed,
-        style: OutlinedButton.styleFrom(
-          foregroundColor: scheme.onSurface,
-          side: BorderSide(color: scheme.outlineVariant),
-          shape: RoundedRectangleBorder(
+      child: Opacity(
+        opacity: onPressed == null ? 0.45 : 1,
+        child: Container(
+          decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
+            gradient: const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Colors.white, Color(0xFFF1F5F9)],
+            ),
+            border: const Border(
+                bottom: BorderSide(color: Color(0xFFE5E7EB), width: 3)),
+            boxShadow: [
+              standardShadow(const Color(0xFF64748B)),
+            ],
           ),
-          // Padding corto: como arriba, "Limpiar" no cabe con el
-          // padding por defecto cuando hay 4 teclas pequeñas.
-          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: OutlinedButton(
+            onPressed: onPressed,
+            style: OutlinedButton.styleFrom(
+              backgroundColor: Colors.transparent,
+              shadowColor: Colors.transparent,
+              elevation: 0,
+              foregroundColor: scheme.onSurface,
+              // Sin contorno: el del tema es teal de 2 px y chocaría
+              // con el borde inferior gris del Container.
+              side: BorderSide.none,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              // Padding corto: como arriba, "Limpiar" no cabe con el
+              // padding por defecto cuando hay 4 teclas pequeñas.
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+            ),
+            child: Text(label,
+                style: const TextStyle(
+                    fontSize: 16, fontWeight: FontWeight.bold)),
+          ),
         ),
-        child: Text(label,
-            style:
-                const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
       ),
     );
   }
@@ -399,7 +481,7 @@ class _NumericKeypadState extends State<NumericKeypad> {
         // unidad al lado (solo el número, sin unidades ni fórmulas).
         // Cuando tiene valor se tiñe suave de primario: es el dato
         // que importa y tiene que saltar a la vista frente a la caja
-        // de la expresión.
+        // de la expresión. Sombra suave (ronda de diseño 7.0).
         Container(
           padding:
               const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -413,6 +495,9 @@ class _NumericKeypadState extends State<NumericKeypad> {
                   ? scheme.outlineVariant
                   : scheme.primary.withValues(alpha: 0.45),
             ),
+            boxShadow: [
+              standardShadow((_answer.isEmpty ? const Color(0xFF64748B) : scheme.primary)),
+            ],
           ),
           child: Row(
             children: [
@@ -462,6 +547,9 @@ class _NumericKeypadState extends State<NumericKeypad> {
             color: scheme.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: scheme.outlineVariant),
+            boxShadow: [
+              standardShadow(const Color(0xFF64748B)),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -595,19 +683,15 @@ class _NumericKeypadState extends State<NumericKeypad> {
         // "Usar resultado" solo en las preguntas de cálculo (onSubmit no
         // null): en modo "para calcular a mano" no hay nada que
         // entregar; '=' ya deja el resultado en el visor.
+        // Botón 3D del tema (ronda de diseño 7.0): sin styleFrom
+        // propio, usa la píldora teal del tema; el styleFrom plano
+        // de antes lo dejaba sin vida.
         if (widget.onSubmit != null) ...[
           const SizedBox(height: 12),
           SizedBox(
             height: 56,
             child: FilledButton(
               onPressed: canSubmit ? _submit : null,
-              style: FilledButton.styleFrom(
-                backgroundColor: scheme.primary,
-                foregroundColor: scheme.onPrimary,
-                disabledBackgroundColor:
-                    scheme.primary.withValues(alpha: 0.45),
-                shape: const StadiumBorder(),
-              ),
               child: Text(
                 tr('calcUseResult'),
                 style: const TextStyle(

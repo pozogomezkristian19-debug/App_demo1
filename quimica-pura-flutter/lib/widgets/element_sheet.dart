@@ -82,8 +82,24 @@ class _ElementSheetState extends State<ElementSheet> {
     final isFav = FavoritesService.instance.isFav(favId);
     return Container(
       decoration: BoxDecoration(
-        color: scheme.surface,
+        // Degradado suave superficie → tinte teal + sombra suave:
+        // la hoja ya no es un plano.
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            scheme.surface,
+            scheme.primary.withValues(alpha: 0.06),
+          ],
+        ),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        boxShadow: [
+          BoxShadow(
+            color: scheme.primary.withValues(alpha: 0.15),
+            blurRadius: 16,
+            offset: const Offset(0, -4),
+          ),
+        ],
       ),
       child: ListView(
         controller: widget.scrollController,

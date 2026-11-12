@@ -14,11 +14,9 @@
 import 'package:flutter/material.dart';
 
 import '../services/localization.dart';
+import '../widgets/duo_button.dart';
 import '../widgets/lives_chip.dart';
 import '../widgets/lucide_icons.dart';
-
-/// Teal propio de Melli-Qui, para el botón de cerrar.
-const _teal = Color(0xFF00C2A8);
 
 /// Abre la pantalla "¿Cómo se juega?" (la usan el alias viejo de
 /// widgets/how_to_play.dart y la fila de Cuenta vía
@@ -97,20 +95,11 @@ class HowToPlayScreen extends StatelessWidget {
               text: tr('howToPlayReview'),
             ),
             const SizedBox(height: 28),
-            FilledButton(
+            // Botón 3D (ronda de diseño 7.0): antes era un
+            // FilledButton plano con styleFrom teal liso.
+            DuoButton.primary(
+              label: tr('closeWord'),
               onPressed: () => Navigator.of(context).pop(),
-              style: FilledButton.styleFrom(
-                backgroundColor: _teal,
-                foregroundColor: Colors.white,
-                shape: const StadiumBorder(),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
-              ),
-              child: Text(
-                tr('closeWord'),
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold, fontSize: 16),
-              ),
             ),
           ],
         ),
@@ -131,6 +120,9 @@ class _RuleRow extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Círculo del icono PLANO (reglas 1 y 3): tinte teal sólido
+        // al 12 %, sin degradado y sin sombra borrosa. Antes era un
+        // degradado suave con sombra tintada (ronda de diseño 7.0).
         Container(
           width: 40,
           height: 40,

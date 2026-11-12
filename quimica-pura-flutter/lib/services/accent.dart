@@ -12,6 +12,7 @@
 import 'package:flutter/material.dart';
 
 import '../widgets/brand_logo.dart';
+import 'social_service.dart';
 import 'user_prefs.dart';
 
 class AppAccent {
@@ -21,15 +22,32 @@ class AppAccent {
   static bool get isViolet => UserPrefs.themeAccent == 'violeta';
 
   /// Color principal del tema claro según el acento elegido.
-  static Color get primary => isViolet ? BrandColors.violet : BrandColors.teal;
+  /// Quemia 7.0: un tema comprado en la tienda manda sobre
+  /// Verde/Violeta (vive en SocialService, no en UserPrefs,
+  /// porque UserPrefs solo acepta 'verde'/'violeta').
+  static Color get primary {
+    final shop = SocialService.equippedThemeColor;
+    if (shop != null) return shop;
+    return isViolet ? BrandColors.violet : BrandColors.teal;
+  }
 
   /// Borde inferior oscuro de los botones píldora, según el acento.
-  static Color get primaryDark =>
-      isViolet ? BrandColors.violetDeep : BrandColors.tealDark;
+  static Color get primaryDark {
+    final shop = SocialService.equippedThemeColor;
+    if (shop != null) {
+      return Color.lerp(shop, Colors.black, 0.18)!;
+    }
+    return isViolet ? BrandColors.violetDeep : BrandColors.tealDark;
+  }
 
   /// Color claro para fondos tintados con el acento.
-  static Color get primarySoft =>
-      isViolet ? const Color(0xFFEDE9FE) : const Color(0xFFCCFBF1);
+  static Color get primarySoft {
+    final shop = SocialService.equippedThemeColor;
+    if (shop != null) {
+      return Color.lerp(shop, Colors.white, 0.88)!;
+    }
+    return isViolet ? const Color(0xFFEDE9FE) : const Color(0xFFCCFBF1);
+  }
 
   /// Fondo oscuro de las pantallas que pintan su propio fondo en modo
   /// oscuro (Estadísticas, Cuenta, Tema): verde para Verde, violeta

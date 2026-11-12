@@ -96,6 +96,11 @@ class _VersionScreenState extends State<VersionScreen> {
     final scheme = Theme.of(context).colorScheme;
     return Card(
       color: selected ? scheme.primary.withValues(alpha: 0.15) : null,
+      elevation: selected ? 3 : 2,
+      shadowColor: const Color(0xFF00C2A8).withValues(alpha: 0.2),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
       child: ListTile(
         leading: CircleAvatar(
           backgroundColor: scheme.primary.withValues(alpha: 0.18),

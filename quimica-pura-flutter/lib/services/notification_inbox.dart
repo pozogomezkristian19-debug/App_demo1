@@ -28,7 +28,7 @@ import 'achievements.dart';
 import 'localization.dart';
 import 'progress.dart';
 
-enum InboxKind { update, reminder, achievement, streak }
+enum InboxKind { update, reminder, achievement, streak, support, friendRequest }
 
 class InboxEntry {
   const InboxEntry({
@@ -206,6 +206,31 @@ class NotificationInbox {
       ),
     );
     await _save(list);
+  }
+
+  /// Igual que [add], pero NO hace nada si ya existe una entrada
+  /// con ese id (ni la vuelve a marcar sin leer): para avisos que
+  /// se re-sincronizan cada vez que se abre una pantalla, como la
+  /// solicitud de amistad, donde una sola entrada por solicitud
+  /// basta y la lectura del usuario se respeta.
+  static Future<void> addIfAbsent({
+    required String id,
+    required InboxKind kind,
+    required String title,
+    required String body,
+    Map<String, dynamic> data = const {},
+    DateTime? createdAt,
+  }) async {
+    await _ensureLoaded();
+    if (entriesNotifier.value.any((e) => e.id == id)) return;
+    await add(
+      id: id,
+      kind: kind,
+      title: title,
+      body: body,
+      data: data,
+      createdAt: createdAt,
+    );
   }
 
   static Future<void> markRead(String id) async {

@@ -7,6 +7,7 @@
 // respondió, cuántas correctas y los puntos (sistema de la v6, por
 // dificultad: acertar suma, fallar resta más).
 
+import '../widgets/shadows.dart';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -119,15 +120,26 @@ class _TimedExamScreenState extends State<TimedExamScreen> {
                 // El temporizador, en su propio círculo tintado
                 // (auditoría): un LucideIcon suelto en una Column
                 // con stretch se estira a todo el ancho y se dibuja
-                // gigante detrás del texto (lo mismo que el mando
-                // del Reto y el trofeo del resultado).
+                // gigante detrás del texto (lo mismo que el trofeo
+                // del resultado). Círculo 3D (ronda de diseño 7.0):
+                // degradado teal con sombra suave tintada.
                 Center(
                   child: Container(
                     width: 96,
                     height: 96,
                     decoration: BoxDecoration(
-                      color: Colors.teal.withValues(alpha: 0.14),
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.teal.withValues(alpha: 0.20),
+                          Colors.teal.withValues(alpha: 0.07),
+                        ],
+                      ),
                       shape: BoxShape.circle,
+                      boxShadow: [
+                        standardShadow(Colors.teal),
+                      ],
                     ),
                     alignment: Alignment.center,
                     child: const LucideIcon(LucideIcons.timer,
@@ -159,13 +171,36 @@ class _TimedExamScreenState extends State<TimedExamScreen> {
                     spacing: 8,
                     runSpacing: 8,
                     children: [
+                      // Chips de duración 3D (ronda de diseño 7.0):
+                      // elegido en teal con texto blanco, resto en
+                      // blanco con sombra suave y borde gris claro.
                       for (final m in _durations)
                         ChoiceChip(
                           label: Text('$m ${tr('minutesShort')}',
-                              style: const TextStyle(fontSize: 16)),
+                              style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: _minutes == m
+                                      ? Colors.white
+                                      : scheme.onSurface)),
                           selected: _minutes == m,
                           onSelected: (_) =>
                               setState(() => _minutes = m),
+                          selectedColor: const Color(0xFF00C2A8),
+                          backgroundColor: Colors.white,
+                          checkmarkColor: Colors.white,
+                          elevation: 2,
+                          pressElevation: 4,
+                          shadowColor: const Color(0xFF64748B)
+                              .withValues(alpha: 0.25),
+                          selectedShadowColor: const Color(0xFF00C2A8)
+                              .withValues(alpha: 0.35),
+                          side: BorderSide(
+                              color: _minutes == m
+                                  ? const Color(0xFF00A18D)
+                                  : const Color(0xFFE5E7EB),
+                              width: _minutes == m ? 2 : 1),
+                          shape: const StadiumBorder(),
                         ),
                     ],
                   ),
@@ -183,15 +218,12 @@ class _TimedExamScreenState extends State<TimedExamScreen> {
                   // pastilla con borde, débil para ser el botón
                   // principal. El color sale del tema (teal/violeta
                   // en claro, menta en oscuro) con su onPrimary.
+                  // Ronda de diseño 7.0: sin styleFrom propio, usa
+                  // el tema (píldora 3D teal con borde inferior
+                  // oscuro); el styleFrom plano de antes lo dejaba
+                  // sin vida.
                   FilledButton(
                     onPressed: () => setState(() => _started = true),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: scheme.primary,
-                      foregroundColor: scheme.onPrimary,
-                      shape: const StadiumBorder(),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 24, vertical: 14),
-                    ),
                     child: Text(
                       tr('timedStart'),
                       style: const TextStyle(fontWeight: FontWeight.bold),

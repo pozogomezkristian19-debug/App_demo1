@@ -183,8 +183,8 @@ class LucideIcon extends StatelessWidget {
     // solo respeta su `size` cuando el padre no le impone otras
     // medidas; en un Column con stretch o en el prefixIcon de un
     // TextField, el padre lo estiraba (la lupa de búsqueda salía
-    // gigante, y el mando del Reto también). Con el SizedBox, el
-    // icono mide SIEMPRE `size`, estire quien estire.
+    // gigante). Con el SizedBox, el icono mide SIEMPRE `size`,
+    // estire quien estire.
     return SizedBox(
       width: size,
       height: size,
@@ -883,6 +883,14 @@ class LucideIcons {
   static const LucideIconData copy = LucideIconData([
     _SvgRect(8, 8, 14, 14, 2, 2),
     _SvgPath('M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2'),
+  ]);
+
+  /// Corona (Lucide, añadida en la ronda de diseño 7.0): la
+  /// insignia del 1º de la tabla de posiciones.
+  static const LucideIconData crown = LucideIconData([
+    _SvgPath(
+        'M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.735H5.81a1 1 0 0 1-.957-.735L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z'),
+    _SvgPath('M5 21h14'),
   ]);
 
   static const LucideIconData dna = LucideIconData([

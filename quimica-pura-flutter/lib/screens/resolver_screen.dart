@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../widgets/lucide_icons.dart';
 import '../data/i18n/content_i18n.dart';
+import '../services/accent.dart';
 import '../services/chemistry.dart';
 import '../services/localization.dart';
 import '../services/nav_requests.dart';
@@ -36,7 +37,8 @@ const List<SolverEntry> solverEntries = [
     id: 'molar-mass',
     group: 'Cantidad de sustancia',
     title: 'Masa molar de un compuesto',
-    subtitle: 'Escribe la fórmula (acepta paréntesis): H2SO4, Ca(OH)2, Al2(SO4)3…',
+    subtitle:
+        'Escribe la fórmula (acepta paréntesis): H2SO4, Ca(OH)2, Al2(SO4)3…',
     icon: LucideIcons.flaskConical,
     page: MolarMassSolver(),
   ),
@@ -230,30 +232,89 @@ class _ResolverScreenState extends State<ResolverScreen> {
       NavRequests.openSolverTitle = null;
       final i = solverEntries.indexWhere((s) => s.title == title);
       if (i >= 0) {
-        WidgetsBinding.instance
-            .addPostFrameCallback((_) => _openSolver(i));
+        WidgetsBinding.instance.addPostFrameCallback((_) => _openSolver(i));
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // Organización 6.3 (corrección de Kristian, 2026-11-11): logo
+    // de las gemelas arriba, "Quemia / Química Pura — Universidad",
+    // tarjeta de introducción, chips rectangulares y cada
+    // solucionador en su propia tarjeta redondeada con separación.
+    // El rediseño Duolingo había quitado el logo y la tarjeta y
+    // dejado filas planas con divisores; la funcionalidad (los 14
+    // solvers, los filtros, abrir cada solver) no cambia.
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final ink = isDark ? Colors.white : const Color(0xFF4B4B4B);
+    final inkSoft =
+        isDark ? AppAccent.darkInkSoft : const Color(0xFF777777);
+    final cardColor = isDark ? AppAccent.darkCard : Colors.white;
+    final borderColor =
+        isDark ? const Color(0xFF37464F) : const Color(0xFFE5E5E5);
+    final entriesByGroup = <String, List<int>>{
+      for (final g in _solverGroupOrder) g: [],
+    };
+    for (var i = 0; i < solverEntries.length; i++) {
+      entriesByGroup[solverEntries[i].group]?.add(i);
+    }
     return ListView(
       controller: _scroll,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       children: [
-        const _LogoHeader(),
+        // Logo de las gemelas + nombre de la app.
+        const Center(child: BrandLogo(size: 112)),
         const SizedBox(height: 8),
-        const _IntroCard(),
+        Text('Quemia',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                fontSize: 28, fontWeight: FontWeight.w800, color: ink)),
+        Text(tr('Química Pura — Universidad'),
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 16, color: inkSoft)),
         const SizedBox(height: 12),
-        // Chips de sección (v6): saltar a cada grupo sin desplazar.
+        // Tarjeta de introducción: el título "Resolver", la
+        // invitación y la explicación de los 14 solucionadores.
+        Card(
+          margin: EdgeInsets.zero,
+          elevation: 0,
+          color: cardColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: borderColor),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(tr('resolverTitle'),
+                    style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: ink)),
+                const SizedBox(height: 4),
+                Text(tr('resolverIntro'),
+                    style: TextStyle(fontSize: 16, color: ink)),
+                const SizedBox(height: 8),
+                Text(
+                    tr('14 solucionadores que no solo dan el resultado: muestran el procedimiento completo, como lo escribirías en un examen.'),
+                    style: TextStyle(fontSize: 15, color: inkSoft)),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Chips de sección: saltar a cada grupo sin desplazar.
+        // Rectangulares con borde (como en la 6.3), no píldoras.
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(
             children: [
-              ActionChip(
-                label: Text(tr('allSolvers')),
-                onPressed: () {
+              _RectChip(
+                label: tr('allSolvers'),
+                onTap: () {
                   SoundService.tap();
                   _scroll.animateTo(0,
                       duration: const Duration(milliseconds: 400),
@@ -262,50 +323,34 @@ class _ResolverScreenState extends State<ResolverScreen> {
               ),
               for (final g in _solverGroupOrder) ...[
                 const SizedBox(width: 6),
-                ActionChip(
-                  label: Text(localizedSolverGroup(g)),
-                  onPressed: () => _jumpToGroup(g),
+                _RectChip(
+                  label: localizedSolverGroup(g),
+                  onTap: () => _jumpToGroup(g),
                 ),
               ],
+              // Respiro final: el último chip puede deslizarse
+              // entero dentro de la vista sin pegarse al borde.
+              const SizedBox(width: 16),
             ],
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 4),
         // Ronda #6: Resolver queda SOLO con los solvers. El Formulario
         // rápido y el Simulador de laboratorio ya viven en el menú
         // hamburguesa; aquí eran duplicados y se quitan.
         for (final group in _solverGroupOrder) ...[
           Padding(
             key: _groupKeys[group],
-            padding: const EdgeInsets.only(top: 14, bottom: 6),
+            padding: const EdgeInsets.only(top: 20, bottom: 12),
             child: Text(localizedSolverGroup(group),
-                style: const TextStyle(
-                    fontSize: 19, fontWeight: FontWeight.bold)),
+                style: TextStyle(
+                    fontSize: 20, fontWeight: FontWeight.w800, color: ink)),
           ),
-          for (var i = 0; i < solverEntries.length; i++)
-            if (solverEntries[i].group == group)
-              Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                child: ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: Theme.of(context)
-                        .colorScheme
-                        .primary
-                        .withValues(alpha: 0.15),
-                    child: LucideIcon(solverEntries[i].icon,
-                        color: Theme.of(context).colorScheme.primary),
-                  ),
-                  title: Text(
-                      localizedSolver(solverEntries[i].id)?.title ??
-                          solverEntries[i].title,
-                      style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text(
-                      localizedSolver(solverEntries[i].id)?.subtitle ??
-                          solverEntries[i].subtitle),
-                  trailing: const LucideIcon(LucideIcons.chevronRight),
-                  onTap: () => _openSolver(i),
-                ),
-              ),
+          for (var k = 0; k < entriesByGroup[group]!.length; k++)
+            _SolverRow(
+              entry: solverEntries[entriesByGroup[group]![k]],
+              onTap: () => _openSolver(entriesByGroup[group]![k]),
+            ),
         ],
         const SizedBox(height: 16),
       ],
@@ -313,51 +358,115 @@ class _ResolverScreenState extends State<ResolverScreen> {
   }
 }
 
-class _LogoHeader extends StatelessWidget {
-  const _LogoHeader();
+/// Un chip de filtro rectangular con borde (como en la 6.3):
+/// fondo de tarjeta, texto 15 pt peso 600. El comportamiento
+/// (desplazar a su grupo) es el mismo que el ActionChip anterior.
+class _RectChip extends StatelessWidget {
+  const _RectChip({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
   @override
   Widget build(BuildContext context) {
-    return const Column(
-      children: [
-        // Fix3, punto 6: logo panorámico recortado a las gemelas
-        // (ancho 80, alto ~32), no el cuadrado marrón de 96.
-        BrandLogo(size: 80),
-        SizedBox(height: 8),
-        Text(
-          'Quemia',
-          style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Material(
+      color: isDark ? AppAccent.darkCard : Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+            color: isDark
+                ? const Color(0xFF37464F)
+                : const Color(0xFFE5E5E5)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Text(label,
+              style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white : const Color(0xFF4B4B4B))),
         ),
-        Text('Química Pura — Universidad'),
-      ],
+      ),
     );
   }
 }
 
-class _IntroCard extends StatelessWidget {
-  const _IntroCard();
+/// Una tarjeta de solucionador (6.3): tarjeta redondeada propia
+/// con separación, icono en círculo tintado teal, título 17 pt
+/// peso 700, descripción 15 pt y chevron gris.
+///
+/// Sigue siendo un Card (los tests de funcionalidad localizan
+/// cada solver dentro de su Card): solo cambia su aspecto, no su
+/// comportamiento (los 14 solvers, tocar abre).
+class _SolverRow extends StatelessWidget {
+  const _SolverRow({required this.entry, required this.onTap});
+  final SolverEntry entry;
+  final VoidCallback onTap;
+
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(tr('resolverTitle'),
-                style:
-                    const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 6),
-            Text(tr('resolverIntro')),
-            const SizedBox(height: 6),
-            Text(
-              localizedSolverString('14 solucionadores que no solo dan el resultado: muestran el procedimiento completo, como lo escribirías en un examen.'),
-              style: TextStyle(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onSurface
-                      .withValues(alpha: 0.7)),
-            ),
-          ],
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 0,
+      color: isDark ? AppAccent.darkCard : Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+            color: isDark
+                ? const Color(0xFF37464F)
+                : const Color(0xFFE5E5E5)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: Theme.of(context)
+                    .colorScheme
+                    .primary
+                    .withValues(alpha: 0.15),
+                child: LucideIcon(entry.icon,
+                    color: Theme.of(context).colorScheme.primary),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      localizedSolver(entry.id)?.title ?? entry.title,
+                      style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                          color: isDark
+                              ? Colors.white
+                              : const Color(0xFF4B4B4B)),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      localizedSolver(entry.id)?.subtitle ?? entry.subtitle,
+                      style: TextStyle(
+                          fontSize: 15,
+                          color: isDark
+                              ? AppAccent.darkInkSoft
+                              : const Color(0xFF777777)),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              const LucideIcon(LucideIcons.chevronRight,
+                  color: Color(0xFFAFAFAF)),
+            ],
+          ),
         ),
       ),
     );
@@ -399,7 +508,8 @@ class _MolarMassSolverState extends State<MolarMassSolver> {
   Widget build(BuildContext context) {
     return SolverCard(
       title: 'Masa molar de un compuesto',
-      subtitle: 'Escribe la fórmula (acepta paréntesis): H2SO4, Ca(OH)2, Al2(SO4)3…',
+      subtitle:
+          'Escribe la fórmula (acepta paréntesis): H2SO4, Ca(OH)2, Al2(SO4)3…',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -408,11 +518,14 @@ class _MolarMassSolverState extends State<MolarMassSolver> {
             decoration: const InputDecoration(labelText: 'Fórmula química'),
           ),
           const SizedBox(height: 10),
-          ElevatedButton(onPressed: _calc, child: Text(localizedSolverString('Calcular masa molar'))),
+          ElevatedButton(
+              onPressed: _calc,
+              child: Text(localizedSolverString('Calcular masa molar'))),
           if (_error.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 10),
-              child: Text(_error, style: const TextStyle(color: Colors.redAccent)),
+              child:
+                  Text(_error, style: const TextStyle(color: Colors.redAccent)),
             ),
           if (_steps.isNotEmpty) Steps(steps: _steps),
         ],
@@ -490,18 +603,29 @@ class _MassMolesSolverState extends State<MassMolesSolver> {
             value: _mode,
             isExpanded: true,
             items: [
-              DropdownMenuItem(value: 'moles', child: Text(localizedSolverString('Moles a partir de la masa'))),
-              DropdownMenuItem(value: 'masa', child: Text(localizedSolverString('Masa a partir de los moles'))),
+              DropdownMenuItem(
+                  value: 'moles',
+                  child:
+                      Text(localizedSolverString('Moles a partir de la masa'))),
+              DropdownMenuItem(
+                  value: 'masa',
+                  child: Text(
+                      localizedSolverString('Masa a partir de los moles'))),
             ],
             onChanged: (v) => setState(() => _mode = v ?? 'moles'),
           ),
-          NumField(controller: _mass, label: _mode == 'moles' ? 'Masa (g)' : 'Moles (mol)'),
+          NumField(
+              controller: _mass,
+              label: _mode == 'moles' ? 'Masa (g)' : 'Moles (mol)'),
           NumField(controller: _molar, label: 'Masa molar M (g/mol)'),
-          ElevatedButton(onPressed: _calc, child: Text(localizedSolverString('Calcular'))),
+          ElevatedButton(
+              onPressed: _calc, child: Text(localizedSolverString('Calcular'))),
           if (_result.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 10),
-              child: Text(_result, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+              child: Text(_result,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 17)),
             ),
           if (_steps.isNotEmpty) Steps(steps: _steps),
         ],
@@ -554,11 +678,14 @@ class _MolaritySolverState extends State<MolaritySolver> {
         children: [
           NumField(controller: _moles, label: 'Moles de soluto (mol)'),
           NumField(controller: _vol, label: 'Volumen (L)'),
-          ElevatedButton(onPressed: _calc, child: Text(localizedSolverString('Calcular'))),
+          ElevatedButton(
+              onPressed: _calc, child: Text(localizedSolverString('Calcular'))),
           if (_result.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 10),
-              child: Text(_result, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+              child: Text(_result,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 17)),
             ),
           if (_steps.isNotEmpty) Steps(steps: _steps),
         ],
@@ -590,7 +717,8 @@ class _DilutionSolverState extends State<DilutionSolver> {
     final v2 = parseNum(_v2);
     final missing = [c1, v1, c2, v2].where((e) => e == null).length;
     if (missing != 1) {
-      setState(() => _result = 'Deja vacío SOLO el dato que quieres calcular y rellena los otros tres.');
+      setState(() => _result =
+          'Deja vacío SOLO el dato que quieres calcular y rellena los otros tres.');
       return;
     }
     if ([c1, v1, c2, v2].whereType<double>().any((e) => e <= 0)) {
@@ -602,19 +730,35 @@ class _DilutionSolverState extends State<DilutionSolver> {
       if (c1 == null) {
         final r = c2! * v2! / v1!;
         _result = 'C₁ = ${fmtResult(r)} mol/L';
-        _steps = ['C₁V₁ = C₂V₂', 'C₁ = C₂V₂ / V₁ = ${fmtResult(c2)} × ${fmtResult(v2)} ÷ ${fmtResult(v1)}', 'C₁ = ${fmtResult(r)} mol/L'];
+        _steps = [
+          'C₁V₁ = C₂V₂',
+          'C₁ = C₂V₂ / V₁ = ${fmtResult(c2)} × ${fmtResult(v2)} ÷ ${fmtResult(v1)}',
+          'C₁ = ${fmtResult(r)} mol/L'
+        ];
       } else if (v1 == null) {
         final r = c2! * v2! / c1;
         _result = 'V₁ = ${fmtResult(r)} mL';
-        _steps = ['C₁V₁ = C₂V₂', 'V₁ = C₂V₂ / C₁ = ${fmtResult(c2)} × ${fmtResult(v2)} ÷ ${fmtResult(c1)}', 'V₁ = ${fmtResult(r)} mL'];
+        _steps = [
+          'C₁V₁ = C₂V₂',
+          'V₁ = C₂V₂ / C₁ = ${fmtResult(c2)} × ${fmtResult(v2)} ÷ ${fmtResult(c1)}',
+          'V₁ = ${fmtResult(r)} mL'
+        ];
       } else if (c2 == null) {
         final r = c1 * v1 / v2!;
         _result = 'C₂ = ${fmtResult(r)} mol/L';
-        _steps = ['C₁V₁ = C₂V₂', 'C₂ = C₁V₁ / V₂ = ${fmtResult(c1)} × ${fmtResult(v1)} ÷ ${fmtResult(v2)}', 'C₂ = ${fmtResult(r)} mol/L'];
+        _steps = [
+          'C₁V₁ = C₂V₂',
+          'C₂ = C₁V₁ / V₂ = ${fmtResult(c1)} × ${fmtResult(v1)} ÷ ${fmtResult(v2)}',
+          'C₂ = ${fmtResult(r)} mol/L'
+        ];
       } else {
         final r = c1 * v1 / c2;
         _result = 'V₂ = ${fmtResult(r)} mL';
-        _steps = ['C₁V₁ = C₂V₂', 'V₂ = C₁V₁ / C₂ = ${fmtResult(c1)} × ${fmtResult(v1)} ÷ ${fmtResult(c2)}', 'V₂ = ${fmtResult(r)} mL'];
+        _steps = [
+          'C₁V₁ = C₂V₂',
+          'V₂ = C₁V₁ / C₂ = ${fmtResult(c1)} × ${fmtResult(v1)} ÷ ${fmtResult(c2)}',
+          'V₂ = ${fmtResult(r)} mL'
+        ];
       }
     });
   }
@@ -623,7 +767,8 @@ class _DilutionSolverState extends State<DilutionSolver> {
   Widget build(BuildContext context) {
     return SolverCard(
       title: 'Dilución · C₁V₁ = C₂V₂',
-      subtitle: 'Deja vacío el dato que quieres calcular y rellena los otros tres.',
+      subtitle:
+          'Deja vacío el dato que quieres calcular y rellena los otros tres.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -631,11 +776,15 @@ class _DilutionSolverState extends State<DilutionSolver> {
           NumField(controller: _v1, label: 'V₁ inicial (mL)'),
           NumField(controller: _c2, label: 'C₂ final (mol/L)'),
           NumField(controller: _v2, label: 'V₂ final (mL)'),
-          ElevatedButton(onPressed: _calc, child: Text(localizedSolverString('Calcular el dato que falta'))),
+          ElevatedButton(
+              onPressed: _calc,
+              child: Text(localizedSolverString('Calcular el dato que falta'))),
           if (_result.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 10),
-              child: Text(_result, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+              child: Text(_result,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 17)),
             ),
           if (_steps.isNotEmpty) Steps(steps: _steps),
         ],
@@ -668,27 +817,33 @@ class _PhSolverState extends State<PhSolver> {
     // exigen un valor mayor que cero; el pH solo no puede ser negativo.
     if (_mode == 'ph') {
       if (v < 0) {
-        setState(() => _result = 'Revisa los datos: el pH no puede ser negativo.');
+        setState(
+            () => _result = 'Revisa los datos: el pH no puede ser negativo.');
         return;
       }
     } else if (v <= 0) {
-      setState(() => _result = 'Revisa los datos: introduce un valor mayor que cero.');
+      setState(() =>
+          _result = 'Revisa los datos: introduce un valor mayor que cero.');
       return;
     }
     setState(() {
       if (_mode == 'h') {
         final ph = -math.log(v) / math.ln10;
         final poh = 14 - ph;
-        _result = 'pH = ${ph.toStringAsFixed(2)} · pOH = ${poh.toStringAsFixed(2)}';
+        _result =
+            'pH = ${ph.toStringAsFixed(2)} · pOH = ${poh.toStringAsFixed(2)}';
         _steps = [
           'Dato: [H⁺] = ${fmtResult(v)} mol/L',
           'pH = −log[H⁺] = ${ph.toStringAsFixed(2)}',
           'A 25 °C: pH + pOH = 14 → pOH = ${poh.toStringAsFixed(2)}',
-          ph < 7 ? 'Disolución ácida.' : (ph > 7 ? 'Disolución básica.' : 'Disolución neutra.'),
+          ph < 7
+              ? 'Disolución ácida.'
+              : (ph > 7 ? 'Disolución básica.' : 'Disolución neutra.'),
         ];
       } else if (_mode == 'ph') {
         final h = math.pow(10, -v).toDouble();
-        _result = '[H⁺] = ${fmtResult(h)} mol/L · pOH = ${(14 - v).toStringAsFixed(2)}';
+        _result =
+            '[H⁺] = ${fmtResult(h)} mol/L · pOH = ${(14 - v).toStringAsFixed(2)}';
         _steps = [
           'Dato: pH = ${fmtResult(v)}',
           '[H⁺] = 10^(−pH) = ${fmtResult(h)} mol/L',
@@ -698,7 +853,8 @@ class _PhSolverState extends State<PhSolver> {
         final oh = v;
         final poh = -math.log(oh) / math.ln10;
         final ph = 14 - poh;
-        _result = 'pOH = ${poh.toStringAsFixed(2)} · pH = ${ph.toStringAsFixed(2)}';
+        _result =
+            'pOH = ${poh.toStringAsFixed(2)} · pH = ${ph.toStringAsFixed(2)}';
         _steps = [
           'Dato: [OH⁻] = ${fmtResult(oh)} mol/L',
           'pOH = −log[OH⁻] = ${poh.toStringAsFixed(2)}',
@@ -720,18 +876,29 @@ class _PhSolverState extends State<PhSolver> {
             value: _mode,
             isExpanded: true,
             items: [
-              DropdownMenuItem(value: 'h', child: Text(localizedSolverString('Concentración [H⁺] (mol/L)'))),
-              DropdownMenuItem(value: 'ph', child: Text(localizedSolverString('pH'))),
-              DropdownMenuItem(value: 'oh', child: Text(localizedSolverString('Concentración [OH⁻] (mol/L)'))),
+              DropdownMenuItem(
+                  value: 'h',
+                  child: Text(
+                      localizedSolverString('Concentración [H⁺] (mol/L)'))),
+              DropdownMenuItem(
+                  value: 'ph', child: Text(localizedSolverString('pH'))),
+              DropdownMenuItem(
+                  value: 'oh',
+                  child: Text(
+                      localizedSolverString('Concentración [OH⁻] (mol/L)'))),
             ],
             onChanged: (v) => setState(() => _mode = v ?? 'h'),
           ),
           NumField(controller: _value, label: 'Valor'),
-          ElevatedButton(onPressed: _calc, child: Text(localizedSolverString('Calcular pH y pOH'))),
+          ElevatedButton(
+              onPressed: _calc,
+              child: Text(localizedSolverString('Calcular pH y pOH'))),
           if (_result.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 10),
-              child: Text(_result, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+              child: Text(_result,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 17)),
             ),
           if (_steps.isNotEmpty) Steps(steps: _steps),
         ],
@@ -779,7 +946,11 @@ class _GasSolverState extends State<GasSolver> {
         }
         final r = n * _r * t / v;
         _result = 'P = ${fmtResult(r)} atm';
-        _steps = ['PV = nRT → P = nRT / V', 'P = ${fmtResult(n)} × 0.08206 × ${fmtResult(t)} ÷ ${fmtResult(v)}', 'P = ${fmtResult(r)} atm'];
+        _steps = [
+          'PV = nRT → P = nRT / V',
+          'P = ${fmtResult(n)} × 0.08206 × ${fmtResult(t)} ÷ ${fmtResult(v)}',
+          'P = ${fmtResult(r)} atm'
+        ];
       } else if (_mode == 'V') {
         if (p == null || n == null || t == null || p == 0) {
           _result = 'Introduce P, n y T (en kelvin).';
@@ -787,7 +958,11 @@ class _GasSolverState extends State<GasSolver> {
         }
         final r = n * _r * t / p;
         _result = 'V = ${fmtResult(r)} L';
-        _steps = ['PV = nRT → V = nRT / P', 'V = ${fmtResult(n)} × 0.08206 × ${fmtResult(t)} ÷ ${fmtResult(p)}', 'V = ${fmtResult(r)} L'];
+        _steps = [
+          'PV = nRT → V = nRT / P',
+          'V = ${fmtResult(n)} × 0.08206 × ${fmtResult(t)} ÷ ${fmtResult(p)}',
+          'V = ${fmtResult(r)} L'
+        ];
       } else if (_mode == 'n') {
         if (p == null || v == null || t == null || t == 0) {
           _result = 'Introduce P, V y T (en kelvin).';
@@ -795,15 +970,24 @@ class _GasSolverState extends State<GasSolver> {
         }
         final r = p * v / (_r * t);
         _result = 'n = ${fmtResult(r)} mol';
-        _steps = ['PV = nRT → n = PV / RT', 'n = ${fmtResult(p)} × ${fmtResult(v)} ÷ (0.08206 × ${fmtResult(t)})', 'n = ${fmtResult(r)} mol'];
+        _steps = [
+          'PV = nRT → n = PV / RT',
+          'n = ${fmtResult(p)} × ${fmtResult(v)} ÷ (0.08206 × ${fmtResult(t)})',
+          'n = ${fmtResult(r)} mol'
+        ];
       } else {
         if (p == null || v == null || n == null || n == 0) {
           _result = 'Introduce P, V y n.';
           return;
         }
         final r = p * v / (_r * n);
-        _result = 'T = ${fmtResult(r)} K (${(r - 273.15).toStringAsFixed(1)} °C)';
-        _steps = ['PV = nRT → T = PV / nR', 'T = ${fmtResult(p)} × ${fmtResult(v)} ÷ (0.08206 × ${fmtResult(n)})', 'T = ${fmtResult(r)} K'];
+        _result =
+            'T = ${fmtResult(r)} K (${(r - 273.15).toStringAsFixed(1)} °C)';
+        _steps = [
+          'PV = nRT → T = PV / nR',
+          'T = ${fmtResult(p)} × ${fmtResult(v)} ÷ (0.08206 × ${fmtResult(n)})',
+          'T = ${fmtResult(r)} K'
+        ];
       }
     });
   }
@@ -812,7 +996,8 @@ class _GasSolverState extends State<GasSolver> {
   Widget build(BuildContext context) {
     return SolverCard(
       title: 'Gas ideal · PV = nRT',
-      subtitle: 'R = 0,08206 L·atm·mol⁻¹·K⁻¹. La temperatura siempre en kelvin (K = °C + 273,15).',
+      subtitle:
+          'R = 0,08206 L·atm·mol⁻¹·K⁻¹. La temperatura siempre en kelvin (K = °C + 273,15).',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -820,10 +1005,20 @@ class _GasSolverState extends State<GasSolver> {
             value: _mode,
             isExpanded: true,
             items: [
-              DropdownMenuItem(value: 'P', child: Text(localizedSolverString('Calcular presión P (atm)'))),
-              DropdownMenuItem(value: 'V', child: Text(localizedSolverString('Calcular volumen V (L)'))),
-              DropdownMenuItem(value: 'n', child: Text(localizedSolverString('Calcular moles n (mol)'))),
-              DropdownMenuItem(value: 'T', child: Text(localizedSolverString('Calcular temperatura T (K)'))),
+              DropdownMenuItem(
+                  value: 'P',
+                  child:
+                      Text(localizedSolverString('Calcular presión P (atm)'))),
+              DropdownMenuItem(
+                  value: 'V',
+                  child: Text(localizedSolverString('Calcular volumen V (L)'))),
+              DropdownMenuItem(
+                  value: 'n',
+                  child: Text(localizedSolverString('Calcular moles n (mol)'))),
+              DropdownMenuItem(
+                  value: 'T',
+                  child: Text(
+                      localizedSolverString('Calcular temperatura T (K)'))),
             ],
             onChanged: (v) => setState(() => _mode = v ?? 'V'),
           ),
@@ -831,11 +1026,14 @@ class _GasSolverState extends State<GasSolver> {
           NumField(controller: _v, label: 'Volumen V (L)'),
           NumField(controller: _n, label: 'Moles n (mol)'),
           NumField(controller: _t, label: 'Temperatura T (K)'),
-          ElevatedButton(onPressed: _calc, child: Text(localizedSolverString('Calcular'))),
+          ElevatedButton(
+              onPressed: _calc, child: Text(localizedSolverString('Calcular'))),
           if (_result.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 10),
-              child: Text(_result, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+              child: Text(_result,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 17)),
             ),
           if (_steps.isNotEmpty) Steps(steps: _steps),
         ],
@@ -900,7 +1098,8 @@ class _LimitingSolverState extends State<LimitingSolver> {
   Widget build(BuildContext context) {
     return SolverCard(
       title: 'Reactivo limitante',
-      subtitle: 'Para una reacción a·A + b·B → productos. Introduce los coeficientes de la ecuación ajustada y los moles de partida.',
+      subtitle:
+          'Para una reacción a·A + b·B → productos. Introduce los coeficientes de la ecuación ajustada y los moles de partida.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -908,11 +1107,15 @@ class _LimitingSolverState extends State<LimitingSolver> {
           NumField(controller: _na, label: 'Moles de A'),
           NumField(controller: _cb, label: 'Coeficiente de B (b)'),
           NumField(controller: _nb, label: 'Moles de B'),
-          ElevatedButton(onPressed: _calc, child: Text(localizedSolverString('Encontrar el limitante'))),
+          ElevatedButton(
+              onPressed: _calc,
+              child: Text(localizedSolverString('Encontrar el limitante'))),
           if (_result.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 10),
-              child: Text(_result, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+              child: Text(_result,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 17)),
             ),
           if (_steps.isNotEmpty) Steps(steps: _steps),
         ],

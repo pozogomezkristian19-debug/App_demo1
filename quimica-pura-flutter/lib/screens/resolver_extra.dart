@@ -42,11 +42,13 @@ class _RedoxSolverState extends State<RedoxSolver> {
             width: double.infinity,
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
+              // Tinte teal sólido, sin degradado y sin sombra
+              // (diseño Duolingo §3.11, reglas 1 y 3).
               color: Theme.of(context)
                   .colorScheme
                   .primary
                   .withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(16),
             ),
             child: Text(r.equation,
                 style:

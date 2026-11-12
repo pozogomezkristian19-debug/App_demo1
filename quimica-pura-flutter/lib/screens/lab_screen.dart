@@ -3,7 +3,6 @@
 // cuestionario y del simulador.
 
 import 'package:flutter/material.dart';
-import '../widgets/brand_logo.dart';
 import '../widgets/lucide_icons.dart';
 
 import '../services/localization.dart';
@@ -29,46 +28,70 @@ class LabScreen extends StatelessWidget {
     required VoidCallback onTap,
   }) {
     final accent = Theme.of(context).colorScheme.primary;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Expanded(
+      // Tarjeta con vida (ronda de diseño 7.0): degradado suave
+      // blanco → menta + sombra tintada teal, nunca el gris plano.
+      // Sigue siendo un Card (los tests lo buscan por tipo): el
+      // degradado va en un Container dentro, con clip.
       child: Card(
         margin: EdgeInsets.zero,
-        color: Theme.of(context).brightness == Brightness.dark
-            ? AppAccent.darkCard
-            : BrandColors.cardGray,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 6),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  width: 54,
-                  height: 54,
-                  decoration: BoxDecoration(
-                    color: accent.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(27),
+        color: isDark ? AppAccent.darkCard : Colors.white,
+        elevation: 3,
+        shadowColor: const Color(0xFF00C2A8).withValues(alpha: 0.20),
+        clipBehavior: Clip.antiAlias,
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: isDark
+                  ? [AppAccent.darkCard, AppAccent.darkCard]
+                  : const [Colors.white, Color(0xFFE9FBF8)],
+            ),
+          ),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 6),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 54,
+                    height: 54,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          accent.withValues(alpha: 0.22),
+                          accent.withValues(alpha: 0.08),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(27),
+                    ),
+                    alignment: Alignment.center,
+                    // Icono 3D (fix3, punto 6): degradado del acento
+                    // en el trazo + brillito, como el corazón.
+                    child:
+                        LucideIcon(icon, size: 28, color: accent, threeD: true),
                   ),
-                  alignment: Alignment.center,
-                  // Icono 3D (fix3, punto 6): degradado del acento
-                  // en el trazo + brillito, como el corazón.
-                  child:
-                      LucideIcon(icon, size: 28, color: accent, threeD: true),
-                ),
-                const SizedBox(height: 8),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 34),
-                  child: Center(
-                    child: Text(
-                      label,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                          fontSize: 13, fontWeight: FontWeight.bold),
+                  const SizedBox(height: 8),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 34),
+                    child: Center(
+                      child: Text(
+                        label,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

@@ -28,11 +28,32 @@ class BrandColors {
   /// Teal oscuro: borde inferior de los botones píldora (efecto 3D).
   static const Color tealDark = Color(0xFF00A18D);
 
-  /// Tinta: texto principal sobre fondo blanco.
-  static const Color ink = Color(0xFF3C3C3C);
+  /// Tinta: texto principal sobre fondo blanco (Eel de Duolingo).
+  static const Color ink = Color(0xFF4B4B4B);
 
   /// Gris claro de tarjetas sobre fondo blanco.
   static const Color cardGray = Color(0xFFF7F7F7);
+
+  /// Azul de compra / acción secundaria (Macaw de Duolingo).
+  static const Color buyBlue = Color(0xFF1CB0F6);
+
+  /// Rojo: errores, corazones, destructivo (Cardinal de Duolingo).
+  static const Color red = Color(0xFFFF4B4B);
+
+  /// Naranja de la llama de racha (Fox de Duolingo).
+  static const Color flameOrange = Color(0xFFFF9600);
+
+  /// Amarillo de XP, puntos y corona (Bee de Duolingo).
+  static const Color xpYellow = Color(0xFFFFC800);
+
+  /// Texto secundario (Hare de Duolingo): gris, iconos inactivos.
+  static const Color secondary = Color(0xFFAFAFAF);
+
+  /// Texto terciario (Wolf de Duolingo): subtítulos.
+  static const Color tertiary = Color(0xFF777777);
+
+  /// Líneas y bordes (Swan de Duolingo).
+  static const Color line = Color(0xFFE5E5E5);
 
   /// Ámbar: acento cálido para logros y estrellas.
   static const Color amber = Color(0xFFF59E0B);

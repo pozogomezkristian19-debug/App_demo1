@@ -26,6 +26,7 @@ import 'package:flutter/material.dart';
 
 import '../services/localization.dart';
 import '../services/notification_service.dart';
+import '../widgets/duo_button.dart';
 import '../widgets/lucide_icons.dart';
 import '../widgets/notification_settings_dialog.dart';
 
@@ -41,8 +42,7 @@ class OnboardingNotificationsPage extends StatefulWidget {
 }
 
 class _OnboardingNotificationsPageState
-    extends State<OnboardingNotificationsPage>
-    with WidgetsBindingObserver {
+    extends State<OnboardingNotificationsPage> with WidgetsBindingObserver {
   var _busy = false;
 
   /// El usuario tocó "Ir a Ajustes": al volver se vuelve a
@@ -142,27 +142,26 @@ class _OnboardingNotificationsPageState
           Text(
             tr('obNotifTitle'),
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+            style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF4B4B4B)),
           ),
           const SizedBox(height: 12),
           Text(
             tr('obNotifBody'),
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 17, height: 1.5),
+            style: const TextStyle(
+                fontSize: 16, height: 1.5, color: Color(0xFF777777)),
           ),
           const SizedBox(height: 32),
           SizedBox(
             width: double.infinity,
-            child: ElevatedButton(
+            // Botón primario Duolingo: sólido teal + labio.
+            child: DuoButton.primary(
+              label: tr('obNotifEnable').toUpperCase(),
               onPressed: _busy ? null : _enable,
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-              ),
-              child: Text(tr('obNotifEnable'),
-                  style: const TextStyle(fontSize: 18)),
+              fontSize: 17,
             ),
           ),
         ],
