@@ -83,12 +83,12 @@ jobs:
         run: |
           if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
             echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > quemia-admin/android/app/quemia-release.keystore
-            cat > quemia-admin/android/key.properties <<'PROPEOF'
-            storePassword=${{ secrets.KEYSTORE_PASSWORD }}
-            keyPassword=${{ secrets.KEY_PASSWORD }}
-            keyAlias=${{ secrets.KEY_ALIAS }}
-            storeFile=quemia-release.keystore
-            PROPEOF
+            {
+              echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}"
+              echo "keyPassword=${{ secrets.KEY_PASSWORD }}"
+              echo "keyAlias=${{ secrets.KEY_ALIAS }}"
+              echo "storeFile=quemia-release.keystore"
+            } > quemia-admin/android/key.properties
             echo "Keystore release restaurado (firma permanente Quemia)"
           else
             echo "Sin secreto ANDROID_KEYSTORE_BASE64: se firmara con claves debug"
