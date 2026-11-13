@@ -61,6 +61,33 @@ class AdminStats {
   final List<MapEntry<String, int>> versionCounts;
 }
 
+/// Usuarios a punto de perder la racha: tienen racha mayor que 0 pero no
+/// han entrado hoy (última actividad anterior al día actual). Se ordenan
+/// por días sin entrar, de más a menos: el primero es el más urgente.
+/// Cálculo puro (sin Firebase) para poder probarlo con fakes. Los días se
+/// cuentan por fecha de calendario (no por tramos de 24 h): entrar ayer y
+/// no entrar hoy ya es 1 día sin entrar.
+List<({AppUser user, int daysAway})> streakAtRisk(
+  List<AppUser> users, {
+  DateTime? now,
+}) {
+  final ref = now ?? DateTime.now();
+  final today = DateTime(ref.year, ref.month, ref.day);
+  final atRisk = <({AppUser user, int daysAway})>[];
+  for (final u in users) {
+    if (u.streak <= 0) continue;
+    final lastDay = DateTime(
+      u.lastActive.year,
+      u.lastActive.month,
+      u.lastActive.day,
+    );
+    final daysAway = today.difference(lastDay).inDays;
+    if (daysAway >= 1) atRisk.add((user: u, daysAway: daysAway));
+  }
+  atRisk.sort((a, b) => b.daysAway.compareTo(a.daysAway));
+  return atRisk;
+}
+
 AdminStats computeStats({
   required List<AppUser> users,
   List<QuestionReport> reports = const [],

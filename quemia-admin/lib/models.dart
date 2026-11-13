@@ -19,6 +19,45 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 const String kOwnerEmail = 'pozogomezkristian19@gmail.com';
 
 /// Un usuario de la app Quemia (documento de la colección 'users').
+class BanHistoryEntry {
+  const BanHistoryEntry({
+    required this.action,
+    required this.reason,
+    required this.at,
+    required this.by,
+  });
+
+  /// 'ban' (baneado) o 'unban' (baneo retirado).
+  final String action;
+
+  /// Motivo escrito por el admin (obligatorio al banear, opcional al
+  /// quitar el baneo; puede ser vacío en entradas antiguas).
+  final String reason;
+
+  final DateTime at;
+
+  /// Quién lo hizo (correo del admin).
+  final String by;
+
+  factory BanHistoryEntry.fromMap(Map<String, dynamic> data) {
+    return BanHistoryEntry(
+      action: (data['action'] as String?) ?? 'ban',
+      reason: (data['reason'] as String?) ?? '',
+      at: AppUser.dateFromValue(data['at']),
+      by: (data['by'] as String?) ?? '',
+    );
+  }
+
+  Map<String, dynamic> toMap() => <String, dynamic>{
+    'action': action,
+    'reason': reason,
+    'at': Timestamp.fromDate(at),
+    'by': by,
+  };
+
+  bool get isBan => action == 'ban';
+}
+
 class AppUser {
   const AppUser({
     required this.id,
@@ -34,10 +73,23 @@ class AppUser {
     required this.banned,
     this.bannedReason = '',
     this.bannedAt,
+    this.lives,
+    this.bannedBy = '',
+    this.banHistory = const [],
   });
 
   factory AppUser.fromDoc(String id, Map<String, dynamic> data) {
     final levels = data['levelsPassed'] as Map<String, dynamic>? ?? {};
+    final rawHistory = data['banHistory'];
+    final history = <BanHistoryEntry>[];
+    if (rawHistory is List) {
+      for (final e in rawHistory) {
+        if (e is Map<String, dynamic>) history.add(BanHistoryEntry.fromMap(e));
+        if (e is Map) {
+          history.add(BanHistoryEntry.fromMap(Map<String, dynamic>.from(e)));
+        }
+      }
+    }
     return AppUser(
       id: id,
       username: (data['username'] as String?) ?? 'Sin nombre',
@@ -52,6 +104,9 @@ class AppUser {
       banned: (data['banned'] as bool?) ?? false,
       bannedReason: (data['bannedReason'] as String?) ?? '',
       bannedAt: _toDateOrNull(data['bannedAt']),
+      lives: (data['lives'] as num?)?.toInt(),
+      bannedBy: (data['bannedBy'] as String?) ?? '',
+      banHistory: history,
     );
   }
 
@@ -70,6 +125,10 @@ class AppUser {
     'banned': banned,
     'bannedReason': bannedReason,
     if (bannedAt != null) 'bannedAt': Timestamp.fromDate(bannedAt!),
+    if (lives != null) 'lives': lives,
+    if (bannedBy.isNotEmpty) 'bannedBy': bannedBy,
+    if (banHistory.isNotEmpty)
+      'banHistory': banHistory.map((e) => e.toMap()).toList(),
   };
 
   final String id;
@@ -88,33 +147,64 @@ class AppUser {
   final String bannedReason;
   final DateTime? bannedAt;
 
+  /// Vidas editadas desde la Admin (0–5). null = el documento no trae
+  /// valor remoto: las vidas viven en el teléfono del usuario y la app
+  /// principal todavía no lee este campo (ver informe de la ronda).
+  final int? lives;
+
+  /// Correo del admin que puso el baneo vigente (vacío si no está baneado
+  /// o si el baneo es anterior a esta función).
+  final String bannedBy;
+
+  /// Historial de baneos y desbaneos, del más antiguo al más reciente.
+  final List<BanHistoryEntry> banHistory;
+
   int get totalLevelsPassed => levelsBachPassed + levelsUniPassed;
 
   bool get activeToday =>
       DateTime.now().difference(lastActive) < const Duration(hours: 24);
 
-  AppUser copyWith({bool? banned, String? bannedReason, DateTime? bannedAt}) =>
-      AppUser(
-        id: id,
-        username: username,
-        joinedAt: joinedAt,
-        lastActive: lastActive,
-        levelsBachPassed: levelsBachPassed,
-        levelsUniPassed: levelsUniPassed,
-        points: points,
-        streak: streak,
-        track: track,
-        appVersion: appVersion,
-        banned: banned ?? this.banned,
-        bannedReason: bannedReason ?? this.bannedReason,
-        bannedAt: bannedAt ?? this.bannedAt,
-      );
+  /// Centinela para poder poner a null campos que admiten null
+  /// (bannedAt, lives): copyWith(bannedAt: null) borra el valor; sin el
+  /// parámetro se conserva.
+  static const _unset = Object();
+
+  AppUser copyWith({
+    int? points,
+    int? streak,
+    Object? lives = _unset,
+    bool? banned,
+    String? bannedReason,
+    Object? bannedAt = _unset,
+    String? bannedBy,
+    List<BanHistoryEntry>? banHistory,
+  }) => AppUser(
+    id: id,
+    username: username,
+    joinedAt: joinedAt,
+    lastActive: lastActive,
+    levelsBachPassed: levelsBachPassed,
+    levelsUniPassed: levelsUniPassed,
+    points: points ?? this.points,
+    streak: streak ?? this.streak,
+    track: track,
+    appVersion: appVersion,
+    banned: banned ?? this.banned,
+    bannedReason: bannedReason ?? this.bannedReason,
+    bannedAt: bannedAt == _unset ? this.bannedAt : bannedAt as DateTime?,
+    lives: lives == _unset ? this.lives : lives as int?,
+    bannedBy: bannedBy ?? this.bannedBy,
+    banHistory: banHistory ?? this.banHistory,
+  );
 
   static DateTime _toDate(Object? value) {
     if (value is Timestamp) return value.toDate();
     if (value is DateTime) return value;
     return DateTime.fromMillisecondsSinceEpoch(0);
   }
+
+  /// Igual que [_toDate] pero público para [BanHistoryEntry].
+  static DateTime dateFromValue(Object? value) => _toDate(value);
 
   static DateTime? _toDateOrNull(Object? value) {
     if (value == null) return null;
@@ -234,6 +324,16 @@ class AdminRecord {
 
   bool get isOwner => role == 'owner';
 
+  /// Primer nombre para el saludo ("Hola Kristian"): solo la primera
+  /// palabra del displayName, sin apellidos y sin caer al correo
+  /// (2026-11-13, Kristian: en el Admin no se muestra el correo).
+  /// Vacío si no hay nombre guardado.
+  String get firstName {
+    final name = displayName.trim();
+    if (name.isEmpty) return '';
+    return name.split(RegExp(r'\s+')).first;
+  }
+
   /// El dueño lo puede todo. Un admin solo lo que tenga en su mapa.
   bool canViewUsers() => isOwner || permissions.viewUsers;
   bool canViewProgress() => isOwner || permissions.viewProgress;
@@ -277,8 +377,7 @@ class RemoteSettings {
       pointsHardGain: readInt('pointsHardGain', 8),
       pointsHardLoss: readInt('pointsHardLoss', -12),
       maxLives: readInt('maxLives', 5),
-      supportNumber:
-          (m['supportNumber'] as String?)?.trim() ?? '+5356519431',
+      supportNumber: (m['supportNumber'] as String?)?.trim() ?? '+5356519431',
       showWhatsApp: (m['showWhatsApp'] as bool?) ?? false,
     );
   }
@@ -541,6 +640,7 @@ class Announcement {
     required this.createdAt,
     required this.createdBy,
     this.active = true,
+    this.sendPush = false,
   });
 
   factory Announcement.fromDoc(String id, Map<String, dynamic> data) {
@@ -551,6 +651,7 @@ class Announcement {
       createdAt: _toDate(data['createdAt']),
       createdBy: (data['createdBy'] as String?) ?? '',
       active: (data['active'] as bool?) ?? true,
+      sendPush: data['sendPush'] == true,
     );
   }
 
@@ -560,6 +661,7 @@ class Announcement {
     'createdAt': Timestamp.fromDate(createdAt),
     'createdBy': createdBy,
     'active': active,
+    'sendPush': sendPush,
   };
 
   final String id;
@@ -569,13 +671,19 @@ class Announcement {
   final String createdBy;
   final bool active;
 
-  Announcement copyWith({bool? active}) => Announcement(
+  /// true = además de caer en la bandeja, el aviso se manda como
+  /// notificación push a todos los usuarios (lo envía la Cloud Function
+  /// onAnnouncementCreated; sin despliegue no llega el push).
+  final bool sendPush;
+
+  Announcement copyWith({bool? active, bool? sendPush}) => Announcement(
     id: id,
     title: title,
     body: body,
     createdAt: createdAt,
     createdBy: createdBy,
     active: active ?? this.active,
+    sendPush: sendPush ?? this.sendPush,
   );
 
   static DateTime _toDate(Object? value) {
@@ -583,6 +691,136 @@ class Announcement {
     if (value is DateTime) return value;
     return DateTime.fromMillisecondsSinceEpoch(0);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Duelos (colección 'duels') — solo lectura en la Admin.
+// Campos reales del documento (ver duels_service.dart de la app principal):
+// playerA/playerB (uid), playerAName/playerBName, questionIds, seed,
+// status ('waiting' | 'playing' | 'finished' | 'cancelled'), createdAtMs,
+// results (mapa por uid: correct, timeMs, finishedAtMs, lastActivityMs),
+// winnerUid (uid del ganador o null), forfeit (ganó por abandono).
+// OJO: las reglas publicadas hablan de 'participants'/'questions'/
+// 'answers'/'winner', campos que NO existen en estos documentos: el admin
+// no puede leer duelos hasta que se corrija la regla (ver informe).
+// ---------------------------------------------------------------------------
+
+/// Resultado de un jugador en un duelo. Una entrada con finishedAtMs == 0
+/// es solo un latido (sigue jugando), no un resultado terminado.
+class DuelResult {
+  const DuelResult({
+    required this.correct,
+    required this.timeMs,
+    required this.finishedAtMs,
+    required this.lastActivityMs,
+  });
+
+  final int correct;
+  final int timeMs;
+  final int finishedAtMs;
+  final int lastActivityMs;
+
+  bool get isFinished => finishedAtMs > 0;
+
+  factory DuelResult.fromMap(Object? raw) {
+    if (raw is! Map) {
+      return const DuelResult(
+        correct: 0,
+        timeMs: 0,
+        finishedAtMs: 0,
+        lastActivityMs: 0,
+      );
+    }
+    return DuelResult(
+      correct: (raw['correct'] as num?)?.toInt() ?? 0,
+      timeMs: (raw['timeMs'] as num?)?.toInt() ?? 0,
+      finishedAtMs: (raw['finishedAtMs'] as num?)?.toInt() ?? 0,
+      lastActivityMs: (raw['lastActivityMs'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+class Duel {
+  const Duel({
+    required this.id,
+    required this.playerA,
+    required this.playerB,
+    required this.playerAName,
+    required this.playerBName,
+    required this.status,
+    required this.createdAtMs,
+    required this.results,
+    required this.winnerUid,
+    required this.forfeit,
+  });
+
+  factory Duel.fromDoc(String id, Map<String, dynamic> data) {
+    final results = <String, DuelResult>{};
+    final rawResults = data['results'];
+    if (rawResults is Map) {
+      rawResults.forEach((uid, r) {
+        results[uid.toString()] = DuelResult.fromMap(r);
+      });
+    }
+    return Duel(
+      id: id,
+      playerA: (data['playerA'] as String?) ?? '',
+      playerB: (data['playerB'] as String?) ?? '',
+      playerAName: (data['playerAName'] as String?) ?? 'Jugador A',
+      playerBName: (data['playerBName'] as String?) ?? 'Jugador B',
+      status: (data['status'] as String?) ?? 'waiting',
+      createdAtMs: (data['createdAtMs'] as num?)?.toInt() ?? 0,
+      results: results,
+      winnerUid: (data['winnerUid'] as String?)?.isEmpty == true
+          ? null
+          : data['winnerUid'] as String?,
+      forfeit: data['forfeit'] == true,
+    );
+  }
+
+  final String id;
+  final String playerA;
+  final String playerB;
+  final String playerAName;
+  final String playerBName;
+
+  /// 'waiting' | 'playing' | 'finished' | 'cancelled'.
+  final String status;
+  final int createdAtMs;
+  final Map<String, DuelResult> results;
+  final String? winnerUid;
+  final bool forfeit;
+
+  bool get isFinished => status == 'finished';
+  bool get isCancelled => status == 'cancelled';
+  bool get isActive => status == 'waiting' || status == 'playing';
+
+  /// Etiqueta en español para la UI (sin slugs internos).
+  String get statusLabel => switch (status) {
+    'waiting' => 'En espera',
+    'playing' => 'En curso',
+    'finished' => 'Terminado',
+    'cancelled' => 'Cancelado',
+    _ => 'En curso',
+  };
+
+  DuelResult? resultOf(String uid) => results[uid];
+
+  /// Aciertos del jugador (solo si terminó; null = aún jugando).
+  int? scoreOf(String uid) {
+    final r = results[uid];
+    if (r == null || !r.isFinished) return null;
+    return r.correct;
+  }
+
+  String get winnerName {
+    if (winnerUid == null) return '';
+    if (winnerUid == playerA) return playerAName;
+    if (winnerUid == playerB) return playerBName;
+    return '';
+  }
+
+  DateTime get createdAt => DateTime.fromMillisecondsSinceEpoch(createdAtMs);
 }
 
 // ---------------------------------------------------------------------------
@@ -655,20 +893,17 @@ class SupportMessage {
 
   bool get isAnswered => status == 'respondido';
 
-  SupportMessage copyWith({
-    String? status,
-    String? reply,
-    DateTime? replyAt,
-  }) => SupportMessage(
-    id: id,
-    authorUid: authorUid,
-    username: username,
-    message: message,
-    createdAt: createdAt,
-    status: status ?? this.status,
-    reply: reply ?? this.reply,
-    replyAt: replyAt ?? this.replyAt,
-  );
+  SupportMessage copyWith({String? status, String? reply, DateTime? replyAt}) =>
+      SupportMessage(
+        id: id,
+        authorUid: authorUid,
+        username: username,
+        message: message,
+        createdAt: createdAt,
+        status: status ?? this.status,
+        reply: reply ?? this.reply,
+        replyAt: replyAt ?? this.replyAt,
+      );
 
   static DateTime _toDate(Object? value) {
     if (value is Timestamp) return value.toDate();

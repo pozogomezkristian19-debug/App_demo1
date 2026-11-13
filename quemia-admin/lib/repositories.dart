@@ -42,7 +42,21 @@ class PermissionDenied implements Exception {
 abstract class UsersRepository {
   Future<List<AppUser>> listUsers();
   Future<AppUser?> getUser(String id);
-  Future<void> setBan(String id, {required bool banned, String reason = ''});
+  Future<void> setBan(
+    String id, {
+    required bool banned,
+    String reason = '',
+    String bannedBy = '',
+  });
+
+  /// Edita el progreso de un usuario (puntos >= 0, racha >= 0, vidas 0–5).
+  /// Solo se escriben los campos que no son null.
+  Future<void> updateProgress(
+    String id, {
+    int? points,
+    int? streak,
+    int? lives,
+  });
 }
 
 class FirestoreUsersRepository implements UsersRepository {
@@ -71,15 +85,41 @@ class FirestoreUsersRepository implements UsersRepository {
     String id, {
     required bool banned,
     String reason = '',
+    String bannedBy = '',
   }) async {
+    final entry = <String, dynamic>{
+      'action': banned ? 'ban' : 'unban',
+      'reason': reason,
+      'at': Timestamp.fromDate(DateTime.now()),
+      'by': bannedBy,
+    };
     await _withTimeout(
       _db.collection('users').doc(id).update(<String, dynamic>{
         'banned': banned,
         'bannedReason': reason,
         if (banned) 'bannedAt': FieldValue.serverTimestamp(),
         if (!banned) 'bannedAt': FieldValue.delete(),
+        if (banned && bannedBy.isNotEmpty) 'bannedBy': bannedBy,
+        if (!banned) 'bannedBy': FieldValue.delete(),
+        'banHistory': FieldValue.arrayUnion([entry]),
       }),
     );
+  }
+
+  @override
+  Future<void> updateProgress(
+    String id, {
+    int? points,
+    int? streak,
+    int? lives,
+  }) async {
+    final data = <String, dynamic>{
+      'points': ?points,
+      'streak': ?streak,
+      'lives': ?lives,
+    };
+    if (data.isEmpty) return;
+    await _withTimeout(_db.collection('users').doc(id).update(data));
   }
 }
 
@@ -112,14 +152,84 @@ class FakeUsersRepository implements UsersRepository {
     String id, {
     required bool banned,
     String reason = '',
+    String bannedBy = '',
   }) async {
     final user = _users[id];
     if (user == null) return;
+    final entry = BanHistoryEntry(
+      action: banned ? 'ban' : 'unban',
+      reason: reason,
+      at: DateTime.now(),
+      by: bannedBy,
+    );
     _users[id] = user.copyWith(
       banned: banned,
       bannedReason: reason,
       bannedAt: banned ? DateTime.now() : null,
+      bannedBy: banned ? bannedBy : '',
+      banHistory: [...user.banHistory, entry],
     );
+  }
+
+  @override
+  Future<void> updateProgress(
+    String id, {
+    int? points,
+    int? streak,
+    int? lives,
+  }) async {
+    var user = _users[id];
+    if (user == null) return;
+    if (points != null) user = user.copyWith(points: points);
+    if (streak != null) user = user.copyWith(streak: streak);
+    if (lives != null) user = user.copyWith(lives: lives);
+    _users[id] = user;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Duelos (colección 'duels') — solo lectura en la Admin.
+// OJO: las reglas publicadas hoy NO dejan leer duelos ni al admin (ver
+// informe de la ronda): la lectura falla con permiso denegado hasta que se
+// publique la regla corregida. La pantalla lo muestra con calma.
+// ---------------------------------------------------------------------------
+
+abstract class DuelsRepository {
+  Future<List<Duel>> listDuels({int limit = 100});
+}
+
+class FirestoreDuelsRepository implements DuelsRepository {
+  FirestoreDuelsRepository([FirebaseFirestore? db])
+    : _db = db ?? FirebaseFirestore.instance;
+
+  final FirebaseFirestore _db;
+
+  @override
+  Future<List<Duel>> listDuels({int limit = 100}) async {
+    final snap = await _withTimeout(
+      _db
+          .collection('duels')
+          .orderBy('createdAtMs', descending: true)
+          .limit(limit)
+          .get(),
+    );
+    return snap.docs.map((d) => Duel.fromDoc(d.id, d.data())).toList();
+  }
+}
+
+/// Fake en memoria de la colección 'duels'.
+class FakeDuelsRepository implements DuelsRepository {
+  FakeDuelsRepository([List<Duel>? seed]) : _duels = List.of(seed ?? []);
+
+  final List<Duel> _duels;
+
+  void add(Duel duel) => _duels.add(duel);
+
+  @override
+  Future<List<Duel>> listDuels({int limit = 100}) async {
+    final list = _duels.toList()
+      ..sort((a, b) => b.createdAtMs.compareTo(a.createdAtMs));
+    return list.take(limit).toList();
   }
 }
 
@@ -228,8 +338,7 @@ class FirestoreAdminsRepository implements AdminsRepository {
       final promoted = AdminRecord(
         uid: uid,
         email: normalized,
-        displayName:
-            displayName.isEmpty ? existing.displayName : displayName,
+        displayName: displayName.isEmpty ? existing.displayName : displayName,
         role: 'owner',
         permissions: AdminPermissions.all,
         createdAt: existing.createdAt,
@@ -602,6 +711,7 @@ abstract class AnnouncementsRepository {
     required String title,
     required String body,
     required String createdBy,
+    bool sendPush = false,
   });
   Future<void> setActive(String id, bool active);
   Future<void> delete(String id);
@@ -627,6 +737,7 @@ class FirestoreAnnouncementsRepository implements AnnouncementsRepository {
     required String title,
     required String body,
     required String createdBy,
+    bool sendPush = false,
   }) async {
     final ref = _db.collection('announcements').doc();
     final announcement = Announcement(
@@ -636,6 +747,7 @@ class FirestoreAnnouncementsRepository implements AnnouncementsRepository {
       createdAt: DateTime.now(),
       createdBy: createdBy,
       active: true,
+      sendPush: sendPush,
     );
     await _withTimeout(ref.set(announcement.toMap()));
     return announcement;
@@ -679,6 +791,7 @@ class FakeAnnouncementsRepository implements AnnouncementsRepository {
     required String title,
     required String body,
     required String createdBy,
+    bool sendPush = false,
   }) async {
     final announcement = Announcement(
       id: 'ann-fake-${_counter++}',
@@ -687,6 +800,7 @@ class FakeAnnouncementsRepository implements AnnouncementsRepository {
       createdAt: DateTime.now(),
       createdBy: createdBy,
       active: true,
+      sendPush: sendPush,
     );
     _items[announcement.id] = announcement;
     return announcement;
@@ -863,10 +977,12 @@ class AdminService {
     AnnouncementsRepository? announcements,
     ReportsRepository? reports,
     SupportRepository? support,
+    DuelsRepository? duels,
   }) : levels = levels ?? FakeLevelsRepository(),
        announcements = announcements ?? FakeAnnouncementsRepository(),
        reports = reports ?? FakeReportsRepository(),
-       support = support ?? FakeSupportRepository();
+       support = support ?? FakeSupportRepository(),
+       duels = duels ?? FakeDuelsRepository();
 
   final AdminRecord me;
   final UsersRepository users;
@@ -881,20 +997,91 @@ class AdminService {
   final ReportsRepository reports;
   final SupportRepository support;
 
+  /// Duelos (solo lectura). Por defecto, fake vacío en memoria; la app
+  /// real inyecta la implementación Firestore.
+  final DuelsRepository duels;
+
   // -- Usuarios -------------------------------------------------------------
 
+  /// Banea a un usuario. El motivo es OBLIGATORIO (texto corto) y queda
+  /// guardado junto a quién lo baneó y cuándo, con su historial.
   Future<void> banUser(AppUser user, String reason) async {
     if (!me.canBanUsers()) {
       throw PermissionDenied('No tienes permiso para banear usuarios.');
     }
-    await users.setBan(user.id, banned: true, reason: reason);
+    if (reason.trim().isEmpty) {
+      throw ArgumentError('Escribe el motivo del baneo.');
+    }
+    await users.setBan(
+      user.id,
+      banned: true,
+      reason: reason.trim(),
+      bannedBy: me.email,
+    );
   }
 
-  Future<void> unbanUser(AppUser user) async {
+  /// Quita el baneo. El motivo es opcional y queda en el historial.
+  Future<void> unbanUser(AppUser user, {String reason = ''}) async {
     if (!me.canBanUsers()) {
       throw PermissionDenied('No tienes permiso para quitar baneos.');
     }
-    await users.setBan(user.id, banned: false);
+    await users.setBan(
+      user.id,
+      banned: false,
+      reason: reason.trim(),
+      bannedBy: me.email,
+    );
+  }
+
+  /// Edita el progreso de un usuario. Solo se escriben los valores que no
+  /// son null (un campo vacío en la UI = sin cambio). Puntos >= 0, racha
+  /// >= 0, vidas 0–5. Devuelve el usuario actualizado para refrescar la
+  /// UI sin recargar. Permiso: el mismo que banea (es la única acción que
+  /// muta usuarios). Límites honestos (ver informe): subir puntos se
+  /// mantiene (la app principal fusiona quedándose con el mayor);
+  /// bajarlos lo deshace la próxima subida del teléfono. La racha se
+  /// recalcula en el teléfono desde sus días de práctica. Las vidas aún
+  /// no las lee la app principal: el valor queda guardado y visible en
+  /// la Admin.
+  Future<AppUser> editUserProgress(
+    AppUser user, {
+    int? points,
+    int? streak,
+    int? lives,
+  }) async {
+    if (!me.canBanUsers()) {
+      throw PermissionDenied('No tienes permiso para editar usuarios.');
+    }
+    if (points != null && points < 0) {
+      throw ArgumentError('Los puntos no pueden ser negativos.');
+    }
+    if (streak != null && streak < 0) {
+      throw ArgumentError('La racha no puede ser negativa.');
+    }
+    if (lives != null && (lives < 0 || lives > 5)) {
+      throw ArgumentError('Las vidas van de 0 a 5.');
+    }
+    await users.updateProgress(
+      user.id,
+      points: points,
+      streak: streak,
+      lives: lives,
+    );
+    var updated = user;
+    if (points != null) updated = updated.copyWith(points: points);
+    if (streak != null) updated = updated.copyWith(streak: streak);
+    if (lives != null) updated = updated.copyWith(lives: lives);
+    return updated;
+  }
+
+  /// Duelos (solo lectura), del más reciente al más viejo. Permiso: ver
+  /// usuarios. OJO: las reglas publicadas hoy no dejan leer duelos ni al
+  /// admin; la pantalla muestra el aviso con calma hasta que se publiquen.
+  Future<List<Duel>> listDuels() async {
+    if (!me.canViewUsers()) {
+      throw PermissionDenied('No tienes permiso para ver los duelos.');
+    }
+    return duels.listDuels();
   }
 
   // -- Administradores ------------------------------------------------------
@@ -976,6 +1163,7 @@ class AdminService {
   Future<Announcement> publishAnnouncement({
     required String title,
     required String body,
+    bool sendPush = false,
   }) async {
     if (!me.canManageAdmins()) {
       throw PermissionDenied('No tienes permiso para publicar avisos.');
@@ -987,6 +1175,7 @@ class AdminService {
       title: title.trim(),
       body: body.trim(),
       createdBy: me.email,
+      sendPush: sendPush,
     );
   }
 

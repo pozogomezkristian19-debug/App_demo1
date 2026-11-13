@@ -134,9 +134,14 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: quemiaAdminTheme(),
-          home: SupportScreen(
-            support: service.support,
-            service: service,
+          // Scaffold ancestro: desde el arreglo de la doble barra
+          // (2026-11-13) las secciones ya no traen su propio Scaffold;
+          // en la app real cuelgan del de HomeShell.
+          home: Scaffold(
+            body: SupportScreen(
+              support: service.support,
+              service: service,
+            ),
           ),
         ),
       );
@@ -156,7 +161,9 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: quemiaAdminTheme(),
-          home: SupportScreen(support: support, service: service),
+          home: Scaffold(
+            body: SupportScreen(support: support, service: service),
+          ),
         ),
       );
       await tester.pump();
@@ -194,10 +201,12 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: quemiaAdminTheme(),
-          home: SettingsScreen(
-            settings: settings,
-            service: service,
-            me: ownerRecord(),
+          home: Scaffold(
+            body: SettingsScreen(
+              settings: settings,
+              service: service,
+              me: ownerRecord(),
+            ),
           ),
         ),
       );

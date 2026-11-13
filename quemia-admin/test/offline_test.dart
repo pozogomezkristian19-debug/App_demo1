@@ -25,6 +25,15 @@ class FailingUsersRepository implements UsersRepository {
     String id, {
     required bool banned,
     String reason = '',
+    String bannedBy = '',
+  }) async => throw Exception('Sin conexión a internet');
+
+  @override
+  Future<void> updateProgress(
+    String id, {
+    int? points,
+    int? streak,
+    int? lives,
   }) async => throw Exception('Sin conexión a internet');
 }
 

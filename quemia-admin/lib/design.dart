@@ -124,6 +124,7 @@ class AdminText {
 enum AdminSection {
   panel,
   usuarios,
+  duelos,
   avisos,
   editor,
   reportes,
@@ -202,8 +203,8 @@ class _AdminButtonState extends State<AdminButton> {
     final face = disabled
         ? AdminColors.line
         : widget._kind == _ButtonKind.secondary
-            ? Colors.white
-            : widget.faceColor;
+        ? Colors.white
+        : widget.faceColor;
     final text = disabled ? AdminColors.faint : widget.textColor;
     // Labio de 4 pt: colapsa a 0 al pulsar; sin labio si deshabilitado.
     final lipWidth = disabled || pressed ? 0.0 : 4.0;
@@ -405,11 +406,7 @@ class AdminKpiCard extends StatelessWidget {
                 // Flecha dibujada (icono), no el carácter ↑: el subconjunto
                 // de Nunito del preview no tiene ese glifo y salía como ▯.
                 if (captionColor != null) ...[
-                  Icon(
-                    Icons.arrow_upward,
-                    size: 13,
-                    color: captionColor,
-                  ),
+                  Icon(Icons.arrow_upward, size: 13, color: captionColor),
                   const SizedBox(width: 2),
                 ],
                 Flexible(
@@ -446,9 +443,7 @@ class AdminDetailRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Text(label, style: AdminText.caption),
-          ),
+          Expanded(child: Text(label, style: AdminText.caption)),
           const SizedBox(width: 12),
           Flexible(
             flex: 2,

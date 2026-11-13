@@ -19,6 +19,7 @@ import 'models.dart';
 import 'push_service.dart';
 import 'repositories.dart';
 import 'stats.dart';
+import 'user_export.dart';
 
 const tealPrimary = AdminColors.teal;
 
@@ -66,9 +67,7 @@ ThemeData quemiaAdminTheme() {
         backgroundColor: AdminColors.teal,
         foregroundColor: Colors.white,
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         textStyle: const TextStyle(
           fontFamily: 'Nunito',
           fontSize: 15,
@@ -120,10 +119,7 @@ ThemeData quemiaAdminTheme() {
             : AdminColors.faint,
       ),
     ),
-    dividerTheme: const DividerThemeData(
-      color: AdminColors.line,
-      thickness: 1,
-    ),
+    dividerTheme: const DividerThemeData(color: AdminColors.line, thickness: 1),
     dialogTheme: const DialogThemeData(
       backgroundColor: AdminColors.card,
       shape: RoundedRectangleBorder(
@@ -224,11 +220,7 @@ class EmptyState extends StatelessWidget {
               child: Icon(icon, size: 34, color: AdminColors.muted),
             ),
             const SizedBox(height: 16),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: AdminText.title,
-            ),
+            Text(title, textAlign: TextAlign.center, style: AdminText.title),
             const SizedBox(height: 6),
             Text(
               subtitle,
@@ -685,6 +677,12 @@ class AdminDrawer extends StatelessWidget {
                       selected: current == AdminSection.usuarios,
                       onTap: () => select(AdminSection.usuarios),
                     ),
+                    _DrawerItem(
+                      icon: Icons.sports_esports_outlined,
+                      label: 'Duelos',
+                      selected: current == AdminSection.duelos,
+                      onTap: () => select(AdminSection.duelos),
+                    ),
                   ],
                   if (canManage) ...[
                     if (!canSeeUsers)
@@ -752,7 +750,12 @@ class AdminDrawer extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          me.displayName.isEmpty ? me.email : me.displayName,
+                          // Quién está logueado: primer nombre solo, sin
+                          // correo y sin apellidos ("Hola Kristian",
+                          // 2026-11-13). El rol sigue debajo.
+                          me.firstName.isEmpty
+                              ? 'Hola'
+                              : 'Hola ${me.firstName}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: AdminText.bodyBold,
@@ -795,6 +798,7 @@ class HomeShell extends StatefulWidget {
     this.announcements,
     this.reports,
     this.support,
+    this.duels,
   });
 
   final AdminRecord me;
@@ -806,6 +810,7 @@ class HomeShell extends StatefulWidget {
   final AnnouncementsRepository? announcements;
   final ReportsRepository? reports;
   final SupportRepository? support;
+  final DuelsRepository? duels;
 
   @override
   State<HomeShell> createState() => _HomeShellState();
@@ -854,6 +859,8 @@ class _HomeShellState extends State<HomeShell> {
       widget.reports ?? FirestoreReportsRepository();
   late final SupportRepository _support =
       widget.support ?? FirestoreSupportRepository();
+  late final DuelsRepository _duels =
+      widget.duels ?? FirestoreDuelsRepository();
 
   late final AdminService _service = AdminService(
     me: widget.me,
@@ -864,11 +871,13 @@ class _HomeShellState extends State<HomeShell> {
     announcements: _announcements,
     reports: _reports,
     support: _support,
+    duels: _duels,
   );
 
   String get _title => switch (_section) {
     AdminSection.panel => 'Panel',
     AdminSection.usuarios => 'Usuarios',
+    AdminSection.duelos => 'Duelos',
     AdminSection.avisos => 'Avisos',
     AdminSection.editor => 'Editor de contenido',
     AdminSection.reportes => 'Reportes',
@@ -890,10 +899,13 @@ class _HomeShellState extends State<HomeShell> {
           me: widget.me,
           reports: _reports,
           support: _support,
+          service: _service,
           onNavigate: (s) => setState(() => _section = s),
         );
       case AdminSection.usuarios:
         body = UsersScreen(users: _users, service: _service, me: widget.me);
+      case AdminSection.duelos:
+        body = DuelsScreen(service: _service);
       case AdminSection.avisos:
         body = AnnouncementsScreen(
           announcements: _announcements,
@@ -919,40 +931,59 @@ class _HomeShellState extends State<HomeShell> {
         );
     }
     // Si el índice quedó fuera de rango por los permisos, volver al Panel.
-    if (_section == AdminSection.usuarios && !canSeeUsers) {
+    if ((_section == AdminSection.usuarios ||
+            _section == AdminSection.duelos) &&
+        !canSeeUsers) {
       body = DashboardScreen(
         users: _users,
         me: widget.me,
         reports: _reports,
         support: _support,
+        service: _service,
         onNavigate: (s) => setState(() => _section = s),
       );
     }
     if (_section != AdminSection.panel &&
         _section != AdminSection.usuarios &&
+        _section != AdminSection.duelos &&
         !canManage) {
       body = DashboardScreen(
         users: _users,
         me: widget.me,
         reports: _reports,
         support: _support,
+        service: _service,
         onNavigate: (s) => setState(() => _section = s),
       );
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_title),
+    // Atrás de Android: desde cualquier sección (drawer o tarjetas del
+    // Panel/Editor) vuelve al Panel de inicio; solo estando YA en el Panel
+    // sale de la app. Antes, las secciones se cambiaban con setState sin
+    // apilar ninguna ruta, así que el botón atrás cerraba la app desde
+    // Usuarios, Ajustes o cualquier otra sección (reportado 2026-11-12).
+    // Las pantallas de detalle (usuario, nivel, pregunta, soporte) sí se
+    // abren con Navigator.push y su atrás ya funcionaba: PopScope solo
+    // actúa cuando la ruta del shell está arriba, no las tapa.
+    return PopScope(
+      canPop: _section == AdminSection.panel,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _section != AdminSection.panel) {
+          setState(() => _section = AdminSection.panel);
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(title: Text(_title)),
+        drawer: AdminDrawer(
+          me: widget.me,
+          current: _section,
+          onSelect: (s) => setState(() => _section = s),
+          onSignOut: () => widget.authService.signOut(),
+          canSeeUsers: canSeeUsers,
+          canManage: canManage,
+        ),
+        body: body,
       ),
-      drawer: AdminDrawer(
-        me: widget.me,
-        current: _section,
-        onSelect: (s) => setState(() => _section = s),
-        onSignOut: () => widget.authService.signOut(),
-        canSeeUsers: canSeeUsers,
-        canManage: canManage,
-      ),
-      body: body,
     );
   }
 }
@@ -969,10 +1000,15 @@ class DashboardScreen extends StatefulWidget {
     this.reports,
     this.support,
     this.onNavigate,
+    this.service,
   });
 
   final UsersRepository users;
   final AdminRecord me;
+
+  /// Servicio para abrir el detalle de un usuario (filas de racha en
+  /// riesgo). Si es null, las filas no son tocables.
+  final AdminService? service;
 
   /// Reportes para las estadísticas de preguntas con más fallos. Si es
   /// null, esa tarjeta muestra el estado vacío.
@@ -1019,7 +1055,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<(List<AppUser>, List<QuestionReport>, List<SupportMessage>)>(
+    return FutureBuilder<
+      (List<AppUser>, List<QuestionReport>, List<SupportMessage>)
+    >(
       future: _future,
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
@@ -1038,6 +1076,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final topUsers = users.toList()
           ..sort((a, b) => b.points.compareTo(a.points));
         final top5 = topUsers.take(5).toList();
+        // Racha en riesgo: con racha y sin entrar hoy, del que más días
+        // lleva sin entrar al que menos.
+        final atRisk = streakAtRisk(users);
+        final riskTop = atRisk.take(5).toList();
         final newThisWeek = users
             .where((u) => DateTime.now().difference(u.joinedAt).inDays < 7)
             .length;
@@ -1066,7 +1108,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Hola, ${widget.me.displayName.isEmpty ? widget.me.email : widget.me.displayName}',
+                          // Saludo con primer nombre solo, sin correo y
+                          // sin apellidos ("Hola Kristian", 2026-11-13).
+                          widget.me.firstName.isEmpty
+                              ? 'Hola'
+                              : 'Hola ${widget.me.firstName}',
                           style: AdminText.screenTitle,
                         ),
                         const SizedBox(height: 2),
@@ -1200,8 +1246,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   child: EmptyState(
                     icon: Icons.people_outline,
                     title: 'Sin usuarios todavía',
-                    subtitle:
-                        'Cuando alguien se una a Quemia, aparecerá aquí.',
+                    subtitle: 'Cuando alguien se una a Quemia, aparecerá aquí.',
                   ),
                 )
               else
@@ -1233,10 +1278,87 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
               ],
+              // Racha en riesgo: usuarios con racha que no han entrado hoy.
+              // Tocar una fila abre su detalle para avisarle o editarle
+              // el progreso. Si nadie está en riesgo, no se muestra nada.
+              if (atRisk.isNotEmpty) ...[
+                const SizedBox(height: 24),
+                const AdminSectionHeader('RACHA EN RIESGO'),
+                AdminCard(
+                  padding: 0,
+                  child: Column(
+                    children: [
+                      for (var i = 0; i < riskTop.length; i++) ...[
+                        if (i > 0) const AdminRowDivider(),
+                        _RiskUserRow(
+                          user: riskTop[i].user,
+                          daysAway: riskTop[i].daysAway,
+                          service: widget.service,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
         );
       },
+    );
+  }
+}
+
+/// Fila de racha en riesgo: avatar + nombre + "Racha X · sin entrar desde
+/// hace N días". Tocable cuando hay servicio: abre el detalle del usuario.
+class _RiskUserRow extends StatelessWidget {
+  const _RiskUserRow({
+    required this.user,
+    required this.daysAway,
+    required this.service,
+  });
+
+  final AppUser user;
+  final int daysAway;
+  final AdminService? service;
+
+  @override
+  Widget build(BuildContext context) {
+    final content = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          AdminUserAvatar(radius: 20, banned: user.banned),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(user.username, style: AdminText.bodyBold),
+                const SizedBox(height: 2),
+                Text(
+                  'Racha ${user.streak} · sin entrar desde hace '
+                  '${daysAway == 1 ? '1 día' : '$daysAway días'}',
+                  style: AdminText.caption,
+                ),
+              ],
+            ),
+          ),
+          const Icon(Icons.chevron_right, color: AdminColors.faint),
+        ],
+      ),
+    );
+    final svc = service;
+    if (svc == null) return content;
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => UserDetailScreen(user: user, service: svc),
+          ),
+        );
+      },
+      child: content,
     );
   }
 }
@@ -1336,8 +1458,7 @@ class _RecentUserRow extends StatelessWidget {
               ],
             ),
           ),
-          if (user.banned)
-            const AdminStatusChip.banned(label: 'Baneado'),
+          if (user.banned) const AdminStatusChip.banned(label: 'Baneado'),
         ],
       ),
     );
@@ -1489,25 +1610,27 @@ class _StatsCard extends StatelessWidget {
               ),
             )
           else
-            ...stats.mostFailed.take(3).map(
-              (f) => Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        f.questionText,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AdminText.body,
-                      ),
+            ...stats.mostFailed
+                .take(3)
+                .map(
+                  (f) => Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            f.questionText,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AdminText.body,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        AdminStatusChip.done(label: '${f.count} reportes'),
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    AdminStatusChip.done(label: '${f.count} reportes'),
-                  ],
+                  ),
                 ),
-              ),
-            ),
           const Divider(height: 28),
           _StatListHeader(
             icon: Icons.phone_android_outlined,
@@ -1625,9 +1748,7 @@ class _StatListHeader extends StatelessWidget {
           child: Icon(icon, size: 18, color: iconColor),
         ),
         const SizedBox(width: 12),
-        Expanded(
-          child: Text(label, style: AdminText.bodyBold),
-        ),
+        Expanded(child: Text(label, style: AdminText.bodyBold)),
       ],
     );
   }
@@ -1700,6 +1821,7 @@ class _UsersScreenState extends State<UsersScreen> {
   late Future<List<AppUser>> _future;
   String _query = '';
   _UserFilter _filter = _UserFilter.todos;
+  bool _exporting = false;
 
   @override
   void initState() {
@@ -1711,6 +1833,25 @@ class _UsersScreenState extends State<UsersScreen> {
     setState(() {
       _future = _guarded(widget.users.listUsers());
     });
+  }
+
+  /// Exporta la lista completa de usuarios a CSV y la comparte (se usa
+  /// la lista ya cargada, sin pedir los datos de nuevo).
+  Future<void> _export(List<AppUser> users) async {
+    if (_exporting) return;
+    setState(() => _exporting = true);
+    try {
+      await shareUsersCsv(users);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('CSV listo con ${users.length} usuarios.')),
+        );
+      }
+    } on Exception {
+      if (mounted) showOfflineNotice(context);
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
   }
 
   @override
@@ -1745,8 +1886,7 @@ class _UsersScreenState extends State<UsersScreen> {
               _FilterPill(
                 label: 'Baneados',
                 selected: _filter == _UserFilter.baneados,
-                onTap: () =>
-                    setState(() => _filter = _UserFilter.baneados),
+                onTap: () => setState(() => _filter = _UserFilter.baneados),
               ),
             ],
           ),
@@ -1764,8 +1904,7 @@ class _UsersScreenState extends State<UsersScreen> {
               final all = snap.data ?? [];
               final byFilter = switch (_filter) {
                 _UserFilter.todos => all,
-                _UserFilter.activos =>
-                  all.where((u) => u.activeToday).toList(),
+                _UserFilter.activos => all.where((u) => u.activeToday).toList(),
                 _UserFilter.baneados => all.where((u) => u.banned).toList(),
               };
               final filtered = _query.isEmpty
@@ -1784,83 +1923,362 @@ class _UsersScreenState extends State<UsersScreen> {
                       : 'Ningún usuario coincide con la búsqueda o el filtro.',
                 );
               }
+              return Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${filtered.length} de ${all.length} usuarios',
+                            style: AdminText.caption,
+                          ),
+                        ),
+                        AdminButton.secondary(
+                          label: _exporting ? 'Exportando…' : 'Exportar CSV',
+                          icon: Icons.file_download_outlined,
+                          onPressed: _exporting ? null : () => _export(all),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: RefreshIndicator(
+                      onRefresh: () async => _reload(),
+                      child: ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                        itemCount: filtered.length,
+                        itemBuilder: (context, i) {
+                          final u = filtered[i];
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: AdminCard(
+                              padding: 0,
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(14),
+                                onTap: () async {
+                                  await Navigator.of(context).push(
+                                    MaterialPageRoute<void>(
+                                      builder: (_) => UserDetailScreen(
+                                        user: u,
+                                        service: widget.service,
+                                      ),
+                                    ),
+                                  );
+                                  _reload();
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 12,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      AdminUserAvatar(
+                                        radius: 22,
+                                        banned: u.banned,
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              u.username,
+                                              style: AdminText.bodyBold,
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              'Unido: ${formatDate(u.joinedAt)} · Últ. vez: ${timeAgo(u.lastActive)}\n'
+                                              'Niveles: ${u.totalLevelsPassed} (Bach ${u.levelsBachPassed} · Uni ${u.levelsUniPassed}) · '
+                                              '${u.points} pts · Racha ${u.streak} · v${u.appVersion}',
+                                              style: AdminText.caption,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      if (u.banned)
+                                        const AdminStatusChip.banned(
+                                          label: 'Baneado',
+                                        )
+                                      else
+                                        const AdminStatusChip.success(
+                                          label: 'Activo',
+                                        ),
+                                      const SizedBox(width: 4),
+                                      const Icon(
+                                        Icons.chevron_right,
+                                        color: AdminColors.faint,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// (b2) Duelos — solo lectura
+// ---------------------------------------------------------------------------
+
+enum _DuelFilter { todos, enCurso, terminados }
+
+class DuelsScreen extends StatefulWidget {
+  const DuelsScreen({super.key, required this.service});
+
+  final AdminService service;
+
+  @override
+  State<DuelsScreen> createState() => _DuelsScreenState();
+}
+
+class _DuelsScreenState extends State<DuelsScreen> {
+  late Future<List<Duel>> _future;
+  _DuelFilter _filter = _DuelFilter.todos;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _guarded(widget.service.listDuels());
+  }
+
+  void _reload() {
+    setState(() {
+      _future = _guarded(widget.service.listDuels());
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+          child: Row(
+            children: [
+              _FilterPill(
+                label: 'Todos',
+                selected: _filter == _DuelFilter.todos,
+                onTap: () => setState(() => _filter = _DuelFilter.todos),
+              ),
+              const SizedBox(width: 8),
+              _FilterPill(
+                label: 'En curso',
+                selected: _filter == _DuelFilter.enCurso,
+                onTap: () => setState(() => _filter = _DuelFilter.enCurso),
+              ),
+              const SizedBox(width: 8),
+              _FilterPill(
+                label: 'Terminados',
+                selected: _filter == _DuelFilter.terminados,
+                onTap: () => setState(() => _filter = _DuelFilter.terminados),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: FutureBuilder<List<Duel>>(
+            future: _future,
+            builder: (context, snap) {
+              if (snap.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snap.hasError) {
+                // Permiso denegado de Firestore = las reglas publicadas
+                // aún no dejan a la Admin leer duelos: aviso calmado que
+                // explica el motivo. Lo demás = sin conexión.
+                final msg = '${snap.error}';
+                if (snap.error is PermissionDenied ||
+                    msg.contains('permission-denied')) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: AdminCard(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.lock_outlined,
+                              size: 40,
+                              color: AdminColors.muted,
+                            ),
+                            const SizedBox(height: 12),
+                            const Text(
+                              'Duelos sin acceso todavía',
+                              style: AdminText.bodyBold,
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 6),
+                            const Text(
+                              'Falta publicar la regla de Firestore que '
+                              'deja a la Admin leer los duelos. En cuanto '
+                              'se publique, aparecerán aquí.',
+                              style: AdminText.body,
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 14),
+                            AdminButton.secondary(
+                              label: 'Reintentar',
+                              onPressed: _reload,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }
+                return CalmOfflineState(onRetry: _reload);
+              }
+              final all = snap.data ?? [];
+              final filtered = switch (_filter) {
+                _DuelFilter.todos => all,
+                _DuelFilter.enCurso => all.where((d) => d.isActive).toList(),
+                _DuelFilter.terminados =>
+                  all.where((d) => d.isFinished || d.isCancelled).toList(),
+              };
+              if (filtered.isEmpty) {
+                return EmptyState(
+                  icon: Icons.sports_esports_outlined,
+                  title: all.isEmpty
+                      ? 'Sin duelos todavía'
+                      : 'Sin duelos en este estado',
+                  subtitle: all.isEmpty
+                      ? 'Cuando dos usuarios jueguen un duelo, aparecerá aquí.'
+                      : 'Ningún duelo coincide con el filtro.',
+                );
+              }
               return RefreshIndicator(
                 onRefresh: () async => _reload(),
                 child: ListView.builder(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                   itemCount: filtered.length,
                   itemBuilder: (context, i) {
-                    final u = filtered[i];
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 8),
-                      child: AdminCard(
-                        padding: 0,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(14),
-                          onTap: () async {
-                            await Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => UserDetailScreen(
-                                  user: u,
-                                  service: widget.service,
-                                ),
-                              ),
-                            );
-                            _reload();
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 12,
-                            ),
-                            child: Row(
-                              children: [
-                                AdminUserAvatar(radius: 22, banned: u.banned),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        u.username,
-                                        style: AdminText.bodyBold,
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        'Unido: ${formatDate(u.joinedAt)} · Últ. vez: ${timeAgo(u.lastActive)}\n'
-                                        'Niveles: ${u.totalLevelsPassed} (Bach ${u.levelsBachPassed} · Uni ${u.levelsUniPassed}) · '
-                                        '${u.points} pts · Racha ${u.streak} · v${u.appVersion}',
-                                        style: AdminText.caption,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                if (u.banned)
-                                  const AdminStatusChip.banned(
-                                    label: 'Baneado',
-                                  )
-                                else
-                                  const AdminStatusChip.success(
-                                    label: 'Activo',
-                                  ),
-                                const SizedBox(width: 4),
-                                const Icon(
-                                  Icons.chevron_right,
-                                  color: AdminColors.faint,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
+                      child: _DuelCard(duel: filtered[i]),
                     );
                   },
                 ),
               );
             },
           ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Tarjeta de un duelo: los dos jugadores con sus aciertos, estado,
+/// ganador y fecha. Solo lectura.
+class _DuelCard extends StatelessWidget {
+  const _DuelCard({required this.duel});
+
+  final Duel duel;
+
+  @override
+  Widget build(BuildContext context) {
+    final aScore = duel.scoreOf(duel.playerA);
+    final bScore = duel.scoreOf(duel.playerB);
+    final winnerLine = duel.isFinished
+        ? (duel.winnerName.isEmpty
+              ? 'Empate'
+              : 'Ganador: ${duel.winnerName}'
+                    '${duel.forfeit ? ' (por abandono)' : ''}')
+        : duel.isCancelled
+        ? 'Duelo cancelado'
+        : 'En juego';
+    final chip = switch (duel.status) {
+      'waiting' => const AdminStatusChip.owner(label: 'En espera'),
+      'playing' => const AdminStatusChip.open(label: 'En curso'),
+      'finished' => const AdminStatusChip.done(label: 'Terminado'),
+      'cancelled' => const AdminStatusChip.banned(label: 'Cancelado'),
+      _ => const AdminStatusChip.open(label: 'En curso'),
+    };
+    return AdminCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _DuelPlayer(
+                  name: duel.playerAName,
+                  score: aScore,
+                  alignRight: false,
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 8),
+                child: Text('VS', style: AdminText.bodyBold),
+              ),
+              Expanded(
+                child: _DuelPlayer(
+                  name: duel.playerBName,
+                  score: bScore,
+                  alignRight: true,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              chip,
+              const SizedBox(width: 8),
+              Expanded(child: Text(winnerLine, style: AdminText.caption)),
+              Text(formatDate(duel.createdAt), style: AdminText.caption),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DuelPlayer extends StatelessWidget {
+  const _DuelPlayer({
+    required this.name,
+    required this.score,
+    required this.alignRight,
+  });
+
+  final String name;
+  final int? score;
+  final bool alignRight;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: alignRight
+          ? CrossAxisAlignment.end
+          : CrossAxisAlignment.start,
+      children: [
+        Text(
+          name,
+          style: AdminText.bodyBold,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 2),
+        Text(
+          score == null ? 'Sin terminar' : '$score aciertos',
+          style: AdminText.caption,
         ),
       ],
     );
@@ -1888,15 +2306,162 @@ class UserDetailScreen extends StatefulWidget {
 class _UserDetailScreenState extends State<UserDetailScreen> {
   late AppUser _user = widget.user;
   bool _busy = false;
+  bool _savingEdit = false;
+  String? _editError;
+  late final TextEditingController _pointsController;
+  late final TextEditingController _streakController;
+  late final TextEditingController _livesController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pointsController = TextEditingController(text: '${widget.user.points}');
+    _streakController = TextEditingController(text: '${widget.user.streak}');
+    _livesController = TextEditingController(
+      text: widget.user.lives?.toString() ?? '',
+    );
+  }
+
+  @override
+  void dispose() {
+    _pointsController.dispose();
+    _streakController.dispose();
+    _livesController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveEdit() async {
+    final points = int.tryParse(_pointsController.text.trim());
+    final streak = int.tryParse(_streakController.text.trim());
+    final livesText = _livesController.text.trim();
+    final lives = livesText.isEmpty ? null : int.tryParse(livesText);
+    String? error;
+    if (points == null || points < 0) {
+      error = 'Los puntos tienen que ser un número entero mayor o igual a 0.';
+    } else if (streak == null || streak < 0) {
+      error = 'La racha tiene que ser un número entero mayor o igual a 0.';
+    } else if (livesText.isNotEmpty &&
+        (lives == null || lives < 0 || lives > 5)) {
+      error = 'Las vidas van de 0 a 5 (o déjalo vacío para no cambiarlas).';
+    }
+    if (error != null) {
+      setState(() => _editError = error);
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Guardar cambios'),
+        content: Text(
+          'Puntos: ${_user.points} → $points\n'
+          'Racha: ${_user.streak} → $streak\n'
+          'Vidas: ${_user.lives?.toString() ?? 'sin valor'} → '
+          '${lives?.toString() ?? 'sin cambio'}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() {
+      _savingEdit = true;
+      _editError = null;
+    });
+    try {
+      final updated = await widget.service.editUserProgress(
+        _user,
+        points: points,
+        streak: streak,
+        lives: lives,
+      );
+      if (mounted) {
+        setState(() {
+          _user = updated;
+          _savingEdit = false;
+        });
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Progreso actualizado.')));
+      }
+    } on PermissionDenied catch (e) {
+      if (mounted) {
+        setState(() => _savingEdit = false);
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } on ArgumentError catch (e) {
+      if (mounted) {
+        setState(() {
+          _savingEdit = false;
+          _editError = e.message;
+        });
+      }
+    } on Exception {
+      if (mounted) {
+        setState(() => _savingEdit = false);
+        showOfflineNotice(context);
+      }
+    }
+  }
 
   Future<void> _toggleBan() async {
     if (_user.banned) {
+      // Quitar el baneo: el motivo es OPCIONAL y queda en el historial.
+      final reasonController = TextEditingController();
+      final reason = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Quitar baneo'),
+          content: TextField(
+            controller: reasonController,
+            decoration: const InputDecoration(
+              labelText: 'Motivo (opcional)',
+              hintText: 'Ej.: ya cumplió la sanción',
+            ),
+            autofocus: true,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () =>
+                  Navigator.of(context).pop(reasonController.text.trim()),
+              child: const Text('Quitar baneo'),
+            ),
+          ],
+        ),
+      );
+      if (reason == null) return;
       setState(() => _busy = true);
       try {
-        await widget.service.unbanUser(_user);
+        await widget.service.unbanUser(_user, reason: reason);
         if (mounted) {
           setState(() {
-            _user = _user.copyWith(banned: false, bannedReason: '');
+            _user = _user.copyWith(
+              banned: false,
+              bannedReason: '',
+              bannedAt: null,
+              bannedBy: '',
+              banHistory: [
+                ..._user.banHistory,
+                BanHistoryEntry(
+                  action: 'unban',
+                  reason: reason,
+                  at: DateTime.now(),
+                  by: widget.service.me.email,
+                ),
+              ],
+            );
             _busy = false;
           });
           ScaffoldMessenger.of(context)
@@ -1916,36 +2481,44 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
       }
       return;
     }
+    // Banear: el motivo es OBLIGATORIO, no se puede banear sin motivo.
     final reasonController = TextEditingController();
     final reason = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Banear usuario'),
-        content: TextField(
-          controller: reasonController,
-          decoration: const InputDecoration(
-            labelText: 'Motivo del baneo',
-            hintText: 'Ej.: trampas en el examen',
-          ),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () =>
-                Navigator.of(context).pop(reasonController.text.trim()),
-            style: FilledButton.styleFrom(
-              backgroundColor: AdminColors.red,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Text('Banear usuario'),
+            content: TextField(
+              controller: reasonController,
+              decoration: const InputDecoration(
+                labelText: 'Motivo del baneo *',
+                hintText: 'Ej.: trampas en el examen',
+                helperText: 'El motivo es obligatorio.',
+              ),
+              autofocus: true,
+              onChanged: (_) => setDialogState(() {}),
             ),
-            child: const Text('Banear'),
-          ),
-        ],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: reasonController.text.trim().isEmpty
+                    ? null
+                    : () =>
+                          Navigator.of(context)
+                              .pop(reasonController.text.trim()),
+                style: FilledButton.styleFrom(backgroundColor: AdminColors.red),
+                child: const Text('Banear'),
+              ),
+            ],
+          );
+        },
       ),
     );
-    if (reason == null) return;
+    if (reason == null || reason.isEmpty) return;
     setState(() => _busy = true);
     try {
       await widget.service.banUser(_user, reason);
@@ -1955,6 +2528,16 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
             banned: true,
             bannedReason: reason,
             bannedAt: DateTime.now(),
+            bannedBy: widget.service.me.email,
+            banHistory: [
+              ..._user.banHistory,
+              BanHistoryEntry(
+                action: 'ban',
+                reason: reason,
+                at: DateTime.now(),
+                by: widget.service.me.email,
+              ),
+            ],
           );
           _busy = false;
         });
@@ -2014,9 +2597,7 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
                 const AdminRowDivider(),
                 AdminDetailRow(
                   label: 'Pista',
-                  value: _user.track == 'uni'
-                      ? 'Universidad'
-                      : 'Bachillerato',
+                  value: _user.track == 'uni' ? 'Universidad' : 'Bachillerato',
                 ),
                 const AdminRowDivider(),
                 AdminDetailRow(
@@ -2039,6 +2620,13 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
                 AdminDetailRow(label: 'Racha', value: '${_user.streak} días'),
                 const AdminRowDivider(),
                 AdminDetailRow(
+                  label: 'Vidas',
+                  value: _user.lives == null
+                      ? 'Sin valor remoto'
+                      : '${_user.lives}',
+                ),
+                const AdminRowDivider(),
+                AdminDetailRow(
                   label: 'Versión de la app',
                   value: _user.appVersion,
                 ),
@@ -2048,6 +2636,10 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
                     label: 'Motivo del baneo',
                     value: _user.bannedReason,
                   ),
+                  if (_user.bannedBy.isNotEmpty) ...[
+                    const AdminRowDivider(),
+                    AdminDetailRow(label: 'Baneado por', value: _user.bannedBy),
+                  ],
                   if (_user.bannedAt != null) ...[
                     const AdminRowDivider(),
                     AdminDetailRow(
@@ -2059,6 +2651,83 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
               ],
             ),
           ),
+          if (_user.banHistory.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            const AdminSectionHeader('HISTORIAL DE BANEOS'),
+            AdminCard(
+              padding: 0,
+              child: Column(
+                children: [
+                  for (
+                    var i = 0;
+                    i < _user.banHistory.reversed.length;
+                    i++
+                  ) ...[
+                    if (i > 0) const AdminRowDivider(),
+                    _BanHistoryRow(
+                      entry: _user.banHistory.reversed.elementAt(i),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+          if (canBan) ...[
+            const SizedBox(height: 16),
+            const AdminSectionHeader('EDITAR PROGRESO'),
+            AdminCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextField(
+                    controller: _pointsController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Puntos'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _streakController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Racha (días)',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _livesController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Vidas (0–5)',
+                      hintText: 'Vacío = sin cambio',
+                    ),
+                  ),
+                  if (_editError != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      _editError!,
+                      style: const TextStyle(
+                        color: AdminColors.redDark,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 14),
+                  AdminButton.primary(
+                    label: _savingEdit ? 'Guardando…' : 'Guardar cambios',
+                    icon: Icons.save_outlined,
+                    onPressed: (_savingEdit || _busy) ? null : _saveEdit,
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Los cambios se guardan en su ficha. Subir puntos se '
+                    'mantiene; bajarlos puede deshacerse al abrir la app.',
+                    style: AdminText.caption,
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 20),
           if (_user.banned)
             AdminButton.primary(
@@ -2081,6 +2750,45 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
                 style: AdminText.caption,
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Fila del historial de baneos: chip (Baneado / Baneo retirado) + motivo
+/// + fecha + quién lo hizo.
+class _BanHistoryRow extends StatelessWidget {
+  const _BanHistoryRow({required this.entry});
+
+  final BanHistoryEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              entry.isBan
+                  ? const AdminStatusChip.banned(label: 'Baneado')
+                  : const AdminStatusChip.done(label: 'Baneo retirado'),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(formatDateTime(entry.at), style: AdminText.caption),
+              ),
+            ],
+          ),
+          if (entry.reason.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(entry.reason, style: AdminText.body),
+          ],
+          if (entry.by.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text('Por ${entry.by}', style: AdminText.caption),
+          ],
         ],
       ),
     );
@@ -2257,120 +2965,118 @@ class _AdminsScreenState extends State<AdminsScreen> {
                   child: Material(
                     type: MaterialType.transparency,
                     child: ExpansionTile(
-                    tilePadding: const EdgeInsets.symmetric(horizontal: 14),
-                    childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                    leading: const AdminUserAvatar(radius: 20),
-                    title: Text(
-                      admin.displayName.isEmpty
-                          ? admin.email
-                          : admin.displayName,
-                      style: AdminText.bodyBold,
-                    ),
-                    subtitle: Text(
-                      '${admin.email}${admin.pending ? ' · invitación pendiente' : ''}',
-                      style: AdminText.caption,
-                    ),
-                    trailing: admin.isOwner
-                        ? const AdminStatusChip.owner(label: 'Dueño')
-                        : admin.pending
-                            ? const AdminStatusChip.pending(
-                                label: 'Pendiente',
-                              )
-                            : const AdminStatusChip.done(label: 'Admin'),
-                    children: [
-                      _permSwitch(
-                        admin,
-                        'Ver usuarios',
-                        admin.permissions.viewUsers,
-                        (p, v) => p.copyWith(viewUsers: v),
+                      tilePadding: const EdgeInsets.symmetric(horizontal: 14),
+                      childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                      leading: const AdminUserAvatar(radius: 20),
+                      title: Text(
+                        admin.displayName.isEmpty
+                            ? admin.email
+                            : admin.displayName,
+                        style: AdminText.bodyBold,
                       ),
-                      _permSwitch(
-                        admin,
-                        'Ver progreso',
-                        admin.permissions.viewProgress,
-                        (p, v) => p.copyWith(viewProgress: v),
+                      subtitle: Text(
+                        '${admin.email}${admin.pending ? ' · invitación pendiente' : ''}',
+                        style: AdminText.caption,
                       ),
-                      _permSwitch(
-                        admin,
-                        'Banear usuarios',
-                        admin.permissions.banUsers,
-                        (p, v) => p.copyWith(banUsers: v),
-                      ),
-                      _permSwitch(
-                        admin,
-                        'Gestionar administradores',
-                        admin.permissions.manageAdmins,
-                        (p, v) => p.copyWith(manageAdmins: v),
-                      ),
-                      if (canManage &&
-                          !admin.isOwner &&
-                          admin.uid != widget.me.uid)
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: TextButton.icon(
-                            onPressed: () async {
-                              final messenger = ScaffoldMessenger.of(context);
-                              final ok = await showDialog<bool>(
-                                context: context,
-                                builder: (context) => AlertDialog(
-                                  title: const Text('Eliminar administrador'),
-                                  content: Text(
-                                    '¿Quitar a ${admin.email} como administrador?',
+                      trailing: admin.isOwner
+                          ? const AdminStatusChip.owner(label: 'Dueño')
+                          : admin.pending
+                          ? const AdminStatusChip.pending(label: 'Pendiente')
+                          : const AdminStatusChip.done(label: 'Admin'),
+                      children: [
+                        _permSwitch(
+                          admin,
+                          'Ver usuarios',
+                          admin.permissions.viewUsers,
+                          (p, v) => p.copyWith(viewUsers: v),
+                        ),
+                        _permSwitch(
+                          admin,
+                          'Ver progreso',
+                          admin.permissions.viewProgress,
+                          (p, v) => p.copyWith(viewProgress: v),
+                        ),
+                        _permSwitch(
+                          admin,
+                          'Banear usuarios',
+                          admin.permissions.banUsers,
+                          (p, v) => p.copyWith(banUsers: v),
+                        ),
+                        _permSwitch(
+                          admin,
+                          'Gestionar administradores',
+                          admin.permissions.manageAdmins,
+                          (p, v) => p.copyWith(manageAdmins: v),
+                        ),
+                        if (canManage &&
+                            !admin.isOwner &&
+                            admin.uid != widget.me.uid)
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton.icon(
+                              onPressed: () async {
+                                final messenger = ScaffoldMessenger.of(context);
+                                final ok = await showDialog<bool>(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    title: const Text('Eliminar administrador'),
+                                    content: Text(
+                                      '¿Quitar a ${admin.email} como administrador?',
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.of(context).pop(false),
+                                        child: const Text('Cancelar'),
+                                      ),
+                                      FilledButton(
+                                        onPressed: () =>
+                                            Navigator.of(context).pop(true),
+                                        style: FilledButton.styleFrom(
+                                          backgroundColor: AdminColors.red,
+                                        ),
+                                        child: const Text('Eliminar'),
+                                      ),
+                                    ],
                                   ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () =>
-                                          Navigator.of(context).pop(false),
-                                      child: const Text('Cancelar'),
-                                    ),
-                                    FilledButton(
-                                      onPressed: () =>
-                                          Navigator.of(context).pop(true),
-                                      style: FilledButton.styleFrom(
-                                        backgroundColor: AdminColors.red,
+                                );
+                                if (ok == true) {
+                                  try {
+                                    await widget.service.removeAdmin(admin);
+                                    _reload();
+                                  } on PermissionDenied catch (e) {
+                                    messenger.showSnackBar(
+                                      SnackBar(content: Text(e.message)),
+                                    );
+                                  } on Exception {
+                                    messenger.showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Sin conexión. Inténtalo de nuevo.',
+                                        ),
                                       ),
-                                      child: const Text('Eliminar'),
-                                    ),
-                                  ],
-                                ),
-                              );
-                              if (ok == true) {
-                                try {
-                                  await widget.service.removeAdmin(admin);
-                                  _reload();
-                                } on PermissionDenied catch (e) {
-                                  messenger.showSnackBar(
-                                    SnackBar(content: Text(e.message)),
-                                  );
-                                } on Exception {
-                                  messenger.showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'Sin conexión. Inténtalo de nuevo.',
-                                      ),
-                                    ),
-                                  );
+                                    );
+                                  }
                                 }
-                              }
-                            },
-                            icon: const Icon(
-                              Icons.delete,
-                              color: AdminColors.redDark,
-                            ),
-                            label: const Text(
-                              'Eliminar administrador',
-                              style: TextStyle(color: AdminColors.redDark),
+                              },
+                              icon: const Icon(
+                                Icons.delete,
+                                color: AdminColors.redDark,
+                              ),
+                              label: const Text(
+                                'Eliminar administrador',
+                                style: TextStyle(color: AdminColors.redDark),
+                              ),
                             ),
                           ),
-                        ),
-                      if (admin.isOwner)
-                        const Text(
-                          'El dueño no se puede eliminar ni se le pueden quitar permisos.',
-                          style: AdminText.caption,
-                        ),
-                    ],
-                  ),
+                        if (admin.isOwner)
+                          const Text(
+                            'El dueño no se puede eliminar ni se le pueden quitar permisos.',
+                            style: AdminText.caption,
+                          ),
+                      ],
                     ),
+                  ),
                 ),
               ),
             ),
@@ -2473,33 +3179,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final canEdit = widget.service.me.canManageAdmins();
-    return Scaffold(
-      appBar: AppBar(title: const Text('Ajustes remotos')),
-      body: FutureBuilder<RemoteSettings>(
-        future: _future,
-        builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snap.hasError) {
-            return CalmOfflineState(
-              onRetry: () {
-                setState(() {
-                  _future = _guarded(widget.settings.load());
-                  _editing = null;
-                });
-              },
-            );
-          }
-          final current = _editing ?? snap.data ?? const RemoteSettings();
-          // SingleChildScrollView + Column (no ListView): todos los campos
-          // existen en el árbol aunque estén bajo el pliegue, y el
-          // scroll hasta ellos funciona buscando por texto.
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
+    // Sin AppBar propia: el shell (HomeShell) ya muestra 'Ajustes
+    // remotos' en su barra; con Scaffold anidado salía la barra doble
+    // (arreglo 2026-11-13, Kristian: "Arregla primero las dos barras").
+    return FutureBuilder<RemoteSettings>(
+      future: _future,
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snap.hasError) {
+          return CalmOfflineState(
+            onRetry: () {
+              setState(() {
+                _future = _guarded(widget.settings.load());
+                _editing = null;
+              });
+            },
+          );
+        }
+        final current = _editing ?? snap.data ?? const RemoteSettings();
+        // SingleChildScrollView + Column (no ListView): todos los campos
+        // existen en el árbol aunque estén bajo el pliegue, y el
+        // scroll hasta ellos funciona buscando por texto.
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
               const Text(
                 'Estos valores los lee la app Quemia al abrir (documento settings/app).',
                 style: AdminText.caption,
@@ -2529,8 +3236,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             value: current.pointsEasyGain,
                             enabled: canEdit,
                             onChanged: (v) => setState(
-                              () => _editing =
-                                  current.copyWith(pointsEasyGain: v),
+                              () => _editing = current.copyWith(
+                                pointsEasyGain: v,
+                              ),
                             ),
                           ),
                         ),
@@ -2541,8 +3249,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             value: current.pointsEasyLoss,
                             enabled: canEdit,
                             onChanged: (v) => setState(
-                              () => _editing =
-                                  current.copyWith(pointsEasyLoss: v),
+                              () => _editing = current.copyWith(
+                                pointsEasyLoss: v,
+                              ),
                             ),
                           ),
                         ),
@@ -2556,8 +3265,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             value: current.pointsMediumGain,
                             enabled: canEdit,
                             onChanged: (v) => setState(
-                              () => _editing =
-                                  current.copyWith(pointsMediumGain: v),
+                              () => _editing = current.copyWith(
+                                pointsMediumGain: v,
+                              ),
                             ),
                           ),
                         ),
@@ -2568,8 +3278,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             value: current.pointsMediumLoss,
                             enabled: canEdit,
                             onChanged: (v) => setState(
-                              () => _editing =
-                                  current.copyWith(pointsMediumLoss: v),
+                              () => _editing = current.copyWith(
+                                pointsMediumLoss: v,
+                              ),
                             ),
                           ),
                         ),
@@ -2583,8 +3294,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             value: current.pointsHardGain,
                             enabled: canEdit,
                             onChanged: (v) => setState(
-                              () => _editing =
-                                  current.copyWith(pointsHardGain: v),
+                              () => _editing = current.copyWith(
+                                pointsHardGain: v,
+                              ),
                             ),
                           ),
                         ),
@@ -2595,8 +3307,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             value: current.pointsHardLoss,
                             enabled: canEdit,
                             onChanged: (v) => setState(
-                              () => _editing =
-                                  current.copyWith(pointsHardLoss: v),
+                              () => _editing = current.copyWith(
+                                pointsHardLoss: v,
+                              ),
                             ),
                           ),
                         ),
@@ -2654,8 +3367,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         value: current.showWhatsApp,
                         onChanged: canEdit
                             ? (v) => setState(
-                                () => _editing =
-                                    current.copyWith(showWhatsApp: v),
+                                () => _editing = current.copyWith(
+                                  showWhatsApp: v,
+                                ),
                               )
                             : null,
                       ),
@@ -2678,11 +3392,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     style: AdminText.caption,
                   ),
                 ),
-              ],
-            ),
-          );
-        },
-      ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -2733,7 +3446,7 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
     });
   }
 
-  Future<void> _publish() async {
+  Future<void> _publish({required bool push}) async {
     final title = _titleController.text.trim();
     final body = _bodyController.text.trim();
     if (title.isEmpty || body.isEmpty) {
@@ -2746,13 +3459,23 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
     }
     setState(() => _busy = true);
     try {
-      await widget.service.publishAnnouncement(title: title, body: body);
+      await widget.service.publishAnnouncement(
+        title: title,
+        body: body,
+        sendPush: push,
+      );
       if (mounted) {
         _titleController.clear();
         _bodyController.clear();
         _reload();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Aviso publicado para todos.')),
+          SnackBar(
+            content: Text(
+              push
+                  ? 'Aviso publicado y enviado a todos.'
+                  : 'Aviso publicado para todos.',
+            ),
+          ),
         );
       }
     } on PermissionDenied catch (e) {
@@ -2775,164 +3498,182 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Avisos')),
-      body: FutureBuilder<List<Announcement>>(
-        future: _future,
-        builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snap.hasError) {
-            return CalmOfflineState(onRetry: _reload);
-          }
-          final items = snap.data ?? [];
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              const AdminSectionHeader('NUEVO AVISO'),
-              AdminCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    TextField(
-                      controller: _titleController,
-                      decoration: const InputDecoration(
-                        labelText: 'Título',
-                        hintText: 'Ej.: ¡Nuevo torneo!',
-                      ),
+    // Sin AppBar propia: el shell ya muestra 'Avisos' (doble barra
+    // arreglada 2026-11-13; ver SettingsScreen).
+    return FutureBuilder<List<Announcement>>(
+      future: _future,
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snap.hasError) {
+          return CalmOfflineState(onRetry: _reload);
+        }
+        final items = snap.data ?? [];
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            const AdminSectionHeader('NUEVO AVISO'),
+            AdminCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextField(
+                    controller: _titleController,
+                    decoration: const InputDecoration(
+                      labelText: 'Título',
+                      hintText: 'Ej.: ¡Nuevo torneo!',
                     ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _bodyController,
-                      maxLines: 4,
-                      decoration: const InputDecoration(
-                        labelText: 'Mensaje',
-                        hintText: 'Lo que verán todos los usuarios…',
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    AdminButton.primary(
-                      label: _busy ? 'Publicando…' : 'Publicar aviso',
-                      icon: Icons.send_outlined,
-                      onPressed: _busy ? null : _publish,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-              const AdminSectionHeader('AVISOS PUBLICADOS'),
-              if (items.isEmpty)
-                const AdminCard(
-                  child: EmptyState(
-                    icon: Icons.campaign_outlined,
-                    title: 'Sin avisos todavía',
-                    subtitle:
-                        'Publica el primero arriba: lo verán todos los usuarios en su bandeja.',
                   ),
-                )
-              else
-                ...items.map(
-                  (a) => Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: AdminCard(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: a.active
-                                  ? AdminColors.tealTint
-                                  : AdminColors.greyTint,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Icon(
-                              Icons.campaign_outlined,
-                              color: a.active
-                                  ? AdminColors.tealDark
-                                  : AdminColors.muted,
-                              size: 20,
-                            ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _bodyController,
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                      labelText: 'Mensaje',
+                      hintText: 'Lo que verán todos los usuarios…',
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  AdminButton.primary(
+                    label: _busy ? 'Publicando…' : 'Publicar aviso',
+                    icon: Icons.send_outlined,
+                    onPressed: _busy ? null : () => _publish(push: false),
+                  ),
+                  const SizedBox(height: 10),
+                  AdminButton.secondary(
+                    label: _busy ? 'Publicando…' : 'Publicar y avisar a todos',
+                    icon: Icons.notifications_active_outlined,
+                    onPressed: _busy ? null : () => _publish(push: true),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    '«Avisar a todos» manda además una notificación push '
+                    'a los teléfonos. Solo «Publicar aviso» lo deja solo '
+                    'en la bandeja.',
+                    style: AdminText.caption,
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            const AdminSectionHeader('AVISOS PUBLICADOS'),
+            if (items.isEmpty)
+              const AdminCard(
+                child: EmptyState(
+                  icon: Icons.campaign_outlined,
+                  title: 'Sin avisos todavía',
+                  subtitle: 'Publica el primero arriba: lo verán todos los usuarios en su bandeja.',
+                ),
+              )
+            else
+              ...items.map(
+                (a) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: AdminCard(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: a.active
+                                ? AdminColors.tealTint
+                                : AdminColors.greyTint,
+                            borderRadius: BorderRadius.circular(10),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(a.title, style: AdminText.bodyBold),
-                                const SizedBox(height: 2),
-                                Text(a.body, style: AdminText.body),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '${formatDate(a.createdAt)} · ${a.createdBy}',
-                                  style: AdminText.caption,
-                                ),
-                              ],
-                            ),
+                          child: Icon(
+                            Icons.campaign_outlined,
+                            color: a.active
+                                ? AdminColors.tealDark
+                                : AdminColors.muted,
+                            size: 20,
                           ),
-                          const SizedBox(width: 8),
-                          Column(
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Switch(
-                                value: a.active,
-                                onChanged: (next) async {
-                                  try {
-                                    await widget.service.setAnnouncementActive(
-                                      a.id,
-                                      next,
-                                    );
-                                    _reload();
-                                  } on PermissionDenied catch (e) {
-                                    if (context.mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text(e.message)),
-                                      );
-                                    }
-                                  } on Exception {
-                                    if (context.mounted) {
-                                      showOfflineNotice(context);
-                                    }
-                                  }
-                                },
+                              Text(a.title, style: AdminText.bodyBold),
+                              const SizedBox(height: 2),
+                              Text(a.body, style: AdminText.body),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${formatDate(a.createdAt)} · ${a.createdBy}',
+                                style: AdminText.caption,
                               ),
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.delete_outline,
-                                  color: AdminColors.redDark,
+                              if (a.sendPush)
+                                const Padding(
+                                  padding: EdgeInsets.only(top: 2),
+                                  child: Text(
+                                    'Enviado como push',
+                                    style: AdminText.caption,
+                                  ),
                                 ),
-                                tooltip: 'Eliminar aviso',
-                                onPressed: () async {
-                                  try {
-                                    await widget.service.deleteAnnouncement(
-                                      a.id,
-                                    );
-                                    _reload();
-                                  } on PermissionDenied catch (e) {
-                                    if (context.mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text(e.message)),
-                                      );
-                                    }
-                                  } on Exception {
-                                    if (context.mounted) {
-                                      showOfflineNotice(context);
-                                    }
-                                  }
-                                },
-                              ),
                             ],
                           ),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(width: 8),
+                        Column(
+                          children: [
+                            Switch(
+                              value: a.active,
+                              onChanged: (next) async {
+                                try {
+                                  await widget.service.setAnnouncementActive(
+                                    a.id,
+                                    next,
+                                  );
+                                  _reload();
+                                } on PermissionDenied catch (e) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text(e.message)),
+                                    );
+                                  }
+                                } on Exception {
+                                  if (context.mounted) {
+                                    showOfflineNotice(context);
+                                  }
+                                }
+                              },
+                            ),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                color: AdminColors.redDark,
+                              ),
+                              tooltip: 'Eliminar aviso',
+                              onPressed: () async {
+                                try {
+                                  await widget.service.deleteAnnouncement(a.id);
+                                  _reload();
+                                } on PermissionDenied catch (e) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text(e.message)),
+                                    );
+                                  }
+                                } on Exception {
+                                  if (context.mounted) {
+                                    showOfflineNotice(context);
+                                  }
+                                }
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                 ),
-            ],
-          );
-        },
-      ),
+              ),
+          ],
+        );
+      },
     );
   }
 }
@@ -2991,10 +3732,8 @@ class _LevelsScreenState extends State<LevelsScreen> {
           onTap: () async {
             await Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => LevelQuestionsScreen(
-                  level: level,
-                  service: widget.service,
-                ),
+                builder: (_) =>
+                    LevelQuestionsScreen(level: level, service: widget.service),
               ),
             );
             _reload();
@@ -3038,10 +3777,7 @@ class _LevelsScreenState extends State<LevelsScreen> {
                     ],
                   ),
                 ),
-                const Icon(
-                  Icons.chevron_right,
-                  color: AdminColors.faint,
-                ),
+                const Icon(Icons.chevron_right, color: AdminColors.faint),
               ],
             ),
           ),
@@ -3052,120 +3788,112 @@ class _LevelsScreenState extends State<LevelsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Editor de contenido')),
-      body: Column(
-        children: [
-          // Cola de preguntas reportadas por revisar (modelo Elite Quiz:
-          // la moderación vive junto a la gestión de preguntas). Solo se
-          // muestra si hay reportes abiertos y se puede navegar a ellos.
-          if (widget.onNavigate != null)
-            FutureBuilder<List<QuestionReport>>(
-              future: _reportsFuture,
-              builder: (context, snap) {
-                final open =
-                    (snap.data ?? []).where((r) => !r.isFixed).length;
-                if (open == 0) return const SizedBox.shrink();
-                return Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: AdminColors.amberTint,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: AdminColors.line,
-                        width: 1,
-                      ),
-                    ),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(14),
-                      onTap: () =>
-                          widget.onNavigate!(AdminSection.reportes),
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.flag_outlined,
-                              color: AdminColors.amberDark,
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                '$open ${open == 1 ? 'pregunta reportada' : 'preguntas reportadas'} por revisar',
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w800,
-                                  color: AdminColors.amberDark,
-                                ),
-                              ),
-                            ),
-                            const Text(
-                              'Revisar',
-                              style: TextStyle(
-                                fontSize: 14,
+    // Sin AppBar propia: el shell ya muestra 'Editor de contenido'
+    // (doble barra arreglada 2026-11-13; ver SettingsScreen).
+    return Column(
+      children: [
+        // Cola de preguntas reportadas por revisar (modelo Elite Quiz:
+        // la moderación vive junto a la gestión de preguntas). Solo se
+        // muestra si hay reportes abiertos y se puede navegar a ellos.
+        if (widget.onNavigate != null)
+          FutureBuilder<List<QuestionReport>>(
+            future: _reportsFuture,
+            builder: (context, snap) {
+              final open = (snap.data ?? []).where((r) => !r.isFixed).length;
+              if (open == 0) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: AdminColors.amberTint,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AdminColors.line, width: 1),
+                  ),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: () => widget.onNavigate!(AdminSection.reportes),
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.flag_outlined,
+                            color: AdminColors.amberDark,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              '$open ${open == 1 ? 'pregunta reportada' : 'preguntas reportadas'} por revisar',
+                              style: const TextStyle(
+                                fontSize: 15,
                                 fontWeight: FontWeight.w800,
                                 color: AdminColors.amberDark,
                               ),
                             ),
-                            const SizedBox(width: 4),
-                            const Icon(
-                              Icons.chevron_right,
+                          ),
+                          const Text(
+                            'Revisar',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
                               color: AdminColors.amberDark,
-                              size: 18,
                             ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(
+                            Icons.chevron_right,
+                            color: AdminColors.amberDark,
+                            size: 18,
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                );
-              },
-            ),
-          Expanded(
-            child: FutureBuilder<List<LevelContent>>(
-              future: _future,
-              builder: (context, snap) {
-                if (snap.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snap.hasError) {
-                  return CalmOfflineState(onRetry: _reload);
-                }
-                final levels = snap.data ?? [];
-                if (levels.isEmpty) {
-                  return const EmptyState(
-                    icon: Icons.edit_note,
-                    title: 'Sin niveles remotos todavía',
-                    subtitle:
-                        'Cuando la app principal publique su contenido en la colección levels, aparecerá aquí para editarlo.',
-                  );
-                }
-                final bach =
-                    levels.where((l) => l.track != 'uni').toList();
-                final uni = levels.where((l) => l.track == 'uni').toList();
-                return RefreshIndicator(
-                  onRefresh: () async => _reload(),
-                  child: ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      if (bach.isNotEmpty) ...[
-                        const AdminSectionHeader('BACHILLERATO'),
-                        ...bach.map(_levelCard),
-                        const SizedBox(height: 16),
-                      ],
-                      if (uni.isNotEmpty) ...[
-                        const AdminSectionHeader('UNIVERSIDAD'),
-                        ...uni.map(_levelCard),
-                      ],
-                    ],
-                  ),
-                );
-              },
-            ),
+                ),
+              );
+            },
           ),
-        ],
-      ),
+        Expanded(
+          child: FutureBuilder<List<LevelContent>>(
+            future: _future,
+            builder: (context, snap) {
+              if (snap.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snap.hasError) {
+                return CalmOfflineState(onRetry: _reload);
+              }
+              final levels = snap.data ?? [];
+              if (levels.isEmpty) {
+                return const EmptyState(
+                  icon: Icons.edit_note,
+                  title: 'Sin niveles remotos todavía',
+                  subtitle: 'Cuando la app principal publique su contenido en la colección levels, aparecerá aquí para editarlo.',
+                );
+              }
+              final bach = levels.where((l) => l.track != 'uni').toList();
+              final uni = levels.where((l) => l.track == 'uni').toList();
+              return RefreshIndicator(
+                onRefresh: () async => _reload(),
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    if (bach.isNotEmpty) ...[
+                      const AdminSectionHeader('BACHILLERATO'),
+                      ...bach.map(_levelCard),
+                      const SizedBox(height: 16),
+                    ],
+                    if (uni.isNotEmpty) ...[
+                      const AdminSectionHeader('UNIVERSIDAD'),
+                      ...uni.map(_levelCard),
+                    ],
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }
@@ -3566,103 +4294,99 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Reportes de preguntas')),
-      body: FutureBuilder<List<QuestionReport>>(
-        future: _future,
-        builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snap.hasError) {
-            return CalmOfflineState(onRetry: _reload);
-          }
-          final reports = snap.data ?? [];
-          if (reports.isEmpty) {
-            return const EmptyState(
-              icon: Icons.flag_outlined,
-              title: 'Sin reportes',
-              subtitle:
-                  'Cuando un usuario reporte una pregunta, aparecerá aquí.',
-            );
-          }
-          final open = reports.where((r) => !r.isFixed).length;
-          return RefreshIndicator(
-            onRefresh: () async => _reload(),
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: reports.length + 1,
-              itemBuilder: (context, i) {
-                if (i == 0) {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Row(
-                      children: [
-                        AdminStatusChip.open(label: '$open abiertos'),
-                        const SizedBox(width: 8),
-                        AdminStatusChip.done(
-                          label: '${reports.length - open} arreglados',
-                        ),
-                      ],
-                    ),
-                  );
-                }
-                final r = reports[i - 1];
+    // Sin AppBar propia: el shell ya muestra 'Reportes' (doble barra
+    // arreglada 2026-11-13; ver SettingsScreen).
+    return FutureBuilder<List<QuestionReport>>(
+      future: _future,
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snap.hasError) {
+          return CalmOfflineState(onRetry: _reload);
+        }
+        final reports = snap.data ?? [];
+        if (reports.isEmpty) {
+          return const EmptyState(
+            icon: Icons.flag_outlined,
+            title: 'Sin reportes',
+            subtitle: 'Cuando un usuario reporte una pregunta, aparecerá aquí.',
+          );
+        }
+        final open = reports.where((r) => !r.isFixed).length;
+        return RefreshIndicator(
+          onRefresh: () async => _reload(),
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: reports.length + 1,
+            itemBuilder: (context, i) {
+              if (i == 0) {
                 return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: r.isFixed
-                          ? AdminColors.greyTint
-                          : AdminColors.card,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: AdminColors.line, width: 1),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  r.displayQuestion,
-                                  style: AdminText.bodyBold,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              if (r.isFixed)
-                                const AdminStatusChip.done(label: 'Arreglado')
-                              else
-                                const AdminStatusChip.open(label: 'Abierto'),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text('“${r.note}”', style: AdminText.body),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Por ${r.username} · ${formatDateTime(r.createdAt)}',
-                            style: AdminText.caption,
-                          ),
-                          if (!r.isFixed) ...[
-                            const SizedBox(height: 12),
-                            AdminButton.primary(
-                              label: 'Marcar como arreglado',
-                              icon: Icons.check,
-                              onPressed: () => _markFixed(r),
-                            ),
-                          ],
-                        ],
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Row(
+                    children: [
+                      AdminStatusChip.open(label: '$open abiertos'),
+                      const SizedBox(width: 8),
+                      AdminStatusChip.done(
+                        label: '${reports.length - open} arreglados',
                       ),
-                    ),
+                    ],
                   ),
                 );
-              },
-            ),
-          );
-        },
-      ),
+              }
+              final r = reports[i - 1];
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: r.isFixed ? AdminColors.greyTint : AdminColors.card,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AdminColors.line, width: 1),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                r.displayQuestion,
+                                style: AdminText.bodyBold,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            if (r.isFixed)
+                              const AdminStatusChip.done(label: 'Arreglado')
+                            else
+                              const AdminStatusChip.open(label: 'Abierto'),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text('“${r.note}”', style: AdminText.body),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Por ${r.username} · ${formatDateTime(r.createdAt)}',
+                          style: AdminText.caption,
+                        ),
+                        if (!r.isFixed) ...[
+                          const SizedBox(height: 12),
+                          AdminButton.primary(
+                            label: 'Marcar como arreglado',
+                            icon: Icons.check,
+                            onPressed: () => _markFixed(r),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+      },
     );
   }
 }
@@ -3708,114 +4432,108 @@ class _SupportScreenState extends State<SupportScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Soporte')),
-      body: FutureBuilder<List<SupportMessage>>(
-        future: _future,
-        builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snap.hasError) {
-            return CalmOfflineState(onRetry: _reload);
-          }
-          final messages = snap.data ?? [];
-          if (messages.isEmpty) {
-            return const EmptyState(
-              icon: Icons.support_agent_outlined,
-              title: 'Sin mensajes de soporte',
-              subtitle:
-                  'Cuando un usuario escriba desde la ventanita de Soporte, su mensaje aparecerá aquí.',
-            );
-          }
-          final open = messages.where((m) => !m.isAnswered).length;
-          return RefreshIndicator(
-            onRefresh: () async => _reload(),
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: messages.length + 1,
-              itemBuilder: (context, i) {
-                if (i == 0) {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Text(
-                      '$open sin responder · ${messages.length - open} respondido(s)',
-                      style: AdminText.caption,
-                    ),
-                  );
-                }
-                final m = messages[i - 1];
-                final isAnswered = m.isAnswered;
+    // Sin AppBar propia: el shell ya muestra 'Soporte' (doble barra
+    // arreglada 2026-11-13; ver SettingsScreen).
+    return FutureBuilder<List<SupportMessage>>(
+      future: _future,
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snap.hasError) {
+          return CalmOfflineState(onRetry: _reload);
+        }
+        final messages = snap.data ?? [];
+        if (messages.isEmpty) {
+          return const EmptyState(
+            icon: Icons.support_agent_outlined,
+            title: 'Sin mensajes de soporte',
+            subtitle: 'Cuando un usuario escriba desde la ventanita de Soporte, su mensaje aparecerá aquí.',
+          );
+        }
+        final open = messages.where((m) => !m.isAnswered).length;
+        return RefreshIndicator(
+          onRefresh: () async => _reload(),
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: messages.length + 1,
+            itemBuilder: (context, i) {
+              if (i == 0) {
                 return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: isAnswered
-                          ? AdminColors.greyTint
-                          : AdminColors.card,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: AdminColors.line, width: 1),
-                    ),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(14),
-                      onTap: () async {
-                        await Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => SupportDetailScreen(
-                              message: m,
-                              service: widget.service,
-                            ),
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    '$open sin responder · ${messages.length - open} respondido(s)',
+                    style: AdminText.caption,
+                  ),
+                );
+              }
+              final m = messages[i - 1];
+              final isAnswered = m.isAnswered;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: isAnswered ? AdminColors.greyTint : AdminColors.card,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AdminColors.line, width: 1),
+                  ),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: () async {
+                      await Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => SupportDetailScreen(
+                            message: m,
+                            service: widget.service,
                           ),
-                        );
-                        _reload();
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                const AdminUserAvatar(radius: 20),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    m.username,
-                                    style: AdminText.bodyBold,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                if (isAnswered)
-                                  const AdminStatusChip.done(
-                                    label: 'Respondido',
-                                  )
-                                else
-                                  const AdminStatusChip.open(label: 'Abierto'),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              m.message,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: AdminText.body,
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              formatDateTime(m.createdAt),
-                              style: AdminText.caption,
-                            ),
-                          ],
                         ),
+                      );
+                      _reload();
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const AdminUserAvatar(radius: 20),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  m.username,
+                                  style: AdminText.bodyBold,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              if (isAnswered)
+                                const AdminStatusChip.done(label: 'Respondido')
+                              else
+                                const AdminStatusChip.open(label: 'Abierto'),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            m.message,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: AdminText.body,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            formatDateTime(m.createdAt),
+                            style: AdminText.caption,
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                );
-              },
-            ),
-          );
-        },
-      ),
+                ),
+              );
+            },
+          ),
+        );
+      },
     );
   }
 }
@@ -3855,7 +4573,9 @@ class _SupportDetailScreenState extends State<SupportDetailScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Respuesta enviada. El usuario la verá en su ventanita.'),
+            content: Text(
+              'Respuesta enviada. El usuario la verá en su ventanita.',
+            ),
           ),
         );
         setState(() {
@@ -3919,9 +4639,7 @@ class _SupportDetailScreenState extends State<SupportDetailScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          AdminCard(
-            child: Text(_message.message, style: AdminText.body),
-          ),
+          AdminCard(child: Text(_message.message, style: AdminText.body)),
           if (_message.isAnswered && _message.reply.isNotEmpty) ...[
             const SizedBox(height: 16),
             const AdminSectionHeader('TU RESPUESTA'),
