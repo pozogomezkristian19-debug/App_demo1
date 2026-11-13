@@ -210,16 +210,21 @@ function supportReply(before, after, messageId) {
 
 // ---------------------------------------------------------------------------
 // Avisos del admin (colección announcements)
-// Campos: title, body, createdAtMs, active (si falta, se considera activo).
+// Campos: title, body, createdAtMs, active (si falta, se considera activo),
+// sendPush (solo true manda push; ausente o false = solo en bandeja).
 // ---------------------------------------------------------------------------
 
 /**
  * onCreate de announcements: el aviso va a TODOS los usuarios con
- * token. Devuelve { notification, data } o null si está inactivo.
+ * token, pero SOLO si el documento trae `sendPush: true`. Sin sendPush
+ * (o con sendPush false) el aviso queda solo en la bandeja de la app
+ * y no se manda push. Devuelve { notification, data } o null si está
+ * inactivo, si no pide push o si no tiene título ni cuerpo.
  */
 function announcementCreated(doc, announcementId) {
   if (!doc) return null;
   if (doc.active === false) return null;
+  if (doc.sendPush !== true) return null;
   const title = typeof doc.title === 'string' ? doc.title.trim() : '';
   const body = typeof doc.body === 'string' ? doc.body.trim() : '';
   if (title === '' && body === '') return null;

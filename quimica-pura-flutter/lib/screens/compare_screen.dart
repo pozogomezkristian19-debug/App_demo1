@@ -133,11 +133,23 @@ class _CompareScreenState extends State<CompareScreen> {
                     flex: 4,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: Text(label,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: scheme.primary)),
+                      // (foto72) La etiqueta larga ("Electronegatividad")
+                      // se partía a mitad de palabra ("Electronegativ /
+                      // ad") porque la columna es estrecha y la palabra
+                      // no tiene espacios. Con una sola línea y
+                      // scaleDown la etiqueta se achica un poco en vez
+                      // de romperse; las cortas quedan igual.
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.center,
+                        child: Text(label,
+                            maxLines: 1,
+                            overflow: TextOverflow.visible,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: scheme.primary)),
+                      ),
                     ),
                   ),
                   Expanded(

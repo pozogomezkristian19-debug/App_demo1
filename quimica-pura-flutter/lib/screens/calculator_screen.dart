@@ -37,6 +37,8 @@ class CalculatorScreen extends StatelessWidget {
     super.key,
     required this.scientific,
     this.unit,
+    this.initialValue,
+    this.onDraftChanged,
   });
 
   final bool scientific;
@@ -44,18 +46,29 @@ class CalculatorScreen extends StatelessWidget {
   /// Unidad del campo de respuesta (solo en preguntas de cálculo).
   final String? unit;
 
+  /// Valor con el que sembrar el campo de respuesta (ronda 7.2: lo
+  /// tecleado persiste por pregunta; null = empezar vacía).
+  final double? initialValue;
+
+  /// Borrador actual en cada cambio (ronda 7.2); null = no se guarda.
+  final ValueChanged<double?>? onDraftChanged;
+
   /// Abre la pantalla y devuelve el valor con el que responder, o
   /// null si se cierra sin más (X, atrás o gesto).
   static Future<double?> open(
     BuildContext context, {
     required bool scientific,
     String? unit,
+    double? initialValue,
+    ValueChanged<double?>? onDraftChanged,
   }) {
     return Navigator.of(context).push<double>(
       MaterialPageRoute(
         builder: (_) => CalculatorScreen(
           scientific: scientific,
           unit: unit,
+          initialValue: initialValue,
+          onDraftChanged: onDraftChanged,
         ),
       ),
     );
@@ -81,6 +94,8 @@ class CalculatorScreen extends StatelessWidget {
             scientific: scientific,
             unit: unit,
             enabled: true,
+            initialValue: initialValue,
+            onDraftChanged: onDraftChanged,
             // Solo en modo científico hay algo que entregar: el
             // valor hace pop y quien abrió la pantalla responde
             // con él. En modo normal onSubmit es null y el teclado
@@ -113,6 +128,8 @@ class QuestionCalculatorButton extends StatelessWidget {
     required this.scientific,
     this.unit,
     this.onResult,
+    this.initialValue,
+    this.onDraftChanged,
   });
 
   /// El texto (o la tarjeta) de la pregunta: va a la izquierda del
@@ -129,11 +146,21 @@ class QuestionCalculatorButton extends StatelessWidget {
   /// pregunta de cálculo: entrega el valor al volver de la pantalla.
   final ValueChanged<double>? onResult;
 
+  /// Valor con el que sembrar el campo de respuesta (ronda 7.2: lo
+  /// tecleado persiste por pregunta; solo en preguntas de cálculo).
+  final double? initialValue;
+
+  /// Borrador actual en cada cambio (ronda 7.2); solo en preguntas
+  /// de cálculo — en opción múltiple no se persiste nada.
+  final ValueChanged<double?>? onDraftChanged;
+
   Future<void> _open(BuildContext context) async {
     final value = await CalculatorScreen.open(
       context,
       scientific: scientific,
       unit: unit,
+      initialValue: initialValue,
+      onDraftChanged: onDraftChanged,
     );
     if (value != null) onResult?.call(value);
   }

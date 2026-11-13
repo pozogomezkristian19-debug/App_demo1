@@ -2,11 +2,12 @@
 // (calculadora en PANTALLA COMPLETA con Navigator.push, no panel
 // inline), 2026-11-11:
 // - fix5_calc_pregunta.png: la pregunta de Kristian (rendimiento
-//   teórico 20 g, obtienes 15 g, opciones en %) con el botoncito de
-//   teclado visible y SIN calculadora: al entrar se ven la pregunta
-//   y las opciones, nada más.
+//   teórico 20 g, obtienes 15 g, opciones en %) SIN botoncito de
+//   teclado (seguimiento 7.2: en opción múltiple no va ningún
+//   teclado): al entrar se ven la pregunta y las opciones, nada más.
 // - fix5_calc_pantalla.png: la PANTALLA de la calculadora abierta, a
-//   página completa (aquí la normal, para la pregunta de opciones).
+//   página completa (aquí la normal, montada directa: ya no se llega
+//   a ella desde una pregunta de opciones).
 // - fix5_calc_vuelta.png: vuelta a la pregunta tras responder con la
 //   pantalla: pregunta de cálculo (pH) con el resultado entregado
 //   desde la calculadora científica (¡Correcto!).
@@ -192,8 +193,9 @@ void main() {
   });
 
   testWidgets(
-      'fix5_calc_pregunta: rendimiento con opciones en %, botoncito '
-      'de teclado visible y SIN calculadora', (tester) async {
+      'fix5_calc_pregunta: rendimiento con opciones en %, SIN '
+      'botoncito de teclado (seguimiento 7.2) y SIN calculadora',
+      (tester) async {
     const q = QuizQuestion(
       topic: 'estequiometria',
       question: 'El rendimiento teórico es 20 g y obtienes 15 g. '
@@ -203,7 +205,10 @@ void main() {
       explanation: 'Rendimiento = 15 / 20 × 100 = 75 %.',
     );
     await pumpRunner(tester, title: 'Estequiometría', items: [q]);
-    expect(find.byKey(const Key('calculator-toggle')), findsOneWidget);
+    // Seguimiento 7.2: en opción múltiple no va ningún icono de
+    // teclado (la calculadora solo se abre desde el campo de las
+    // preguntas de cálculo).
+    expect(find.byKey(const Key('calculator-toggle')), findsNothing);
     expect(find.byType(NumericKeypad), findsNothing);
     expect(find.byType(CalculatorScreen), findsNothing);
     expect(find.text('75 %'), findsOneWidget);
@@ -213,16 +218,17 @@ void main() {
   testWidgets(
       'fix5_calc_pantalla: la PANTALLA de la calculadora abierta, a '
       'página completa', (tester) async {
-    const q = QuizQuestion(
-      topic: 'estequiometria',
-      question: 'El rendimiento teórico es 20 g y obtienes 15 g. '
-          '¿Cuál es el rendimiento porcentual?',
-      options: ['60 %', '75 %', '80 %', '133 %'],
-      answer: 1,
-      explanation: 'Rendimiento = 15 / 20 × 100 = 75 %.',
+    // Seguimiento 7.2: la calculadora normal ya no se abre desde
+    // una pregunta de opciones (sin botoncito ahí); se monta la
+    // pantalla directa para seguir capturando su aspecto.
+    await setPhone(tester);
+    await tester.pumpWidget(
+      MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(useMaterial3: true),
+        home: const CalculatorScreen(scientific: false),
+      ),
     );
-    await pumpRunner(tester, title: 'Estequiometría', items: [q]);
-    await tester.tap(find.byKey(const Key('calculator-toggle')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.byType(CalculatorScreen), findsOneWidget);
@@ -241,7 +247,9 @@ void main() {
       'calculadora científica', (tester) async {
     final g = buildPh('ph', 1, 7); // [H+] = 1×10⁻⁷, pH = 7
     await pumpRunner(tester, title: 'Ácidos y bases', items: [g.question]);
-    await tester.tap(find.byKey(const Key('calculator-toggle')));
+    // Seguimiento 7.2: la calculadora se abre desde el campo de
+    // respuesta (el botoncito junto a la pregunta se quitó).
+    await tester.tap(find.byKey(const Key('numeric-answer-field')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.byType(CalculatorScreen), findsOneWidget);

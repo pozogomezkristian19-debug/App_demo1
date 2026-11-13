@@ -21,6 +21,7 @@ import '../widgets/celebration.dart';
 import '../widgets/report_question.dart';
 import '../widgets/simple_quiz.dart';
 import '../screens/calculator_screen.dart';
+import '../widgets/numeric_answer_field.dart';
 import '../widgets/twin_avatars.dart';
 
 // Practicar estilo Duolingo: niveles por tema, repaso de errores y memoria
@@ -802,6 +803,8 @@ class _TopicPathSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final progress = ProgressService.instance;
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final unlocked = locked ? 0 : progress.unlockedLevel(topic);
     var best = 0;
     for (var i = 1; i <= levelCount; i++) {
@@ -830,8 +833,13 @@ class _TopicPathSection extends StatelessWidget {
                   // (Brenda/Britany, sin aro) en lugar del círculo
                   // blanco con el símbolo del tema.
                   decoration: BoxDecoration(
+                    // Bloqueado en oscuro (auditoría 7.2): gris
+                    // oscuro del tema, no #E5E5E5 claro; el texto
+                    // bloqueado también se aclara (ver abajo).
                     color: locked
-                        ? const Color(0xFFE5E5E5)
+                        ? (isDark
+                            ? scheme.surfaceContainerHighest
+                            : const Color(0xFFE5E5E5))
                         : AppAccent.primary,
                     borderRadius: BorderRadius.circular(16),
                   ),
@@ -883,8 +891,13 @@ class _TopicPathSection extends StatelessWidget {
                                             fontSize: 20,
                                             fontWeight: FontWeight.w800,
                                             color: locked
-                                                ? BrandColors.ink
-                                                    .withValues(alpha: 0.6)
+                                                ? (isDark
+                                                    ? scheme.onSurface
+                                                        .withValues(
+                                                            alpha: 0.6)
+                                                    : BrandColors.ink
+                                                        .withValues(
+                                                            alpha: 0.6))
                                                 : Colors.white)),
                                   ),
                                 ),
@@ -900,7 +913,11 @@ class _TopicPathSection extends StatelessWidget {
                                 fontSize: 15,
                                 fontWeight: FontWeight.w500,
                                 color: locked
-                                    ? BrandColors.ink.withValues(alpha: 0.6)
+                                    ? (isDark
+                                        ? scheme.onSurface
+                                            .withValues(alpha: 0.6)
+                                        : BrandColors.ink
+                                            .withValues(alpha: 0.6))
                                     : Colors.white.withValues(alpha: 0.85),
                               ),
                               maxLines: 1,
@@ -1058,6 +1075,8 @@ class _LevelNodeRowState extends State<_LevelNodeRow>
   Widget build(BuildContext context) {
     final accent = AppAccent.primary;
     final accentDark = AppAccent.primaryDark;
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final progress = ProgressService.instance;
     final best = progress.bestScore('level:${widget.topic}:${widget.level}');
     // Pasado = desbloqueado el siguiente (fix5, punto 13): con la
@@ -1174,9 +1193,14 @@ class _LevelNodeRowState extends State<_LevelNodeRow>
                     height: _nodeSize,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
+                      // Bloqueado en oscuro (auditoría 7.2): gris
+                      // oscuro del tema, no #E5E5E5 claro. El
+                      // candado #AFAFAF se lee igual sobre oscuro.
                       color: nodeLit
                           ? accent
-                          : const Color(0xFFE5E5E5),
+                          : (isDark
+                              ? scheme.surfaceContainerHighest
+                              : const Color(0xFFE5E5E5)),
                       // Labio 4 px: sombra sólida (sin desenfoque)
                       // del color oscuro, solo en nodos con color.
                       boxShadow: nodeLit
@@ -1259,6 +1283,7 @@ class _FinalExamSection extends StatelessWidget {
     final progress = ProgressService.instance;
     final best = progress.bestScore('mixto');
     final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       children: [
         const SizedBox(height: 8),
@@ -1297,9 +1322,13 @@ class _FinalExamSection extends StatelessWidget {
             height: 84,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
+              // Bloqueado en oscuro (auditoría 7.2): gris oscuro
+              // del tema, no #E5E5E5 claro.
               color: unlocked
                   ? AppAccent.primary
-                  : const Color(0xFFE5E5E5),
+                  : (isDark
+                      ? scheme.surfaceContainerHighest
+                      : const Color(0xFFE5E5E5)),
               boxShadow: unlocked
                   ? [
                       BoxShadow(
@@ -1463,6 +1492,16 @@ class _QuizRunnerState extends State<_QuizRunner> {
   /// (3 aciertos seguidos en sus variantes).
   final Set<String> _clearedReview = {};
 
+  /// Borrador numérico de la pregunta actual (ronda 7.2): lo tecleado
+  /// en la calculadora persiste POR PREGUNTA — si se cierra la
+  /// calculadora sin pulsar '=' para mirar un dato y se vuelve, lo
+  /// escrito sigue ahí. Se limpia al pasar a otra pregunta.
+  double? _pendingNumeric;
+
+  /// Valor numérico ya enviado con "Usar resultado": el campo lo
+  /// muestra apagado cuando la pregunta está contestada.
+  double? _submittedNumeric;
+
   @override
   void initState() {
     super.initState();
@@ -1504,6 +1543,8 @@ class _QuizRunnerState extends State<_QuizRunner> {
   void _shuffleOptions() {
     _order = [0, 1, 2, 3]..shuffle(Random());
     _selected = null;
+    _pendingNumeric = null;
+    _submittedNumeric = null;
   }
 
   _QuizItem get _item => widget.quiz.items[_index];
@@ -1577,10 +1618,37 @@ class _QuizRunnerState extends State<_QuizRunner> {
   /// valor tecleado selecciona y comprueba en un solo paso.
   void _answerNumeric(double value) {
     if (_selected != null) return;
+    // "Usar resultado" responde como hoy y limpia el pendiente: el
+    // valor enviado queda en _submittedNumeric para que el campo lo
+    // muestre apagado.
+    _submittedNumeric = value;
+    _pendingNumeric = null;
     // Las preguntas de cálculo no tienen opciones que seleccionar:
     // el valor tecleado se responde en un solo paso.
     _answer(displayedIndexForNumericAnswer(
         typed: value, question: _q, order: _order));
+  }
+
+  /// Borrador que reporta la calculadora en cada cambio (ronda 7.2):
+  /// se guarda por pregunta y se vuelve a sembrar al reabrirla.
+  void _onNumericDraft(double? value) {
+    if (_pendingNumeric == value) return;
+    setState(() => _pendingNumeric = value);
+  }
+
+  /// Abre la calculadora desde el campo de respuesta (ronda 7.2):
+  /// mismo flujo que el botoncito de teclado — siembra lo que se
+  /// llevaba escrito y responde con "Usar resultado".
+  Future<void> _openNumericCalculator() async {
+    if (_selected != null) return;
+    final value = await CalculatorScreen.open(
+      context,
+      scientific: true,
+      unit: _q.numericUnit,
+      initialValue: _pendingNumeric,
+      onDraftChanged: _onNumericDraft,
+    );
+    if (value != null) _answerNumeric(value);
   }
 
   void _next() {
@@ -1703,29 +1771,49 @@ class _QuizRunnerState extends State<_QuizRunner> {
                             MascotLine.console, _index))),
               ),
               const SizedBox(height: 16),
-              // Botoncito de teclado (fix5, punto B, corrección 00:26):
-              // sale en (casi) todas las preguntas, a un ladito del
-              // texto; al tocarlo se abre la PANTALLA de la calculadora
-              // (página completa, no un panel inline) y al cerrarla se
-              // vuelve a la pregunta intacta. Científica en las de
-              // cálculo (al volver se responde con el valor), normal en
-              // las demás (solo para calcular a mano). Este runner es el
-              // mismo para niveles, repaso de errores y examen mixto,
-              // así que el icono llega a los tres.
-              QuestionCalculatorButton(
-                question: Text(_q.question,
-                    style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                        color: Theme.of(context).colorScheme.onSurface)),
-                scientific: _q.isNumeric,
-                unit: _q.numericUnit,
-                onResult: _q.isNumeric ? _answerNumeric : null,
-              ),
+              // Texto de la pregunta (seguimiento 7.2): UN SOLO
+              // acceso al teclado — el del campo de respuesta en
+              // las de cálculo. El botoncito junto a la pregunta se
+              // quitó (salía doble) y en opción múltiple no va
+              // ningún teclado: la calculadora se abre desde el
+              // campo (NumericAnswerField) y el borrador persiste
+              // por pregunta (_openNumericCalculator).
+              Text(_q.question,
+                  style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: Theme.of(context).colorScheme.onSurface)),
+              // Campo visible de respuesta (ronda 7.2, solo en las de
+              // cálculo): donde hoy irían las opciones. Muestra lo
+              // que se lleva escrito (o el valor enviado, apagado,
+              // al contestar) y al tocarlo abre la calculadora.
+              if (_q.isNumeric) ...[
+                const SizedBox(height: 16),
+                NumericAnswerField(
+                  key: const Key('numeric-answer-field'),
+                  value: _selected != null
+                      ? _submittedNumeric
+                      : _pendingNumeric,
+                  unit: _q.numericUnit,
+                  answered: _selected != null,
+                  onTap:
+                      _selected == null ? _openNumericCalculator : null,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  tr('numericKeyboardHint'),
+                  style: TextStyle(
+                      fontSize: 14,
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurfaceVariant),
+                ),
+              ],
               const SizedBox(height: 16),
               // En las preguntas de cálculo las opciones dejan paso al
-              // teclado (que ahora se abre con el icono); las
-              // conceptuales siguen con las opciones de siempre.
+              // campo de respuesta (la calculadora se abre desde el
+              // campo); las conceptuales siguen con las opciones de
+              // siempre.
               if (!_q.isNumeric)
                 for (var i = 0; i < 4; i++)
                   Padding(

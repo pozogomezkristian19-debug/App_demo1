@@ -25,6 +25,13 @@
 // mismas vidas, misma explicación y mismo repaso de errores, con la
 // tolerancia ±2 % de services/numeric_answer.dart).
 //
+// Persistencia por pregunta (ronda 7.2): lo tecleado no se pierde al
+// cerrar la calculadora sin pulsar '=' ni al reabrirla — el runner
+// guarda el borrador que reporta `onDraftChanged` (también el
+// resultado EN VIVO de la expresión, no solo el de '=') y lo vuelve
+// a sembrar con `initialValue` al abrir. En opción múltiple no se
+// persiste nada: la calculadora es solo para calcular a mano.
+//
 // Funciones: dígitos, punto decimal, + − × ÷, paréntesis, log (base
 // 10), ln, 10^x, e^x, x², √, π y notación científica (×10^). La
 // expresión se evalúa con el evaluador propio de
@@ -60,6 +67,15 @@ import 'shadows.dart';
 /// [scientific] false esconde las teclas científicas (log, ln,
 /// potencias, raíces, π, notación científica y '^'): queda la
 /// calculadora normal (dígitos, + − × ÷, paréntesis, =).
+/// [initialValue] siembra el campo de respuesta (ronda 7.2): el valor
+/// tecleado persiste POR PREGUNTA — al reabrir la calculadora el campo
+/// trae lo que se llevaba escrito (como si se acabara de pulsar '=',
+/// así un dígito empieza un cálculo nuevo y un operador sigue desde
+/// ese valor). null = empezar vacía, como siempre.
+/// [onDraftChanged] se llama en cada cambio con el borrador actual
+/// (ver [_draft]): lo que se lleva escrito, aunque no se haya pulsado
+/// '='. null = a nadie le importa el borrador (opción múltiple: la
+/// calculadora es solo para calcular a mano y no persiste nada).
 class NumericKeypad extends StatefulWidget {
   const NumericKeypad({
     super.key,
@@ -67,12 +83,16 @@ class NumericKeypad extends StatefulWidget {
     required this.enabled,
     this.onSubmit,
     this.scientific = true,
+    this.initialValue,
+    this.onDraftChanged,
   });
 
   final String? unit;
   final bool enabled;
   final ValueChanged<double>? onSubmit;
   final bool scientific;
+  final double? initialValue;
+  final ValueChanged<double?>? onDraftChanged;
 
   @override
   State<NumericKeypad> createState() => _NumericKeypadState();
@@ -89,10 +109,44 @@ class _NumericKeypadState extends State<NumericKeypad> {
   /// un operador sigue calculando desde el resultado.
   var _justEvaluated = false;
 
-  double? get _liveResult =>
-      _expr.isEmpty ? null : evaluateExpression(_expr);
+  double? get _liveResult => _expr.isEmpty ? null : evaluateExpression(_expr);
 
   double? get _answerValue => parseNumericInput(_answer);
+
+  /// Borrador actual (ronda 7.2): lo que se guardaría si se cerrara
+  /// la calculadora ahora mismo. Es el resultado EN VIVO de la
+  /// expresión sin pulsar '=' (Kristian escribe el número y cierra
+  /// sin '=' para mirar un dato y lo pierde), o el valor de '=' si
+  /// lo hay. No es literalmente `_answerValue ?? _liveResult`: tras
+  /// '=' el `_answer` viejo quedaría por delante del número nuevo
+  /// que se está escribiendo (p. ej. '=' deja 5 y luego se teclea
+  /// '3': el borrador debe ser 3, no 5). Por eso, mientras se
+  /// escribe una expresión nueva manda el resultado en vivo; si la
+  /// expresión está incompleta ('5+'), se conserva el último valor
+  /// válido en vez de perderlo.
+  double? get _draft {
+    if (_justEvaluated) return _answerValue;
+    if (_expr.isNotEmpty) return _liveResult ?? _answerValue;
+    return _answerValue;
+  }
+
+  /// Avisa del borrador actual a quien lo guarda (el runner, por
+  /// pregunta). Se llama después de cada cambio de tecla.
+  void _notifyDraft() => widget.onDraftChanged?.call(_draft);
+
+  @override
+  void initState() {
+    super.initState();
+    // Siembra el campo de respuesta (ronda 7.2): al reabrir la
+    // calculadora el valor que se llevaba escrito ya está en el
+    // campo, como si se acabara de pulsar '=' (un dígito empieza un
+    // cálculo nuevo y un operador sigue desde ese valor).
+    final seed = widget.initialValue;
+    if (seed != null) {
+      _answer = formatCalculatorResult(seed);
+      _justEvaluated = true;
+    }
+  }
 
   static bool _isDigit(String c) =>
       c.codeUnitAt(0) >= 48 && c.codeUnitAt(0) <= 57;
@@ -108,8 +162,7 @@ class _NumericKeypadState extends State<NumericKeypad> {
     return '+-×÷^'.contains(_expr[_expr.length - 1]);
   }
 
-  bool get _endsWithOpenParen =>
-      _expr.isNotEmpty && _expr.endsWith('(');
+  bool get _endsWithOpenParen => _expr.isNotEmpty && _expr.endsWith('(');
 
   int get _unclosedParens {
     var n = 0;
@@ -134,6 +187,7 @@ class _NumericKeypadState extends State<NumericKeypad> {
       _freshStartIfEvaluated();
       _expr += d;
     });
+    _notifyDraft();
   }
 
   void _pressDot() {
@@ -151,6 +205,7 @@ class _NumericKeypadState extends State<NumericKeypad> {
       // un número válido.
       _expr += segment.isEmpty ? '0.' : '.';
     });
+    _notifyDraft();
   }
 
   void _pressOperator(String op) {
@@ -185,6 +240,7 @@ class _NumericKeypadState extends State<NumericKeypad> {
       }
       _expr += op;
     });
+    _notifyDraft();
   }
 
   /// Función o constante que, escrita tras un número o ')', lleva una
@@ -196,6 +252,7 @@ class _NumericKeypadState extends State<NumericKeypad> {
       if (_endsWithValue) _expr += '×';
       _expr += text;
     });
+    _notifyDraft();
   }
 
   /// x²: eleva al cuadrado lo último escrito ("3" -> "3^2").
@@ -209,6 +266,7 @@ class _NumericKeypadState extends State<NumericKeypad> {
       }
       _expr += '^2';
     });
+    _notifyDraft();
   }
 
   /// "×10^": notación científica, solo tras un número ("2×10^3").
@@ -222,6 +280,7 @@ class _NumericKeypadState extends State<NumericKeypad> {
       }
       _expr += '×10^';
     });
+    _notifyDraft();
   }
 
   void _pressOpenParen() => _pressOperandStart('(');
@@ -231,6 +290,7 @@ class _NumericKeypadState extends State<NumericKeypad> {
     if (_unclosedParens <= 0) return;
     if (_endsWithOperator || _endsWithOpenParen) return;
     setState(() => _expr += ')');
+    _notifyDraft();
   }
 
   void _backspace() {
@@ -256,6 +316,7 @@ class _NumericKeypadState extends State<NumericKeypad> {
         _justEvaluated = false;
       }
     });
+    _notifyDraft();
   }
 
   void _clear() {
@@ -265,6 +326,7 @@ class _NumericKeypadState extends State<NumericKeypad> {
       _answer = '';
       _justEvaluated = false;
     });
+    _notifyDraft();
   }
 
   /// '=': evalúa la expresión y pone el resultado en el campo de
@@ -277,6 +339,7 @@ class _NumericKeypadState extends State<NumericKeypad> {
       _answer = formatCalculatorResult(result);
       _justEvaluated = true;
     });
+    _notifyDraft();
   }
 
   void _submit() {
@@ -349,8 +412,7 @@ class _NumericKeypadState extends State<NumericKeypad> {
             ),
             child: Text(
               label,
-              style:
-                  TextStyle(fontSize: fontSize, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.bold),
             ),
           ),
         ),
@@ -385,8 +447,7 @@ class _NumericKeypadState extends State<NumericKeypad> {
               borderRadius: BorderRadius.circular(16),
               color: AppAccent.primary,
               border: Border(
-                  bottom: BorderSide(
-                      color: AppAccent.primaryDark, width: 3)),
+                  bottom: BorderSide(color: AppAccent.primaryDark, width: 3)),
               boxShadow: [
                 standardShadow(scheme.primary),
               ],
@@ -457,8 +518,8 @@ class _NumericKeypadState extends State<NumericKeypad> {
               padding: const EdgeInsets.symmetric(horizontal: 8),
             ),
             child: Text(label,
-                style: const TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.bold)),
+                style:
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           ),
         ),
       ),
@@ -482,6 +543,7 @@ class _NumericKeypadState extends State<NumericKeypad> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final canEquals = widget.enabled && _liveResult != null;
     final canSubmit = widget.enabled && _answerValue != null;
     return Column(
@@ -493,20 +555,25 @@ class _NumericKeypadState extends State<NumericKeypad> {
         // que importa y tiene que saltar a la vista frente a la caja
         // de la expresión. Sombra suave (ronda de diseño 7.0).
         Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
             color: _answer.isEmpty
                 ? scheme.surfaceContainerHighest
                 : scheme.primary.withValues(alpha: 0.10),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: _answer.isEmpty
-                  ? scheme.outlineVariant
-                  : scheme.primary.withValues(alpha: 0.45),
-            ),
+            // Sin borde en oscuro cuando está vacío: la línea
+            // clara se veía fea (Kristian, 2026-11-13); el relleno
+            // distingue la caja. Con valor, el borde del acento.
+            border: (_answer.isEmpty && isDark)
+                ? null
+                : Border.all(
+                    color: _answer.isEmpty
+                        ? scheme.outlineVariant
+                        : scheme.primary.withValues(alpha: 0.45),
+                  ),
             boxShadow: [
-              standardShadow((_answer.isEmpty ? const Color(0xFF64748B) : scheme.primary)),
+              standardShadow(
+                  (_answer.isEmpty ? const Color(0xFF64748B) : scheme.primary)),
             ],
           ),
           child: Row(
@@ -528,8 +595,8 @@ class _NumericKeypadState extends State<NumericKeypad> {
               ),
               if (widget.unit != null)
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: scheme.primary.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(999),
@@ -551,12 +618,13 @@ class _NumericKeypadState extends State<NumericKeypad> {
         // Mismo radio y borde que el campo de respuesta, mismo
         // padding vertical (12): las dos cajas van parejas.
         Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
             color: scheme.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: scheme.outlineVariant),
+            // Sin borde en oscuro (misma razón que el campo de
+            // respuesta): el relleno distingue la caja.
+            border: isDark ? null : Border.all(color: scheme.outlineVariant),
             boxShadow: [
               standardShadow(const Color(0xFF64748B)),
             ],
@@ -599,31 +667,49 @@ class _NumericKeypadState extends State<NumericKeypad> {
         if (widget.scientific) ...[
           // Fila científica (teclas compactas): log, ln, raíz, x², 10^x.
           _row([
-            _key(label: 'log', onTap: () => _pressOperandStart('log('),
-                height: 44, fontSize: 16),
-            _key(label: 'ln', onTap: () => _pressOperandStart('ln('),
-                height: 44, fontSize: 16),
-            _key(label: '√', onTap: () => _pressOperandStart('√('),
-                height: 44, fontSize: 20),
-            _key(label: 'x²', onTap: _pressSquare,
-                height: 44, fontSize: 16),
-            _key(label: '10^x', onTap: () => _pressOperandStart('10^'),
-                height: 44, fontSize: 16),
+            _key(
+                label: 'log',
+                onTap: () => _pressOperandStart('log('),
+                height: 44,
+                fontSize: 16),
+            _key(
+                label: 'ln',
+                onTap: () => _pressOperandStart('ln('),
+                height: 44,
+                fontSize: 16),
+            _key(
+                label: '√',
+                onTap: () => _pressOperandStart('√('),
+                height: 44,
+                fontSize: 20),
+            _key(label: 'x²', onTap: _pressSquare, height: 44, fontSize: 16),
+            _key(
+                label: '10^x',
+                onTap: () => _pressOperandStart('10^'),
+                height: 44,
+                fontSize: 16),
           ]),
           // Segunda fila científica: e^x, paréntesis, notación
           // científica y π. Cinco teclas como la fila de arriba: la
           // retícula queda simétrica (antes eran cuatro, más anchas).
           _row([
-            _key(label: 'e^x', onTap: () => _pressOperandStart('e^'),
-                height: 44, fontSize: 16),
-            _key(label: '(', onTap: _pressOpenParen,
-                height: 44, fontSize: 20),
-            _key(label: ')', onTap: _pressCloseParen,
-                height: 44, fontSize: 20),
-            _key(label: '×10^x', onTap: _pressTimesPow10,
-                height: 44, fontSize: 16),
-            _key(label: 'π', onTap: () => _pressOperandStart('π'),
-                height: 44, fontSize: 20),
+            _key(
+                label: 'e^x',
+                onTap: () => _pressOperandStart('e^'),
+                height: 44,
+                fontSize: 16),
+            _key(label: '(', onTap: _pressOpenParen, height: 44, fontSize: 20),
+            _key(label: ')', onTap: _pressCloseParen, height: 44, fontSize: 20),
+            _key(
+                label: '×10^x',
+                onTap: _pressTimesPow10,
+                height: 44,
+                fontSize: 16),
+            _key(
+                label: 'π',
+                onTap: () => _pressOperandStart('π'),
+                height: 44,
+                fontSize: 20),
           ]),
         ],
         // Teclas grandes: dígitos y operadores (no GridView: el grid
@@ -673,18 +759,18 @@ class _NumericKeypadState extends State<NumericKeypad> {
             ],
             Expanded(
                 flex: widget.scientific ? 1 : 2,
-                child: _smallKey(
-                    label: tr('keypadDelete'), onTap: _backspace)),
+                child: _smallKey(label: tr('keypadDelete'), onTap: _backspace)),
             const SizedBox(width: 8),
             Expanded(
                 flex: widget.scientific ? 1 : 2,
-                child:
-                    _smallKey(label: tr('keypadClear'), onTap: _clear)),
+                child: _smallKey(label: tr('keypadClear'), onTap: _clear)),
             const SizedBox(width: 8),
             Expanded(
                 flex: widget.scientific ? 1 : 2,
                 child: _smallKey(
-                    label: '=', onTap: _equals, primary: true,
+                    label: '=',
+                    onTap: _equals,
+                    primary: true,
                     // '=' solo se enciende con un resultado válido:
                     // con la expresión incompleta no hace nada.
                     enabled: canEquals)),
@@ -704,8 +790,8 @@ class _NumericKeypadState extends State<NumericKeypad> {
               onPressed: canSubmit ? _submit : null,
               child: Text(
                 tr('calcUseResult'),
-                style: const TextStyle(
-                    fontSize: 18, fontWeight: FontWeight.bold),
+                style:
+                    const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ),
           ),

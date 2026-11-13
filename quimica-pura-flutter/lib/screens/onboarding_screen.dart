@@ -1,7 +1,7 @@
 // Pantallas de bienvenida: solo salen la primera vez que se instala la app.
 // No necesitan internet. Al final se guardan el nombre, el género y el
-// idioma en el teléfono, y cada entrada saluda "Bienvenida [nombre]" o
-// "Bienvenido [nombre]" (en el idioma elegido).
+// idioma en el teléfono, y cada entrada saluda "Bienvenido/a
+// [primer nombre]" (Kristian).
 
 import '../data/i18n/content_i18n.dart';
 import 'package:flutter/material.dart';
@@ -478,8 +478,7 @@ class _ProfilePage extends StatelessWidget {
           Text(
             tr('obProfileBody'),
             textAlign: TextAlign.center,
-            style: TextStyle(
-                fontSize: 16, height: 1.5, color: subtitleColor),
+            style: TextStyle(fontSize: 16, height: 1.5, color: subtitleColor),
           ),
           const SizedBox(height: 12),
           Align(

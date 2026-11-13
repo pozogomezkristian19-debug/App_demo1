@@ -70,7 +70,10 @@ class _ElementSheetState extends State<ElementSheet> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 170,
+            // (foto72) 170 pt era justo el ancho de la etiqueta más
+            // larga ("Números de oxidación") y el valor quedaba
+            // pegado a ella ("oxidación+2, +3"). 184 pt deja respiro.
+            width: 184,
             child: Text(label,
                 style: const TextStyle(fontWeight: FontWeight.bold)),
           ),

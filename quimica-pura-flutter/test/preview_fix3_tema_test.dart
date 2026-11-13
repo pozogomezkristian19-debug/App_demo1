@@ -88,8 +88,8 @@ void main() {
     await UserPrefs.saveThemeMode('claro');
     UserPrefs.onboardingDone = true;
     UserPrefs.isDark = false;
-    // Nombre y género para que el saludo muestre "Bienvenido
-    // Kristian" como en el teléfono real.
+    // Nombre y género para que el saludo muestre SOLO el primer
+    // nombre ("Kristian", 2026-11-13) como en el teléfono real.
     UserPrefs.userName = 'Kristian';
     UserPrefs.userGender = 'Masculino';
     // Los tres compañeros ya se presentaron: las burbujas muestran
@@ -162,18 +162,28 @@ void main() {
           body: Row(
             key: Key('warmup'),
             children: [
-              Image(image: AssetImage('assets/brenda.png'),
-                  width: 40, height: 40),
-              Image(image: AssetImage('assets/britany.png'),
-                  width: 40, height: 40),
-              Image(image: AssetImage('assets/kristian.png'),
-                  width: 40, height: 40),
-              Image(image: AssetImage('assets/logo.png'),
-                  width: 40, height: 40),
-              Image(image: AssetImage('assets/whatsapp.png'),
-                  width: 40, height: 40),
-              Image(image: AssetImage('assets/avatar_default.png'),
-                  width: 40, height: 40),
+              Image(
+                  image: AssetImage('assets/brenda.png'),
+                  width: 40,
+                  height: 40),
+              Image(
+                  image: AssetImage('assets/britany.png'),
+                  width: 40,
+                  height: 40),
+              Image(
+                  image: AssetImage('assets/kristian.png'),
+                  width: 40,
+                  height: 40),
+              Image(
+                  image: AssetImage('assets/logo.png'), width: 40, height: 40),
+              Image(
+                  image: AssetImage('assets/whatsapp.png'),
+                  width: 40,
+                  height: 40),
+              Image(
+                  image: AssetImage('assets/avatar_default.png'),
+                  width: 40,
+                  height: 40),
             ],
           ),
         ),
@@ -195,8 +205,7 @@ void main() {
     await settle(tester);
   });
 
-  testWidgets('fix3_cuenta (fila Tema, cabecera Quemia)',
-      (tester) async {
+  testWidgets('fix3_cuenta (fila Tema, cabecera Quemia)', (tester) async {
     await pumpScreen(
         tester,
         AccountScreen(
@@ -226,8 +235,7 @@ void main() {
     await shot(tester, 'fix3_cuenta.png');
   });
 
-  testWidgets('fix3_tema (pantalla dedicada, color + modo)',
-      (tester) async {
+  testWidgets('fix3_tema (pantalla dedicada, color + modo)', (tester) async {
     // Se entra como en la app real (una ruta empujada sobre Cuenta,
     // para que la captura tenga la AppBar "Tema" con la flecha
     // atrás), pero sin tocar la fila: el toque suena (SoundService)
@@ -244,8 +252,7 @@ void main() {
           builder: (context) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               Navigator.of(context).push(
-                MaterialPageRoute(
-                    builder: (_) => const ThemeScreen()),
+                MaterialPageRoute(builder: (_) => const ThemeScreen()),
               );
             });
             return const Scaffold(body: SizedBox.shrink());

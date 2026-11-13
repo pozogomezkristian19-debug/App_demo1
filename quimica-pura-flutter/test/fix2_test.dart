@@ -12,6 +12,7 @@ import 'package:quimica_pura/screens/lab_screen.dart';
 import 'package:quimica_pura/screens/onboarding_screen.dart';
 import 'package:quimica_pura/screens/practicar_screen.dart';
 import 'package:quimica_pura/screens/settings_screen.dart';
+import 'package:quimica_pura/screens/compare_screen.dart';
 import 'package:quimica_pura/screens/tabla_screen.dart';
 import 'package:quimica_pura/screens/table_quiz_screen.dart';
 import 'package:quimica_pura/screens/theme_screen.dart';
@@ -204,8 +205,7 @@ void main() {
   group('Niveles compacto (item 3)', () {
     testWidgets(
         'sin intro, pregunta del día ancha con la foto del acompañante'
-        ' + camino arriba (fix4, punto 13 REVISADO)',
-        (tester) async {
+        ' + camino arriba (fix4, punto 13 REVISADO)', (tester) async {
       tester.view.physicalSize = const Size(720, 1600);
       tester.view.devicePixelRatio = 2.0;
       addTearDown(() {
@@ -342,8 +342,7 @@ void main() {
       // USUARIO (SocialAvatar, con su lápiz), no la compañera.
       // Tocar ahí abre la galería (clave 'avatar').
       expect(find.byType(SocialAvatar), findsOneWidget);
-      expect(tester.getSize(find.byType(SocialAvatar)),
-          const Size(96, 96));
+      expect(tester.getSize(find.byType(SocialAvatar)), const Size(96, 96));
       await tester.tap(find.byType(SocialAvatar));
       await tester.pump();
       expect(opened, ['avatar']);
@@ -352,8 +351,7 @@ void main() {
       // (la API nueva es CompanionAvatar, que cubre a los tres,
       // incluido Kristian) ni hay etiqueta de nombre bajo la foto.
       expect(find.byType(CompanionAvatar), findsOneWidget);
-      expect(tester.getSize(find.byType(CompanionAvatar)),
-          const Size(22, 22));
+      expect(tester.getSize(find.byType(CompanionAvatar)), const Size(22, 22));
       expect(find.byType(TwinAvatarA), findsNothing);
       expect(find.byType(TwinAvatarB), findsNothing);
       expect(find.text(tr('accountTitle')), findsOneWidget);
@@ -466,7 +464,6 @@ void main() {
         tester.getSize(quizCard).height,
       );
     });
-
   });
 
   group('Encabezado del quiz (bug 6: sin ids internos)', () {
@@ -570,7 +567,7 @@ void main() {
       expect(
         find.descendant(
           of: find.byType(AppBar),
-          matching: find.textContaining('Bienvenid'),
+          matching: find.textContaining('Kristian'),
         ),
         findsNothing,
       );
@@ -606,9 +603,15 @@ void main() {
     });
   });
 
-  group('Botones de Tabla (bug 13: icono arriba, texto debajo)', () {
-    testWidgets('icono arriba y mismo tamaño en los dos botones',
-        (tester) async {
+  // Rediseño Tabla 2026-11-12 (mockup flotante aprobado): las dos
+  // tarjetas grandes se quitaron; Comparar y Quiz son ahora
+  // píldoras flotantes abajo a la derecha, una encima de la otra
+  // (Comparar arriba, Quiz abajo), con icono a la IZQUIERDA del
+  // texto corto, misma altura (44 pt) y alineadas a la derecha.
+  // El bug 13 original (icono arriba, texto debajo, en tarjetas)
+  // ya no aplica: aquí el icono va al lado del texto.
+  group('Botones flotantes de Tabla (rediseño 2026-11-12)', () {
+    Future<void> pumpTabla(WidgetTester tester) async {
       tester.view.physicalSize = const Size(720, 1600);
       tester.view.devicePixelRatio = 2.0;
       addTearDown(() {
@@ -623,26 +626,64 @@ void main() {
       );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
-      for (final labelKey in ['tableQuizTitle', 'compareTitle']) {
+    }
+
+    Finder pillOf(String labelKey) => find
+        .ancestor(
+          of: find.text(tr(labelKey)),
+          matching: find.byType(InkWell),
+        )
+        .first;
+
+    testWidgets('icono a la izquierda del texto y misma altura',
+        (tester) async {
+      await pumpTabla(tester);
+      for (final labelKey in ['quizShort', 'compareShort']) {
         final label = find.text(tr(labelKey));
         expect(label, findsOneWidget);
-        final card =
-            find.ancestor(of: label, matching: find.byType(Card)).first;
+        final pill = pillOf(labelKey);
         final icon =
-            find.descendant(of: card, matching: find.byType(LucideIcon));
+            find.descendant(of: pill, matching: find.byType(LucideIcon));
         expect(icon, findsOneWidget);
-        expect(tester.getCenter(icon).dy, lessThan(tester.getCenter(label).dy));
+        // Icono a la izquierda del texto, en la misma línea.
+        expect(tester.getCenter(icon).dx, lessThan(tester.getCenter(label).dx));
+        expect(tester.getCenter(icon).dy,
+            closeTo(tester.getCenter(label).dy, 1.0));
+        // Altura 44 pt en los dos.
+        expect(tester.getSize(pill).height, 44);
       }
-      // Los dos botones miden exactamente lo mismo.
-      final quizCard = find
-          .ancestor(
-              of: find.text(tr('tableQuizTitle')), matching: find.byType(Card))
-          .first;
-      final compareCard = find
-          .ancestor(
-              of: find.text(tr('compareTitle')), matching: find.byType(Card))
-          .first;
-      expect(tester.getSize(quizCard), tester.getSize(compareCard));
+    });
+
+    testWidgets(
+        'apilados abajo a la derecha: Comparar arriba, '
+        'Quiz abajo, alineados a la derecha', (tester) async {
+      await pumpTabla(tester);
+      final compare = pillOf('compareShort');
+      final quiz = pillOf('quizShort');
+      // Comparar encima de Quiz.
+      expect(tester.getCenter(compare).dy, lessThan(tester.getCenter(quiz).dy));
+      // Alineados al borde derecho (mismo borde derecho).
+      expect(tester.getBottomRight(compare).dx,
+          closeTo(tester.getBottomRight(quiz).dx, 1.0));
+      // Abajo del todo de la pantalla (800 pt de alto): el borde
+      // inferior de Quiz queda a 16 pt del borde inferior.
+      expect(tester.getBottomRight(quiz).dy, closeTo(800 - 16, 1.0));
+      // Sin tarjetas grandes: ya no hay ningún Card de acción.
+      expect(find.byType(Card), findsNothing);
+    });
+
+    testWidgets('el flotante Quiz abre el quiz de la tabla', (tester) async {
+      await pumpTabla(tester);
+      await tester.tap(find.text(tr('quizShort')));
+      await tester.pumpAndSettle();
+      expect(find.byType(TableQuizScreen), findsOneWidget);
+    });
+
+    testWidgets('el flotante Comparar abre la comparación', (tester) async {
+      await pumpTabla(tester);
+      await tester.tap(find.text(tr('compareShort')));
+      await tester.pumpAndSettle();
+      expect(find.byType(CompareScreen), findsOneWidget);
     });
   });
 

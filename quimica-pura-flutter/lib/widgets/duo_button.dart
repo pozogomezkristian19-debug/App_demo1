@@ -122,20 +122,37 @@ class _DuoButtonState extends State<DuoButton> {
     // color propio (buy-blue y demás explícitos se conservan).
     final bottomColor =
         widget.bottomColor ?? AppAccent.primary;
-    final edgeColor = widget.edgeColor ?? AppAccent.primaryDark;
+    // Labio en oscuro (auditoría 7.2): el borde claro del
+    // secundario (#E5E5E5 o el tinte del acento) se veía como una
+    // línea blanca sobre el botón oscuro; en oscuro va el borde
+    // oscuro del tema. El primario conserva su labio del acento.
+    final edgeColor = isDark && widget._secondary
+        ? AppAccent.darkBorder
+        : widget.edgeColor ?? AppAccent.primaryDark;
 
     final face = disabled
         ? (isDark
             ? scheme.surfaceContainerHighest
             : const Color(0xFFE5E5E5))
         : widget._secondary
-            ? Colors.white
+            // Secundario en oscuro (auditoría 7.2): cara oscura
+            // como el resto de la app, no blanca.
+            ? (isDark ? scheme.surfaceContainerHighest : Colors.white)
             : bottomColor;
+    // Texto del secundario en oscuro (auditoría 7.2): los
+    // call-sites pasan tintas oscuras de claro (#4B4B4B, #777777,
+    // teal oscuro, marrón) que sobre el botón oscuro no se
+    // leerían; si la tinta es oscura va el onSurface claro del
+    // tema. Una tinta ya clara (blanco) se conserva.
     final text = disabled
         ? (isDark
             ? scheme.onSurface.withValues(alpha: 0.45)
             : const Color(0xFFAFAFAF))
-        : widget.textColor;
+        : (isDark &&
+                widget._secondary &&
+                widget.textColor.computeLuminance() < 0.4)
+            ? scheme.onSurface
+            : widget.textColor;
     // Labio de 4 pt: colapsa a 0 al pulsar; sin labio si está
     // deshabilitado. En secondary el borde de 2 pt rodea el botón
     // con el mismo color del labio. Sin labio, el lado inferior

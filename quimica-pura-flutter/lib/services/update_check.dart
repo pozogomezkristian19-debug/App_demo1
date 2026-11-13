@@ -41,6 +41,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -56,7 +57,7 @@ import 'notification_service.dart';
 /// Versión actual de la app: ÚNICA fuente de verdad en el código.
 /// Debe coincidir con `latest` de version.json en la build que se
 /// publica, para que no salga un aviso falso nada más instalar.
-const String kAppVersion = '7.1';
+const String kAppVersion = '7.2';
 
 /// version.json en la raíz del repo, servido en crudo por GitHub.
 const String kUpdateCheckUrl =
@@ -171,8 +172,7 @@ Future<String?> _defaultFetcher(Uri url) async {
   try {
     final request =
         await client.getUrl(url).timeout(const Duration(seconds: 5));
-    final response =
-        await request.close().timeout(const Duration(seconds: 5));
+    final response = await request.close().timeout(const Duration(seconds: 5));
     if (response.statusCode != 200) return null;
     return await response
         .transform(utf8.decoder)
@@ -416,8 +416,7 @@ class UpdateInstaller {
   /// se asume que sí y decide el sistema.
   static Future<bool> canInstallUnknownSources() async {
     try {
-      final ok =
-          await _channel.invokeMethod<bool>('canInstallUnknownSources');
+      final ok = await _channel.invokeMethod<bool>('canInstallUnknownSources');
       return ok ?? true;
     } catch (_) {
       return true;
@@ -507,11 +506,9 @@ Map<String, String> updateTexts(String lang) {
         'downloadingTitle': 'Download di Quemia',
         'downloadingBody': 'Versione {v}',
         'downloadReadyTitle': 'Download completato',
-        'downloadReadyBody':
-            'La versione {v} è pronta. Tocca per installarla.',
+        'downloadReadyBody': 'La versione {v} è pronta. Tocca per installarla.',
         'downloadFailedTitle': 'Download non riuscito',
-        'downloadFailedBody':
-            'Controlla la connessione e riprova più tardi.',
+        'downloadFailedBody': 'Controlla la connessione e riprova più tardi.',
         'reminderBody': 'C’è un aggiornamento in sospeso',
         'unknownSourcesTitle': 'Consenti installazione app',
         'unknownSourcesBody':
@@ -531,8 +528,7 @@ Map<String, String> updateTexts(String lang) {
         'downloadingTitle': 'Baixando Quemia',
         'downloadingBody': 'Versão {v}',
         'downloadReadyTitle': 'Download concluído',
-        'downloadReadyBody':
-            'A versão {v} está pronta. Toque para instalar.',
+        'downloadReadyBody': 'A versão {v} está pronta. Toque para instalar.',
         'downloadFailedTitle': 'Não foi possível baixar',
         'downloadFailedBody':
             'Verifique sua conexão e tente novamente mais tarde.',
@@ -555,11 +551,9 @@ Map<String, String> updateTexts(String lang) {
         'downloadingTitle': 'Скачивание Quemia',
         'downloadingBody': 'Версия {v}',
         'downloadReadyTitle': 'Скачивание завершено',
-        'downloadReadyBody':
-            'Версия {v} готова. Нажмите, чтобы установить.',
+        'downloadReadyBody': 'Версия {v} готова. Нажмите, чтобы установить.',
         'downloadFailedTitle': 'Не удалось скачать',
-        'downloadFailedBody':
-            'Проверьте подключение и попробуйте позже.',
+        'downloadFailedBody': 'Проверьте подключение и попробуйте позже.',
         'reminderBody': 'Есть ожидающее обновление',
         'unknownSourcesTitle': 'Разрешить установку приложений',
         'unknownSourcesBody':
@@ -792,8 +786,8 @@ class UpdateCheckService {
     BuildContext context, {
     UpdateJsonFetcher? fetcher,
   }) async {
-    final info = await _fetchUpdateInfo(
-        fetcher ?? _resumeFetcher ?? _defaultFetcher);
+    final info =
+        await _fetchUpdateInfo(fetcher ?? _resumeFetcher ?? _defaultFetcher);
     if (info == null) return ManualUpdateResult.checkFailed;
     if (compareVersions(info.latest, kAppVersion) <= 0) {
       await _cleanupAfterUpdate();
@@ -855,127 +849,180 @@ class UpdateCheckService {
     _dialogShowing = true;
     String? choice;
     try {
-      choice = await showDialog<String>(
+      choice = await showGeneralDialog<String>(
         context: context,
         // Con actualización obligatoria no se puede cerrar tocando
         // fuera ni con el botón atrás: solo queda Actualizar.
         barrierDismissible: !info.force,
-        builder: (dialogContext) => PopScope(
+        // showGeneralDialog exige barrierLabel != null cuando la
+        // barrera cierra el diálogo: la misma etiqueta que usaba
+        // showDialog ("Cerrar" localizada).
+        barrierLabel:
+            MaterialLocalizations.of(context).modalBarrierDismissLabel,
+        // Barrera transparente (ronda 7.2, Zona C): el velo + blur
+        // los pinta el pageBuilder (liquid glass). El showDialog
+        // ponía su propio velo gris plano y no dejaba ver el fondo
+        // difuminado. La barrera sigue ahí y sigue cerrando el
+        // diálogo al tocar fuera (si no es obligatoria): el blur
+        // lleva IgnorePointer para no comerse esos toques.
+        barrierColor: Colors.transparent,
+        transitionDuration: const Duration(milliseconds: 250),
+        pageBuilder: (dialogContext, animation, secondaryAnimation) {
+          // Diálogo según el tema (auditoría 7.2): en oscuro la
+          // cara es oscura y el texto claro; en blanco fijo se
+          // veía como tarjeta clara en oscuro. El teal se conserva
+          // en los dos temas (se lee sobre oscuro).
+          final scheme = Theme.of(dialogContext).colorScheme;
+          final isDark =
+              Theme.of(dialogContext).brightness == Brightness.dark;
+          final dialogInk =
+              isDark ? scheme.onSurface : BrandColors.ink;
+          return PopScope(
           canPop: !info.force,
-          child: Dialog(
-          backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          insetPadding:
-              const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
-            // Con desplazamiento: unas notas largas nunca desbordan el
-            // diálogo en un teléfono estrecho.
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: BrandColors.teal.withValues(alpha: 0.15),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const LucideIcon(
-                        LucideIcons.download,
-                        size: 26,
-                        color: BrandColors.teal,
-                      ),
+          child: Stack(
+            children: [
+              // Blur real (sigma 10) + velo negro 35 % a pantalla
+              // completa, detrás del diálogo. Sin toques: la
+              // barrera de arriba recibe el toque fuera del
+              // diálogo y lo cierra.
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                    child: Container(
+                      color: Colors.black.withValues(alpha: 0.35),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        t['dialogTitle']!,
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
-                          color: BrandColors.ink,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  t['versionAvailable']!.replaceAll('{v}', info.latest),
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: BrandColors.teal,
                   ),
                 ),
-                if (info.notes.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    info.notes,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      height: 1.45,
-                      color: BrandColors.ink,
-                    ),
-                  ),
-                ],
-                if (info.force) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    t['forceNote']!,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: BrandColors.ink,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    // Teal fijo (no el acento elegido en Cuenta): el
-                    // diálogo de actualización es siempre teal. La
-                    // elevación le da vida 3D; el color de fondo NO
-                    // se toca (lo afirma el test de actualización).
-                    style: FilledButton.styleFrom(
-                      backgroundColor: BrandColors.teal,
-                      foregroundColor: Colors.white,
-                      shadowColor: BrandColors.tealDark,
-                      elevation: 4,
-                    ),
-                    onPressed: () =>
-                        Navigator.of(dialogContext).pop('update'),
-                    child: Text(already ? t['install']! : t['updateNow']!),
-                  ),
-                ),
-                if (!info.force) ...[
-                  const SizedBox(height: 4),
-                  SizedBox(
-                    width: double.infinity,
-                    child: TextButton(
-                      style: TextButton.styleFrom(
-                        foregroundColor: BrandColors.teal,
-                      ),
-                      onPressed: () =>
-                          Navigator.of(dialogContext).pop('later'),
-                      child: Text(t['later']!),
-                    ),
-                  ),
-                ],
-              ],
               ),
-            ),
+              // El MISMO diálogo de siempre, centrado, con el
+              // MISMO contenido: fondo blanco en claro (oscuro en
+              // oscuro, auditoría 7.2), radio 20, icono, título,
+              // versión, notas, botones.
+              Center(
+                child: Dialog(
+                  backgroundColor: isDark
+                      ? scheme.surfaceContainerHighest
+                      : Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  insetPadding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+                    // Con desplazamiento: unas notas largas nunca desbordan el
+                    // diálogo en un teléfono estrecho.
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                width: 48,
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  color:
+                                      BrandColors.teal.withValues(alpha: 0.15),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const LucideIcon(
+                                  LucideIcons.download,
+                                  size: 26,
+                                  color: BrandColors.teal,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  t['dialogTitle']!,
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w800,
+                                    color: dialogInk,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            t['versionAvailable']!
+                                .replaceAll('{v}', info.latest),
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: BrandColors.teal,
+                            ),
+                          ),
+                          if (info.notes.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              info.notes,
+                              style: TextStyle(
+                                fontSize: 16,
+                                height: 1.45,
+                                color: dialogInk,
+                              ),
+                            ),
+                          ],
+                          if (info.force) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              t['forceNote']!,
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: dialogInk,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 20),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton(
+                              // Teal fijo (no el acento elegido en Cuenta): el
+                              // diálogo de actualización es siempre teal. La
+                              // elevación le da vida 3D; el color de fondo NO
+                              // se toca (lo afirma el test de actualización).
+                              style: FilledButton.styleFrom(
+                                backgroundColor: BrandColors.teal,
+                                foregroundColor: Colors.white,
+                                shadowColor: BrandColors.tealDark,
+                                elevation: 4,
+                              ),
+                              onPressed: () =>
+                                  Navigator.of(dialogContext).pop('update'),
+                              child: Text(
+                                  already ? t['install']! : t['updateNow']!),
+                            ),
+                          ),
+                          if (!info.force) ...[
+                            const SizedBox(height: 4),
+                            SizedBox(
+                              width: double.infinity,
+                              child: TextButton(
+                                style: TextButton.styleFrom(
+                                  foregroundColor: BrandColors.teal,
+                                ),
+                                onPressed: () =>
+                                    Navigator.of(dialogContext).pop('later'),
+                                child: Text(t['later']!),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-        ),
-      ),
+        );
+      },
     );
     } finally {
       _dialogShowing = false;
@@ -1124,8 +1171,7 @@ class UpdateCheckService {
     if (dir == null) return;
     final dl = downloader ?? UpdateCheckService.downloader;
     final throttle = UpdateProgressThrottle();
-    final versionBody =
-        t['downloadingBody']!.replaceAll('{v}', info.latest);
+    final versionBody = t['downloadingBody']!.replaceAll('{v}', info.latest);
 
     /// Muestra la notificación de progreso si el regulador dice que
     /// toca (ver [UpdateProgressThrottle]): la primera vez siempre,
@@ -1216,8 +1262,7 @@ class UpdateCheckService {
     }
     // El instalador del sistema se abre: la app pasa a "installing"
     // (la instalación en sí la hace el sistema, fuera de la app).
-    UpdateCheckService.downloader.state.value =
-        UpdateDownloadState.installing;
+    UpdateCheckService.downloader.state.value = UpdateDownloadState.installing;
     final installed = await UpdateInstaller.installApk(path);
     if (!installed) {
       UpdateCheckService.downloader.state.value =

@@ -58,8 +58,8 @@ void main() {
       w.image is AssetImage &&
       (w.image as AssetImage).assetName == asset);
 
-  Finder lucide(LucideIconData icon) => find.byWidgetPredicate(
-      (w) => w is LucideIcon && w.icon == icon);
+  Finder lucide(LucideIconData icon) =>
+      find.byWidgetPredicate((w) => w is LucideIcon && w.icon == icon);
 
   /// La foto marcada con el check dentro de la galería.
   Finder selectedPhoto(String asset) {
@@ -92,13 +92,12 @@ void main() {
 
   group('avatar por defecto y resolución de ids', () {
     test('por defecto según el género del onboarding', () {
-      expect(SocialService.defaultAvatarIdForGender('Femenino'),
-          'avatar_brenda');
+      expect(
+          SocialService.defaultAvatarIdForGender('Femenino'), 'avatar_brenda');
       expect(SocialService.defaultAvatarIdForGender('Masculino'),
           'avatar_kristian');
       expect(SocialService.defaultAvatarIdForGender(''), 'avatar_default');
-      expect(SocialService.defaultAvatarIdForGender('Otro'),
-          'avatar_default');
+      expect(SocialService.defaultAvatarIdForGender('Otro'), 'avatar_default');
     });
 
     test('displayAvatarAssetForGender usa el de por defecto', () {
@@ -110,12 +109,11 @@ void main() {
           'assets/avatar_default.png');
     });
 
-    test('avatarAssetForId resuelve libres, premium y desconocidos',
-        () {
+    test('avatarAssetForId resuelve libres, premium y desconocidos', () {
       expect(SocialService.avatarAssetForId('avatar_default'),
           'assets/avatar_default.png');
-      expect(SocialService.avatarAssetForId('avatar_brenda'),
-          'assets/brenda.png');
+      expect(
+          SocialService.avatarAssetForId('avatar_brenda'), 'assets/brenda.png');
       expect(SocialService.avatarAssetForId('avatar_britany'),
           'assets/britany.png');
       expect(SocialService.avatarAssetForId('avatar_kristian'),
@@ -132,7 +130,8 @@ void main() {
   });
 
   group('galería del editor', () {
-    testWidgets('sin nada equipado, la elegida es la de por defecto '
+    testWidgets(
+        'sin nada equipado, la elegida es la de por defecto '
         'según el género', (tester) async {
       UserPrefs.userGender = 'Femenino';
       await pumpEditor(tester);
@@ -149,8 +148,7 @@ void main() {
       expect(selectedPhoto('assets/brenda.png'), findsOneWidget);
     });
 
-    testWidgets('tocar una libre la equipa y mueve el check',
-        (tester) async {
+    testWidgets('tocar una libre la equipa y mueve el check', (tester) async {
       UserPrefs.userGender = 'Masculino';
       await pumpEditor(tester);
       expect(selectedPhoto('assets/kristian.png'), findsOneWidget);
@@ -161,11 +159,11 @@ void main() {
       expect(selectedPhoto('assets/britany.png'), findsOneWidget);
       // Se guarda en local con el mismo campo de los premium.
       final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString('social_shop_equipped_avatar'),
-          'avatar_britany');
+      expect(prefs.getString('social_shop_equipped_avatar'), 'avatar_britany');
     });
 
-    testWidgets('los 3 premium salen bloqueados y al tocarlos van '
+    testWidgets(
+        'los 3 premium salen bloqueados y al tocarlos van '
         'a la Tienda', (tester) async {
       final opened = <String>[];
       await tester.pumpWidget(
@@ -189,11 +187,9 @@ void main() {
       expect(SocialService.equippedAvatarId, isNull);
     });
 
-    testWidgets('un premium ya comprado se puede equipar',
-        (tester) async {
+    testWidgets('un premium ya comprado se puede equipar', (tester) async {
       ProgressService.instance.addPoints(1000);
-      final dorado = kShopCatalog
-          .firstWhere((i) => i.id == 'avatar_dorado');
+      final dorado = kShopCatalog.firstWhere((i) => i.id == 'avatar_dorado');
       expect(await SocialService.buyItem(dorado), isTrue);
       await pumpEditor(tester);
       // Comprado: solo quedan 2 candados.
@@ -233,11 +229,11 @@ void main() {
       return opened;
     }
 
-    testWidgets('el círculo grande muestra el avatar equipado, '
+    testWidgets(
+        'el círculo grande muestra el avatar equipado, '
         'no a la compañera', (tester) async {
       ProgressService.instance.addPoints(1000);
-      final dorado =
-          kShopCatalog.firstWhere((i) => i.id == 'avatar_dorado');
+      final dorado = kShopCatalog.firstWhere((i) => i.id == 'avatar_dorado');
       await SocialService.buyItem(dorado);
       await SocialService.equipItem(dorado);
       UserPrefs.userName = 'Kristian';
@@ -252,10 +248,8 @@ void main() {
           'assets/avatar_dorado.png');
       // La compañera sigue solo en miniatura junto a la línea.
       expect(find.byType(CompanionAvatar), findsOneWidget);
-      expect(tester.getSize(find.byType(CompanionAvatar)),
-          const Size(22, 22));
-      expect(
-          find.text(tr(companionOfDayKey(companionOfTheDay()))),
+      expect(tester.getSize(find.byType(CompanionAvatar)), const Size(22, 22));
+      expect(find.text(tr(companionOfDayKey(companionOfTheDay()))),
           findsOneWidget);
       // Tocar el círculo abre la galería.
       await tester.tap(find.byType(SocialAvatar));
@@ -263,7 +257,8 @@ void main() {
       expect(opened, ['avatar']);
     });
 
-    testWidgets('sin nada equipado, el círculo es el de por defecto '
+    testWidgets(
+        'sin nada equipado, el círculo es el de por defecto '
         'según el género', (tester) async {
       UserPrefs.userName = 'Ana';
       UserPrefs.userGender = 'Femenino';
@@ -271,15 +266,17 @@ void main() {
       final avatarImage = tester.widget<Image>(
         find.byKey(const ValueKey('social-avatar-Ana')),
       );
-      expect((avatarImage.image as AssetImage).assetName,
-          'assets/brenda.png');
+      expect((avatarImage.image as AssetImage).assetName, 'assets/brenda.png');
     });
 
-    testWidgets('el género no se muestra escrito en Cuenta',
-        (tester) async {
+    testWidgets('el género no se muestra escrito en Cuenta', (tester) async {
       UserPrefs.userName = 'Kristian';
       UserPrefs.userGender = 'Masculino';
       await pumpAccount(tester);
+      // (revert saludo 2026-11-13: el saludo de la app principal
+      // volvió a "Bienvenido [primer nombre]" — el nombre solo
+      // ("Kristian") era del cambio de las 00:35, que era para el
+      // Admin. El saludo es un solo Text, así que se busca entero.)
       expect(find.text('Bienvenido Kristian'), findsOneWidget);
       expect(find.text('Masculino'), findsNothing);
       expect(find.text('Femenino'), findsNothing);
@@ -291,7 +288,8 @@ void main() {
   });
 
   group('menú hamburguesa (alcance 10)', () {
-    testWidgets('el encabezado trae el logo del anillo, no el de '
+    testWidgets(
+        'el encabezado trae el logo del anillo, no el de '
         'las gemelas', (tester) async {
       tester.view.physicalSize = const Size(800, 1700);
       tester.view.devicePixelRatio = 1.0;

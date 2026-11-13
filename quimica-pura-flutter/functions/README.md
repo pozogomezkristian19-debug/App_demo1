@@ -46,7 +46,7 @@ API: si algún día se prefiere v1, solo cambian los envoltorios de
 | `onDuelCreated` | `duels/{duelId}` onCreate | `playerB` (el retado; `playerA` es quien crea el duelo) | "¡Te retaron a un duelo!" |
 | `onDuelFinished` | `duels/{duelId}` onUpdate a status `finished` | los DOS jugadores | "¡Ganaste el duelo!" / "Perdiste el duelo contra {nombre}" / "El duelo terminó en empate" si `winnerUid` es null |
 | `onSupportReplied` | `support_messages/{messageId}` onUpdate, `reply` pasa de vacío a texto | `authorUid` | "Soporte te respondió" (el cuerpo ES la respuesta, como la bandeja local) |
-| `onAnnouncementCreated` | `announcements/{announcementId}` onCreate (si `active` no es `false`) | TODOS los usuarios con token | título/cuerpo del documento |
+| `onAnnouncementCreated` | `announcements/{announcementId}` onCreate (si `active` no es `false` **y `sendPush` es `true`**) | TODOS los usuarios con token | título/cuerpo del documento |
 | `onUserCreatedNotifyAdmins` | `users/{uid}` onCreate | TODOS los admins | "Nuevo usuario: {username}" |
 | `onReportCreatedNotifyAdmins` | `reports/{reportId}` onCreate | TODOS los admins | "Nueva pregunta reportada" |
 | `onSupportCreatedNotifyAdmins` | `support_messages/{messageId}` onCreate | TODOS los admins | "Nuevo mensaje de soporte de {username}" |
@@ -64,6 +64,12 @@ Detalles que importan:
   tokens (límite de `sendEach`) y leyendo solo el campo `fcmToken`.
 - **Quitar un amigo no avisa**: el paso `aceptada` → `rechazada` no es
   una respuesta a una solicitud, así que no dispara push.
+- **Aviso en bandeja ≠ aviso + push**: un aviso solo llega como push si
+  el documento trae `sendPush: true`. Si `sendPush` está ausente o es
+  `false`, el aviso queda solo en la bandeja local de la app (al abrirla)
+  y la función no manda nada. **Cambio de comportamiento**: antes todos
+  los avisos activos mandaban push; ahora solo los que piden push
+  explícitamente con `sendPush: true`.
 - **Sin emojis, español llano, una línea**, igual que los avisos de la
   bandeja local de la app.
 
@@ -187,7 +193,9 @@ existe en Firestore y mirar `functions:log`.
   (Timestamp), `status` (`abierto`/`respondido`), `reply` (null hasta
   responder), `replyAt` (Timestamp). Ver `lib/services/support_service.dart`.
 - `announcements`: `title`, `body`, `createdAtMs`, `active` (ausente =
-  activo). Ver `lib/services/announcements_service.dart`.
+  activo), `sendPush` (solo `true` manda push a todos los usuarios con
+  token; ausente o `false` = aviso solo en bandeja, sin push).
+  Ver `lib/services/announcements_service.dart`.
 - `reports`: `questionId`, `note`, `uid`, `username`, `createdAtMs`.
   Ver `lib/services/reports_service.dart`.
 - `users`: documento id = uid, campo `username`; el token va en

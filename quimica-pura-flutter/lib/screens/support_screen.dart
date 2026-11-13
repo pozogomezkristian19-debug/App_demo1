@@ -283,11 +283,10 @@ class _ThreadItem extends StatelessWidget {
                   ),
                   // Borde fino #E5E5E5 en vez de sombra: la sombra
                   // era una de las "líneas" feas (diseño §3.15).
-                  border: Border.all(
-                      color: isDark
-                          ? const Color(0xFF37464F)
-                          : const Color(0xFFE5E5E5),
-                      width: 2),
+                  // Sin borde en oscuro (Kristian, 2026-11-13).
+                  border: isDark
+                      ? null
+                      : Border.all(color: const Color(0xFFE5E5E5), width: 2),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -338,9 +337,10 @@ class _WhatsAppOption extends StatelessWidget {
       decoration: BoxDecoration(
         color: isDark ? scheme.surfaceContainerHighest : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-            color: isDark ? const Color(0xFF37464F) : const Color(0xFFE5E5E5),
-            width: 2),
+        // Sin borde en oscuro (Kristian, 2026-11-13).
+        border: isDark
+            ? null
+            : Border.all(color: const Color(0xFFE5E5E5), width: 2),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -367,8 +367,7 @@ class _WhatsAppOption extends StatelessWidget {
               Expanded(
                 child: Text(
                   tr('supportWhatsApp').replaceFirst('%s', number),
-                  style:
-                      TextStyle(fontSize: 15, color: scheme.onSurface),
+                  style: TextStyle(fontSize: 15, color: scheme.onSurface),
                 ),
               ),
               const LucideIcon(
@@ -446,6 +445,7 @@ class _Composer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return SafeArea(
       top: false,
       child: Padding(
@@ -459,7 +459,11 @@ class _Composer extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: scheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFE5E5E5), width: 2),
+                  // Borde según el tema (auditoría 7.2).
+                  // Sin borde en oscuro (Kristian, 2026-11-13).
+                  border: isDark
+                      ? null
+                      : Border.all(color: const Color(0xFFE5E5E5), width: 2),
                 ),
                 child: TextField(
                   controller: controller,

@@ -13,7 +13,8 @@ class UserPrefs {
   static const _kDarkMode = 'melli_dark_mode';
   static const _kThemeMode =
       'melli_theme_mode'; // 'claro' | 'oscuro' | 'sistema'
-  static const _kLanguage = 'melli_language'; // 'es' | 'en' | 'fr' | 'it' | 'pt' | 'ru'
+  static const _kLanguage =
+      'melli_language'; // 'es' | 'en' | 'fr' | 'it' | 'pt' | 'ru'
   static const _kTrack = 'melli_track'; // 'uni' | 'bach'
   static const _kSoundOn = 'melli_sound_on';
   static const _kReminderOn = 'melli_reminder_on';
@@ -47,11 +48,11 @@ class UserPrefs {
   static bool get effectiveDark {
     if (themeMode == 'oscuro') return true;
     if (themeMode == 'sistema') {
-      return PlatformDispatcher.instance.platformBrightness ==
-          Brightness.dark;
+      return PlatformDispatcher.instance.platformBrightness == Brightness.dark;
     }
     return false;
   }
+
   static String language = 'es';
   static String track = 'uni';
   static bool soundOn = true; // Sonidos y vibración al contestar.
@@ -91,8 +92,7 @@ class UserPrefs {
     // es 'sistema' (ronda fix6, ítem 3), que sigue al brillo del
     // teléfono. Un valor raro se sanea a claro. isDark queda como el
     // valor EFECTIVO (con 'sistema', el brillo del teléfono ahora).
-    themeMode =
-        prefs.getString(_kThemeMode) ?? (isDark ? 'oscuro' : 'sistema');
+    themeMode = prefs.getString(_kThemeMode) ?? (isDark ? 'oscuro' : 'sistema');
     if (themeMode != 'oscuro' && themeMode != 'sistema') {
       themeMode = 'claro';
     }
@@ -213,10 +213,20 @@ class UserPrefs {
     await prefs.setBool(_kMetKristian, true);
   }
 
-  /// Saludo de cada entrada: "Bienvenida Ana" o "Bienvenido Luis".
+  /// Primer nombre del usuario (primera palabra del nombre
+  /// guardado); vacío si no hay nombre.
+  static String get firstName {
+    final name = userName.trim();
+    if (name.isEmpty) return '';
+    return name.split(RegExp(r'\s+')).first;
+  }
+
+  /// Saludo de cada entrada: "Bienvenido [primer nombre]" o
+  /// "Bienvenida [primer nombre]" según el género guardado.
+  /// Sin nombre guardado, "Hola" como antes.
   static String get greeting {
     if (userName.isEmpty) return 'Hola';
     final word = userGender == 'Femenino' ? 'Bienvenida' : 'Bienvenido';
-    return '$word $userName';
+    return '$word $firstName';
   }
 }

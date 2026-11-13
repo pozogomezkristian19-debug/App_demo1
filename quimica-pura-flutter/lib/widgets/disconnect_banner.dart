@@ -32,16 +32,24 @@ class DisconnectBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       key: const ValueKey('disconnect-banner'),
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFFFFFBEB), Color(0xFFFFFFFF)],
-        ),
+        // En oscuro, cara oscura sólida (auditoría 7.2): el
+        // degradado claro dejaba el texto onSurface claro
+        // invisible sobre fondo claro. En claro queda el
+        // degradado cálido de siempre.
+        color: isDark ? scheme.surfaceContainerHighest : null,
+        gradient: isDark
+            ? null
+            : const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFFFFFBEB), Color(0xFFFFFFFF)],
+              ),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(

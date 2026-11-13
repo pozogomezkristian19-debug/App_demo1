@@ -147,18 +147,21 @@ class _NotificationsScreenState extends State<NotificationsScreen>
       body: ValueListenableBuilder<List<InboxEntry>>(
         valueListenable: NotificationInbox.entriesNotifier,
         builder: (context, entries, _) {
+          final scheme = Theme.of(context).colorScheme;
+          final isDark = Theme.of(context).brightness == Brightness.dark;
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
               if (!_notifEnabled) ...[
-                // Diseño Duolingo §3.15: fila plana con borde 2 pt
-                // #E5E5E5 y radio 16, sin tarjeta con sombra.
+                // Diseño Duolingo §3.15: fila plana, radio 16, sin
+                // sombra y SIN borde (Kristian, 2026-11-13: el borde
+                // blanco de las tarjetas de la bandeja fuera, en
+                // ambos temas). La tarjeta se lee por el relleno
+                // (surfaceContainerHighest) contra el fondo.
                 Container(
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: scheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(16),
-                    border:
-                        Border.all(color: const Color(0xFFE5E5E5), width: 2),
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(16),
@@ -167,15 +170,20 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                       children: [
                         Text(
                           tr('notifSettingsTitle'),
-                          style: const TextStyle(
+                          style: TextStyle(
                               fontSize: 17,
                               fontWeight: FontWeight.w700,
-                              color: Color(0xFF4B4B4B)),
+                              color: isDark
+                                  ? scheme.onSurface
+                                  : const Color(0xFF4B4B4B)),
                         ),
                         const SizedBox(height: 6),
                         Text(tr('notifSettingsBody'),
-                            style: const TextStyle(
-                                fontSize: 16, color: Color(0xFF4B4B4B))),
+                            style: TextStyle(
+                                fontSize: 16,
+                                color: isDark
+                                    ? scheme.onSurface.withValues(alpha: 0.85)
+                                    : const Color(0xFF4B4B4B))),
                         const SizedBox(height: 12),
                         SizedBox(
                           width: double.infinity,
@@ -210,20 +218,9 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                     onTap: () => _openEntry(entry),
                   ),
               const SizedBox(height: 8),
-              // Fila plana de acceso a Recordatorios (antes una
-              // tarjeta con sombra): sin tarjeta, con línea #E5E5E5.
-              const Divider(height: 1, thickness: 1, color: Color(0xFFE5E5E5)),
-              ListTile(
-                key: const Key('inboxOpenReminders'),
-                contentPadding: EdgeInsets.zero,
-                leading: const LucideIcon(LucideIcons.bellRing, size: 24),
-                title: Text(tr('inboxOpenReminders'),
-                    style: const TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF4B4B4B))),
-                trailing:
-                    const Icon(Icons.chevron_right, color: Color(0xFFAFAFAF)),
+              // Acceso a Recordatorios (seguimiento 7.2): tarjeta
+              // como las entradas, sin líneas divisorias.
+              _InboxLinkCard(
                 onTap: () => widget.onOpenScreen('reminder'),
               ),
             ],
@@ -234,11 +231,13 @@ class _NotificationsScreenState extends State<NotificationsScreen>
   }
 }
 
-/// Una entrada de la bandeja (diseño Duolingo §3.15): fila plana,
-/// sin tarjeta y sin sombra — icono en su círculo tintado, flecha
-/// a la derecha y hora en gris pequeño, separada por una línea
-/// #E5E5E5. Sin leer: título en negrita y puntito del color del
-/// tipo; leída: atenuada (título normal, cuerpo más apagado).
+/// Una entrada de la bandeja (seguimiento 7.2): tarjeta redondeada
+/// (radio 16, sin borde y sin sombra borrosa), como el resto de la
+/// app — sin líneas divisorias, que se veían rústicas. El borde
+/// blanco se quitó por pedido de Kristian (2026-11-13): la tarjeta
+/// se lee por el relleno (surfaceContainerHighest) contra el fondo,
+/// en ambos temas. Sin leer: título en negrita y puntito del color
+/// del tipo; leída: atenuada (título normal, cuerpo más apagado).
 class _EntryTile extends StatelessWidget {
   const _EntryTile({required this.entry, required this.onTap});
 
@@ -254,102 +253,141 @@ class _EntryTile extends StatelessWidget {
       InboxKind.achievement => (LucideIcons.trophy, const Color(0xFF8B5CF6)),
       InboxKind.streak => (LucideIcons.flame, const Color(0xFFF97316)),
       InboxKind.support => (LucideIcons.messageCircle, AppAccent.primary),
-      InboxKind.friendRequest => (
-          LucideIcons.userRound,
-          AppAccent.primary
-        ),
-      InboxKind.duel =>
-        (LucideIcons.trophy, AppAccent.primary),
-      InboxKind.announcement =>
-        (LucideIcons.bell, AppAccent.primary),
+      InboxKind.friendRequest => (LucideIcons.userRound, AppAccent.primary),
+      InboxKind.duel => (LucideIcons.trophy, AppAccent.primary),
+      InboxKind.announcement => (LucideIcons.bell, AppAccent.primary),
     };
     final unread = !entry.read;
-    return Column(
-      children: [
-        Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.18),
-                      shape: BoxShape.circle,
-                    ),
-                    child: LucideIcon(icon, size: 24, color: color),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(16),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.18),
+                    shape: BoxShape.circle,
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          entry.title,
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight:
-                                unread ? FontWeight.w700 : FontWeight.w500,
-                            color: const Color(0xFF4B4B4B),
-                          ),
+                  child: LucideIcon(icon, size: 24, color: color),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        entry.title,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight:
+                              unread ? FontWeight.w700 : FontWeight.w500,
+                          // onSurface del tema (no el gris fijo
+                          // #4B4B4B): el título va sobre el fondo de
+                          // la bandeja, oscuro en modo oscuro.
+                          color: scheme.onSurface,
                         ),
-                        if (entry.body.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            entry.body,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 15,
-                              color: scheme.onSurface
-                                  .withValues(alpha: unread ? 0.85 : 0.65),
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 4),
+                      ),
+                      if (entry.body.isNotEmpty) ...[
+                        const SizedBox(height: 2),
                         Text(
-                          _formatTime(entry.createdAt),
+                          entry.body,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            fontSize: 12,
-                            color: scheme.onSurfaceVariant,
+                            fontSize: 15,
+                            color: scheme.onSurface
+                                .withValues(alpha: unread ? 0.85 : 0.65),
                           ),
                         ),
                       ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Column(
-                    children: [
-                      if (unread)
-                        Container(
-                          width: 10,
-                          height: 10,
-                          decoration: BoxDecoration(
-                            color: color,
-                            shape: BoxShape.circle,
-                          ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _formatTime(entry.createdAt),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: scheme.onSurfaceVariant,
                         ),
-                      if (unread) const SizedBox(height: 10),
-                      Icon(
-                        Icons.chevron_right,
-                        size: 20,
-                        color: scheme.onSurfaceVariant,
                       ),
                     ],
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 8),
+                Column(
+                  children: [
+                    if (unread)
+                      Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    if (unread) const SizedBox(height: 10),
+                    Icon(
+                      Icons.chevron_right,
+                      size: 20,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ),
-        const Divider(height: 1, thickness: 1, color: Color(0xFFE5E5E5)),
-      ],
+      ),
+    );
+  }
+}
+
+/// Enlace a "Configurar recordatorios" (seguimiento 7.2): la misma
+/// tarjeta que las entradas, sin líneas divisorias.
+class _InboxLinkCard extends StatelessWidget {
+  const _InboxLinkCard({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(16),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        key: const Key('inboxOpenReminders'),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          child: Row(
+            children: [
+              const LucideIcon(LucideIcons.bellRing, size: 24),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(tr('inboxOpenReminders'),
+                    style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        // Color del tema (no el gris fijo #4B4B4B): en
+                        // oscuro el gris sobre fondo oscuro no se leía.
+                        color: scheme.onSurface)),
+              ),
+              const Icon(Icons.chevron_right, color: Color(0xFFAFAFAF)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

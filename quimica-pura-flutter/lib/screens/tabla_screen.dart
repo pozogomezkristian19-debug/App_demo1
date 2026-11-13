@@ -103,84 +103,49 @@ class _TablaScreenState extends State<TablaScreen>
     showElementSheet(context, e);
   }
 
-  /// Tarjeta de acción superior (quiz / comparar): mismo patrón que
-  /// "Practicar de otra forma" — icono arriba en círculo tintado,
-  /// texto abajo centrado. El texto NO se recorta: sin maxLines ni
-  /// ellipsis, envuelve libremente ("Quiz de la tabla periódica"
-  /// ocupa 3 líneas en español) y el alto mínimo de 3 líneas
-  /// (51 px) más IntrinsicHeight + stretch hacen que ambas
-  /// tarjetas midan exactamente lo mismo. Diseño Duolingo §3.13:
-  /// borde 2 pt #E5E5E5, cara blanca sólida, sin degradado y sin
-  /// sombra borrosa. Sigue siendo un Card (los tests lo buscan
-  /// por tipo).
-  ///
-  /// Compacta (re-verificación Zona D, test grande 430x900): la
-  /// leyenda con Nunito creció ~90 dp y la línea "118 elementos"
-  /// quedaba 89,5 dp fuera del viewport. El ajuste mínimo es de
-  /// espaciados: padding vertical 10 (antes 14) y círculo 48
-  /// (antes 54); las dos tarjetas siguen midiendo exactamente lo
-  /// mismo (regla 8) y el tap no cambia.
-  Widget _actionCard(
-    BuildContext context, {
-    required LucideIconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    final accent = Theme.of(context).colorScheme.primary;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Expanded(
-      // Tarjeta plana (diseño Duolingo §3.13): cara sólida + borde
-      // 2 pt #E5E5E5, sin degradado y sin sombra borrosa. Sigue
-      // siendo un Card (los tests lo buscan por tipo).
-      child: Card(
-        margin: EdgeInsets.zero,
-        // Superficie sólida (sin degradado): blanca en claro,
-        // superficie oscura en modo oscuro (mismo bug que Niveles:
-        // gris fijo en oscuro dejaba el texto blanco invisible).
-        color: isDark ? AppAccent.darkCard : Colors.white,
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(
-              color: isDark ? const Color(0xFF37464F) : const Color(0xFFE5E5E5),
-              width: 2),
+  /// Elemento de allElements por número atómico (sin copiar datos):
+  /// así las celdas de La (57) y Ac (89) de la rejilla principal
+  /// usan las mismas entradas que las filas separadas de abajo.
+  static ChemicalElement _elementByAtomicNumber(int z) =>
+      allElements.firstWhere((e) => e.atomicNumber == z);
+
+  /// Botones flotantes (rediseño Tabla 2026-11-12, Kristian,
+  /// aprobado en mockup_tabla_botones_flotantes.png): las dos
+  /// tarjetas grandes ("Quiz de la tabla periódica" y "Comparar
+  /// elementos") se quitaron; quedan Comparar y Quiz como píldoras
+  /// flotantes abajo a la derecha, una encima de la otra, encima
+  /// del contenido, con sombrita. Comparar arriba, Quiz abajo
+  /// (como en el mockup). La cabecera queda solo con buscador +
+  /// chips, la rejilla sube y es lo principal, y la página se hace
+  /// más corta. El quiz NO se borra como función: su botoncito
+  /// abre TableQuizScreen. Como antes, con filtro activo
+  /// desaparecen; al volver a "Todos" reaparecen.
+  Widget _floatingActions(BuildContext context) {
+    if (_filterCategory != null) return const SizedBox.shrink();
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        _FloatingPill(
+          icon: LucideIcons.arrowLeftRight,
+          label: tr('compareShort'),
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const CompareScreen()),
+            );
+          },
         ),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: accent.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  alignment: Alignment.center,
-                  child: LucideIcon(icon, size: 28, color: accent),
-                ),
-                const SizedBox(height: 8),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 51),
-                  child: Center(
-                    child: Text(
-                      label,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                          fontSize: 13, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+        const SizedBox(height: 12),
+        _FloatingPill(
+          icon: LucideIcons.circleHelp,
+          label: tr('quizShort'),
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const TableQuizScreen()),
+            );
+          },
         ),
-      ),
+      ],
     );
   }
 
@@ -223,10 +188,17 @@ class _TablaScreenState extends State<TablaScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       children: [
         TabBar(
           controller: _tabController,
+          // Línea bajo las pestañas (rediseño Tabla 2026-11-12,
+          // Kristian): fina (1 pt) y del color de línea del tema,
+          // no la línea pesada por defecto.
+          dividerColor:
+              isDark ? const Color(0xFF37464F) : const Color(0xFFE5E5E5),
+          dividerHeight: 1,
           tabs: [
             Tab(text: tr('tabPeriodic')),
             Tab(text: tr('tabActivity')),
@@ -255,33 +227,34 @@ class _TablaScreenState extends State<TablaScreen>
       if (idx >= 0 && idx < grid.length) grid[idx] = e;
     }
     final searching = _query.isNotEmpty || _filterCategory != null;
-    // Cabecera común (búsqueda, acciones, chips): la misma en los
-    // tres modos (búsqueda, tabla normal y tabla angosta).
+    // Cabecera común (búsqueda + chips): la misma en los tres
+    // modos (búsqueda, tabla normal y tabla angosta). Los chips
+    // quedan justo debajo del buscador (las tarjetas se quitaron)
+    // y la rejilla debajo, como contenido principal.
     final header = <Widget>[
       _searchField(),
-      _actionCards(context),
       _chipsRow(context),
     ];
     final legend = _legend(context);
+    final Widget content;
     if (searching) {
-      return Column(
+      content = Column(
         children: [
           ...header,
           Expanded(child: _searchList(context)),
           legend,
         ],
       );
-    }
-    // Tabla angosta (fix4, punto 1): SOLO cuando el ancho disponible
-    // es realmente estrecho (< 340 dp) la rejilla mide 18 × 40 px y
-    // se desplaza en horizontal. En cualquier teléfono normal la
-    // tabla es la rejilla original de 18 columnas SIN scroll (como
-    // en v6): el modo scroll era solo para teléfonos incompatibles
-    // o angostos, no para todos. En el modo angosto la página entera
-    // se desplaza en vertical y la rejilla tiene su altura completa
-    // (10 filas), así se ven TODAS las filas sin cortes.
-    if (MediaQuery.sizeOf(context).width - 16 < 340) {
-      return SingleChildScrollView(
+    } else if (MediaQuery.sizeOf(context).width - 16 < 340) {
+      // Tabla angosta (fix4, punto 1): SOLO cuando el ancho disponible
+      // es realmente estrecho (< 340 dp) la rejilla mide 18 × 40 px y
+      // se desplaza en horizontal. En cualquier teléfono normal la
+      // tabla es la rejilla original de 18 columnas SIN scroll (como
+      // en v6): el modo scroll era solo para teléfonos incompatibles
+      // o angostos, no para todos. En el modo angosto la página entera
+      // se desplaza en vertical y la rejilla tiene su altura completa
+      // (10 filas), así se ven TODAS las filas sin cortes.
+      content = SingleChildScrollView(
         child: Column(
           children: [
             ...header,
@@ -290,33 +263,49 @@ class _TablaScreenState extends State<TablaScreen>
           ],
         ),
       );
+    } else {
+      // Modo normal (fix5, punto 3): la página ENTERA se desplaza en
+      // vertical (SingleChildScrollView + Column), con la rejilla
+      // COMPLETA de 10 filas dibujada entera (shrinkWrap, sin scroll
+      // interno) y la leyenda debajo — exactamente como ya hace el
+      // modo angosto y como era en v6 ("como estaban"). El Column con
+      // Expanded anterior se comía la altura: la cabecera dejaba a la
+      // rejilla solo lo que quedaba (~3,5 filas en el Redmi de
+      // Kristian) y la leyenda quedaba fijada debajo. Ya no hay
+      // Expanded que recorte la rejilla. Sin las tarjetas, la página
+      // se hace más corta: a la leyenda se llega con menos
+      // deslizamiento que antes.
+      content = SingleChildScrollView(
+        child: Column(
+          children: [
+            ...header,
+            _normalGrid(context, grid),
+            legend,
+          ],
+        ),
+      );
     }
-    // Modo normal (fix5, punto 3): la página ENTERA se desplaza en
-    // vertical (SingleChildScrollView + Column), con la rejilla
-    // COMPLETA de 10 filas dibujada entera (shrinkWrap, sin scroll
-    // interno) y la leyenda debajo — exactamente como ya hace el
-    // modo angosto y como era en v6 ("como estaban"). El Column con
-    // Expanded anterior se comía la altura: la cabecera (búsqueda +
-    // 2 tarjetas + chips) dejaba a la rejilla solo lo que quedaba
-    // (~3,5 filas en el Redmi de Kristian) y la leyenda quedaba
-    // fijada debajo. Ya no hay Expanded que recorte la rejilla.
-    return SingleChildScrollView(
-      child: Column(
-        children: [
-          ...header,
-          _normalGrid(context, grid),
-          legend,
-        ],
-      ),
+    // Botones flotantes fijos abajo a la derecha, encima del
+    // contenido: no se desplazan con el scroll de la página.
+    return Stack(
+      children: [
+        content,
+        Positioned(
+          right: 16,
+          bottom: 16,
+          child: _floatingActions(context),
+        ),
+      ],
     );
   }
 
   /// Campo de búsqueda de elementos (cabecera de la pestaña).
   Widget _searchField() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       // Compacto (re-verificación Zona D, test grande 430x900):
-      // padding superior 4 (antes 8); el campo sigue midiendo
-      // 56 pt de alto (§1.6) y el tap no cambia.
+      // padding superior 4 (antes 8); el campo mide 44 pt de alto
+      // (compacto, rediseño Tabla) y el tap no cambia.
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
       child: TextField(
         decoration: InputDecoration(
@@ -325,14 +314,26 @@ class _TablaScreenState extends State<TablaScreen>
           // (24) se veía enorme en la cajita de búsqueda.
           prefixIcon: const LucideIcon(LucideIcons.search, size: 18),
           // Campo de texto Duolingo §1.6: radio 16, borde 2 pt
-          // #E5E5E5; al enfocar, borde #5EEAD4. Sin sombra.
+          // #E5E5E5 en claro (#37464F en oscuro, auditoría 7.2);
+          // al enfocar, borde #5EEAD4. Sin sombra. Compacto
+          // (rediseño Tabla 2026-11-12, Kristian): la barra se veía
+          // muy grande; padding vertical 10 y alto mínimo 44.
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          constraints: const BoxConstraints(minHeight: 44),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
-            borderSide: const BorderSide(color: Color(0xFFE5E5E5), width: 2),
+            borderSide: BorderSide(
+                color:
+                    isDark ? const Color(0xFF37464F) : const Color(0xFFE5E5E5),
+                width: 2),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
-            borderSide: const BorderSide(color: Color(0xFFE5E5E5), width: 2),
+            borderSide: BorderSide(
+                color:
+                    isDark ? const Color(0xFF37464F) : const Color(0xFFE5E5E5),
+                width: 2),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
@@ -344,60 +345,20 @@ class _TablaScreenState extends State<TablaScreen>
     );
   }
 
-  /// Dos acciones superiores: quiz de la tabla y comparación.
-  /// SOLO sin filtro de categoría activo (ronda #5, punto extra):
-  /// en cuanto se activa cualquier filtro, las dos tarjetas
-  /// desaparecen y la tabla filtrada gana ese sitio; al volver a
-  /// "Todos" reaparecen. Mismo patrón que la leyenda (_legend).
-  /// Como _actionCards está en la cabecera común de los tres modos
-  /// (búsqueda, tabla normal y tabla angosta), el chequeo aquí
-  /// vale para los tres.
-  Widget _actionCards(BuildContext context) {
-    if (_filterCategory != null) return const SizedBox.shrink();
-    return // Dos acciones superiores con el MISMO patrón que las tarjetas
-        // "Practicar de otra forma": icono ARRIBA en un círculo
-        // tintado, texto ABAJO centrado. El OutlinedButton.icon
-        // anterior ponía icono y texto en horizontal y el título
-        // "Quiz de la tabla periódica" se partía en 3 líneas feas
-        // ("Quiz de la / tabla / periódica"). IntrinsicHeight +
-        // stretch igualan ambas tarjetas a la altura de la más alta.
-        Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _actionCard(
-              context,
-              icon: LucideIcons.circleHelp,
-              label: tr('tableQuizTitle'),
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const TableQuizScreen()),
-                );
-              },
-            ),
-            const SizedBox(width: 8),
-            _actionCard(
-              context,
-              icon: LucideIcons.arrowLeftRight,
-              label: tr('compareTitle'),
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const CompareScreen()),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   /// Fila de chips de filtro con desplazamiento horizontal y un
   /// degradado claro en el borde derecho (64 px): el chip cortado
   /// se lee como "hay más" y no como un error.
   Widget _chipsRow(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Chips según el tema (auditoría 7.2): en blanco fijo se veían
+    // como píldoras claras en oscuro, con el texto oscuro del tema
+    // claro encima. Seleccionado: teal + blanco en los dos temas.
+    final chipBg = isDark ? scheme.surfaceContainerHighest : Colors.white;
+    final chipInk = isDark ? scheme.onSurface : BrandColors.ink;
+    // Sin borde en oscuro (Kristian, 2026-11-13): el relleno
+    // del chip lo distingue del fondo; en claro queda el gris suave.
+    final chipEdge = isDark ? Colors.transparent : const Color(0xFFE8E8E8);
     return // Fila de chips con desplazamiento horizontal (fix3, punto 8):
         // "Alcalinotérreo" quedaba cortado a mitad en el borde derecho
         // y parecía un error. El degradado del borde derecho hace que
@@ -416,9 +377,7 @@ class _TablaScreenState extends State<TablaScreen>
               ChoiceChip(
                 label: Text(tr('allWord'),
                     style: TextStyle(
-                        color: _filterCategory == null
-                            ? Colors.white
-                            : BrandColors.ink,
+                        color: _filterCategory == null ? Colors.white : chipInk,
                         fontWeight: FontWeight.w700)),
                 selected: _filterCategory == null,
                 onSelected: (_) => setState(() => _filterCategory = null),
@@ -428,7 +387,7 @@ class _TablaScreenState extends State<TablaScreen>
                 // Se mantiene ChoiceChip (los tests lo buscan por tipo);
                 // el degradado no cabe en un chip de Material.
                 selectedColor: const Color(0xFF00C2A8),
-                backgroundColor: Colors.white,
+                backgroundColor: chipBg,
                 elevation: 3,
                 shadowColor: const Color(0xFF00C2A8).withValues(alpha: 0.35),
                 selectedShadowColor:
@@ -437,7 +396,7 @@ class _TablaScreenState extends State<TablaScreen>
                 side: BorderSide(
                     color: _filterCategory == null
                         ? const Color(0xFF00A18D)
-                        : const Color(0xFFE8E8E8)),
+                        : chipEdge),
                 shape: const StadiumBorder(),
               ),
               for (var i = 0; i < categoryNames.length; i++)
@@ -446,15 +405,14 @@ class _TablaScreenState extends State<TablaScreen>
                   child: ChoiceChip(
                     label: Text(categoryNames[i],
                         style: TextStyle(
-                            color: _filterCategory == i
-                                ? Colors.white
-                                : BrandColors.ink,
+                            color:
+                                _filterCategory == i ? Colors.white : chipInk,
                             fontWeight: FontWeight.w700)),
                     selected: _filterCategory == i,
                     onSelected: (_) => setState(() =>
                         _filterCategory = _filterCategory == i ? null : i),
                     selectedColor: const Color(0xFF00C2A8),
-                    backgroundColor: Colors.white,
+                    backgroundColor: chipBg,
                     elevation: 3,
                     shadowColor:
                         const Color(0xFF00C2A8).withValues(alpha: 0.35),
@@ -464,7 +422,7 @@ class _TablaScreenState extends State<TablaScreen>
                     side: BorderSide(
                         color: _filterCategory == i
                             ? const Color(0xFF00A18D)
-                            : const Color(0xFFE8E8E8)),
+                            : chipEdge),
                     shape: const StadiumBorder(),
                   ),
                 ),
@@ -532,8 +490,14 @@ class _TablaScreenState extends State<TablaScreen>
   }
 
   /// Rejilla de 18 columnas con el ancho dado. Las celdas llevan
-  /// su elemento o el marcador 57–71 / 89–103. En modo normal
-  /// (fix5, punto 3) se dibuja ENTERA dentro de la página con
+  /// su elemento; en la rejilla principal los huecos de los bloques
+  /// f (fila 6, columna 3 y fila 7, columna 3) son las celdas
+  /// REALES de Lantano (La, 57) y Actinio (Ac, 89), buscadas por
+  /// número atómico en allElements — tocables y con su hoja de
+  /// detalle como cualquier elemento. Las dos filas separadas de
+  /// abajo (lantánidos/actínidos, filas 9 y 10) no se tocan: La y
+  /// Ac aparecen también allí, como en la tabla clásica. En modo
+  /// normal (fix5, punto 3) se dibuja ENTERA dentro de la página con
   /// scroll: shrinkWrap + NeverScrollableScrollPhysics (sin scroll
   /// interno). En modo angosto se deja el comportamiento de siempre
   /// (rejilla con su propia altura fija, _narrowGridHeight, y
@@ -556,40 +520,17 @@ class _TablaScreenState extends State<TablaScreen>
         ),
         itemCount: grid.length,
         itemBuilder: (context, i) {
-          // Marcadores 57–71 y 89–103 en la rejilla principal.
+          // Lantano (La, 57) y Actinio (Ac, 89) en la rejilla
+          // principal: celdas de elemento REALES, buscadas por
+          // número atómico en allElements (sin copiar los datos),
+          // con el mismo estilo y la misma hoja de detalle que
+          // cualquier elemento. Las filas 9 y 10 de abajo (bloques
+          // f) las dibuja _cell desde la rejilla y no se tocan.
           if (i == (6 - 1) * 18 + (3 - 1)) {
-            return Container(
-              margin: const EdgeInsets.all(1),
-              decoration: BoxDecoration(
-                color: _catColors[8],
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: const FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text('57–71',
-                    style: TextStyle(
-                        fontSize: 7,
-                        color: Colors.black,
-                        fontWeight: FontWeight.bold)),
-              ),
-            );
+            return _cell(context, _elementByAtomicNumber(57));
           }
           if (i == (7 - 1) * 18 + (3 - 1)) {
-            return Container(
-              margin: const EdgeInsets.all(1),
-              decoration: BoxDecoration(
-                color: _catColors[9],
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: const FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text('89–103',
-                    style: TextStyle(
-                        fontSize: 7,
-                        color: Colors.black,
-                        fontWeight: FontWeight.bold)),
-              ),
-            );
+            return _cell(context, _elementByAtomicNumber(89));
           }
           return _cell(context, grid[i]);
         },
@@ -898,4 +839,66 @@ class _TablaScreenState extends State<TablaScreen>
 String _activityName(ActivityEntry a) {
   final el = allElements.where((e) => e.symbol == a.symbol).firstOrNull;
   return el == null ? a.name : localizedElementName(el);
+}
+
+/// Píldora flotante de la Tabla (44 pt): icono + texto corto en
+/// horizontal, radio píldora. Como en el mockup aprobado por
+/// Kristian: cara del tema (blanca en claro, oscura en oscuro),
+/// borde 2 pt teal, icono y texto teal, con sombrita suave (la
+/// sombrita es la del mockup aprobado; sin degradado, sin brillo).
+class _FloatingPill extends StatelessWidget {
+  const _FloatingPill({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final LucideIconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final accent = scheme.primary;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          height: 44,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            color: isDark ? AppAccent.darkCard : Colors.white,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: accent, width: 2),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              LucideIcon(icon, size: 20, color: accent),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: accent,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

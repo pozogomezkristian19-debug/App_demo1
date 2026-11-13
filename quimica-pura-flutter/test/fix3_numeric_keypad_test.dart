@@ -15,7 +15,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quimica_pura/data/questions.dart';
 import 'package:quimica_pura/models.dart';
-import 'package:quimica_pura/screens/calculator_screen.dart';
 import 'package:quimica_pura/services/calculator.dart';
 import 'package:quimica_pura/services/numeric_answer.dart';
 import 'package:quimica_pura/services/progress.dart';
@@ -703,12 +702,10 @@ void main() {
       final g = buildMassMoles('moles', 'H2O', 36);
       await pumpRunner(tester, [g.question]);
       // Ronda fix5: la calculadora es bajo demanda — el teclado no
-      // está montado hasta tocar el botoncito de teclado.
+      // está montado hasta tocar el campo de respuesta (seguimiento
+      // 7.2: el botoncito junto a la pregunta se quitó).
       expect(find.byType(NumericKeypad), findsNothing);
-      await tester.tap(find.descendant(
-        of: find.byType(QuestionCalculatorButton),
-        matching: find.byType(IconButton),
-      ));
+      await tester.tap(find.byKey(const Key('numeric-answer-field')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
       expect(find.byType(NumericKeypad), findsOneWidget);
@@ -729,12 +726,10 @@ void main() {
         (tester) async {
       final g = buildMassMoles('moles', 'H2O', 36); // 36 g / 18,02 ≈ 2 mol
       await pumpRunner(tester, [g.question]);
-      // Ronda fix5: primero hay que abrir la calculadora con el
-      // botoncito de teclado; al volver con el valor se responde.
-      await tester.tap(find.descendant(
-        of: find.byType(QuestionCalculatorButton),
-        matching: find.byType(IconButton),
-      ));
+      // Ronda fix5: primero hay que abrir la calculadora desde el
+      // campo de respuesta (seguimiento 7.2); al volver con el valor
+      // se responde.
+      await tester.tap(find.byKey(const Key('numeric-answer-field')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
       await tester.tap(find.text('2'));

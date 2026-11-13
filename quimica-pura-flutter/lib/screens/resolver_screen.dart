@@ -248,11 +248,11 @@ class _ResolverScreenState extends State<ResolverScreen> {
     // solvers, los filtros, abrir cada solver) no cambia.
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final ink = isDark ? Colors.white : const Color(0xFF4B4B4B);
-    final inkSoft =
-        isDark ? AppAccent.darkInkSoft : const Color(0xFF777777);
+    final inkSoft = isDark ? AppAccent.darkInkSoft : const Color(0xFF777777);
     final cardColor = isDark ? AppAccent.darkCard : Colors.white;
-    final borderColor =
-        isDark ? const Color(0xFF37464F) : const Color(0xFFE5E5E5);
+    // Borde oscuro tono sobre tono en oscuro (misma razón
+    // que Aprender: la tarjeta es darkCard).
+    final borderColor = isDark ? AppAccent.darkBorder : const Color(0xFFE5E5E5);
     final entriesByGroup = <String, List<int>>{
       for (final g in _solverGroupOrder) g: [],
     };
@@ -291,9 +291,7 @@ class _ResolverScreenState extends State<ResolverScreen> {
               children: [
                 Text(tr('resolverTitle'),
                     style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        color: ink)),
+                        fontSize: 20, fontWeight: FontWeight.w800, color: ink)),
                 const SizedBox(height: 4),
                 Text(tr('resolverIntro'),
                     style: TextStyle(fontSize: 16, color: ink)),
@@ -375,9 +373,7 @@ class _RectChip extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
-            color: isDark
-                ? const Color(0xFF37464F)
-                : const Color(0xFFE5E5E5)),
+            color: isDark ? AppAccent.darkBorder : const Color(0xFFE5E5E5)),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -417,9 +413,7 @@ class _SolverRow extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-            color: isDark
-                ? const Color(0xFF37464F)
-                : const Color(0xFFE5E5E5)),
+            color: isDark ? AppAccent.darkBorder : const Color(0xFFE5E5E5)),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -446,9 +440,8 @@ class _SolverRow extends StatelessWidget {
                       style: TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.w700,
-                          color: isDark
-                              ? Colors.white
-                              : const Color(0xFF4B4B4B)),
+                          color:
+                              isDark ? Colors.white : const Color(0xFF4B4B4B)),
                     ),
                     const SizedBox(height: 2),
                     Text(

@@ -25,6 +25,7 @@ import 'report_question.dart';
 import '../services/progress.dart';
 import '../services/sound_service.dart';
 import '../screens/calculator_screen.dart';
+import 'numeric_answer_field.dart';
 import 'twin_avatars.dart';
 
 // El color principal ya no es un teal fijo: es el acento elegido
@@ -65,24 +66,51 @@ class QuizOptionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const ink = Color(0xFF4B4B4B);
-    const line = Color(0xFFE5E5E5);
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // En oscuro las tarjetas son OSCURAS (auditoría 7.2): en claro
+    // iban en blanco y se veían como tarjetas claras dentro de una
+    // pantalla oscura (foto72_examen_cabecera_oscuro). Correcto:
+    // fondo oscuro con tinte verde + texto/borde verde claro;
+    // incorrecto: fondo oscuro con tinte rojo + texto/borde rojo
+    // claro. Labio de 2 pt y lógica de bordes intactos; en claro
+    // todo queda como estaba.
     final (Color bg, Color edge, Color label) = switch (state) {
-      QuizOptionState.normal => (
-          Colors.white,
-          line,
-          ink,
-        ),
-      QuizOptionState.correct => (
-          AppAccent.primarySoft,
-          AppAccent.primary,
-          AppAccent.primaryDark,
-        ),
-      QuizOptionState.wrong => (
-          const Color(0xFFFFDFE0),
-          const Color(0xFFFF4B4B),
-          const Color(0xFFEA2B2B),
-        ),
+      QuizOptionState.normal => isDark
+          ? (
+              AppAccent.darkCard,
+              AppAccent.darkBorder,
+              scheme.onSurface,
+            )
+          : (
+              Colors.white,
+              const Color(0xFFE5E5E5),
+              const Color(0xFF4B4B4B),
+            ),
+      QuizOptionState.correct => isDark
+          ? (
+              Color.alphaBlend(const Color(0xFF2E7D32).withValues(alpha: 0.30),
+                  AppAccent.darkCard),
+              const Color(0xFF81C784),
+              const Color(0xFF81C784),
+            )
+          : (
+              AppAccent.primarySoft,
+              AppAccent.primary,
+              AppAccent.primaryDark,
+            ),
+      QuizOptionState.wrong => isDark
+          ? (
+              Color.alphaBlend(const Color(0xFFFF4B4B).withValues(alpha: 0.28),
+                  AppAccent.darkCard),
+              const Color(0xFFEF9A9A),
+              const Color(0xFFEF9A9A),
+            )
+          : (
+              const Color(0xFFFFDFE0),
+              const Color(0xFFFF4B4B),
+              const Color(0xFFEA2B2B),
+            ),
     };
     return Container(
       decoration: BoxDecoration(
@@ -106,8 +134,7 @@ class QuizOptionButton extends StatelessWidget {
             elevation: 0,
             foregroundColor: label,
             alignment: Alignment.centerLeft,
-            padding:
-                const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
             ),
@@ -146,9 +173,8 @@ class DuoProgressBar extends StatelessWidget {
         height: 12,
         // Pista según el tema (antes #E5E5E5 fijo: resplandecía
         // en blanco sobre el fondo oscuro).
-        color: isDark
-            ? scheme.surfaceContainerHighest
-            : const Color(0xFFE5E5E5),
+        color:
+            isDark ? scheme.surfaceContainerHighest : const Color(0xFFE5E5E5),
         child: Align(
           alignment: Alignment.centerLeft,
           child: FractionallySizedBox(
@@ -163,8 +189,8 @@ class DuoProgressBar extends StatelessWidget {
                   width: double.infinity,
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                        color: Color.lerp(
-                            AppAccent.primary, Colors.white, 0.35)),
+                        color:
+                            Color.lerp(AppAccent.primary, Colors.white, 0.35)),
                   ),
                 ),
               ),
@@ -208,9 +234,8 @@ class DuoCheckButton extends StatelessWidget {
         decoration: BoxDecoration(
           // Deshabilitado según el tema: en oscuro el gris claro
           // #E5E5E5 se veía como una píldora blanca con texto gris.
-          color: isDark
-              ? scheme.surfaceContainerHighest
-              : const Color(0xFFE5E5E5),
+          color:
+              isDark ? scheme.surfaceContainerHighest : const Color(0xFFE5E5E5),
           borderRadius: BorderRadius.circular(999),
         ),
         alignment: Alignment.center,
@@ -339,6 +364,16 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
   Timer? _timer;
   int _remaining = 0;
 
+  /// Borrador numérico de la pregunta actual (ronda 7.2): lo tecleado
+  /// en la calculadora persiste POR PREGUNTA — si se cierra la
+  /// calculadora sin pulsar '=' para mirar un dato y se vuelve, lo
+  /// escrito sigue ahí. Se limpia al pasar a otra pregunta.
+  double? _pendingNumeric;
+
+  /// Valor numérico ya enviado con "Usar resultado": el campo lo
+  /// muestra apagado cuando la pregunta está contestada.
+  double? _submittedNumeric;
+
   @override
   void initState() {
     super.initState();
@@ -395,9 +430,10 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
   void _shuffleOptions() {
     final seed = widget.shuffleSeed;
     _order = [0, 1, 2, 3]
-      ..shuffle(
-          seed == null ? Random() : Random(seed * 7919 + _index));
+      ..shuffle(seed == null ? Random() : Random(seed * 7919 + _index));
     _selected = null;
+    _pendingNumeric = null;
+    _submittedNumeric = null;
   }
 
   QuizQuestion get _q => widget.items[_index];
@@ -463,10 +499,37 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
   /// niveles, fix4, punto 5).
   void _answerNumeric(double value) {
     if (_selected != null) return;
+    // "Usar resultado" responde como hoy y limpia el pendiente: el
+    // valor enviado queda en _submittedNumeric para que el campo lo
+    // muestre apagado.
+    _submittedNumeric = value;
+    _pendingNumeric = null;
     // Las preguntas de cálculo no tienen opciones que seleccionar:
     // el valor tecleado se responde en un solo paso.
     _answer(displayedIndexForNumericAnswer(
         typed: value, question: _q, order: _order));
+  }
+
+  /// Borrador que reporta la calculadora en cada cambio (ronda 7.2):
+  /// se guarda por pregunta y se vuelve a sembrar al reabrirla.
+  void _onNumericDraft(double? value) {
+    if (_pendingNumeric == value) return;
+    setState(() => _pendingNumeric = value);
+  }
+
+  /// Abre la calculadora desde el campo de respuesta (ronda 7.2):
+  /// mismo flujo que el botoncito de teclado — siembra lo que se
+  /// llevaba escrito y responde con "Usar resultado".
+  Future<void> _openNumericCalculator() async {
+    if (_selected != null) return;
+    final value = await CalculatorScreen.open(
+      context,
+      scientific: true,
+      unit: _q.numericUnit,
+      initialValue: _pendingNumeric,
+      onDraftChanged: _onNumericDraft,
+    );
+    if (value != null) _answerNumeric(value);
   }
 
   void _next() {
@@ -626,8 +689,7 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
             ? '${widget.title} · ${tr('quizQuestion')} ${_index + 1}'
             : '${widget.title} · ${tr('quizQuestion')} ${_index + 1} ${tr('quizOf')} ${widget.items.length}')
         : '${widget.playerName} · ${tr('quizQuestion')} ${_index + 1} ${tr('quizOf')} ${widget.items.length}';
-    final wasCorrect =
-        _selected != null && _order[_selected!] == _q.answer;
+    final wasCorrect = _selected != null && _order[_selected!] == _q.answer;
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -653,25 +715,38 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
                           ? Text(
                               '${tr('timedAnswered')}: $_answered · ${tr('quizScore')}: $_score · ${tr('pointsWord')}: ${_points >= 0 ? '+$_points' : '$_points'}',
                               style: TextStyle(
-                                  fontSize: 14,
+                                  fontSize: 13,
                                   fontWeight: FontWeight.w500,
-                                  color: scheme.onSurface
-                                      .withValues(alpha: 0.8)),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                                  color:
+                                      scheme.onSurface.withValues(alpha: 0.8)),
+                              // Ronda 7.2, pieza 2a: antes era una sola
+                              // línea con "..." y el tercer dato
+                              // ("Puntos: +X") salía cortado. Ahora
+                              // cabe entero: letra un poco más pequeña
+                              // y hasta 3 líneas (en el ancho de
+                              // referencia son 2; la tercera es solo
+                              // el margen para teléfonos estrechos o
+                              // el francés, el idioma más largo).
+                              maxLines: 3,
                             )
                           : DuoProgressBar(
-                              value:
-                                  (_index + 1) / widget.items.length,
+                              value: (_index + 1) / widget.items.length,
                             ),
                     ),
                     if (timed) ...[
                       const SizedBox(width: 8),
                       Chip(
                         backgroundColor: scheme.surfaceContainerHighest,
-                        side: BorderSide(color: scheme.outlineVariant),
+                        // Sin borde en oscuro: la línea clara se veía
+                        // fea (Kristian, 2026-11-13); el relleno
+                        // distingue el chip del fondo.
+                        side: Theme.of(context).brightness == Brightness.dark
+                            ? BorderSide.none
+                            : BorderSide(color: scheme.outlineVariant),
                         avatar: LucideIcon(LucideIcons.timer,
-                            size: 18, color: AppAccent.primaryDark, threeD: true),
+                            size: 18,
+                            color: AppAccent.primaryDark,
+                            threeD: true),
                         label: Text(_timeText,
                             style: TextStyle(
                                 fontWeight: FontWeight.bold,
@@ -696,27 +771,44 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
                               MascotLine.console, _index))),
                 ),
                 const SizedBox(height: 16),
-                // Botoncito de teclado (fix5, punto B, corrección 00:26):
-                // sale en (casi) todas las preguntas, a un ladito del
-                // texto; al tocarlo se abre la PANTALLA de la calculadora
-                // (página completa, no un panel inline) y al cerrarla se
-                // vuelve a la pregunta intacta. Científica en las de
-                // cálculo (al volver se responde con el valor), normal en
-                // las demás (solo para calcular a mano).
-                QuestionCalculatorButton(
-                  question: Text(_q.question,
-                      style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                          color: scheme.onSurface)),
-                  scientific: _q.isNumeric,
-                  unit: _q.numericUnit,
-                  onResult: _q.isNumeric ? _answerNumeric : null,
-                ),
+                // Texto de la pregunta (seguimiento 7.2): UN SOLO
+                // acceso al teclado — el del campo de respuesta en
+                // las de cálculo. El botoncito junto a la pregunta
+                // se quitó (salía doble) y en opción múltiple no va
+                // ningún teclado: la calculadora se abre desde el
+                // campo (NumericAnswerField) y el borrador persiste
+                // por pregunta (_openNumericCalculator).
+                Text(_q.question,
+                    style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        color: scheme.onSurface)),
+                // Campo visible de respuesta (ronda 7.2, solo en las de
+                // cálculo): donde hoy irían las opciones. Muestra lo
+                // que se lleva escrito (o el valor enviado, apagado,
+                // al contestar) y al tocarlo abre la calculadora.
+                if (_q.isNumeric) ...[
+                  const SizedBox(height: 16),
+                  NumericAnswerField(
+                    key: const Key('numeric-answer-field'),
+                    value:
+                        _selected != null ? _submittedNumeric : _pendingNumeric,
+                    unit: _q.numericUnit,
+                    answered: _selected != null,
+                    onTap: _selected == null ? _openNumericCalculator : null,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    tr('numericKeyboardHint'),
+                    style:
+                        TextStyle(fontSize: 14, color: scheme.onSurfaceVariant),
+                  ),
+                ],
                 const SizedBox(height: 16),
-                // En las preguntas de cálculo las opciones dejan paso al
-                // teclado (que ahora se abre con el icono); las
-                // conceptuales siguen con las opciones de siempre.
+                // En las preguntas de cálculo las opciones dejan paso
+                // al campo de respuesta (la calculadora se abre desde
+                // el campo); las conceptuales siguen con las opciones
+                // de siempre.
                 if (!_q.isNumeric)
                   for (var i = 0; i < 4; i++)
                     Padding(
@@ -759,8 +851,7 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
                   ),
                   const SizedBox(height: 6),
                   Text(_q.explanation,
-                      style: TextStyle(
-                          fontSize: 16, color: scheme.onSurface)),
+                      style: TextStyle(fontSize: 16, color: scheme.onSurface)),
                   const SizedBox(height: 16),
                 ],
               ],

@@ -1,16 +1,24 @@
-// Ronda #5, punto extra (Quemia 6.2): las dos tarjetas de acción
-// de arriba ("Quiz de la tabla periódica" y "Comparar elementos")
-// SOLO se muestran cuando el filtro es "Todos" (sin categoría
-// seleccionada). En cuanto se activa cualquier filtro de categoría,
-// las dos tarjetas DESAPARECEN y la tabla filtrada gana ese sitio;
-// al volver a "Todos", reaparecen. Es el mismo patrón que ya tiene
-// la leyenda (que solo sale con "Todos"). La búsqueda y los chips
-// se quedan siempre. Vale para los tres modos (búsqueda, tabla
-// normal y tabla angosta) porque _actionCards está en la cabecera
-// común y devuelve SizedBox.shrink() con filtro activo.
+// Ronda #5, punto extra (Quemia 6.2) + rediseño Tabla 2026-11-12
+// (Kristian, mockup flotante aprobado ~23:21, aclaración ~23:22):
+// las dos tarjetas grandes de acción ("Quiz de la tabla
+// periódica" y "Comparar elementos") se quitaron; quedan Comparar
+// y Quiz como BOTONES FLOTANTES abajo a la derecha, uno encima del
+// otro, encima del contenido (Comparar arriba, Quiz abajo). La
+// cabecera queda solo con buscador + chips (los chips suben justo
+// debajo del buscador) y la rejilla debajo, como principal. Los
+// flotantes SOLO se muestran cuando el filtro es "Todos" (sin
+// categoría seleccionada). En cuanto se activa cualquier filtro de
+// categoría, DESAPARECEN; al volver a "Todos", reaparecen. La
+// búsqueda y los chips se quedan siempre. Vale para los tres modos
+// (búsqueda, tabla normal y tabla angosta) porque _floatingActions
+// está en el Stack de _periodicTab y devuelve SizedBox.shrink()
+// con filtro activo. El quiz NO se borra como función: su
+// botoncito abre TableQuizScreen.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:quimica_pura/screens/compare_screen.dart';
+import 'package:quimica_pura/screens/table_quiz_screen.dart';
 import 'package:quimica_pura/screens/tabla_screen.dart';
 import 'package:quimica_pura/services/localization.dart';
 import 'package:quimica_pura/services/progress.dart';
@@ -58,17 +66,17 @@ void main() {
   });
 
   Finder quizCard(WidgetTester tester) =>
-      find.text(tr('tableQuizTitle'));
+      find.text(tr('quizShort'));
   Finder compareCard(WidgetTester tester) =>
-      find.text(tr('compareTitle'));
+      find.text(tr('compareShort'));
 
-  /// Las dos tarjetas de acción están visibles.
+  /// Los dos botones flotantes están visibles.
   void expectCardsVisible(WidgetTester tester) {
     expect(quizCard(tester), findsOneWidget);
     expect(compareCard(tester), findsOneWidget);
   }
 
-  /// Las dos tarjetas de acción NO están en el árbol.
+  /// Los dos botones flotantes NO están en el árbol.
   void expectCardsHidden(WidgetTester tester) {
     expect(quizCard(tester), findsNothing);
     expect(compareCard(tester), findsNothing);
@@ -91,9 +99,9 @@ void main() {
     await tester.pump();
   }
 
-  group('Tarjetas de acción solo con filtro "Todos" '
+  group('Botones flotantes solo con filtro "Todos" '
       '(fix5, punto extra)', () {
-    testWidgets('con filtro Todos las dos tarjetas están visibles',
+    testWidgets('con filtro Todos los dos flotantes están visibles',
         (tester) async {
       await pumpTabla(tester, logicalWidth: 393, logicalHeight: 852);
       expectCardsVisible(tester);
@@ -103,7 +111,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('al activar "Metal alcalino" las tarjetas desaparecen '
+    testWidgets('al activar "Metal alcalino" los flotantes desaparecen '
         'y la tabla filtrada ocupa su sitio', (tester) async {
       await pumpTabla(tester, logicalWidth: 393, logicalHeight: 852);
       expectCardsVisible(tester);
@@ -115,10 +123,10 @@ void main() {
       expect(find.text('Sodio'), findsOneWidget);
       // Nada que no sea alcalino: el hidrógeno no está en la lista.
       expect(find.text('Hidrógeno'), findsNothing);
-      // La lista filtrada ocupa el sitio de las tarjetas: el
-      // recuento empieza pegado a la fila de chips (menos de 40 px
-      // por debajo de su borde inferior), sin el hueco de ~150 px
-      // que dejaban las dos tarjetas.
+      // La lista filtrada empieza pegada a la fila de chips (menos
+      // de 40 px por debajo de su borde inferior): con los
+      // flotantes fuera del flujo ya no hay nada entre los chips
+      // y la lista.
       final chipsBottom =
           tester.getBottomRight(find.byType(ChoiceChip).first).dy;
       final countTop = tester.getTopLeft(
@@ -127,7 +135,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('al volver a "Todos" las tarjetas reaparecen y vuelve '
+    testWidgets('al volver a "Todos" los flotantes reaparecen y vuelve '
         'la tabla completa', (tester) async {
       await pumpTabla(tester, logicalWidth: 393, logicalHeight: 852);
       await tapCategoryChip(tester, 'Metal alcalino');
@@ -150,8 +158,8 @@ void main() {
           findsOneWidget);
       expect(find.widgetWithText(ChoiceChip, 'Metal alcalino'),
           findsOneWidget);
-      // Buscar dentro del filtro sigue funcionando y las tarjetas
-      // siguen ocultas mientras el filtro está activo.
+      // Buscar dentro del filtro sigue funcionando y los flotantes
+      // siguen ocultos mientras el filtro está activo.
       await tester.enterText(find.byType(TextField), 'litio');
       await tester.pump();
       expectCardsHidden(tester);
@@ -160,8 +168,8 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('solo buscar (sin filtro de categoría) NO oculta las '
-        'tarjetas', (tester) async {
+    testWidgets('solo buscar (sin filtro de categoría) NO oculta los '
+        'flotantes', (tester) async {
       await pumpTabla(tester, logicalWidth: 393, logicalHeight: 852);
       await tester.enterText(find.byType(TextField), 'oxígeno');
       await tester.pump();
@@ -171,7 +179,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('otro filtro ("Gas noble") también oculta las tarjetas',
+    testWidgets('otro filtro ("Gas noble") también oculta los flotantes',
         (tester) async {
       await pumpTabla(tester, logicalWidth: 393, logicalHeight: 852);
       // El chip "Gas noble" queda fuera de la vista a la derecha:
@@ -187,10 +195,28 @@ void main() {
       expectCardsVisible(tester);
       expect(tester.takeException(), isNull);
     });
+
+    testWidgets('el flotante Quiz abre el quiz de la tabla '
+        '(la función no se pierde)', (tester) async {
+      await pumpTabla(tester, logicalWidth: 393, logicalHeight: 852);
+      await tester.tap(quizCard(tester));
+      await tester.pumpAndSettle();
+      expect(find.byType(TableQuizScreen), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('el flotante Comparar abre la comparación',
+        (tester) async {
+      await pumpTabla(tester, logicalWidth: 393, logicalHeight: 852);
+      await tester.tap(compareCard(tester));
+      await tester.pumpAndSettle();
+      expect(find.byType(CompareScreen), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
   });
 
   group('Modo angosto (fix5, punto extra)', () {
-    testWidgets('a 320 px: con Todos las tarjetas están; con filtro '
+    testWidgets('a 320 px: con Todos los flotantes están; con filtro '
         'desaparecen y vuelve la lista filtrada', (tester) async {
       await pumpTabla(tester, logicalWidth: 320, logicalHeight: 2000);
       expectCardsVisible(tester);

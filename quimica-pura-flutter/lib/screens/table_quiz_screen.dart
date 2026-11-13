@@ -16,7 +16,6 @@ import '../services/accent.dart';
 import '../data/i18n/content_i18n.dart';
 import '../data/periodic_table.dart';
 import '../models.dart';
-import '../screens/calculator_screen.dart';
 import '../services/localization.dart';
 import '../services/points.dart';
 import '../services/progress.dart';
@@ -68,8 +67,7 @@ class _TableQuizScreenState extends State<TableQuizScreen> {
     final correct = _options[_index][i] == _rounds[_index];
     ProgressService.instance.recordAnswer('tabla', correct);
     // Puntos (fix4, punto 5): dificultad fácil, +3/−5.
-    final delta =
-        correct ? pointsForCorrect(1) : pointsForWrong(1);
+    final delta = correct ? pointsForCorrect(1) : pointsForWrong(1);
     ProgressService.instance.addPoints(delta);
     setState(() {
       _selected = i;
@@ -122,6 +120,8 @@ class _TableQuizScreenState extends State<TableQuizScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     // Bloqueo de sesión (fix2, ronda 2): mientras el quiz está en
     // curso, ni el botón atrás ni la flecha de la barra pueden
     // cerrarlo directamente: muestran el aviso de Salir sin pérdida
@@ -134,105 +134,104 @@ class _TableQuizScreenState extends State<TableQuizScreen> {
         if (!didPop && !_finished) _requestExit();
       },
       child: Scaffold(
-      appBar: AppBar(title: Text(tr('tableQuizTitle'))),
-      body: _finished
-          ? Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+        appBar: AppBar(title: Text(tr('tableQuizTitle'))),
+        body: _finished
+            ? Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(tr('quizResult'),
+                        style: const TextStyle(
+                            fontSize: 24, fontWeight: FontWeight.bold),
+                        textAlign: TextAlign.center),
+                    const SizedBox(height: 12),
+                    Text('$_score ${tr('quizOf')} 10 ${tr('quizScore')}',
+                        style: const TextStyle(fontSize: 20),
+                        textAlign: TextAlign.center),
+                    Text('${_score * 10}%',
+                        style: TextStyle(
+                            fontSize: 48,
+                            fontWeight: FontWeight.bold,
+                            color: AppAccent.primary),
+                        textAlign: TextAlign.center),
+                    const SizedBox(height: 4),
+                    Text(
+                        '${tr('pointsWord')}: ${_points > 0 ? '+$_points' : '$_points'}',
+                        style: const TextStyle(
+                            fontSize: 22, fontWeight: FontWeight.bold),
+                        textAlign: TextAlign.center),
+                    const SizedBox(height: 24),
+                    ElevatedButton(
+                      onPressed: () => setState(_newGame),
+                      child: Text(tr('quizRepeat')),
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: Text(tr('quizBack')),
+                    ),
+                  ],
+                ),
+              )
+            : ListView(
+                padding: const EdgeInsets.all(16),
                 children: [
-                  Text(tr('quizResult'),
-                      style: const TextStyle(
-                          fontSize: 24, fontWeight: FontWeight.bold),
-                      textAlign: TextAlign.center),
-                  const SizedBox(height: 12),
-                  Text('$_score ${tr('quizOf')} 10 ${tr('quizScore')}',
-                      style: const TextStyle(fontSize: 20),
-                      textAlign: TextAlign.center),
-                  Text('${_score * 10}%',
-                      style: TextStyle(
-                          fontSize: 48,
-                          fontWeight: FontWeight.bold,
-                          color: AppAccent.primary),
-                      textAlign: TextAlign.center),
+                  // Selector de modo 3D (ronda de diseño 7.0): segmento
+                  // elegido en el color del acento con texto blanco, resto en blanco
+                  // con sombra suave y borde gris claro. El degradado
+                  // no cabe en un SegmentedButton, así que el elegido
+                  // es el color del acento liso con su sombra tintada.
+                  SegmentedButton<bool>(
+                    segments: [
+                      ButtonSegment(
+                          value: true, label: Text(tr('tableQuizSymToName'))),
+                      ButtonSegment(
+                          value: false, label: Text(tr('tableQuizNameToSym'))),
+                    ],
+                    selected: {_symbolToName},
+                    onSelectionChanged: (s) =>
+                        setState(() => _symbolToName = s.first),
+                    style: SegmentedButton.styleFrom(
+                      // Fondo según el tema (auditoría 7.2): en blanco
+                      // fijo se veía como una píldora clara en oscuro.
+                      backgroundColor: isDark
+                          ? scheme.surfaceContainerHighest
+                          : Colors.white,
+                      foregroundColor: Theme.of(context).colorScheme.onSurface,
+                      selectedBackgroundColor: AppAccent.primary,
+                      selectedForegroundColor: Colors.white,
+                      // Sin borde en oscuro (Kristian, 2026-11-13).
+                      side: isDark
+                          ? BorderSide.none
+                          : BorderSide(color: const Color(0xFFE5E7EB)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      elevation: 2,
+                      shadowColor: AppAccent.primary.withValues(alpha: 0.30),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    tr('tableQuizCounter')
+                        .replaceFirst('%d', '${_index + 1}')
+                        .replaceFirst('%d', '$_score'),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 4),
                   Text(
                       '${tr('pointsWord')}: ${_points > 0 ? '+$_points' : '$_points'}',
                       style: const TextStyle(
-                          fontSize: 22, fontWeight: FontWeight.bold),
-                      textAlign: TextAlign.center),
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: () => setState(_newGame),
-                    child: Text(tr('quizRepeat')),
-                  ),
-                  const SizedBox(height: 8),
-                  OutlinedButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: Text(tr('quizBack')),
-                  ),
-                ],
-              ),
-            )
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                // Selector de modo 3D (ronda de diseño 7.0): segmento
-                // elegido en el color del acento con texto blanco, resto en blanco
-                // con sombra suave y borde gris claro. El degradado
-                // no cabe en un SegmentedButton, así que el elegido
-                // es el color del acento liso con su sombra tintada.
-                SegmentedButton<bool>(
-                  segments: [
-                    ButtonSegment(
-                        value: true,
-                        label: Text(tr('tableQuizSymToName'))),
-                    ButtonSegment(
-                        value: false,
-                        label: Text(tr('tableQuizNameToSym'))),
-                  ],
-                  selected: {_symbolToName},
-                  onSelectionChanged: (s) =>
-                      setState(() => _symbolToName = s.first),
-                  style: SegmentedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor:
-                        Theme.of(context).colorScheme.onSurface,
-                    selectedBackgroundColor: AppAccent.primary,
-                    selectedForegroundColor: Colors.white,
-                    side: const BorderSide(color: Color(0xFFE5E7EB)),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    elevation: 2,
-                    shadowColor:
-                        AppAccent.primary.withValues(alpha: 0.30),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  tr('tableQuizCounter')
-                      .replaceFirst('%d', '${_index + 1}')
-                      .replaceFirst('%d', '$_score'),
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                    '${tr('pointsWord')}: ${_points > 0 ? '+$_points' : '$_points'}',
-                    style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 12),
-                // Botoncito de teclado (fix5, punto B, corrección
-                // 00:26): también en el quiz de la tabla, a un
-                // ladito de la tarjeta de la pregunta; al tocarlo se
-                // abre la PANTALLA de la calculadora normal (página
-                // completa, no un panel inline) y al cerrarla se
-                // vuelve a la pregunta intacta.
-                QuestionCalculatorButton(
+                          fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
                   // Tarjeta de la pregunta 3D (ronda de diseño 7.0):
                   // antes era una Card plana de color liso.
-                  question: Container(
+                  // Seguimiento 7.2: sin botoncito de teclado — el
+                  // quiz de la tabla es siempre opción múltiple y
+                  // no lleva calculadora.
+                  Container(
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(16),
                       gradient: LinearGradient(
@@ -276,58 +275,55 @@ class _TableQuizScreenState extends State<TableQuizScreen> {
                       ),
                     ),
                   ),
-                  scientific: false,
-                ),
-                const SizedBox(height: 16),
-                // Opciones 3D (ronda de diseño 7.0): tarjeta blanca
-                // con sombra en reposo, degradado teal/rojo con
-                // borde inferior oscuro al acertar/fallar (ver
-                // QuizOptionButton en simple_quiz.dart).
-                for (var i = 0; i < 4; i++)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: QuizOptionButton(
-                      text: _symbolToName
-                          ? localizedElementName(_options[_index][i])
-                          : _options[_index][i].symbol,
-                      state: _selected == null
-                          ? QuizOptionState.normal
-                          : (_options[_index][i] == _rounds[_index]
-                              ? QuizOptionState.correct
-                              : (_selected == i
-                                  ? QuizOptionState.wrong
-                                  : QuizOptionState.normal)),
-                      // Texto legible (capturas 2026-11-10): sobre
-                      // fondo claro va tinta oscura; sobre teal o
-                      // rojo, blanco. Sin esto heredaba blanco.
-                      textColor: _selected != null &&
-                              (_options[_index][i] == _rounds[_index] ||
-                                  _selected == i)
-                          ? Colors.white
-                          : Theme.of(context).colorScheme.onSurface,
-                      onPressed: () => _answer(i),
-                      fontSize: 17,
+                  const SizedBox(height: 16),
+                  // Opciones 3D (ronda de diseño 7.0): tarjeta blanca
+                  // con sombra en reposo, degradado teal/rojo con
+                  // borde inferior oscuro al acertar/fallar (ver
+                  // QuizOptionButton en simple_quiz.dart).
+                  for (var i = 0; i < 4; i++)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: QuizOptionButton(
+                        text: _symbolToName
+                            ? localizedElementName(_options[_index][i])
+                            : _options[_index][i].symbol,
+                        state: _selected == null
+                            ? QuizOptionState.normal
+                            : (_options[_index][i] == _rounds[_index]
+                                ? QuizOptionState.correct
+                                : (_selected == i
+                                    ? QuizOptionState.wrong
+                                    : QuizOptionState.normal)),
+                        // Texto legible (capturas 2026-11-10): sobre
+                        // fondo claro va tinta oscura; sobre teal o
+                        // rojo, blanco. Sin esto heredaba blanco.
+                        textColor: _selected != null &&
+                                (_options[_index][i] == _rounds[_index] ||
+                                    _selected == i)
+                            ? Colors.white
+                            : Theme.of(context).colorScheme.onSurface,
+                        onPressed: () => _answer(i),
+                        fontSize: 17,
+                      ),
                     ),
-                  ),
-                if (_selected != null) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    _options[_index][_selected!] == _rounds[_index]
-                        ? tr('quizCorrect')
-                        : '${tr('quizIncorrect')}. ${tr('quizCorrectIs')} ${_symbolToName ? localizedElementName(_rounds[_index]) : _rounds[_index].symbol}',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 12),
-                  ElevatedButton(
-                    onPressed: _next,
-                    child: Text(_index + 1 >= 10
-                        ? tr('quizResult')
-                        : tr('quizNext')),
-                  ),
+                  if (_selected != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      _options[_index][_selected!] == _rounds[_index]
+                          ? tr('quizCorrect')
+                          : '${tr('quizIncorrect')}. ${tr('quizCorrectIs')} ${_symbolToName ? localizedElementName(_rounds[_index]) : _rounds[_index].symbol}',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    ElevatedButton(
+                      onPressed: _next,
+                      child: Text(
+                          _index + 1 >= 10 ? tr('quizResult') : tr('quizNext')),
+                    ),
+                  ],
                 ],
-              ],
-            ),
+              ),
       ),
     );
   }

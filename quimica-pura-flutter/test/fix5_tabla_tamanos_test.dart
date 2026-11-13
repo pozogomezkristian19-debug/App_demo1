@@ -12,7 +12,11 @@
 //   de una vez, sin desplazar.
 // - Modo ANGOSTO (< 340 dp): sin cambios (rejilla 18 x 40 px con
 //   scroll horizontal).
-// - Regresión 400x852 (punto 3): la página con scroll sigue igual.
+// - Regresión 400x852 (punto 3): antes la página con scroll seguía
+//   igual; tras el rediseño Tabla 2026-11-12 (sin las dos tarjetas
+//   grandes) la página se hace más corta y a 400x852 cabe entera
+//   sin desplazar, como el caso grande (la leyenda se ve sin bajar).
+//   En teléfono chico (360x680) el scroll sigue existiendo.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -282,7 +286,8 @@ void main() {
     expect(fullyVisible(tester, legendLine(tester)), isTrue);
   });
 
-  testWidgets('regresion 400x852: punto 3 sigue en verde',
+  testWidgets('regresion 400x852: sin tarjetas la pagina cabe '
+      'entera sin desplazar (rediseno Tabla 2026-11-12)',
       (tester) async {
     await pumpAppTabla(tester, width: 400, height: 852);
 
@@ -291,7 +296,13 @@ void main() {
     expect(cellW, closeTo((400 - 16) / 18, 0.6));
     expect(gridRect.height, closeTo(10 * cellW / aspectFor(cellW), 1.0));
     expect(fullyVisible(tester, find.text('H').first), isTrue);
-    expect(pagePosition(tester).maxScrollExtent, greaterThan(0));
+    // Sin las dos tarjetas la página se acorta ~150 dp y a 400x852
+    // ya cabe entera: no hay scroll (como el caso grande 430x900).
+    // La leyenda y la última fila se ven sin bajar.
+    expect(pagePosition(tester).maxScrollExtent, 0);
+    expect(fullyVisible(tester, find.text('Lr').first), isTrue);
+    expect(fullyVisible(tester, find.text('La').first), isTrue);
+    expect(fullyVisible(tester, legendLine(tester)), isTrue);
 
     final seen = await scanRows(tester, step: cellW / aspectFor(cellW));
     for (final s in rowReps) {

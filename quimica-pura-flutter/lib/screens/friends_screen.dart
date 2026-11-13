@@ -405,15 +405,16 @@ class _FriendsScreenState extends State<FriendsScreen> {
                         hintText: tr('friendsAddHint'),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(16),
-                          borderSide: const BorderSide(
-                            color: Color(0xFFE5E5E5),
+                          borderSide: BorderSide(
+                            // Borde según el tema (auditoría 7.2).
+                            color: isDark ? _lineDark : _lineLight,
                             width: 2,
                           ),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(16),
-                          borderSide: const BorderSide(
-                            color: Color(0xFFE5E5E5),
+                          borderSide: BorderSide(
+                            color: isDark ? _lineDark : _lineLight,
                             width: 2,
                           ),
                         ),

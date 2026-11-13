@@ -28,8 +28,11 @@ class _AprenderScreenState extends State<AprenderScreen> {
     final accent = Theme.of(context).colorScheme.primary;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardColor = isDark ? AppAccent.darkCard : Colors.white;
-    final borderColor =
-        isDark ? const Color(0xFF37464F) : const Color(0xFFE5E5E5);
+    // Borde oscuro tono sobre tono en oscuro (Kristian,
+    // 2026-11-13): la tarjeta es darkCard, casi igual que el fondo,
+    // así que sin borde se perdería; el gris claro se veía como
+    // línea blanca.
+    final borderColor = isDark ? AppAccent.darkBorder : const Color(0xFFE5E5E5);
     final visibleTopics = topics
         .where((t) => t.slug != 'organica' && t.slug != 'laboratorio')
         .map(localizedTopic)
@@ -68,7 +71,8 @@ class _AprenderScreenState extends State<AprenderScreen> {
                       // sin fuente (bloques en las capturas, Roboto
                       // en el teléfono): Nunito como en toda la app.
                       fontFamily: 'Nunito',
-                      fontSize: 16, fontWeight: FontWeight.w700),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700),
                 ),
                 icon: const LucideIcon(LucideIcons.bookOpen, size: 18),
                 label: Text(tr('glossaryTitle')),
@@ -93,7 +97,8 @@ class _AprenderScreenState extends State<AprenderScreen> {
                       // sin fuente (bloques en las capturas, Roboto
                       // en el teléfono): Nunito como en toda la app.
                       fontFamily: 'Nunito',
-                      fontSize: 16, fontWeight: FontWeight.w700),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700),
                 ),
                 icon: const LucideIcon(LucideIcons.notebookPen, size: 18),
                 label: Text(tr('notesTitle')),
@@ -124,8 +129,7 @@ class _AprenderScreenState extends State<AprenderScreen> {
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  LucideIcon(LucideIcons.lightbulb,
-                      size: 28, color: onSurface),
+                  LucideIcon(LucideIcons.lightbulb, size: 28, color: onSurface),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -200,7 +204,8 @@ class _AprenderScreenState extends State<AprenderScreen> {
                                   // Dalton no cabe en una línea a 16
                                   // y dejaba "total" sola en la
                                   // segunda (Zona F, 2026-11-12).
-                                  fontSize: 15, color: onSurface)),
+                                  fontSize: 15,
+                                  color: onSurface)),
                         ),
                       ],
                     ),
@@ -288,8 +293,7 @@ class _TopicCard extends StatelessWidget {
                     if (subtitle != null) ...[
                       const SizedBox(height: 2),
                       Text(subtitle!,
-                          style: TextStyle(
-                              fontSize: 15, color: onSurface)),
+                          style: TextStyle(fontSize: 15, color: onSurface)),
                     ],
                   ],
                 ),

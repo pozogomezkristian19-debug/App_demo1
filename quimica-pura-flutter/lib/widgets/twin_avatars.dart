@@ -214,13 +214,19 @@ class _TwinAvatarImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // (foto72) El fondo era blanco fijo: en oscuro se veía un
+    // disco blanco detrás de la cara de la compañera (el PNG es
+    // transparente y el blanco se transparentaba). En oscuro el
+    // fondo es transparente (se ve el fondo de la pantalla, como
+    // en el banner de Niveles); en claro se mantiene blanco.
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         border: ring ? Border.all(color: accent, width: size * 0.05) : null,
-        color: Colors.white,
+        color: isDark ? Colors.transparent : Colors.white,
       ),
       child: ClipOval(
         child: Image.asset(
@@ -277,8 +283,7 @@ class TwinAvatarB extends StatelessWidget {
 /// detalles teal (su color de identidad sigue siendo el teal: aro
 /// de la foto y etiquetas).
 class KristianAvatar extends StatelessWidget {
-  const KristianAvatar(
-      {super.key, this.size = 52, this.mood = TwinMood.happy});
+  const KristianAvatar({super.key, this.size = 52, this.mood = TwinMood.happy});
 
   final double size;
   final TwinMood mood;
@@ -377,8 +382,7 @@ class MascotBubble extends StatelessWidget {
         const SizedBox(width: 10),
         Expanded(
           child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
               // Burbuja blanca con borde #E5E5E5 (§3.3.2): antes era
               // gris tintada con borde del color de la mascota.
@@ -389,10 +393,11 @@ class MascotBubble extends StatelessWidget {
                 bottomLeft: Radius.circular(16),
                 bottomRight: Radius.circular(16),
               ),
-              border: Border.all(
-                  color: isDark
-                      ? const Color(0xFF37464F)
-                      : const Color(0xFFE5E5E5)),
+              // Sin borde en oscuro: la línea clara se veía fea
+              // (Kristian, 2026-11-13); el relleno distingue la
+              // burbuja del fondo.
+              border:
+                  isDark ? null : Border.all(color: const Color(0xFFE5E5E5)),
             ),
             // (fix5) Solo el texto del mensaje, sin la firma
             // "— Nombre" abajo a la derecha. Siempre [text]:

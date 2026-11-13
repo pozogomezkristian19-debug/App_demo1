@@ -86,29 +86,41 @@ class _ConstantsScreenState extends State<ConstantsScreen> {
       } else {
         out = (kelvin - 273.15) * 9 / 5 + 32;
       }
-      setState(() => _result =
-          '$v $_tempFrom = ${out.toStringAsFixed(2)} $_tempTo');
+      setState(
+          () => _result = '$v $_tempFrom = ${out.toStringAsFixed(2)} $_tempTo');
       return;
     }
     final cat = _categories[_catIndex];
-    final fromFactor =
-        cat.units.firstWhere((u) => u.$1 == _from, orElse: () => cat.units[1]).$2;
+    final fromFactor = cat.units
+        .firstWhere((u) => u.$1 == _from, orElse: () => cat.units[1])
+        .$2;
     final toFactor =
         cat.units.firstWhere((u) => u.$1 == _to, orElse: () => cat.units[1]).$2;
     final out = v * fromFactor / toFactor;
-    setState(() => _result =
-        '$v $_from = ${_format(out)} $_to');
+    setState(() => _result = '$v $_from = ${_format(out)} $_to');
   }
 
   String _format(double v) {
     if (v == 0) return '0';
     if (v.abs() >= 10000 || v.abs() < 0.001) return v.toStringAsExponential(3);
-    return v.toStringAsFixed(4).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
+    return v
+        .toStringAsFixed(4)
+        .replaceAll(RegExp(r'0+$'), '')
+        .replaceAll(RegExp(r'\.$'), '');
   }
 
   @override
   Widget build(BuildContext context) {
     final cat = _categories[_catIndex];
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Chips según el tema (auditoría 7.2): en blanco fijo se veían
+    // como píldoras claras en oscuro, con texto oscuro encima.
+    final chipBg = isDark ? scheme.surfaceContainerHighest : Colors.white;
+    final chipInk = isDark ? scheme.onSurface : const Color(0xFF1F2937);
+    // Sin borde en oscuro (Kristian, 2026-11-13): el relleno
+    // del chip lo distingue del fondo; en claro queda el gris suave.
+    final chipEdge = isDark ? Colors.transparent : const Color(0xFFE8E8E8);
     return Scaffold(
       appBar: AppBar(title: Text(tr('menuConstants'))),
       body: ListView(
@@ -139,7 +151,7 @@ class _ConstantsScreenState extends State<ConstantsScreen> {
                       style: TextStyle(
                           color: !_temperature && _catIndex == i
                               ? Colors.white
-                              : const Color(0xFF1F2937),
+                              : chipInk,
                           fontWeight: FontWeight.w700)),
                   selected: !_temperature && _catIndex == i,
                   onSelected: (_) => setState(() {
@@ -154,25 +166,22 @@ class _ConstantsScreenState extends State<ConstantsScreen> {
                   // con sombra suave y borde gris claro sin
                   // seleccionar. Se mantiene ChoiceChip.
                   selectedColor: AppAccent.primary,
-                  backgroundColor: Colors.white,
+                  backgroundColor: chipBg,
                   elevation: 3,
-                  shadowColor:
-                      AppAccent.primary.withValues(alpha: 0.35),
+                  shadowColor: AppAccent.primary.withValues(alpha: 0.35),
                   selectedShadowColor:
                       AppAccent.primary.withValues(alpha: 0.45),
                   checkmarkColor: Colors.white,
                   side: BorderSide(
                       color: !_temperature && _catIndex == i
                           ? AppAccent.primaryDark
-                          : const Color(0xFFE8E8E8)),
+                          : chipEdge),
                   shape: const StadiumBorder(),
                 ),
               ChoiceChip(
                 label: Text('Temperatura',
                     style: TextStyle(
-                        color: _temperature
-                            ? Colors.white
-                            : const Color(0xFF1F2937),
+                        color: _temperature ? Colors.white : chipInk,
                         fontWeight: FontWeight.w700)),
                 selected: _temperature,
                 onSelected: (_) => setState(() {
@@ -180,17 +189,13 @@ class _ConstantsScreenState extends State<ConstantsScreen> {
                   _result = null;
                 }),
                 selectedColor: AppAccent.primary,
-                backgroundColor: Colors.white,
+                backgroundColor: chipBg,
                 elevation: 3,
-                shadowColor:
-                    AppAccent.primary.withValues(alpha: 0.35),
-                selectedShadowColor:
-                    AppAccent.primary.withValues(alpha: 0.45),
+                shadowColor: AppAccent.primary.withValues(alpha: 0.35),
+                selectedShadowColor: AppAccent.primary.withValues(alpha: 0.45),
                 checkmarkColor: Colors.white,
                 side: BorderSide(
-                    color: _temperature
-                        ? AppAccent.primaryDark
-                        : const Color(0xFFE8E8E8)),
+                    color: _temperature ? AppAccent.primaryDark : chipEdge),
                 shape: const StadiumBorder(),
               ),
             ],
@@ -209,8 +214,7 @@ class _ConstantsScreenState extends State<ConstantsScreen> {
               // texto del campo) para que no vuelva a pasar.
               prefixIcon: LucideIcon(LucideIcons.logIn, size: 24),
             ),
-            keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
             onChanged: (v) {
               _input = v;
               _convert();
@@ -226,8 +230,7 @@ class _ConstantsScreenState extends State<ConstantsScreen> {
                   items: (_temperature
                           ? ['°C', 'K', '°F']
                           : cat.units.map((u) => u.$1).toList())
-                      .map((u) =>
-                          DropdownMenuItem(value: u, child: Text(u)))
+                      .map((u) => DropdownMenuItem(value: u, child: Text(u)))
                       .toList(),
                   onChanged: (v) {
                     if (v == null) return;
@@ -254,8 +257,7 @@ class _ConstantsScreenState extends State<ConstantsScreen> {
                   items: (_temperature
                           ? ['°C', 'K', '°F']
                           : cat.units.map((u) => u.$1).toList())
-                      .map((u) =>
-                          DropdownMenuItem(value: u, child: Text(u)))
+                      .map((u) => DropdownMenuItem(value: u, child: Text(u)))
                       .toList(),
                   onChanged: (v) {
                     if (v == null) return;
@@ -276,14 +278,10 @@ class _ConstantsScreenState extends State<ConstantsScreen> {
             const SizedBox(height: 16),
             Card(
               elevation: 4,
-              shadowColor: Theme.of(context)
-                  .colorScheme
-                  .primary
-                  .withValues(alpha: 0.30),
-              color: Theme.of(context)
-                  .colorScheme
-                  .primary
-                  .withValues(alpha: 0.15),
+              shadowColor:
+                  Theme.of(context).colorScheme.primary.withValues(alpha: 0.30),
+              color:
+                  Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Text(_result!,

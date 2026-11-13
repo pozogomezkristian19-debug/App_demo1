@@ -220,9 +220,11 @@ class _TournamentCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: isDark ? scheme.surfaceContainerHighest : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-            color: isDark ? const Color(0xFF37464F) : const Color(0xFFE5E5E5),
-            width: 2),
+        // Sin borde en oscuro (Kristian, 2026-11-13): el
+        // relleno distingue la tarjeta del fondo.
+        border: isDark
+            ? null
+            : Border.all(color: const Color(0xFFE5E5E5), width: 2),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -276,7 +278,9 @@ class _TournamentCard extends StatelessWidget {
               const SizedBox(height: 10),
               Text(
                 '${t.topic} · ${tr('tournQuestions').replaceFirst('%s', '${t.questionCount}')}',
-                style: TextStyle(fontSize: 16, color: Theme.of(context).colorScheme.onSurface),
+                style: TextStyle(
+                    fontSize: 16,
+                    color: Theme.of(context).colorScheme.onSurface),
               ),
               const SizedBox(height: 4),
               // El premio va en su propia línea: compartiendo la
@@ -326,11 +330,11 @@ class _TournamentCard extends StatelessWidget {
                             fontSize: 17,
                           )
                         // "Unido" (torneo próximo, ya dentro): botón
-                    // secundario Duolingo estándar (blanco + borde
-                    // 2 pt #E5E5E5 + texto #4B4B4B, §1.4), sin tinte
-                    // teal propio: en la pantalla manda un solo
-                    // color de acción (regla 9).
-                    : DuoButton.secondary(
+                        // secundario Duolingo estándar (blanco + borde
+                        // 2 pt #E5E5E5 + texto #4B4B4B, §1.4), sin tinte
+                        // teal propio: en la pantalla manda un solo
+                        // color de acción (regla 9).
+                        : DuoButton.secondary(
                             label: tr('tournJoined').toUpperCase(),
                             onPressed: onTap,
                             fontSize: 17,
@@ -520,10 +524,10 @@ class _DetailBody extends StatelessWidget {
           decoration: BoxDecoration(
             color: isDark ? scheme.surfaceContainerHighest : Colors.white,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-                color:
-                    isDark ? const Color(0xFF37464F) : const Color(0xFFE5E5E5),
-                width: 2),
+            // Sin borde en oscuro (Kristian, 2026-11-13).
+            border: isDark
+                ? null
+                : Border.all(color: const Color(0xFFE5E5E5), width: 2),
           ),
           clipBehavior: Clip.antiAlias,
           child: Padding(
@@ -619,11 +623,10 @@ class _DetailBody extends StatelessWidget {
             decoration: BoxDecoration(
               color: isDark ? scheme.surfaceContainerHighest : Colors.white,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                  color: isDark
-                      ? const Color(0xFF37464F)
-                      : const Color(0xFFE5E5E5),
-                  width: 2),
+              // Sin borde en oscuro (Kristian, 2026-11-13).
+              border: isDark
+                  ? null
+                  : Border.all(color: const Color(0xFFE5E5E5), width: 2),
             ),
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -743,7 +746,12 @@ class _RankingRow extends StatelessWidget {
       return Column(
         children: [
           content,
-          const Divider(height: 1, thickness: 1, color: Color(0xFFE5E5E5)),
+          Divider(
+              height: 1,
+              thickness: 1,
+              // Línea según el tema (auditoría 7.2).
+              color:
+                  isDark ? const Color(0xFF37464F) : const Color(0xFFE5E5E5)),
         ],
       );
     }

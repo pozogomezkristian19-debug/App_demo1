@@ -1,5 +1,6 @@
-// Vistas previas de la ronda #5, punto extra (Quemia 6.2): las
-// tarjetas de acción de Tabla SOLO con filtro "Todos".
+// Vistas previas de la ronda #5, punto extra (Quemia 6.2) +
+// rediseño Tabla 2026-11-12 (mockup flotante aprobado): los
+// botones flotantes Comparar + Quiz SOLO con filtro "Todos".
 // Se ejecuta con --update-goldens para ESCRIBIR los PNG en
 // ~/workspace/melli-qui-v6-previews/ (nombres fix5_tabla_todos.png
 // y fix5_tabla_filtro.png). Viewport de teléfono real: 400 dp de
@@ -104,24 +105,24 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
   }
 
-  testWidgets('fix5_tabla_todos: filtro Todos, las dos tarjetas '
-      'de acción visibles', (tester) async {
+  testWidgets('fix5_tabla_todos: filtro Todos, los dos flotantes '
+      'visibles abajo a la derecha', (tester) async {
     await pumpAppTabla(tester);
-    expect(find.text(tr('tableQuizTitle')), findsOneWidget);
-    expect(find.text(tr('compareTitle')), findsOneWidget);
+    expect(find.text(tr('quizShort')), findsOneWidget);
+    expect(find.text(tr('compareShort')), findsOneWidget);
     await shot(tester, 'fix5_tabla_todos.png');
   });
 
-  testWidgets('fix5_tabla_filtro: filtro Metal alcalino, tarjetas '
-      'ocultas y lista filtrada arriba', (tester) async {
+  testWidgets('fix5_tabla_filtro: filtro Metal alcalino, flotantes '
+      'ocultos y lista filtrada arriba', (tester) async {
     await pumpAppTabla(tester);
     await tester.tap(
       find.widgetWithText(ChoiceChip, 'Metal alcalino'),
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text(tr('tableQuizTitle')), findsNothing);
-    expect(find.text(tr('compareTitle')), findsNothing);
+    expect(find.text(tr('quizShort')), findsNothing);
+    expect(find.text(tr('compareShort')), findsNothing);
     expect(find.text('6 ${tr('elementsWord')}'), findsOneWidget);
     await shot(tester, 'fix5_tabla_filtro.png');
   });

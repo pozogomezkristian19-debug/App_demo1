@@ -124,9 +124,9 @@ void main() {
     UserPrefs.themeAccentNotifier.value = 'verde';
     UserPrefs.onboardingDone = true;
     UserPrefs.isDark = false;
-    // Nombre y género para que el saludo muestre "Bienvenido
-    // Kristian" como en el teléfono real (en fix2 el nombre estaba
-    // vacío y salía solo "Hola").
+    // Nombre y género para que el saludo muestre SOLO el primer
+    // nombre ("Kristian", 2026-11-13) como en el teléfono real
+    // (en fix2 el nombre estaba vacío y salía solo "Hola").
     UserPrefs.userName = 'Kristian';
     UserPrefs.userGender = 'Masculino';
     // Los tres compañeros ya se presentaron: las burbujas muestran
@@ -206,18 +206,28 @@ void main() {
           body: Row(
             key: Key('warmup'),
             children: [
-              Image(image: AssetImage('assets/brenda.png'),
-                  width: 40, height: 40),
-              Image(image: AssetImage('assets/britany.png'),
-                  width: 40, height: 40),
-              Image(image: AssetImage('assets/kristian.png'),
-                  width: 40, height: 40),
-              Image(image: AssetImage('assets/logo.png'),
-                  width: 40, height: 40),
-              Image(image: AssetImage('assets/whatsapp.png'),
-                  width: 40, height: 40),
-              Image(image: AssetImage('assets/avatar_default.png'),
-                  width: 40, height: 40),
+              Image(
+                  image: AssetImage('assets/brenda.png'),
+                  width: 40,
+                  height: 40),
+              Image(
+                  image: AssetImage('assets/britany.png'),
+                  width: 40,
+                  height: 40),
+              Image(
+                  image: AssetImage('assets/kristian.png'),
+                  width: 40,
+                  height: 40),
+              Image(
+                  image: AssetImage('assets/logo.png'), width: 40, height: 40),
+              Image(
+                  image: AssetImage('assets/whatsapp.png'),
+                  width: 40,
+                  height: 40),
+              Image(
+                  image: AssetImage('assets/avatar_default.png'),
+                  width: 40,
+                  height: 40),
             ],
           ),
         ),
@@ -239,8 +249,7 @@ void main() {
     await settle(tester);
   });
 
-  testWidgets('fix3_niveles (barra limpia, camino)',
-      (tester) async {
+  testWidgets('fix3_niveles (barra limpia, camino)', (tester) async {
     // El compañero del día lo decide la fecha (día % 3): hoy
     // 2026-11-10 → 10 % 3 = 1 → Britany. No se puede forzar a
     // Kristian desde el test: PracticarScreen llama a
@@ -297,10 +306,11 @@ void main() {
         ),
         dark: dark,
         height: 1050);
-    // Se abre la pantalla de la calculadora con el botoncito de
-    // teclado y se teclea ahí. Las teclas son FilledButton u
+    // Se abre la pantalla de la calculadora desde el campo de
+    // respuesta (seguimiento 7.2: el botoncito junto a la pregunta
+    // se quitó) y se teclea ahí. Las teclas son FilledButton u
     // OutlinedButton con su etiqueta.
-    await tester.tap(find.byKey(const Key('calculator-toggle')));
+    await tester.tap(find.byKey(const Key('numeric-answer-field')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
     Finder key(String label) {
@@ -308,6 +318,7 @@ void main() {
       if (filled.evaluate().isNotEmpty) return filled;
       return find.widgetWithText(OutlinedButton, label);
     }
+
     for (final label in ['−', 'log', '0', '.', '0', '1', ')', '=']) {
       await tester.tap(key(label));
       await tester.pump();
@@ -321,8 +332,7 @@ void main() {
     await shot(tester, 'fix3_quiz_calculadora.png');
   });
 
-  testWidgets('fix3_quiz_calculadora_dark (pH, tema oscuro)',
-      (tester) async {
+  testWidgets('fix3_quiz_calculadora_dark (pH, tema oscuro)', (tester) async {
     await pumpPhQuiz(tester, dark: true);
     await shot(tester, 'fix3_quiz_calculadora_dark.png');
   });
@@ -340,8 +350,7 @@ void main() {
             children: [
               MascotBubble(
                 companion: Companion.kristian,
-                text: tr(mascotLineKey(
-                    Companion.kristian, MascotLine.ask, 2)),
+                text: tr(mascotLineKey(Companion.kristian, MascotLine.ask, 2)),
               ),
               const SizedBox(height: 16),
               const Text(

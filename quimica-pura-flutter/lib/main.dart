@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -534,8 +535,7 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
           foregroundColor: primary,
           backgroundColor: surface,
           side: BorderSide(color: buttonBg, width: 2),
-          shape: DuoPillBorder(
-              edgeColor: primary.withValues(alpha: 0.35)),
+          shape: DuoPillBorder(edgeColor: primary.withValues(alpha: 0.35)),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           textStyle: const TextStyle(
               fontFamily: 'Nunito', fontSize: 16, fontWeight: FontWeight.w800),
@@ -552,9 +552,7 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
       // el color por defecto de Material 3.
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith((states) =>
-            states.contains(WidgetState.selected)
-                ? primary
-                : Colors.white),
+            states.contains(WidgetState.selected) ? primary : Colors.white),
         trackColor: WidgetStateProperty.resolveWith((states) =>
             states.contains(WidgetState.selected)
                 ? primary.withValues(alpha: 0.45)
@@ -569,18 +567,15 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
         constraints: const BoxConstraints(minHeight: 56),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide:
-              const BorderSide(color: Color(0xFF37464F), width: 2),
+          borderSide: const BorderSide(color: Color(0xFF37464F), width: 2),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide:
-              const BorderSide(color: Color(0xFF37464F), width: 2),
+          borderSide: const BorderSide(color: Color(0xFF37464F), width: 2),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide:
-              const BorderSide(color: Color(0xFF84D8FF), width: 2),
+          borderSide: const BorderSide(color: Color(0xFF84D8FF), width: 2),
         ),
       ),
       snackBarTheme: SnackBarThemeData(
@@ -806,8 +801,7 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: const BorderRadius.all(Radius.circular(16)),
-          borderSide:
-              const BorderSide(color: Color(0xFF84D8FF), width: 2),
+          borderSide: const BorderSide(color: Color(0xFF84D8FF), width: 2),
         ),
       ),
       snackBarTheme: const SnackBarThemeData(
@@ -1072,6 +1066,44 @@ class _HomeScreenState extends State<HomeScreen> {
   /// el menú y la barra inferior se OCULTAN: la única salida es el
   /// botón Salir del quiz (fix2, ronda 2). Lo avisa PracticarScreen.
   bool _inSession = false;
+
+  /// ¿Está abierto el menú hamburguesa? Lo sigue `onDrawerChanged`
+  /// del Scaffold (ronda 7.2, Zona C): con el menú abierto, el
+  /// contenido se ve con blur real + velo oscuro estilo
+  /// "liquid glass"; el drawer en sí queda nítido por encima.
+  /// Seguimiento 7.2: el blur cubre TODA la pantalla (AppBar +
+  /// body + barra inferior), no solo el body.
+  bool _drawerOpen = false;
+
+  /// Overlay de blur "liquid glass" del menú abierto (ronda 7.2,
+  /// Zona C; corrección 2026-11-13: UNA sola capa a pantalla
+  /// completa por encima de la barra, el cuerpo y la barra
+  /// inferior): blur real (sigma 10) + velo negro 35 % con
+  /// entrada/salida animada (~250 ms). NO es el cuadrado gris plano
+  /// que Kristian rechazó: el fondo se sigue viendo, difuminado. El
+  /// drawer se pinta POR ENCIMA de este overlay (es del Scaffold),
+  /// así que el menú queda nítido y opaco. IgnorePointer: los toques
+  /// pasan al Scaffold, que cierra el menú al tocar fuera como
+  /// siempre.
+  Widget _drawerBlurOverlay() {
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: TweenAnimationBuilder<double>(
+          tween: Tween<double>(begin: 0, end: _drawerOpen ? 1 : 0),
+          duration: const Duration(milliseconds: 250),
+          builder: (context, t, child) {
+            if (t == 0) return const SizedBox.shrink();
+            return BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 10 * t, sigmaY: 10 * t),
+              child: Container(
+                color: Colors.black.withValues(alpha: 0.35 * t),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -1346,7 +1378,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-
   /// Compartir la app (Quemia 7.1, Zona H): abre DIRECTO la hoja
   /// nativa del sistema (la de la captura: contactos y apps),
   /// sin diálogo ni pantalla intermedia con el enlace. El texto
@@ -1358,8 +1389,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _showShareApp(BuildContext context) async {
     await SharePlus.instance.share(
       ShareParams(
-        text:
-            'Descarga Quemia, la app de química pura: $kShareUrl',
+        text: 'Descarga Quemia, la app de química pura: $kShareUrl',
       ),
     );
   }
@@ -1476,8 +1506,7 @@ class _HomeScreenState extends State<HomeScreen> {
           style: TextStyle(
             fontSize: 17,
             fontWeight: FontWeight.w700,
-            color:
-                isDark ? scheme.onSurface : const Color(0xFF4B4B4B),
+            color: isDark ? scheme.onSurface : const Color(0xFF4B4B4B),
           )),
       subtitle: subtitle == null
           ? null
@@ -1491,9 +1520,8 @@ class _HomeScreenState extends State<HomeScreen> {
               style: TextStyle(
                 fontSize: 15,
                 height: 1.35,
-                color: isDark
-                    ? scheme.onSurfaceVariant
-                    : const Color(0xFF777777),
+                color:
+                    isDark ? scheme.onSurfaceVariant : const Color(0xFF777777),
               ),
             ),
       trailing: const LucideIcon(LucideIcons.chevronRight,
@@ -1513,9 +1541,8 @@ class _HomeScreenState extends State<HomeScreen> {
   /// (toUpperCase): los tests del menú lo exigen y es solo aspecto.
   Widget _drawerSection(String title) {
     final scheme = Theme.of(context).colorScheme;
-    final dividerColor = widget.isDark
-        ? const Color(0xFF37464F)
-        : const Color(0xFFE5E5E5);
+    final dividerColor =
+        widget.isDark ? const Color(0xFF37464F) : const Color(0xFFE5E5E5);
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 20, 16, 8),
       child: Row(
@@ -1525,9 +1552,7 @@ class _HomeScreenState extends State<HomeScreen> {
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w800,
-              color: widget.isDark
-                  ? scheme.onSurface
-                  : const Color(0xFF4B4B4B),
+              color: widget.isDark ? scheme.onSurface : const Color(0xFF4B4B4B),
             ),
           ),
           const SizedBox(width: 10),
@@ -1551,9 +1576,8 @@ class _HomeScreenState extends State<HomeScreen> {
   /// (La tarjeta se quitó también en los tests de aspecto del menú;
   /// la navegación y el orden no cambian.)
   Widget _drawerCard(List<Widget> items) {
-    final dividerColor = widget.isDark
-        ? const Color(0xFF37464F)
-        : const Color(0xFFE5E5E5);
+    final dividerColor =
+        widget.isDark ? const Color(0xFF37464F) : const Color(0xFFE5E5E5);
     final children = <Widget>[];
     for (var i = 0; i < items.length; i++) {
       if (i > 0) {
@@ -1569,6 +1593,81 @@ class _HomeScreenState extends State<HomeScreen> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: children,
+    );
+  }
+
+  /// Barra superior (menú, vidas, repaso, campana). Vive en el
+  /// cuerpo (no en el slot appBar del Scaffold) para que el
+  /// difuminado del menú sea UNA sola capa de blur a pantalla
+  /// completa por encima de la barra, el cuerpo y la barra
+  /// inferior (corrección 2026-11-13, Kristian: un solo
+  /// difuminado uniforme, sin costuras). El drawer sigue siendo
+  /// del Scaffold y se pinta por encima, así que queda nítido.
+  Widget _topBar() {
+    return AppBar(
+      leading: Builder(
+        builder: (context) => IconButton(
+          icon: const LucideIcon(LucideIcons.menu),
+          tooltip: tr('menuWord'),
+          onPressed: () => Scaffold.of(context).openDrawer(),
+        ),
+      ),
+      // Sin título de texto en la barra (fix3, punto 6,
+      // ampliación): el nombre de la pantalla ("Niveles",
+      // "Tabla"...) se recortaba ("Ni...") y ya está como
+      // título grande dentro del contenido de cada pestaña.
+      // La barra queda solo con sus controles: menú, vidas,
+      // repaso y campana.
+      actions: [
+        // Chip de vidas junto al saludo (corazón + número, fix 1):
+        // siempre visible en las 5 pestañas. Se actualiza solo
+        // cuando cambian las vidas, sin reconstruir la pantalla.
+        // Separación igual entre los tres controles (fix4,
+        // punto 9): cada uno lleva _kTopBarGap a ambos lados.
+        Center(
+          child: Padding(
+            padding:
+                const EdgeInsets.symmetric(horizontal: _kTopBarGap),
+            child: ValueListenableBuilder<int>(
+              valueListenable: ProgressService.livesNotifier,
+              builder: (context, _, __) => LivesChip(
+                lives: ProgressService.instance.livesLeft,
+              ),
+            ),
+          ),
+        ),
+        // Repasar mis errores (fix2, item 2): entrada visible en
+        // la barra de arriba, estilo Duolingo, junto a la campana
+        // de notificaciones. El numerito es la cantidad de errores
+        // por repasar; sin errores, avisa y no abre nada.
+        // El avatar del usuario ya NO está aquí (fix2, item 6).
+        Center(
+          child: Padding(
+            padding:
+                const EdgeInsets.symmetric(horizontal: _kTopBarGap),
+            child: ValueListenableBuilder<int>(
+              valueListenable: ProgressService.failedNotifier,
+              builder: (context, _, __) => _ReviewChip(
+                count: ProgressService.instance.failedCount,
+                onTap: _startReviewFromAppBar,
+              ),
+            ),
+          ),
+        ),
+        // Campana de notificaciones (fix4, punto 8): abre la
+        // bandeja de Notificaciones (ya no Recordatorios).
+        // Fondo transparente como los otros dos chips
+        // (§3.9.5, Zona A), no píldora.
+        Center(
+          child: Padding(
+            padding:
+                const EdgeInsets.symmetric(horizontal: _kTopBarGap),
+            child: _NotificationBell(
+              onTap: () => _openScreenKey('notifications'),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -1614,7 +1713,18 @@ class _HomeScreenState extends State<HomeScreen> {
         // la franja que el menú no cubre. Sin scrim, la pantalla
         // de detrás se ve normal y el menú se distingue por su
         // propia sombra; tocar fuera sigue cerrándolo.
+        // El difuminado al abrir el menú (ronda 7.2, Zona C) NO
+        // es ese gris plano: es blur real + velo, pintado por el
+        // overlay único a pantalla completa del body (ver
+        // _drawerBlurOverlay). Por eso el scrim sigue en
+        // transparente.
         drawerScrimColor: Colors.transparent,
+        // Sigue si el menú está abierto o cerrado para el blur
+        // del body: abrir/cerrar (gesto, tocar fuera, atrás)
+        // lo maneja el Scaffold como siempre; esto solo avisa.
+        onDrawerChanged: (open) {
+          if (_drawerOpen != open) setState(() => _drawerOpen = open);
+        },
         // Sin botón flotante de Soporte (fix2, ronda 2): el pill
         // verde tapaba contenido en Niveles y en Tabla. Soporte
         // vive ahora al pie del menú hamburguesa.
@@ -1628,8 +1738,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 // Fondo plano del drawer (rediseño Duolingo §3.15):
                 // blanco en claro, superficie oscura en oscuro — las
                 // filas van directamente sobre este fondo, sin tarjeta.
-                backgroundColor:
-                    widget.isDark ? scheme.surface : Colors.white,
+                backgroundColor: widget.isDark ? scheme.surface : Colors.white,
                 child: SafeArea(
                   child: Column(
                     children: [
@@ -1648,8 +1757,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                 const LucideIcon(LucideIcons.search, size: 18),
                             contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 16, vertical: 16),
-                            // Campo §1.6: radio 16, borde 2 pt #E5E5E5;
-                            // al enfocar, #84D8FF. Sin sombra. El
+                            // Campo §1.6: radio 16, borde 2 pt #E5E5E5
+                            // en claro (#37464F en oscuro, auditoría
+                            // 7.2); al enfocar, #84D8FF. Sin sombra. El
                             // padding vertical 16 (como el campo de
                             // Amigos) hace que la caja PINTADA mida
                             // ≥ 56 pt de alto (mínimo §1.6): el
@@ -1657,13 +1767,19 @@ class _HomeScreenState extends State<HomeScreen> {
                             // hueco, no la caja visible.
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(16),
-                              borderSide: const BorderSide(
-                                  color: Color(0xFFE5E5E5), width: 2),
+                              borderSide: BorderSide(
+                                  color: widget.isDark
+                                      ? const Color(0xFF37464F)
+                                      : const Color(0xFFE5E5E5),
+                                  width: 2),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(16),
-                              borderSide: const BorderSide(
-                                  color: Color(0xFFE5E5E5), width: 2),
+                              borderSide: BorderSide(
+                                  color: widget.isDark
+                                      ? const Color(0xFF37464F)
+                                      : const Color(0xFFE5E5E5),
+                                  width: 2),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(16),
@@ -1839,108 +1955,84 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
-        appBar: _inSession
-            ? null
-            : AppBar(
-                leading: Builder(
-                  builder: (context) => IconButton(
-                    icon: const LucideIcon(LucideIcons.menu),
-                    tooltip: tr('menuWord'),
-                    onPressed: () => Scaffold.of(context).openDrawer(),
-                  ),
-                ),
-                // Sin título de texto en la barra (fix3, punto 6,
-                // ampliación): el nombre de la pantalla ("Niveles",
-                // "Tabla"...) se recortaba ("Ni...") y ya está como
-                // título grande dentro del contenido de cada pestaña.
-                // La barra queda solo con sus controles: menú, vidas,
-                // repaso y campana.
-                actions: [
-                  // Chip de vidas junto al saludo (corazón + número, fix 1):
-                  // siempre visible en las 5 pestañas. Se actualiza solo
-                  // cuando cambian las vidas, sin reconstruir la pantalla.
-                  // Separación igual entre los tres controles (fix4,
-                  // punto 9): cada uno lleva _kTopBarGap a ambos lados.
-                  Center(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: _kTopBarGap),
-                      child: ValueListenableBuilder<int>(
-                        valueListenable: ProgressService.livesNotifier,
-                        builder: (context, _, __) => LivesChip(
-                          lives: ProgressService.instance.livesLeft,
+        body: SafeArea(
+          top: true,
+          bottom: false,
+          // UN SOLO difuminado uniforme sobre TODA la pantalla
+          // trasera al abrir el menú (corrección 2026-11-13,
+          // Kristian): la barra de arriba, el cuerpo y la barra
+          // inferior viven en esta misma columna, con UNA sola
+          // capa de blur + velo a pantalla completa por encima
+          // de los tres (un solo sigma, un solo velo, sin
+          // costuras). El drawer se pinta POR ENCIMA (es del
+          // Scaffold), así que el menú queda nítido.
+          child: Stack(
+            children: [
+              Column(
+                children: [
+                  // Las tres posiciones son FIJAS (con SizedBox
+                  // vacío en sesión): si la barra o la navegación
+                  // desaparecieran de la lista, el Expanded
+                  // cambiaría de índice y Flutter destruiría el
+                  // AnimatedSwitcher con el quiz en curso (el
+                  // _inSession se quedaba en true y se veía Niveles
+                  // sin barras ni quiz). Con hueco fijo, el quiz
+                  // sobrevive al cambio de _inSession.
+                  _inSession
+                      ? const SizedBox.shrink()
+                      : MediaQuery.removePadding(
+                          context: context,
+                          removeTop: true,
+                          child: _topBar(),
+                        ),
+                  // Cambio de pestaña con fundido +
+                  // deslizamiento suave.
+                  // El Expanded lleva CLAVE: al entrar/salir de una
+                  // sesión la barra y la navegación cambian de tipo
+                  // (a SizedBox), y el diff de Flutter desactiva
+                  // todo el medio de la lista si el Expanded no
+                  // tiene clave — con ella, el AnimatedSwitcher y
+                  // el quiz en curso sobreviven al cambio de
+                  // _inSession (sin la clave, el quiz se destruía
+                  // y quedaba Niveles sin barras ni quiz).
+                  Expanded(
+                    key: const ValueKey('homeBody'),
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 250),
+                      transitionBuilder: (child, animation) =>
+                          FadeTransition(
+                        opacity: animation,
+                        child: SlideTransition(
+                          position: Tween<Offset>(
+                            begin: const Offset(0.05, 0),
+                            end: Offset.zero,
+                          ).animate(animation),
+                          child: child,
                         ),
                       ),
+                      child: KeyedSubtree(
+                        key: ValueKey('tab-$_index'),
+                        child: _pages[_index],
+                      ),
                     ),
                   ),
-                  // Repasar mis errores (fix2, item 2): entrada visible en
-                  // la barra de arriba, estilo Duolingo, junto a la campana
-                  // de notificaciones. El numerito es la cantidad de errores
-                  // por repasar; sin errores, avisa y no abre nada.
-                  // El avatar del usuario ya NO está aquí (fix2, item 6).
-                  Center(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: _kTopBarGap),
-                      child: ValueListenableBuilder<int>(
-                        valueListenable: ProgressService.failedNotifier,
-                        builder: (context, _, __) => _ReviewChip(
-                          count: ProgressService.instance.failedCount,
-                          onTap: _startReviewFromAppBar,
+                  _inSession
+                      ? const SizedBox.shrink()
+                      : MainBottomNav(
+                          selectedIndex: _index,
+                          onSelected: (i) {
+                            SoundService.tap();
+                            setState(() => _index = i);
+                          },
+                          isDark: widget.isDark,
+                          tabColors: tabColors,
                         ),
-                      ),
-                    ),
-                  ),
-                  // Campana de notificaciones (fix4, punto 8): abre la
-                  // bandeja de Notificaciones (ya no Recordatorios).
-                  // Fondo transparente como los otros dos chips
-                  // (§3.9.5, Zona A), no píldora.
-                  Center(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: _kTopBarGap),
-                      child: _NotificationBell(
-                        onTap: () => _openScreenKey('notifications'),
-                      ),
-                    ),
-                  ),
                 ],
               ),
-        body: SafeArea(
-          // Cambio de pestaña con fundido + deslizamiento suave.
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 250),
-            transitionBuilder: (child, animation) => FadeTransition(
-              opacity: animation,
-              child: SlideTransition(
-                position: Tween<Offset>(
-                  begin: const Offset(0.05, 0),
-                  end: Offset.zero,
-                ).animate(animation),
-                child: child,
-              ),
-            ),
-            child: KeyedSubtree(
-              key: ValueKey('tab-$_index'),
-              child: _pages[_index],
-            ),
+              _drawerBlurOverlay(),
+            ],
           ),
         ),
-        bottomNavigationBar: _inSession
-            ? null
-            // Ronda #8 (Quemia 6.5): barra propia con Niveles en el
-            // centro como círculo grande (MainBottomNav), en vez
-            // del NavigationBar con 5 destinos en fila. El orden
-            // nuevo es Resolver, Aprender, Niveles, Tabla, Cuenta.
-            : MainBottomNav(
-                selectedIndex: _index,
-                onSelected: (i) {
-                  SoundService.tap();
-                  setState(() => _index = i);
-                },
-                isDark: widget.isDark,
-                tabColors: tabColors,
-              ),
       ),
     );
   }

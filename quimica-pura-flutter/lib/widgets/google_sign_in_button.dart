@@ -42,14 +42,21 @@ class GoogleSignInButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // La sombra es un BoxShadow suave y difuso (no la elevación de
-    // Material, que en los previews se veía como un anillo gris
-    // alrededor del botón). Sin bordes: solo sombra.
+    // (foto72) La sombra difusa estándar ya no existe desde el
+    // rediseño Duolingo 7.0: standardShadow es un no-op, así que el
+    // botón blanco NO se veía sobre fondo blanco (solo se veían la
+    // G y el texto, sin forma de botón). Borde fino gris claro en
+    // claro — el color de línea fina del sistema (#E5E5E5) — y en
+    // oscuro nada, porque la píldora blanca ya se ve sobre oscuro.
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       height: 54,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(999),
+        border: isDark
+            ? null
+            : Border.all(color: const Color(0xFFE5E5E5), width: 2),
         boxShadow: [
           standardShadow(const Color(0xFF6B7280)),
         ],

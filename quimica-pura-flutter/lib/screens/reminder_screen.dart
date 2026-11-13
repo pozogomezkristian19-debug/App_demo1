@@ -160,6 +160,7 @@ class _ReminderScreenState extends State<ReminderScreen>
   @override
   Widget build(BuildContext context) {
     final on = UserPrefs.reminderOn;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     // El interruptor refleja la realidad (fix5): sin permiso,
     // apagado. Mientras no se ha comprobado (_granted null), se
     // muestra la preferencia guardada.
@@ -231,7 +232,13 @@ class _ReminderScreenState extends State<ReminderScreen>
                     );
                   },
           ),
-          const Divider(height: 25, thickness: 1, color: Color(0xFFE5E5E5)),
+          Divider(
+              height: 25,
+              thickness: 1,
+              // Línea según el tema (auditoría 7.2).
+              color: isDark
+                  ? const Color(0xFF37464F)
+                  : const Color(0xFFE5E5E5)),
           const SizedBox(height: 12),
           // Botón primario Duolingo: sólido teal + labio.
           DuoButton.primary(

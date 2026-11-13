@@ -23,6 +23,7 @@ import '../services/localization.dart';
 import '../services/numeric_answer.dart';
 import '../services/points.dart';
 import '../services/progress.dart';
+import '../widgets/numeric_answer_field.dart';
 import '../widgets/simple_quiz.dart';
 
 class LabQuizPage extends StatefulWidget {
@@ -45,6 +46,16 @@ class _LabQuizPageState extends State<LabQuizPage> {
   List<int> _order = [];
   bool _finished = false;
 
+  /// Borrador numérico de la pregunta actual (ronda 7.2): lo tecleado
+  /// en la calculadora persiste POR PREGUNTA — si se cierra la
+  /// calculadora sin pulsar '=' para mirar un dato y se vuelve, lo
+  /// escrito sigue ahí. Se limpia al pasar a otra pregunta.
+  double? _pendingNumeric;
+
+  /// Valor numérico ya enviado con "Usar resultado": el campo lo
+  /// muestra apagado cuando la pregunta está contestada.
+  double? _submittedNumeric;
+
   @override
   void initState() {
     super.initState();
@@ -61,6 +72,8 @@ class _LabQuizPageState extends State<LabQuizPage> {
   void _shuffleOptions() {
     _order = [0, 1, 2, 3]..shuffle(Random());
     _selected = null;
+    _pendingNumeric = null;
+    _submittedNumeric = null;
   }
 
   QuizQuestion get _q => _questions[_index];
@@ -104,8 +117,35 @@ class _LabQuizPageState extends State<LabQuizPage> {
   /// cálculo), pero si una generada llegara aquí, ya funcionaría.
   void _answerNumeric(double value) {
     if (_selected != null) return;
+    // "Usar resultado" responde como hoy y limpia el pendiente: el
+    // valor enviado queda en _submittedNumeric para que el campo lo
+    // muestre apagado.
+    _submittedNumeric = value;
+    _pendingNumeric = null;
     _answer(displayedIndexForNumericAnswer(
         typed: value, question: _q, order: _order));
+  }
+
+  /// Borrador que reporta la calculadora en cada cambio (ronda 7.2):
+  /// se guarda por pregunta y se vuelve a sembrar al reabrirla.
+  void _onNumericDraft(double? value) {
+    if (_pendingNumeric == value) return;
+    setState(() => _pendingNumeric = value);
+  }
+
+  /// Abre la calculadora desde el campo de respuesta (ronda 7.2):
+  /// mismo flujo que el botoncito de teclado — siembra lo que se
+  /// llevaba escrito y responde con "Usar resultado".
+  Future<void> _openNumericCalculator() async {
+    if (_selected != null) return;
+    final value = await CalculatorScreen.open(
+      context,
+      scientific: true,
+      unit: _q.numericUnit,
+      initialValue: _pendingNumeric,
+      onDraftChanged: _onNumericDraft,
+    );
+    if (value != null) _answerNumeric(value);
   }
 
   void _next() {
@@ -251,26 +291,47 @@ class _LabQuizPageState extends State<LabQuizPage> {
                     style: const TextStyle(
                         fontSize: 16, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 16),
-                // Botoncito de teclado (fix5, punto B, corrección
-                // 00:26): sale en (casi) todas las preguntas, a un
-                // ladito del texto; al tocarlo se abre la PANTALLA
-                // de la calculadora (página completa, no un panel
-                // inline) y al cerrarla se vuelve a la pregunta
-                // intacta. Científica en las de cálculo (al volver
-                // se responde con el valor), normal en las demás
-                // (solo para calcular a mano).
-                QuestionCalculatorButton(
-                  question: Text(_q.question,
-                      style: const TextStyle(
-                          fontSize: 19, fontWeight: FontWeight.w600)),
-                  scientific: _q.isNumeric,
-                  unit: _q.numericUnit,
-                  onResult: _q.isNumeric ? _answerNumeric : null,
-                ),
+                // Texto de la pregunta (seguimiento 7.2): UN SOLO
+                // acceso al teclado — el del campo de respuesta en
+                // las de cálculo. El botoncito junto a la pregunta se
+                // quitó (salía doble) y en opción múltiple no va
+                // ningún teclado: la calculadora se abre desde el
+                // campo (NumericAnswerField) y el borrador persiste
+                // por pregunta (_openNumericCalculator).
+                Text(_q.question,
+                    style: const TextStyle(
+                        fontSize: 19, fontWeight: FontWeight.w600)),
+                // Campo visible de respuesta (ronda 7.2, solo en las de
+                // cálculo): donde hoy irían las opciones. Muestra lo
+                // que se lleva escrito (o el valor enviado, apagado,
+                // al contestar) y al tocarlo abre la calculadora.
+                if (_q.isNumeric) ...[
+                  const SizedBox(height: 16),
+                  NumericAnswerField(
+                    key: const Key('numeric-answer-field'),
+                    value: _selected != null
+                        ? _submittedNumeric
+                        : _pendingNumeric,
+                    unit: _q.numericUnit,
+                    answered: _selected != null,
+                    onTap:
+                        _selected == null ? _openNumericCalculator : null,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    tr('numericKeyboardHint'),
+                    style: TextStyle(
+                        fontSize: 14,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurfaceVariant),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 // En las preguntas de cálculo las opciones dejan paso
-                // al teclado (que ahora se abre con el icono); las
-                // conceptuales siguen con las opciones de siempre.
+                // al campo de respuesta (la calculadora se abre desde
+                // el campo); las conceptuales siguen con las opciones
+                // de siempre.
                 // Opciones 3D (ronda de diseño 7.0): tarjeta blanca
                 // con sombra en reposo, degradado del acento/rojo con
                 // borde inferior oscuro al acertar/fallar (ver

@@ -32,13 +32,11 @@ const int _poolSize = 275;
 /// Banco entero barajado + preguntas nuevas generadas hasta llenar la
 /// lista. Devuelve las preguntas y sus ids en paralelo ('bank:...' o
 /// 'gen:...'). Función pura para poder probarla (ver test/v6_logic_test.dart).
-({List<QuizQuestion> questions, List<String> ids}) buildTimedPool(
-    Random rng) {
+({List<QuizQuestion> questions, List<String> ids}) buildTimedPool(Random rng) {
   // Banco en el idioma activo, pero los ids siempre en español (regla
   // de content_i18n): se barajan los índices, no las preguntas.
   final bank = localizedAllQuestions();
-  final order = List<int>.generate(allQuestions.length, (i) => i)
-    ..shuffle(rng);
+  final order = List<int>.generate(allQuestions.length, (i) => i)..shuffle(rng);
   final questions = [for (final i in order) bank[i]];
   final ids = <String>[
     for (final i in order)
@@ -97,6 +95,7 @@ class _TimedExamScreenState extends State<TimedExamScreen> {
     // del contenido ("Examen con tiempo") es el único título, para
     // que no salga dos veces.
     final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       appBar: AppBar(),
       body: _started
@@ -118,35 +117,35 @@ class _TimedExamScreenState extends State<TimedExamScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                // El temporizador, en su propio círculo tintado
-                // (auditoría): un LucideIcon suelto en una Column
-                // con stretch se estira a todo el ancho y se dibuja
-                // gigante detrás del texto (lo mismo que el trofeo
-                // del resultado). Círculo 3D (ronda de diseño 7.0):
-                // degradado teal con sombra suave tintada.
-                Center(
-                  child: Container(
-                    width: 96,
-                    height: 96,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          AppAccent.primary.withValues(alpha: 0.20),
-                          AppAccent.primary.withValues(alpha: 0.07),
+                  // El temporizador, en su propio círculo tintado
+                  // (auditoría): un LucideIcon suelto en una Column
+                  // con stretch se estira a todo el ancho y se dibuja
+                  // gigante detrás del texto (lo mismo que el trofeo
+                  // del resultado). Círculo 3D (ronda de diseño 7.0):
+                  // degradado teal con sombra suave tintada.
+                  Center(
+                    child: Container(
+                      width: 96,
+                      height: 96,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            AppAccent.primary.withValues(alpha: 0.20),
+                            AppAccent.primary.withValues(alpha: 0.07),
+                          ],
+                        ),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          standardShadow(AppAccent.primary),
                         ],
                       ),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        standardShadow(AppAccent.primary),
-                      ],
+                      alignment: Alignment.center,
+                      child: LucideIcon(LucideIcons.timer,
+                          size: 48, color: AppAccent.primary),
                     ),
-                    alignment: Alignment.center,
-                    child: LucideIcon(LucideIcons.timer,
-                        size: 48, color: AppAccent.primary),
                   ),
-                ),
                   const SizedBox(height: 16),
                   Text(
                     tr('timedTitle'),
@@ -174,7 +173,9 @@ class _TimedExamScreenState extends State<TimedExamScreen> {
                     children: [
                       // Chips de duración 3D (ronda de diseño 7.0):
                       // elegido en el color del acento con texto blanco, resto en
-                      // blanco con sombra suave y borde gris claro.
+                      // blanco con sombra suave y borde gris claro. En oscuro
+                      // la cara es oscura (auditoría 7.2): en blanco fijo
+                      // se veía como píldora clara con texto claro encima.
                       for (final m in _durations)
                         ChoiceChip(
                           label: Text('$m ${tr('minutesShort')}',
@@ -185,22 +186,29 @@ class _TimedExamScreenState extends State<TimedExamScreen> {
                                       ? Colors.white
                                       : scheme.onSurface)),
                           selected: _minutes == m,
-                          onSelected: (_) =>
-                              setState(() => _minutes = m),
+                          onSelected: (_) => setState(() => _minutes = m),
                           selectedColor: AppAccent.primary,
-                          backgroundColor: Colors.white,
+                          backgroundColor: isDark
+                              ? scheme.surfaceContainerHighest
+                              : Colors.white,
                           checkmarkColor: Colors.white,
                           elevation: 2,
                           pressElevation: 4,
-                          shadowColor: const Color(0xFF64748B)
-                              .withValues(alpha: 0.25),
-                          selectedShadowColor: AppAccent.primary
-                              .withValues(alpha: 0.35),
-                          side: BorderSide(
-                              color: _minutes == m
-                                  ? AppAccent.primaryDark
-                                  : const Color(0xFFE5E7EB),
-                              width: _minutes == m ? 2 : 1),
+                          shadowColor:
+                              const Color(0xFF64748B).withValues(alpha: 0.25),
+                          selectedShadowColor:
+                              AppAccent.primary.withValues(alpha: 0.35),
+                          // Sin borde en oscuro sin seleccionar
+                          // (Kristian, 2026-11-13); seleccionado
+                          // guarda el borde del acento.
+                          side: _minutes == m
+                              ? BorderSide(
+                                  color: AppAccent.primaryDark, width: 2)
+                              : (isDark
+                                  ? BorderSide.none
+                                  : BorderSide(
+                                      color: const Color(0xFFE5E7EB),
+                                      width: 1)),
                           shape: const StadiumBorder(),
                         ),
                     ],

@@ -206,7 +206,7 @@ test('trunc: recorta respuestas largas', () => {
 
 test('announcementCreated: usa título y cuerpo del documento', () => {
   const p = announcementCreated(
-    { title: 'Torneo el viernes', body: 'Apúntate antes del jueves.', active: true },
+    { title: 'Torneo el viernes', body: 'Apúntate antes del jueves.', active: true, sendPush: true },
     'a1',
   );
   assert.equal(p.notification.title, 'Torneo el viernes');
@@ -214,12 +214,50 @@ test('announcementCreated: usa título y cuerpo del documento', () => {
   assert.deepEqual(p.data, { type: 'announcement', announcementId: 'a1' });
 });
 
-test('announcementCreated: inactivo no avisa; sin active se considera activo', () => {
+test('announcementCreated: inactivo no avisa; sin active se considera activo si pide push', () => {
   assert.equal(
-    announcementCreated({ title: 'X', body: 'Y', active: false }, 'a1'),
+    announcementCreated({ title: 'X', body: 'Y', active: false, sendPush: true }, 'a1'),
     null,
   );
-  assert.notEqual(announcementCreated({ title: 'X', body: 'Y' }, 'a1'), null);
+  assert.notEqual(
+    announcementCreated({ title: 'X', body: 'Y', sendPush: true }, 'a1'),
+    null,
+  );
+});
+
+test('announcementCreated: sin sendPush no manda push (solo queda en bandeja)', () => {
+  assert.equal(announcementCreated({ title: 'X', body: 'Y', active: true }, 'a1'), null);
+  assert.equal(announcementCreated({ title: 'X', body: 'Y' }, 'a1'), null);
+});
+
+test('announcementCreated: sendPush false no manda push', () => {
+  assert.equal(
+    announcementCreated({ title: 'X', body: 'Y', active: true, sendPush: false }, 'a1'),
+    null,
+  );
+});
+
+test('announcementCreated: sendPush true + active false no avisa', () => {
+  assert.equal(
+    announcementCreated({ title: 'X', body: 'Y', active: false, sendPush: true }, 'a1'),
+    null,
+  );
+});
+
+test('announcementCreated: sendPush true con título y cuerpo devuelve el payload', () => {
+  const p = announcementCreated(
+    { title: 'Nuevo torneo', body: 'Empieza el lunes.', sendPush: true },
+    'a9',
+  );
+  assert.equal(p.notification.title, 'Nuevo torneo');
+  assert.equal(p.notification.body, 'Empieza el lunes.');
+  assert.deepEqual(p.data, { type: 'announcement', announcementId: 'a9' });
+});
+
+test('announcementCreated: sendPush true pero sin título ni cuerpo no avisa', () => {
+  assert.equal(announcementCreated({ title: '', body: '', sendPush: true }, 'a1'), null);
+  assert.equal(announcementCreated({ title: '  ', body: '  ', sendPush: true }, 'a1'), null);
+  assert.equal(announcementCreated({ sendPush: true }, 'a1'), null);
 });
 
 // --- Admin -----------------------------------------------------------------
@@ -254,7 +292,7 @@ test('todos los data llevan solo strings (FCM lo exige)', () => {
     duelChallenge({ playerA: 'u1', playerB: 'u2', playerAName: 'A' }, 'd'),
     ...duelResult({ status: 'playing' }, { status: 'finished', playerA: 'u1', playerB: 'u2', playerAName: 'A', playerBName: 'L', winnerUid: 'u1' }, 'd'),
     supportReply({ reply: null }, { authorUid: 'u1', reply: 'ok' }, 'm'),
-    announcementCreated({ title: 'T', body: 'B' }, 'a'),
+    announcementCreated({ title: 'T', body: 'B', sendPush: true }, 'a'),
     adminNewUser({ username: 'M' }, 'u'),
     adminNewReport({ username: 'L', questionId: 'q' }, 'r'),
     adminNewSupport({ username: 'A', message: 'hola' }, 'm'),

@@ -49,11 +49,14 @@ class AppLang {
   /// tienen las mismas claves).
   static Map<String, Map<String, String>> get allStrings => _strings;
 
-  /// Saludo de cada entrada, según el nombre, el género y el idioma.
+  /// Saludo de cada entrada: "Bienvenido/a [primer nombre]"
+  /// según el género guardado. Sin nombre guardado, "Hola"
+  /// (greetHi) como antes.
   static String greeting() {
     if (UserPrefs.userName.isEmpty) return t('greetHi');
-    final word = UserPrefs.userGender == 'Femenino' ? t('greetF') : t('greetM');
-    return '$word ${UserPrefs.userName}';
+    final word =
+        UserPrefs.userGender == 'Femenino' ? t('greetF') : t('greetM');
+    return '$word ${UserPrefs.firstName}';
   }
 }
 
@@ -135,6 +138,9 @@ const Map<String, Map<String, String>> _strings = {
     'quizContinue': 'Continuar',
     'calcUseResult': 'Usar resultado',
     'calcHint': 'Escribe el cálculo',
+    'numericKeyboardHint':
+        'Toca el botón del teclado para resolver la pregunta',
+    'numericAnswerPlaceholder': 'Toca para escribir tu respuesta',
     'keypadDelete': 'Borrar',
     'keypadClear': 'Limpiar',
     'quizResult': 'Resultado',
@@ -236,6 +242,7 @@ const Map<String, Map<String, String>> _strings = {
     'flashcardsTitle': 'Tarjetas de memoria',
     'glossaryTitle': 'Glosario',
     'compareTitle': 'Comparar elementos',
+    'compareShort': 'Comparar',
     'notesTitle': 'Mi cuaderno',
     'timedTitle': 'Examen con tiempo',
     'labSimTitle': 'Simulador de laboratorio',
@@ -299,6 +306,7 @@ const Map<String, Map<String, String>> _strings = {
     'twinOfDayKristian': 'Hoy te acompaña Kristian',
     'tutorsLine': 'Tus tutoras: Brenda y Britany',
     'tableQuizTitle': 'Quiz de la tabla periódica',
+    'quizShort': 'Quiz',
     'topicLocked': 'Primero termina el tema anterior',
     'practiceOtherWays': 'Practicar de otra forma',
     'flashcardsSub': 'Repasar fórmulas y elementos',
@@ -675,6 +683,8 @@ const Map<String, Map<String, String>> _strings = {
     'quizContinue': 'Continue',
     'calcUseResult': 'Use result',
     'calcHint': 'Type the calculation',
+    'numericKeyboardHint': 'Tap the keyboard button to solve the question',
+    'numericAnswerPlaceholder': 'Tap to type your answer',
     'keypadDelete': 'Delete',
     'keypadClear': 'Clear',
     'quizResult': 'Result',
@@ -876,6 +886,7 @@ const Map<String, Map<String, String>> _strings = {
     'flashcardsTitle': 'Flashcards',
     'glossaryTitle': 'Glossary',
     'compareTitle': 'Compare elements',
+    'compareShort': 'Compare',
     'notesTitle': 'My notebook',
     'timedTitle': 'Timed exam',
     'labSimTitle': 'Lab simulator',
@@ -942,6 +953,7 @@ const Map<String, Map<String, String>> _strings = {
     'twinOfDayKristian': 'Kristian is with you today',
     'tutorsLine': 'Your tutors: Brenda and Britany',
     'tableQuizTitle': 'Periodic table quiz',
+    'quizShort': 'Quiz',
     'topicLocked': 'Finish the previous topic first',
     'practiceOtherWays': 'Practice another way',
     'flashcardsSub': 'Review formulas and elements',
@@ -1215,6 +1227,9 @@ const Map<String, Map<String, String>> _strings = {
     'quizContinue': 'Continuer',
     'calcUseResult': 'Utiliser le résultat',
     'calcHint': 'Tape le calcul',
+    'numericKeyboardHint':
+        'Touche le bouton du clavier pour résoudre la question',
+    'numericAnswerPlaceholder': 'Touche pour écrire ta réponse',
     'keypadDelete': 'Effacer',
     'keypadClear': 'Tout effacer',
     'quizResult': 'Résultat',
@@ -1419,6 +1434,7 @@ const Map<String, Map<String, String>> _strings = {
     'flashcardsTitle': 'Cartes mémoire',
     'glossaryTitle': 'Glossaire',
     'compareTitle': 'Comparer les éléments',
+    'compareShort': 'Comparer',
     'notesTitle': 'Mon cahier',
     'timedTitle': 'Examen chronométré',
     'labSimTitle': 'Simulateur de labo',
@@ -1489,6 +1505,7 @@ const Map<String, Map<String, String>> _strings = {
     'twinOfDayKristian': "C'est Kristian qui t'accompagne aujourd'hui",
     'tutorsLine': 'Tes tutrices : Brenda et Britany',
     'tableQuizTitle': 'Quiz du tableau périodique',
+    'quizShort': 'Quiz',
     'topicLocked': 'Termine d’abord le sujet précédent',
     'practiceOtherWays': 'S’entraîner autrement',
     'flashcardsSub': 'Réviser les formules et les éléments',
@@ -1802,8 +1819,7 @@ const Map<String, Map<String, String>> _strings = {
         'Il canale « Promemoria di prova » è disattivato: attivalo nelle impostazioni delle notifiche',
     'notifTestFailedSystem':
         'Impossibile inviare il promemoria: errore di sistema. Riprova',
-    'notifTestFailedDetail':
-        'Impossibile inviare il promemoria: {detail}',
+    'notifTestFailedDetail': 'Impossibile inviare il promemoria: {detail}',
     'notifTestPending':
         'Quando tornerai con il permesso concesso, il promemoria si invierà da solo',
     'labPrecipitation': 'Precipitazione',
@@ -1870,6 +1886,9 @@ const Map<String, Map<String, String>> _strings = {
     'quizContinue': 'Continua',
     'calcUseResult': 'Usa il risultato',
     'calcHint': 'Scrivi il calcolo',
+    'numericKeyboardHint':
+        'Tocca il pulsante della tastiera per risolvere la domanda',
+    'numericAnswerPlaceholder': 'Tocca per scrivere la tua risposta',
     'keypadDelete': 'Cancella',
     'keypadClear': 'Azzera',
     'quizResult': 'Risultato',
@@ -1971,6 +1990,7 @@ const Map<String, Map<String, String>> _strings = {
     'flashcardsTitle': 'Flashcard',
     'glossaryTitle': 'Glossario',
     'compareTitle': 'Confronta elementi',
+    'compareShort': 'Confronta',
     'notesTitle': 'Il mio quaderno',
     'timedTitle': 'Esame a tempo',
     'labSimTitle': 'Simulatore di laboratorio',
@@ -2034,6 +2054,7 @@ const Map<String, Map<String, String>> _strings = {
     'twinOfDayKristian': 'Oggi ti accompagna Kristian',
     'tutorsLine': 'Le tue tutor: Brenda e Britany',
     'tableQuizTitle': 'Quiz della tavola periodica',
+    'quizShort': 'Quiz',
     'topicLocked': 'Completa prima l’argomento precedente',
     'practiceOtherWays': 'Esercitarsi in un altro modo',
     'flashcardsSub': 'Ripassa formule ed elementi',
@@ -2310,6 +2331,8 @@ const Map<String, Map<String, String>> _strings = {
     'quizContinue': 'Continuar',
     'calcUseResult': 'Usar resultado',
     'calcHint': 'Escreva o cálculo',
+    'numericKeyboardHint': 'Toca no botão do teclado para resolver a pergunta',
+    'numericAnswerPlaceholder': 'Toca para escrever a tua resposta',
     'keypadDelete': 'Apagar',
     'keypadClear': 'Limpar',
     'quizResult': 'Resultado',
@@ -2511,6 +2534,7 @@ const Map<String, Map<String, String>> _strings = {
     'flashcardsTitle': 'Cartões de memória',
     'glossaryTitle': 'Glossário',
     'compareTitle': 'Comparar elementos',
+    'compareShort': 'Comparar',
     'notesTitle': 'Meu caderno',
     'timedTitle': 'Prova com tempo',
     'labSimTitle': 'Simulador de laboratório',
@@ -2574,6 +2598,7 @@ const Map<String, Map<String, String>> _strings = {
     'twinOfDayKristian': 'Hoje quem te acompanha é o Kristian',
     'tutorsLine': 'Suas tutoras: Brenda e Britany',
     'tableQuizTitle': 'Quiz da tabela periódica',
+    'quizShort': 'Quiz',
     'topicLocked': 'Termine o tópico anterior primeiro',
     'practiceOtherWays': 'Praticar de outra forma',
     'flashcardsSub': 'Revisar fórmulas e elementos',
@@ -2851,6 +2876,8 @@ const Map<String, Map<String, String>> _strings = {
     'quizContinue': 'Продолжить',
     'calcUseResult': 'Использовать результат',
     'calcHint': 'Введите вычисление',
+    'numericKeyboardHint': 'Нажми кнопку клавиатуры, чтобы решить задачу',
+    'numericAnswerPlaceholder': 'Нажми, чтобы ввести ответ',
     'keypadDelete': 'Стереть',
     'keypadClear': 'Очистить',
     'quizResult': 'Результат',
@@ -2952,6 +2979,7 @@ const Map<String, Map<String, String>> _strings = {
     'flashcardsTitle': 'Карточки',
     'glossaryTitle': 'Глоссарий',
     'compareTitle': 'Сравнить элементы',
+    'compareShort': 'Сравнить',
     'notesTitle': 'Моя тетрадь',
     'timedTitle': 'Экзамен на время',
     'labSimTitle': 'Симулятор лаборатории',
@@ -3015,6 +3043,7 @@ const Map<String, Map<String, String>> _strings = {
     'twinOfDayKristian': 'Сегодня с тобой Кристиан',
     'tutorsLine': 'Твои наставницы: Бренда и Британи',
     'tableQuizTitle': 'Викторина по таблице',
+    'quizShort': 'Викторина',
     'topicLocked': 'Сначала завершите предыдущую тему',
     'practiceOtherWays': 'Тренироваться по-другому',
     'flashcardsSub': 'Повторять формулы и элементы',

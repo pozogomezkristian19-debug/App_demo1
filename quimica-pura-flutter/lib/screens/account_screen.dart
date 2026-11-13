@@ -4,9 +4,9 @@
 // - Cabecera en TARJETA redondeada (no banner teal a todo lo
 //   ancho): título "Cuenta" + el CÍRCULO GRANDE del AVATAR DEL
 //   USUARIO (96 dp, editable tocándolo: abre la galería de
-//   avatares, alcance 9) + "Bienvenido/a [nombre]" SIN el
-//   género escrito (alcance 10) + la línea "Hoy te acompaña
-//   [compañero]" en el color del compañero, con su miniatura
+//   avatares, alcance 9) + saludo "Bienvenido/a [primer
+//   nombre]" (Kristian) + la línea
+//   "Hoy te acompaña [compañero]" en el color del compañero,
 //   de compañera (22 dp). El círculo grande ya NO es la
 //   compañera del día. El avatar elegido se sigue mostrando en
 //   Tabla de posiciones, Amigos y Torneos.
@@ -239,10 +239,8 @@ class _AccountScreenState extends State<AccountScreen> {
     final unlockedCount = allAchievements
         .where((a) => achievementUnlocked(a.id, p, widget.trackTopics))
         .length;
-    // Saludo SIN el género escrito (alcance 10, 7.1): solo
-    // "Bienvenido/a [nombre]". El género sigue usándose por
-    // dentro (el saludo mismo es Bienvenido/Bienvenida según el
-    // género, y el avatar por defecto), pero no se muestra.
+    // Saludo "Bienvenido/a [primer nombre]" (Kristian).
+    // Sin nombre guardado, greeting devuelve "Hola".
     final greetingLine = UserPrefs.greeting;
     // greeting ya devuelve "Hola" sin nombre guardado: no hace
     // falta (ni se debe) caer al título "Cuenta", que repetiría
@@ -254,8 +252,7 @@ class _AccountScreenState extends State<AccountScreen> {
         // Con padding lateral: cabecera, estadísticas y filas son
         // tarjetas contenidas. El padding inferior es altura de
         // la barra (64) + 16 pt.
-        padding: EdgeInsets.fromLTRB(
-            16, 16, 16, MainBottomNav.barHeight + 16),
+        padding: EdgeInsets.fromLTRB(16, 16, 16, MainBottomNav.barHeight + 16),
         children: [
           // Tarjeta de cabecera redondeada (organización 6.3):
           // título "Cuenta" + CÍRCULO GRANDE del avatar del
@@ -276,8 +273,7 @@ class _AccountScreenState extends State<AccountScreen> {
                 // repinta solo al elegir otro en la galería
                 // (SocialService avisa con el notifier).
                 ListenableBuilder(
-                  listenable:
-                      SocialService.equippedAvatarIdNotifier,
+                  listenable: SocialService.equippedAvatarIdNotifier,
                   builder: (context, _) => _UserAvatarCircle(
                     asset: SocialService.displayAvatarAssetForGender(
                         UserPrefs.userGender),
@@ -322,7 +318,11 @@ class _AccountScreenState extends State<AccountScreen> {
                           Expanded(
                             child: Text(
                               tr(companionOfDayKey(companion)),
-                              maxLines: 1,
+                              // 2 líneas: "Hoy te acompaña Britany" no
+                              // cabe en una (7 letras más que Brenda);
+                              // con 1 se cortaba a "Br…" los días de
+                              // Britany. La tarjeta crece un poco.
+                              maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 fontSize: 15,
@@ -345,8 +345,7 @@ class _AccountScreenState extends State<AccountScreen> {
           Padding(
             padding: const EdgeInsets.only(top: 12, bottom: 12),
             child: StatsCard(
-              achievementsLabel:
-                  '$unlockedCount/${allAchievements.length}',
+              achievementsLabel: '$unlockedCount/${allAchievements.length}',
             ),
           ),
           // Orden de Cuenta (Quemia 7.1, Zona H): la cabecera y la
@@ -537,8 +536,7 @@ class _UserAvatarCircle extends StatelessWidget {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: _teal,
-                    border:
-                        Border.all(color: Colors.white, width: 2),
+                    border: Border.all(color: Colors.white, width: 2),
                   ),
                   alignment: Alignment.center,
                   child: const LucideIcon(

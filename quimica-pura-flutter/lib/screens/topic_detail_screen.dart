@@ -78,8 +78,9 @@ class _TopicDetailViewState extends State<TopicDetailView> {
     final ink = Theme.of(context).colorScheme.onSurface;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardColor = isDark ? AppAccent.darkCard : Colors.white;
-    final borderColor =
-        isDark ? const Color(0xFF37464F) : const Color(0xFFE5E5E5);
+    // Borde oscuro tono sobre tono en oscuro (misma razón
+    // que Aprender: la tarjeta es darkCard).
+    final borderColor = isDark ? AppAccent.darkBorder : const Color(0xFFE5E5E5);
     final section =
         TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: ink);
     final body = TextStyle(fontSize: 16, color: ink);
@@ -89,94 +90,94 @@ class _TopicDetailViewState extends State<TopicDetailView> {
     return ScrollConfiguration(
       behavior: const QuemiaScrollBehavior(),
       child: ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Text(topic.level,
-            style: TextStyle(
-              color: ink,
-              fontWeight: FontWeight.w700,
-              fontSize: 14,
-            )),
-        const SizedBox(height: 8),
-        for (final p in topic.summary)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text(p, style: body),
-          ),
-        gap,
-        Card(
-          margin: EdgeInsets.zero,
-          elevation: 0,
-          color: cardColor,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: borderColor),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(tr('formulasWord'), style: section),
-                for (final f in topic.formulas)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child:
-                        Text('• ${f.name}: ${f.expr} — ${f.note}', style: body),
-                  ),
-              ],
-            ),
-          ),
-        ),
-        // Diagramas 3D de moléculas (tema de química orgánica).
-        if (topic.molecules.isNotEmpty) ...[
-          gap,
-          Text(tr('moleculesWord'), style: section),
-          for (final key in topic.molecules) MoleculeCard(moleculeKey: key),
-        ],
-        gap,
-        Text('${tr('exampleWord')}: ${topic.exampleTitle}', style: section),
-        for (var i = 0; i < topic.exampleSteps.length; i++)
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text('${i + 1}. ${topic.exampleSteps[i]}', style: body),
-          ),
-        Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Text(topic.exampleAnswer,
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text(topic.level,
               style: TextStyle(
-                  fontSize: 16, fontWeight: FontWeight.w700, color: ink)),
-        ),
-        gap,
-        Text(tr('errorsWord'), style: section),
-        for (final e in topic.errors)
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text('• $e', style: body),
-          ),
-        gap,
-        Text('${tr('tipWord')}: ${topic.tip}',
-            style: TextStyle(
-                fontSize: 16, fontStyle: FontStyle.italic, color: ink)),
-        const SizedBox(height: 12),
-        // Cuestionario de laboratorio: 20 preguntas del tema.
-        if (topic.slug == 'laboratorio')
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const LabQuizPage()),
-                  );
-                },
-                icon: const LucideIcon(LucideIcons.circleHelp),
-                label: Text(tr('labQuizButton')),
+                color: ink,
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+              )),
+          const SizedBox(height: 8),
+          for (final p in topic.summary)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(p, style: body),
+            ),
+          gap,
+          Card(
+            margin: EdgeInsets.zero,
+            elevation: 0,
+            color: cardColor,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: borderColor),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(tr('formulasWord'), style: section),
+                  for (final f in topic.formulas)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text('• ${f.name}: ${f.expr} — ${f.note}',
+                          style: body),
+                    ),
+                ],
               ),
             ),
           ),
-      ],
+          // Diagramas 3D de moléculas (tema de química orgánica).
+          if (topic.molecules.isNotEmpty) ...[
+            gap,
+            Text(tr('moleculesWord'), style: section),
+            for (final key in topic.molecules) MoleculeCard(moleculeKey: key),
+          ],
+          gap,
+          Text('${tr('exampleWord')}: ${topic.exampleTitle}', style: section),
+          for (var i = 0; i < topic.exampleSteps.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text('${i + 1}. ${topic.exampleSteps[i]}', style: body),
+            ),
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(topic.exampleAnswer,
+                style: TextStyle(
+                    fontSize: 16, fontWeight: FontWeight.w700, color: ink)),
+          ),
+          gap,
+          Text(tr('errorsWord'), style: section),
+          for (final e in topic.errors)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text('• $e', style: body),
+            ),
+          gap,
+          Text('${tr('tipWord')}: ${topic.tip}',
+              style: TextStyle(
+                  fontSize: 16, fontStyle: FontStyle.italic, color: ink)),
+          const SizedBox(height: 12),
+          // Cuestionario de laboratorio: 20 preguntas del tema.
+          if (topic.slug == 'laboratorio')
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const LabQuizPage()),
+                    );
+                  },
+                  icon: const LucideIcon(LucideIcons.circleHelp),
+                  label: Text(tr('labQuizButton')),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

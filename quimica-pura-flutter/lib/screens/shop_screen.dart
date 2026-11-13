@@ -252,7 +252,6 @@ class _ItemCard extends StatelessWidget {
   };
 
   static const _line = Color(0xFFE5E5E5);
-  static const _lineDark = Color(0xFF37464F);
 
   /// Botón de acción del producto: equipado = chip "Equipado";
   /// comprado = "EQUIPAR"; sin comprar y con puntos = "COMPRAR ·
@@ -335,10 +334,13 @@ class _ItemCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: isDark ? scheme.surfaceContainerHighest : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark ? _lineDark : _line,
-          width: 2,
-        ),
+        // Sin borde en oscuro (Kristian, 2026-11-13).
+        border: isDark
+            ? null
+            : Border.all(
+                color: _line,
+                width: 2,
+              ),
       ),
       padding: const EdgeInsets.all(12),
       child: item.kind == 'avatar'
@@ -457,6 +459,7 @@ class _StateChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent = AppAccent.primary;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       height: 56,
       alignment: Alignment.center,
@@ -466,7 +469,10 @@ class _StateChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: filled
             ? null
-            : Border.all(color: const Color(0xFFE5E5E5), width: 2),
+            // Borde según el tema (auditoría 7.2).
+            : Border.all(
+                color: isDark ? AppAccent.darkBorder : const Color(0xFFE5E5E5),
+                width: 2),
       ),
       child: Text(
         label,

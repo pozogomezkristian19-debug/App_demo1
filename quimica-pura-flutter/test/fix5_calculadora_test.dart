@@ -1,24 +1,21 @@
 // Ronda #5, punto B (2026-11-11), corrección 00:26: calculadora en
 // PANTALLA COMPLETA con Navigator.push, no panel inline.
 //
-// - El icono (botoncito de teclado) sale en (casi) TODAS las
-//   preguntas: niveles, repaso de errores, examen cronometrado,
-//   cuestionario de laboratorio, quiz de la tabla y diálogo de la
-//   pregunta del día. Sin heurística de detección: no se decide qué
-//   pregunta "necesita" calculadora.
+// - Seguimiento 7.2: UN SOLO acceso al teclado — el campo de
+//   respuesta de las preguntas de cálculo. El botoncito junto a la
+//   pregunta se quitó (salía doble) y en opción múltiple NO va
+//   ningún teclado.
 // - La calculadora NO se abre sola y NO es un panel dentro de la
-//   pregunta: al entrar se ven pregunta + opciones/campo y el
-//   botoncito; al tocarlo se abre la pantalla de la calculadora
-//   (página completa) y SE CIERRA para responder: nunca tapa las
-//   opciones ni bloquea la respuesta.
+//   pregunta: en las de cálculo se abre desde el campo; al tocarlo
+//   se abre la pantalla de la calculadora (página completa) y SE
+//   CIERRA para responder: nunca tapa las opciones ni bloquea la
+//   respuesta.
 // - Numérica: "Usar resultado" en la pantalla hace pop con el valor y al
-//   volver se responde con él. Opciones: se cierra con la X o atrás
-//   y se toca la opción que coincide con el resultado calculado.
+//   volver se responde con él. Opciones: sin teclado.
 // - La ida y vuelta NO resetea el estado del quiz (índice, selección,
 //   marcador, progreso).
 // - Pregunta de cálculo -> CIENTÍFICA (log, ln, potencias, raíces,
-//   notación científica); las demás -> NORMAL (dígitos, + − × ÷,
-//   paréntesis, =; sin teclas científicas ni Usar resultado).
+//   notación científica); las demás no llevan calculadora.
 // - Un solo componente (NumericKeypad) con el flag `scientific`.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -492,47 +489,30 @@ void main() {
     }
 
     testWidgets(
-        'opción múltiple con %: icono, pantalla normal, vuelta intacta '
-        'y la opción se puede tocar', (tester) async {
+        'opción múltiple con %: sin teclado, la opción se puede tocar',
+        (tester) async {
       await pumpRunner(tester, [yieldQuestion]);
       expect(find.text('75 %'), findsOneWidget);
-      // Nada de calculadora en la pregunta: ni inline ni pantalla.
+      // Seguimiento 7.2: en opción múltiple no va ningún icono de
+      // teclado ni se abre calculadora alguna.
+      expect(find.byKey(const Key('calculator-toggle')), findsNothing);
       expect(find.byType(NumericKeypad), findsNothing);
       expect(find.byType(CalculatorScreen), findsNothing);
-      expect(find.byKey(const Key('calculator-toggle')), findsOneWidget);
-      await tester.tap(find.byKey(const Key('calculator-toggle')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-      // La pantalla normal, a página completa.
-      expect(find.byType(CalculatorScreen), findsOneWidget);
-      expect(find.byType(NumericKeypad), findsOneWidget);
-      expect(find.text('log'), findsNothing);
-      expect(find.text(tr('calcUseResult')), findsNothing);
-      // Calcular a mano: 15 ÷ 20 × 100 = 75.
-      await tapKeys(tester, ['1', '5', '÷', '2', '0', '×', '1', '0', '0', '=']);
-      expect(displayText(tester), '75');
-      // Cerrar para responder: la pregunta sigue intacta.
-      await closeCalculator(tester);
-      expect(find.byType(CalculatorScreen), findsNothing);
-      expect(find.byType(NumericKeypad), findsNothing);
-      expect(find.text(yieldQuestion.question), findsOneWidget);
-      expect(find.text('75 %'), findsOneWidget);
       await tester.tap(find.text('75 %'));
       await tester.pump();
       expect(find.text(tr('quizCorrect')), findsOneWidget);
     });
 
-    testWidgets('conceptual: icono también, pantalla normal',
-        (tester) async {
+    testWidgets('conceptual: sin teclado', (tester) async {
       await pumpRunner(tester, [conceptualQuestion]);
-      expect(find.byKey(const Key('calculator-toggle')), findsOneWidget);
-      await tester.tap(find.byKey(const Key('calculator-toggle')));
+      // Seguimiento 7.2: en opción múltiple no va ningún icono de
+      // teclado.
+      expect(find.byKey(const Key('calculator-toggle')), findsNothing);
+      expect(find.byType(NumericKeypad), findsNothing);
+      expect(find.byType(CalculatorScreen), findsNothing);
+      await tester.tap(find.text('El que se agota primero'));
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-      expect(find.byType(CalculatorScreen), findsOneWidget);
-      expect(find.text('log'), findsNothing);
-      await closeCalculator(tester);
-      expect(find.text(conceptualQuestion.question), findsOneWidget);
+      expect(find.text(tr('quizCorrect')), findsOneWidget);
     });
 
     testWidgets('pregunta de cálculo: pantalla científica y al volver '
@@ -540,7 +520,9 @@ void main() {
       final g = buildMassMoles('moles', 'H2O', 36); // 36 g / 18,02 ≈ 2 mol
       await pumpRunner(tester, [g.question]);
       expect(find.byType(NumericKeypad), findsNothing);
-      await tester.tap(find.byKey(const Key('calculator-toggle')));
+      // Seguimiento 7.2: la calculadora se abre desde el campo de
+      // respuesta (el botoncito junto a la pregunta se quitó).
+      await tester.tap(find.byKey(const Key('numeric-answer-field')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
       expect(find.byType(CalculatorScreen), findsOneWidget);
@@ -555,37 +537,46 @@ void main() {
       expect(find.text(tr('quizCorrect')), findsOneWidget);
     });
 
-    testWidgets('examen con tiempo: el mismo runner lleva el icono',
+    testWidgets('examen con tiempo: sin teclado en opción múltiple',
         (tester) async {
       await pumpRunner(tester, [yieldQuestion], durationSeconds: 300);
-      expect(find.byKey(const Key('calculator-toggle')), findsOneWidget);
+      expect(find.byKey(const Key('calculator-toggle')), findsNothing);
       expect(find.byType(NumericKeypad), findsNothing);
     });
 
     testWidgets('la ida y vuelta NO resetea el quiz: índice, selección '
         'y marcador siguen', (tester) async {
-      await pumpRunner(tester, [yieldQuestion, conceptualQuestion]);
-      // Abrir y cerrar la calculadora en la pregunta 1: sigue la 1.
-      await tester.tap(find.byKey(const Key('calculator-toggle')));
+      // Seguimiento 7.2: la ida y vuelta a la calculadora solo existe
+      // en pregunta de cálculo (desde el campo); en opción múltiple
+      // no hay teclado.
+      final g = buildMassMoles('moles', 'H2O', 36); // 36 g / 18,02 ≈ 2 mol
+      await pumpRunner(tester, [g.question, conceptualQuestion]);
+      // Abrir y cerrar la calculadora en la pregunta 1 sin entregar:
+      // sigue la 1, sin contestar.
+      await tester.tap(find.byKey(const Key('numeric-answer-field')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byType(CalculatorScreen), findsOneWidget);
       await closeCalculator(tester);
-      expect(find.text(yieldQuestion.question), findsOneWidget);
-      // Acertar la 1: el marcador sube.
-      await tester.tap(find.text('75 %'));
+      expect(find.text(g.question.question), findsOneWidget);
+      expect(find.text(tr('quizCorrect')), findsNothing);
+      // Responder la 1 con la calculadora: el marcador sube.
+      await tester.tap(find.byKey(const Key('numeric-answer-field')));
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tapKeys(tester, ['2', '=']);
+      expect(displayText(tester), '2');
+      await tapKey(tester, tr('calcUseResult'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byType(CalculatorScreen), findsNothing);
       expect(find.text(tr('quizCorrect')), findsOneWidget);
-      // Pasar a la 2: sigue siendo la 2 (el índice no se reseteó).
+      // Pasar a la 2: sigue siendo la 2 (el índice no se reseteó) y
+      // ahí no hay teclado (opción múltiple).
       await tester.tap(find.text(tr('quizNext').toUpperCase()));
       await tester.pump();
       expect(find.text(conceptualQuestion.question), findsOneWidget);
-      // Abrir y cerrar en la 2: sigue la 2, sin contestar.
-      await tester.tap(find.byKey(const Key('calculator-toggle')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-      await closeCalculator(tester);
-      expect(find.text(conceptualQuestion.question), findsOneWidget);
-      expect(find.text(tr('quizCorrect')), findsNothing);
+      expect(find.byKey(const Key('calculator-toggle')), findsNothing);
       // Acertar la 2: 2 de 2 (el marcador de la 1 sigue).
       await tester.tap(find.text('El que se agota primero'));
       await tester.pump();
@@ -598,7 +589,7 @@ void main() {
   });
 
   group('Cuestionario de laboratorio', () {
-    testWidgets('icono, pantalla normal y vuelta intacta', (tester) async {
+    testWidgets('sin teclado: solo opciones', (tester) async {
       tallViewport(tester);
       await tester.pumpWidget(
         MaterialApp(
@@ -607,23 +598,17 @@ void main() {
         ),
       );
       await tester.pump();
-      expect(find.byKey(const Key('calculator-toggle')), findsOneWidget);
+      // Seguimiento 7.2: el cuestionario de laboratorio es de opción
+      // múltiple y no lleva calculadora.
+      expect(find.byKey(const Key('calculator-toggle')), findsNothing);
       expect(find.byType(NumericKeypad), findsNothing);
       expect(find.byType(CalculatorScreen), findsNothing);
-      await tester.tap(find.byKey(const Key('calculator-toggle')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-      expect(find.byType(CalculatorScreen), findsOneWidget);
-      expect(find.text('log'), findsNothing);
-      await closeCalculator(tester);
-      expect(find.byType(CalculatorScreen), findsNothing);
-      expect(find.byKey(const Key('calculator-toggle')), findsOneWidget);
+      expect(find.byType(QuizOptionButton), findsNWidgets(4));
     });
   });
 
   group('Quiz de la tabla', () {
-    testWidgets('icono junto a la tarjeta, pantalla normal',
-        (tester) async {
+    testWidgets('sin teclado: solo opciones', (tester) async {
       tallViewport(tester);
       await tester.pumpWidget(
         MaterialApp(
@@ -632,17 +617,12 @@ void main() {
         ),
       );
       await tester.pump();
-      expect(find.byKey(const Key('calculator-toggle')), findsOneWidget);
+      // Seguimiento 7.2: el quiz de la tabla es siempre opción
+      // múltiple y no lleva calculadora.
+      expect(find.byKey(const Key('calculator-toggle')), findsNothing);
       expect(find.byType(NumericKeypad), findsNothing);
       expect(find.byType(CalculatorScreen), findsNothing);
-      await tester.tap(find.byKey(const Key('calculator-toggle')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-      expect(find.byType(CalculatorScreen), findsOneWidget);
-      expect(find.text('log'), findsNothing);
-      await closeCalculator(tester);
-      expect(find.byType(CalculatorScreen), findsNothing);
-      expect(find.byKey(const Key('calculator-toggle')), findsOneWidget);
+      expect(find.byType(QuizOptionButton), findsNWidgets(4));
     });
   });
 
@@ -682,31 +662,21 @@ void main() {
           .firstWhere((r) => r.width == 80.0 && r.height == 80.0);
     }
 
-    testWidgets('nivel: icono y pantalla; la vuelta deja el nivel intacto',
+    testWidgets('nivel: sin teclado en la primera pregunta (conceptual)',
         (tester) async {
       await pumpNiveles(tester);
       await tester.tapAt(nodeOneRect(tester).center);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
-      // El runner del nivel: icono sí, calculadora no.
-      expect(find.byKey(const Key('calculator-toggle')), findsOneWidget);
+      // La primera pregunta del nivel 1 es de banco (conceptual):
+      // sin teclado (seguimiento 7.2).
+      expect(find.byKey(const Key('calculator-toggle')), findsNothing);
       expect(find.byType(NumericKeypad), findsNothing);
       expect(find.byType(CalculatorScreen), findsNothing);
-      await tester.tap(find.byKey(const Key('calculator-toggle')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-      // La primera pregunta del nivel 1 es de banco (conceptual):
-      // pantalla normal.
-      expect(find.byType(CalculatorScreen), findsOneWidget);
-      expect(find.text('log'), findsNothing);
-      await closeCalculator(tester);
-      // De vuelta en el nivel, en la pregunta 1, sin contestar.
-      expect(find.byType(CalculatorScreen), findsNothing);
-      expect(find.byKey(const Key('calculator-toggle')), findsOneWidget);
       expect(find.textContaining('Pregunta 1 de 5'), findsOneWidget);
     });
 
-    testWidgets('repaso de errores: el mismo runner lleva el icono',
+    testWidgets('repaso de errores: sin teclado en pregunta conceptual',
         (tester) async {
       // Un error de laboratorio: tema sin generador, así el repaso
       // usa solo preguntas del banco (conceptuales, modo normal).
@@ -721,16 +691,9 @@ void main() {
       await pumpNiveles(tester);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
-      expect(find.byKey(const Key('calculator-toggle')), findsOneWidget);
+      expect(find.byKey(const Key('calculator-toggle')), findsNothing);
       expect(find.byType(NumericKeypad), findsNothing);
-      await tester.tap(find.byKey(const Key('calculator-toggle')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-      expect(find.byType(CalculatorScreen), findsOneWidget);
-      expect(find.text('log'), findsNothing);
-      await closeCalculator(tester);
       expect(find.byType(CalculatorScreen), findsNothing);
-      expect(find.byKey(const Key('calculator-toggle')), findsOneWidget);
     });
 
   });
