@@ -11,10 +11,19 @@ plugins {
 
 android {
     namespace = "com.melliqui.quemia_admin"
-    compileSdk = flutter.compileSdkVersion
+    // Pinned to 37: flutter_local_notifications and androidx.core 1.19.0
+    // require compiling against Android API 37+, while Flutter 3.47.9's
+    // default (flutter.compileSdkVersion) is 36. Restore the default once
+    // a newer Flutter raises it to 37. minSdk/targetSdk stay on Flutter
+    // defaults (only compileSdk is raised; targetSdk 36 keeps runtime
+    // behaviour unchanged). Mismo arreglo que la app principal (7.1):
+    // sin esto el build del Admin falla en checkReleaseAarMetadata.
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        // Required by flutter_local_notifications (it uses java.time APIs).
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -70,6 +79,11 @@ kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
     }
+}
+
+dependencies {
+    // Core library desugaring, required by flutter_local_notifications.
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }
 
 flutter {
