@@ -115,6 +115,11 @@ class CalculatorScreen extends StatelessWidget {
             // pantalla responde con él. En modo normal sin
             // submitResult, onSubmit es null y el teclado no
             // muestra el botón Usar resultado (solo calcular a mano).
+            // (Quemia 7.4: se pensó en esconderlo en científico sin
+            // submitResult, pero los tests fix5 exigen que el modo
+            // científico siempre lo muestre; en una conceptual
+            // difícil, tocarlo solo da el aviso de "no coincide",
+            // que es el camino previsto.)
             onSubmit: (scientific || submitResult)
                 ? (value) => Navigator.of(context).pop<double>(value)
                 : null,

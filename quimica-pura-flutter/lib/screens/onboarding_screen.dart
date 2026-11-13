@@ -577,7 +577,10 @@ class _ProfilePage extends StatelessWidget {
           // Ronda #8 (cambio 09:08): "Continuar con Google" DEBAJO
           // del nombre y el género. Opcional: enlaza la sesión con
           // Google y prellena el nombre con el de la cuenta.
-          const SizedBox(height: 16),
+          // Quemia 7.4: el hueco aquí es 12 (antes 16) para que la
+          // página siga cabiendo sin desplazar en 360x800 con barra
+          // de estado (el botón "Google" dejaba 2 px de más).
+          const SizedBox(height: 12),
           Row(
             children: [
               const Expanded(child: Divider()),
@@ -595,6 +598,9 @@ class _ProfilePage extends StatelessWidget {
           // a la izquierda (DuoButton no admite icono de imagen);
           // con IgnorePointer para no tapar el toque. El texto se
           // queda en #4B4B4B fijo: el botón es blanco en ambos temas.
+          // Quemia 7.4 (Kristian): el botón dice solo "Google" (la
+          // G se metía en el texto largo "CONTINUAR CON GOOGLE").
+          // Es marca, igual en todos los idiomas: sin traducir.
           SizedBox(
             width: double.infinity,
             child: Stack(
@@ -603,7 +609,7 @@ class _ProfilePage extends StatelessWidget {
                 SizedBox(
                   width: double.infinity,
                   child: DuoButton.secondary(
-                    label: tr('googleContinue').toUpperCase(),
+                    label: 'Google',
                     onPressed: googleBusy || onGoogleSignIn == null
                         ? null
                         : () => onGoogleSignIn!(),

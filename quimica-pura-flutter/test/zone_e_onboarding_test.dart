@@ -156,8 +156,9 @@ void main() {
           Scrollable.of(tester.element(find.byType(TextField))).position;
       expect(position.maxScrollExtent, 0.0);
       // El botón de Google está entero dentro de la pantalla.
-      final rect =
-          tester.getRect(find.text(tr('googleContinue').toUpperCase()));
+      // Quemia 7.4 (Kristian): el botón dice solo "Google" (antes
+      // "CONTINUAR CON GOOGLE", que se metía con el logo).
+      final rect = tester.getRect(find.text('Google'));
       expect(rect.top, greaterThanOrEqualTo(0.0));
       expect(rect.bottom, lessThanOrEqualTo(height));
       expect(rect.left, greaterThanOrEqualTo(0.0));

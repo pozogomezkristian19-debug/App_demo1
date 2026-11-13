@@ -195,15 +195,40 @@ class FirebaseAuthProvider implements AuthProvider {
     }
   }
 
+  /// Timeout del inicio anónimo al ENLAZAR Google (Quemia 7.4,
+  /// Kristian): con VPN en Cuba tarda más de 5 s; el timeout viejo
+  /// de 5 s lanzaba TimeoutException y salía 'link:unknown' sin que
+  /// apareciera el selector. Ahora 15 s.
+  static const kAnonymousLinkTimeout = Duration(seconds: 15);
+
+  /// Espera el inicio anónimo con el timeout de enlace. Se extrae
+  /// para poder probarlo sin Firebase: el test pasa un Future lento
+  /// y comprueba que no se rinde antes de 15 s, y que al agotarse
+  /// deja el código 'link:timeout_anon' (no un 'unknown' opaco).
+  @visibleForTesting
+  static Future<T?> waitForAnonymous<T>(Future<T> future) async {
+    try {
+      final value = await future.timeout(kAnonymousLinkTimeout);
+      // Sin error en este paso: limpiar el código anterior para que
+      // un fallo viejo no se confunda con el intento actual.
+      _lastGoogleError = null;
+      return value;
+    } on TimeoutException {
+      _lastGoogleError = 'link:timeout_anon';
+      debugPrint('[Google] linkWithGoogle: el inicio anónimo agotó '
+          '15 s (conexión lenta).');
+      return null;
+    }
+  }
+
   @override
   Future<bool> linkWithGoogle() async {
     try {
       var user = _auth.currentUser;
       if (user == null) {
-        final cred = await _auth
-            .signInAnonymously()
-            .timeout(const Duration(seconds: 5));
-        user = cred.user;
+        final cred =
+            await waitForAnonymous(_auth.signInAnonymously());
+        user = cred?.user;
       }
       if (user == null) return false;
       final credential = await _nativeGoogleCredential();
@@ -245,7 +270,9 @@ class FirebaseAuthProvider implements AuthProvider {
         return false;
       }
     } catch (e) {
-      _lastGoogleError = 'link:unknown';
+      // Quemia 7.4: guardar el tipo real en vez de un 'unknown'
+      // opaco, para diagnosticar el fallo de verdad.
+      _lastGoogleError = 'link:${e.runtimeType}';
       debugPrint('[Google] linkWithGoogle falló: $e');
       return false;
     }

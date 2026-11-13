@@ -9,7 +9,12 @@
 // estequiometría, cociente de reacción Qc y termoquímica (q = m·c·ΔT).
 // Las generadas conceptuales (tabla periódica: Z, símbolo, masa, grupo;
 // enlace: geometría y tipo de enlace) y TODAS las del banco se quedan
-// con las 4 opciones de texto.
+// con las 4 opciones de texto. Quemia 7.3 (Kristian: el teclado está
+// en TODAS las preguntas): en las de opción múltiple hay además un
+// botón Calculadora debajo de las opciones — si las opciones son
+// numéricas, "Usar resultado" contesta la opción que coincida con el
+// valor tecleado (displayedIndexForTypedOptionValue); si son
+// conceptuales, la calculadora es solo borrador.
 //
 // ## Validación con tolerancia
 // El generador calcula la respuesta exacta (`correct`) pero muestra la
@@ -72,10 +77,68 @@ double? parseNumericInput(String text) {
   return double.tryParse(text);
 }
 
-/// Traduce una respuesta numérica al índice de opción visible (en las
-/// opciones barajadas `order`) que le corresponde, para que el runner
-/// pueda pasar por su `_answer` de siempre sin cambiar nada de puntos,
-/// vidas, sonidos ni repaso de errores:
+/// Extrae el número inicial de una opción de texto ("0.50 mol" ->
+/// 0.50, "-3 g" -> -3). Acepta punto o coma decimal. null si la opción
+/// no empieza por un número (pregunta conceptual).
+double? parseOptionNumber(String option) {
+  final match = _leadingNumberMatch(option);
+  if (match == null) return null;
+  return double.tryParse(match.group(0)!.replaceAll(',', '.'));
+}
+
+/// El texto tras el número inicial de una opción, recortado
+/// ("0.50 mol" -> "mol", "342.14 g/mol" -> "g/mol"); null si no queda
+/// nada (opción sin unidad) o si la opción no empieza por número.
+String? parseOptionUnit(String option) {
+  final match = _leadingNumberMatch(option);
+  if (match == null) return null;
+  final rest = option.trim().substring(match.end).trim();
+  return rest.isEmpty ? null : rest;
+}
+
+/// Número inicial de un texto (con signo, punto o coma decimal):
+/// "0.50 mol" -> "0.50", "-3 g" -> "-3". null si no empieza por uno.
+RegExpMatch? _leadingNumberMatch(String option) {
+  return RegExp(r'^[+-]?(\d+([.,]\d*)?|[.,]\d+)')
+      .firstMatch(option.trim());
+}
+
+/// Busca entre las opciones visibles (en el orden barajado `order`)
+/// la que tenga número y coincida con el valor tecleado en la
+/// calculadora, según [isNumericAnswerCorrect] con los decimales que
+/// muestra esa opción (Quemia 7.3, Kristian: el teclado está en TODAS
+/// las preguntas, así que una de opción múltiple con números también
+/// se puede contestar desde la calculadora). Si varias coinciden,
+/// devuelve la más cercana (menor diferencia relativa). null si
+/// ninguna coincide o si las opciones no son numéricas. Solo para
+/// preguntas de opción múltiple (no numéricas): aquí no hay un
+/// `numericAnswer` exacto, cada opción se compara con su propio
+/// valor mostrado.
+int? displayedIndexForTypedOptionValue({
+  required double typed,
+  required QuizQuestion question,
+  required List<int> order,
+}) {
+  int? bestDisplayed;
+  double? bestRelativeDiff;
+  for (var displayed = 0; displayed < order.length; displayed++) {
+    final shown = question.options[order[displayed]];
+    final value = parseOptionNumber(shown);
+    if (value == null) continue;
+    if (!isNumericAnswerCorrect(typed, value,
+        displayDecimals: _displayDecimalsOfOption(shown))) {
+      continue;
+    }
+    final diff = value == 0
+        ? (typed - value).abs()
+        : (typed - value).abs() / value.abs();
+    if (bestRelativeDiff == null || diff < bestRelativeDiff) {
+      bestRelativeDiff = diff;
+      bestDisplayed = displayed;
+    }
+  }
+  return bestDisplayed;
+}
 /// - correcta -> el índice donde está la opción correcta;
 /// - incorrecta -> el primer índice donde NO está la correcta.
 /// Requiere que la pregunta sea numérica (`numericAnswer != null`).
@@ -92,11 +155,15 @@ int displayedIndexForNumericAnswer({
 
 /// Decimales con los que se muestra la opción correcta en pantalla
 /// (fix5 A15): el texto de la opción lleva el redondeo del generador
-/// ("0.016" -> 3 decimales, Qc; "18.02" -> 2). Los decimales se
-/// cuentan hasta el primer carácter que no es dígito, así que una
-/// unidad pegada ("342.14 g/mol") no estorba.
+/// ("0.016" -> 3 decimales, Qc; "18.02" -> 2).
 int _displayDecimals(QuizQuestion question) {
-  final shown = question.options[question.answer];
+  return _displayDecimalsOfOption(question.options[question.answer]);
+}
+
+/// Decimales con los que se muestra un valor en el texto de una
+/// opción. Los decimales se cuentan hasta el primer carácter que no
+/// es dígito, así que una unidad pegada ("342.14 g/mol") no estorba.
+int _displayDecimalsOfOption(String shown) {
   final dot = shown.indexOf('.');
   if (dot < 0) return 0;
   var n = 0;

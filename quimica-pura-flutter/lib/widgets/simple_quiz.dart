@@ -538,6 +538,40 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
     if (value != null) _answerNumeric(value);
   }
 
+  /// Calculadora en una pregunta de opción múltiple (Quemia 7.4,
+  /// Kristian: el teclado está en TODAS las preguntas): si las
+  /// opciones son numéricas, "Usar resultado" entrega el valor y
+  /// se contesta la opción que coincida (mismos puntos y repaso
+  /// que tocarla); si no coincide ninguna, avisa y no se contesta.
+  /// Si son conceptuales, la calculadora es solo borrador
+  /// (submitResult: false) para calcular a mano.
+  Future<void> _openOptionCalculator() async {
+    if (_selected != null) return;
+    final allNumeric =
+        _q.options.every((o) => parseOptionNumber(o) != null);
+    final value = await CalculatorScreen.open(
+      context,
+      // El teclado sigue la dificultad de la pregunta — sencillo si
+      // es fácil (1), científico si es media (2) o difícil (3).
+      scientific: _q.difficulty > 1,
+      submitResult: allNumeric,
+      unit: allNumeric ? parseOptionUnit(_q.options[_q.answer]) : null,
+      initialValue: _pendingNumeric,
+      onDraftChanged: _onNumericDraft,
+    );
+    if (!mounted) return;
+    if (value == null) return;
+    final match = displayedIndexForTypedOptionValue(
+        typed: value, question: _q, order: _order);
+    if (match != null) {
+      _answer(match);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(tr('numericNoOptionMatch'))),
+      );
+    }
+  }
+
   void _next() {
     if (_index + 1 >= widget.items.length) {
       _finish();
@@ -778,12 +812,11 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
                 ),
                 const SizedBox(height: 16),
                 // Texto de la pregunta (seguimiento 7.2): UN SOLO
-                // acceso al teclado — el del campo de respuesta en
-                // las de cálculo. El botoncito junto a la pregunta
-                // se quitó (salía doble) y en opción múltiple no va
-                // ningún teclado: la calculadora se abre desde el
-                // campo (NumericAnswerField) y el borrador persiste
-                // por pregunta (_openNumericCalculator).
+                // acceso al teclado en las de cálculo — el del campo
+                // de respuesta. El botoncito junto a la pregunta se
+                // quitó (salía doble). En opción múltiple va el botón
+                // Calculadora debajo de las opciones (Quemia 7.4,
+                // Kristian: el teclado está en TODAS las preguntas).
                 Text(_q.question,
                     style: TextStyle(
                         fontSize: 22,
@@ -813,9 +846,10 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
                 const SizedBox(height: 16),
                 // En las preguntas de cálculo las opciones dejan paso
                 // al campo de respuesta (la calculadora se abre desde
-                // el campo); las conceptuales siguen con las opciones
-                // de siempre.
-                if (!_q.isNumeric)
+                // el campo); las de opción múltiple siguen con las
+                // opciones de siempre + el botón Calculadora debajo
+                // (Quemia 7.4, Kristian: el teclado está en TODAS).
+                if (!_q.isNumeric) ...[
                   for (var i = 0; i < 4; i++)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8),
@@ -835,6 +869,32 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
                         onPressed: () => _answer(i),
                       ),
                     ),
+                  // Botón Calculadora: solo mientras no se ha contestado.
+                  if (_selected == null) ...[
+                    const SizedBox(height: 4),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _openOptionCalculator,
+                        icon: const LucideIcon(LucideIcons.calculator,
+                            size: 20),
+                        label: Text(tr('quizCalculator')),
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(
+                              color: AppAccent.primary, width: 2),
+                          foregroundColor: AppAccent.primary,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 12),
+                          textStyle: const TextStyle(
+                            fontFamily: 'Nunito',
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
                 // Quemia 7.0: reportar la pregunta — opción pequeña y
                 // discreta bajo las opciones (regla 1: solo este texto).
                 ReportQuestionButton(questionId: _id),

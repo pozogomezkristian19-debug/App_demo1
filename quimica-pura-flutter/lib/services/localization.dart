@@ -141,6 +141,8 @@ const Map<String, Map<String, String>> _strings = {
     'numericKeyboardHint':
         'Toca el botón del teclado para resolver la pregunta',
     'numericAnswerPlaceholder': 'Escribe tu respuesta',
+    'quizCalculator': 'Calculadora',
+    'numericNoOptionMatch': 'Ese valor no coincide con ninguna opción',
     'keypadDelete': 'Borrar',
     'keypadClear': 'Limpiar',
     'quizResult': 'Resultado',
@@ -752,6 +754,8 @@ const Map<String, Map<String, String>> _strings = {
     'calcHint': 'Type the calculation',
     'numericKeyboardHint': 'Tap the keyboard button to solve the question',
     'numericAnswerPlaceholder': 'Type your answer',
+    'quizCalculator': 'Calculator',
+    'numericNoOptionMatch': 'That value does not match any option',
     'keypadDelete': 'Delete',
     'keypadClear': 'Clear',
     'quizResult': 'Result',
@@ -1362,6 +1366,8 @@ const Map<String, Map<String, String>> _strings = {
     'numericKeyboardHint':
         'Touche le bouton du clavier pour résoudre la question',
     'numericAnswerPlaceholder': 'Écris ta réponse',
+    'quizCalculator': 'Calculatrice',
+    'numericNoOptionMatch': 'Cette valeur ne correspond à aucune option',
     'keypadDelete': 'Effacer',
     'keypadClear': 'Tout effacer',
     'quizResult': 'Résultat',
@@ -2087,6 +2093,9 @@ const Map<String, Map<String, String>> _strings = {
     'numericKeyboardHint':
         'Tocca il pulsante della tastiera per risolvere la domanda',
     'numericAnswerPlaceholder': 'Scrivi la risposta',
+    'quizCalculator': 'Calcolatrice',
+    'numericNoOptionMatch':
+        'Questo valore non corrisponde a nessuna opzione',
     'keypadDelete': 'Cancella',
     'keypadClear': 'Azzera',
     'quizResult': 'Risultato',
@@ -2597,6 +2606,8 @@ const Map<String, Map<String, String>> _strings = {
     'calcHint': 'Escreva o cálculo',
     'numericKeyboardHint': 'Toca no botão do teclado para resolver a pergunta',
     'numericAnswerPlaceholder': 'Escreve a tua resposta',
+    'quizCalculator': 'Calculadora',
+    'numericNoOptionMatch': 'Esse valor não corresponde a nenhuma opção',
     'keypadDelete': 'Apagar',
     'keypadClear': 'Limpar',
     'quizResult': 'Resultado',
@@ -3208,6 +3219,9 @@ const Map<String, Map<String, String>> _strings = {
     'calcHint': 'Введите вычисление',
     'numericKeyboardHint': 'Нажми кнопку клавиатуры, чтобы решить задачу',
     'numericAnswerPlaceholder': 'Введи ответ',
+    'quizCalculator': 'Калькулятор',
+    'numericNoOptionMatch':
+        'Это значение не совпадает ни с одним вариантом',
     'keypadDelete': 'Стереть',
     'keypadClear': 'Очистить',
     'quizResult': 'Результат',
