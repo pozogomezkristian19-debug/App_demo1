@@ -5,10 +5,14 @@
 // de notificaciones (listenForReplies).
 //
 // Reglas (las de toda la capa online 7.0):
-//   - Puerta de identidad (09:19): solo con Google vinculada. Sin
-//     ella, sendMessage devuelve false y no toca Firestore; las
-//     lecturas devuelven vacío.
-//   - Timeout de 5 s en cada llamada, fallo en silencio, nada
+//   - Sin puerta de Google (Quemia 7.6, Kristian: envió un mensaje
+//     y no llegó porque no tenía Google vinculada y sendMessage
+//     devolvía false sin escribir nada). Basta con estar autenticado
+//     (incluido el anónimo): las reglas de Firestore ya permiten
+//     crear a cualquier usuario autenticado. El soporte es justo el
+//     canal para reportar que Google no funciona; no puede exigir
+//     Google. Sin uid no se escribe nada.
+//   - Timeout de 10 s en cada llamada, fallo en silencio, nada
 //     bloquea: sin internet el mensaje queda encolado en local
 //     (SharedPreferences) y se reintenta solo al abrir la app y al
 //     volver a primer plano (retryPendingSupport, lo llama main()).
@@ -259,7 +263,7 @@ class SupportService {
     try {
       final clean = text.trim();
       if (clean.isEmpty) return false;
-      if (!OnlineCommon.allowed || _me.isEmpty) return false;
+      if (_me.isEmpty) return false;
       final msg = SupportMessage(
         id: '',
         authorUid: _me,
@@ -281,7 +285,7 @@ class SupportService {
   /// Mis mensajes con sus respuestas, los más nuevos primero. Vacío
   /// sin Google o sin internet. Nunca lanza.
   Future<List<SupportMessage>> fetchMyMessages() async {
-    if (!OnlineCommon.allowed || _me.isEmpty) return [];
+    if (_me.isEmpty) return [];
     final docs = await OnlineCommon.call(() => _repo.queryDocs(
           collection,
           whereField: 'authorUid',
@@ -375,7 +379,7 @@ class SupportService {
     if (_checkingReplies) return;
     _checkingReplies = true;
     try {
-      if (!OnlineCommon.allowed || _me.isEmpty) return;
+      if (_me.isEmpty) return;
       await _loadSeenReplies();
       final mine = await fetchMyMessages();
       final fresh = <SupportMessage>[];
@@ -408,7 +412,7 @@ class SupportService {
   /// y al volver a primer plano (Regla 2). La fecha guardada en la
   /// cola se convierte de nuevo a Timestamp al enviar.
   Future<int> retryPendingSupport() async {
-    if (!OnlineCommon.allowed || _me.isEmpty) return 0;
+    if (_me.isEmpty) return 0;
     final items = await OnlineCommon.pending(_pendingKey);
     var done = 0;
     for (var i = items.length - 1; i >= 0; i--) {

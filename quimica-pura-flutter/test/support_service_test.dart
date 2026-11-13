@@ -1,9 +1,10 @@
 // Tests del sistema de Soporte (Quemia 7.0, Kristian 09:52): envío
-// con cola offline, respuestas del admin en la bandeja local,
-// ajustes remotos y puerta de identidad (Google). Todo contra los
-// falsos en memoria, nunca Firebase real. Las fechas de los
-// documentos sembrados van como Timestamp, que es lo que escribe
-// la app de admin (y lo que escribe este servicio).
+// con cola offline, respuestas del admin en la bandeja local y
+// ajustes remotos. Sin puerta de Google (Quemia 7.6): el soporte
+// funciona también en anónimo. Todo contra los falsos en memoria,
+// nunca Firebase real. Las fechas de los documentos sembrados van
+// como Timestamp, que es lo que escribe la app de admin (y lo que
+// escribe este servicio).
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -26,7 +27,8 @@ void usePhone(String uid, String username) {
   UserPrefs.userName = username;
 }
 
-/// Sesión anónima sola: sin Google vinculada (puerta cerrada).
+/// Sesión anónima sola: sin Google vinculada (el soporte funciona
+/// igual, Quemia 7.6).
 void useAnonymousOnly(String uid) {
   authFake.uid = uid;
   authFake.googleLinked = false;
@@ -194,22 +196,27 @@ void main() {
     });
   });
 
-  group('puerta de identidad: sin Google no se envía nada', () {
-    test('sendMessage devuelve false y no toca Firestore ni la cola',
-        () async {
+  // Sin puerta de Google (Quemia 7.6, Kristian: envió un mensaje y
+  // no llegó porque no tenía Google vinculada). Basta con estar
+  // autenticado (incluido el anónimo): el soporte es el canal para
+  // reportar que Google no funciona.
+  group('sin Google (anónimo) el soporte sí funciona', () {
+    test('sendMessage envía y llega a Firestore', () async {
       useAnonymousOnly('uid-a');
-      expect(await support.sendMessage('Hola, ayuda'), isFalse);
+      expect(await support.sendMessage('Hola, ayuda'), isTrue);
       expect(await support.pendingCount(), 0);
-      expect(await support.retryPendingSupport(), 0);
-      expect(fake.docs['support_messages'], isNull);
-      expect(await support.fetchMyMessages(), isEmpty);
+      expect(fake.docs['support_messages'], isNotNull);
+      expect(fake.docs['support_messages']!.length, 1);
+      final mine = await support.fetchMyMessages();
+      expect(mine.map((m) => m.message).toList(), ['Hola, ayuda']);
     });
 
-    test('sin Google, la escucha de respuestas no avisa', () async {
+    test('sin Google, la escucha de respuestas avisa', () async {
       useAnonymousOnly('uid-a');
       await seedMyMessage(status: 'respondido', reply: 'Hola');
       await support.checkRepliesNow();
-      expect(NotificationInbox.entries, isEmpty);
+      expect(NotificationInbox.entries, hasLength(1));
+      expect(NotificationInbox.entries.first.body, 'Hola');
     });
   });
 

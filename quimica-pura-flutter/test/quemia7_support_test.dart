@@ -75,13 +75,13 @@ void main() {
   });
 
   group('envío de mensajes', () {
-    test('sin Google no se envía nada ni se encola', () async {
+    test('sin Google (anónimo) sí se envía', () async {
       authFake.uid = 'uid-a';
       authFake.googleLinked = false;
-      expect(await support.sendMessage('Hola, ayuda'), isFalse);
+      expect(await support.sendMessage('Hola, ayuda'), isTrue);
       expect(await support.pendingCount(), 0);
-      expect(await support.retryPendingSupport(), 0);
-      expect(fake.docs['support_messages'], isNull);
+      final docs = await fake.queryDocs('support_messages');
+      expect(docs, hasLength(1));
     });
 
     test('envío correcto: documento con estado abierto', () async {

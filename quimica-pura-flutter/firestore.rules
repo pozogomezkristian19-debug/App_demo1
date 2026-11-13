@@ -480,7 +480,7 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
-    //  Colección 'groups' — grupos de estudio. Campos: name, inviteCode
+    //  Colección 'groups' — grupos de estudio. Campos: name, code
     //  (código de invitación), members (lista de uid), creatorUid (uid del
     //  creador).
     //  ------------------------------------------------------------------
@@ -504,44 +504,44 @@ service cloud.firestore {
       // LECTURA: solo los miembros del grupo. Nadie más puede ver ni el
       // nombre, ni los miembros, ni el código de invitación.
       allow read: if isSignedIn()
-        && request.auth.uid in resource.data.members;
+        && request.auth.uid in resource.data.memberUids;
 
       // CREAR: el creador es quien crea el grupo y su único miembro
-      // inicial; creatorUid tiene que ser su uid, y name e inviteCode,
+      // inicial; ownerUid tiene que ser su uid, y name y code,
       // texto.
       allow create: if isSignedIn()
-        && request.resource.data.creatorUid == request.auth.uid
-        && request.resource.data.members == [request.auth.uid]
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.memberUids == [request.auth.uid]
         && request.resource.data.name is string
-        && request.resource.data.inviteCode is string;
+        && request.resource.data.code is string;
 
-      // ACTUALIZAR: el creador (creatorUid) NUNCA cambia. Tres casos:
+      // ACTUALIZAR: el creador (ownerUid) NUNCA cambia. Tres casos:
       //   1. El CREADOR edita nombre, código o miembros, y sigue siendo
       //      miembro (puede añadir o quitar a otros, no quitarse a sí mismo).
       //   2. UNIRSE: quien NO era miembro se añade SOLO a sí mismo a
-      //      members, sin tocar ningún otro campo. Así entra con el código.
-      //   3. SALIRSE: un miembro se quita SOLO a sí mismo de members, sin
+      //      memberUids, sin tocar ningún otro campo. Así entra con el código.
+      //   3. SALIRSE: un miembro se quita SOLO a sí mismo de memberUids, sin
       //      tocar ningún otro campo.
       // Un miembro que no es creador NO puede editar el nombre, el código
       // ni a otros miembros, y nadie puede cambiar el creador del grupo.
       allow update: if isSignedIn()
-        && request.resource.data.creatorUid == resource.data.creatorUid
-        && ((resource.data.creatorUid == request.auth.uid
-            && request.auth.uid in request.resource.data.members)
-          || (!(request.auth.uid in resource.data.members)
-            && request.auth.uid in request.resource.data.members
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members'])
-            && request.resource.data.members.hasAll(resource.data.members)
-            && request.resource.data.members.size() == resource.data.members.size() + 1)
-          || ((request.auth.uid in resource.data.members)
-            && !(request.auth.uid in request.resource.data.members)
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members'])
-            && resource.data.members.hasAll(request.resource.data.members)
-            && request.resource.data.members.size() == resource.data.members.size() - 1));
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && ((resource.data.ownerUid == request.auth.uid
+            && request.auth.uid in request.resource.data.memberUids)
+          || (!(request.auth.uid in resource.data.memberUids)
+            && request.auth.uid in request.resource.data.memberUids
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids'])
+            && request.resource.data.memberUids.hasAll(resource.data.memberUids)
+            && request.resource.data.memberUids.size() == resource.data.memberUids.size() + 1)
+          || ((request.auth.uid in resource.data.memberUids)
+            && !(request.auth.uid in request.resource.data.memberUids)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids'])
+            && resource.data.memberUids.hasAll(request.resource.data.memberUids)
+            && request.resource.data.memberUids.size() == resource.data.memberUids.size() - 1));
 
       // BORRAR: solo el creador del grupo.
       allow delete: if isSignedIn()
-        && resource.data.creatorUid == request.auth.uid;
+        && resource.data.ownerUid == request.auth.uid;
     }
 
     // -------------------------------------------------------------------------

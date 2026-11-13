@@ -106,13 +106,22 @@ Future<void> main() async {
   // Sesión anónima automática (ronda fix8): el uid es la identidad
   // del documento de Firestore. Si falla (sin internet), la app
   // sigue 100% offline y la analítica usa el id temporal.
-  await AuthService.ensureAnonymous();
+  // NO se espera (Quemia 7.6, Kristian: el logo tardaba un montón):
+  // con la conexión lenta el inicio anónimo podía tardar hasta 5 s
+  // y el splash nativo se quedaba todo ese tiempo. La app arranca
+  // sin uid (id temporal) y el uid llega en segundo plano; nada de
+  // la primera pantalla lo necesita.
+  unawaited(AuthService.ensureAnonymous().then(
+      (_) => AnalyticsSync.init().timeout(
+            const Duration(seconds: 3),
+            onTimeout: () {},
+          )));
   // Límite de 3 s (Quemia 7.3): init() migra el documento heredado
   // por red (dos llamadas con timeout de 5 s cada una) y no puede
   // retrasar el primer frame más de 3 s; si se agota, la migración
   // se reintenta en la próxima apertura y la app arranca igual.
-  await AnalyticsSync.init()
-      .timeout(const Duration(seconds: 3), onTimeout: () {});
+  // (Ahora corre en segundo plano, encadenado al inicio anónimo de
+  // arriba: la migración necesita el uid.)
   await UserPrefs.load();
   // Compras y cosméticos de la tienda (Quemia 7.0): se cargan
   // antes de arrancar para que el tema equipado tiña la app
@@ -137,8 +146,9 @@ Future<void> main() async {
   // de sesión; sin internet se salta en silencio.
   unawaited(PushService.init());
   // Primera carga de datos del widget de inicio (pregunta del día,
-  // racha, vidas y puntos). Si no hay widget, no pasa nada.
-  await HomeWidgetService.update();
+  // racha, vidas y puntos). Si no hay widget, no pasa nada. Sin
+  // esperar (Quemia 7.6): no bloquea el primer frame.
+  unawaited(HomeWidgetService.update());
   // Puerta de bloqueo (ronda fix8): si el creador baneó esta cuenta,
   // la app arranca en la pantalla de suspensión. La lectura es de
   // RED y ANTES esperaba hasta 5 s ANTES del primer frame (Quemia

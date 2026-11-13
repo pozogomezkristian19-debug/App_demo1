@@ -2,8 +2,11 @@
 //
 // Invitar: el código grande + copiar, las gemelas arriba, "los
 // dos ganan", usos restantes, aviso de amigo nuevo, hitos con
-// barra de progreso, mensaje listo y los que más invitan. La
-// barra de compartir va FIJA abajo (fuera del scroll).
+// barra de progreso y los que más invitan. La barra de compartir
+// va FIJA abajo (fuera del scroll). Sin "Mensaje listo" (Quemia
+// 7.6, Kristian: la pantalla se sentía muy cargada): el mensaje
+// para compartir se sigue armando al tocar Compartir/WhatsApp/
+// Messenger, pero ya no se enseña como tarjeta en la pantalla.
 // Canjear: 6 casillas + regalo + botón Canjear + tarjeta de
 // error como en el mockup. Sin sección de contactos (la app no
 // vincula el número de teléfono).
@@ -23,8 +26,8 @@ import '../widgets/online_gate.dart';
 import '../widgets/share_bar.dart';
 import '../widgets/social_avatar.dart';
 
-/// Pantalla Invitar (mockup_invitar): el código, los hitos y el
-/// mensaje listo. La entrada vive en Cuenta (fila Referidos).
+/// Pantalla Invitar (mockup_invitar): el código y los hitos. La
+/// entrada vive en Cuenta (fila Referidos).
 class ReferralsScreen extends StatefulWidget {
   const ReferralsScreen({
     super.key,
@@ -210,15 +213,17 @@ class _ReferralsScreenState extends State<ReferralsScreen> {
                                 ),
                               // Las gemelas arriba, como en el
                               // mockup: Brenda (violeta) y Britany
-                              // (azul) en círculo, sin texto.
+                              // (azul) en círculo, sin texto. Más
+                              // pequeñas (Quemia 7.6, Kristian: la
+                              // pantalla se sentía muy cargada).
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   ClipOval(
                                     child: Image.asset(
                                       'assets/brenda.png',
-                                      width: 140,
-                                      height: 140,
+                                      width: 96,
+                                      height: 96,
                                       fit: BoxFit.cover,
                                       filterQuality: FilterQuality.medium,
                                     ),
@@ -227,8 +232,8 @@ class _ReferralsScreenState extends State<ReferralsScreen> {
                                   ClipOval(
                                     child: Image.asset(
                                       'assets/britany.png',
-                                      width: 140,
-                                      height: 140,
+                                      width: 96,
+                                      height: 96,
                                       fit: BoxFit.cover,
                                       filterQuality: FilterQuality.medium,
                                     ),
@@ -452,46 +457,6 @@ class _ReferralsScreenState extends State<ReferralsScreen> {
                                   ),
                                 ),
                               const SizedBox(height: 12),
-                              Text(
-                                tr('referralMessageReady'),
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w800,
-                                  color: scheme.onSurface,
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: scheme.surface,
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: border,
-                                ),
-                                padding: const EdgeInsets.all(16),
-                                child: RichText(
-                                  text: TextSpan(
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      color: scheme.onSurface,
-                                    ),
-                                    children: [
-                                      TextSpan(
-                                          text: tr('referralMessageBody')
-                                              .replaceAll('{code}',
-                                                  _state!.code)),
-                                      const TextSpan(text: ' '),
-                                      const TextSpan(
-                                        text:
-                                            'https://quemia-8410a.web.app',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                          color: Color(0xFF00C2A8),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
                               const SizedBox(height: 24),
                               Text(
                                 tr('referralTop'),
