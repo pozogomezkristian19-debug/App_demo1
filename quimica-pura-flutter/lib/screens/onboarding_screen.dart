@@ -101,18 +101,31 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       });
       return;
     }
-    final String? name = AuthService.googleDisplayName;
-    if (name != null &&
-        name.isNotEmpty &&
-        _nameController.text.trim().isEmpty) {
-      _nameController.text = name;
+    // Con Google, el nombre ya viene de la cuenta: se entra
+    // DIRECTO a la app (Quemia 7.5, Kristian: "si ya toco iniciar
+    // sesión con Google ya cojo la cuenta y automáticamente va a
+    // la pantalla"). No hay que escribir el nombre, ni elegir el
+    // género, ni darle a Siguiente, ni pasar por las páginas de
+    // notificaciones e idioma: el nombre es el de Google (o el
+    // escrito, si ya escribió uno) y el género es el elegido en
+    // esta pantalla, o Masculino si no se eligió (el saludo y el
+    // avatar ya usan Masculino como predeterminado cuando no es
+    // Femenino). El respaldo de la nube se trae en segundo plano.
+    final typedName = _nameController.text.trim();
+    final googleName = AuthService.googleDisplayName ?? '';
+    final name = typedName.isNotEmpty ? typedName : googleName.trim();
+    if (name.isNotEmpty) {
+      if (typedName.isEmpty) _nameController.text = name;
+      final gender = _gender ?? 'Masculino';
+      if (mounted) setState(() => _googleBusy = false);
+      unawaited(AnalyticsSync.restoreFromCloud().then((_) {}));
+      await UserPrefs.saveProfile(name, gender);
+      if (!mounted) return;
+      widget.onFinished();
+      return;
     }
-    // Enlazado: quitar la carga YA. El respaldo de la nube se trae
-    // en segundo plano (Quemia 7.5, igual que en Cuenta): con la
-    // conexión lenta tardaba y el botón se quedaba cargando aunque
-    // el enlace ya había salido bien. El nombre ya se prellenó con
-    // el de Google, así que el respaldo no tiene nada que repintar
-    // aquí.
+    // Sin nombre (Google no dio nombre y el campo está vacío): se
+    // queda en la pantalla para que lo escriba a mano.
     if (mounted) setState(() => _googleBusy = false);
     unawaited(AnalyticsSync.restoreFromCloud().then((_) {}));
   }
