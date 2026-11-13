@@ -1,5 +1,5 @@
 // Piezas comunes de todo lo online (7.0): puerta de identidad,
-// timeout de 5 s y cola de reintento en local.
+// timeout de 10 s y cola de reintento en local.
 //
 // REGLA DE IDENTIDAD (Kristian 09:19): para jugar online hay que
 // tener la cuenta de Google vinculada. La sesión anónima sola NO
@@ -10,7 +10,7 @@
 // [AnalyticsSync.needsGoogle].
 //
 // REGLA 2 (Kristian 6.5): sin internet no pasa nada malo. Cada
-// llamada a la red lleva timeout de 5 s y falla en silencio; lo que
+// llamada a la red lleva timeout de 10 s y falla en silencio; lo que
 // no se pudo enviar queda encolado en shared_preferences y se
 // reintenta solo al abrir la app y al volver a primer plano.
 import 'dart:convert';
@@ -22,8 +22,14 @@ import 'analytics_sync.dart';
 class OnlineCommon {
   OnlineCommon._();
 
-  /// Timeout de cada llamada a la red (Regla 2).
-  static const Duration timeout = Duration(seconds: 5);
+  /// Timeout de cada llamada a la red (Regla 2). Quemia 7.5: era
+  /// 5 s, pero con la conexión lenta de Cuba + VPN una llamada
+  /// normal tarda 6-9 s (la primera, con el apretón de manos,
+  /// aún más). A 5 s se cortaba, se reintentaba y al final tardaba
+  /// MÁS que esperando un poco. A 10 s casi todo entra al primer
+  /// intento; sin internet de verdad, la llamada falla en silencio
+  /// igual, solo que 5 s más tarde y en segundo plano.
+  static const Duration timeout = Duration(seconds: 10);
 
   /// ¿Se puede jugar online? Solo con Google vinculada.
   static bool get allowed => AnalyticsSync.onlinePlayAllowed;
@@ -31,7 +37,7 @@ class OnlineCommon {
   /// ¿Falta vincular Google para jugar online?
   static bool get needsGoogle => !allowed;
 
-  /// Una llamada a la red con timeout de 5 s y silencio total ante
+  /// Una llamada a la red con timeout de 10 s y silencio total ante
   /// fallos: devuelve null si no hay internet, si cuelga o si el
   /// servidor rechaza. Nunca lanza.
   static Future<T?> call<T>(Future<T> Function() fn) async {
