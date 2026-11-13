@@ -176,12 +176,13 @@ void main() {
     await settle(tester);
   }
 
-  // Calentamiento: decodifica las imágenes (gemelas, logo, WhatsApp)
-  // ANTES de la primera captura, esperando la decodificación de
-  // verdad con runAsync + precacheImage. Sin esto, la primera
-  // pantalla (Niveles claro) salía con el avatar de Brenda vacío y
-  // el pie del drawer sin el logo de WhatsApp: con solo hacer pump,
-  // la decodificación seguía pendiente al capturar.
+  // Calentamiento: decodifica las imágenes (gemelas, logo, WhatsApp
+  // y el avatar por defecto del círculo de Cuenta) ANTES de la
+  // primera captura, esperando la decodificación de verdad con
+  // runAsync + precacheImage. Sin esto, la primera pantalla (Niveles
+  // claro) salía con el avatar de Brenda vacío y el pie del drawer
+  // sin el logo de WhatsApp: con solo hacer pump, la decodificación
+  // seguía pendiente al capturar.
   testWidgets('warm-up imágenes', (tester) async {
     await setPhone(tester);
     await tester.pumpWidget(
@@ -200,6 +201,8 @@ void main() {
                   width: 40, height: 40),
               Image(image: AssetImage('assets/whatsapp.png'),
                   width: 40, height: 40),
+              Image(image: AssetImage('assets/avatar_default.png'),
+                  width: 40, height: 40),
             ],
           ),
         ),
@@ -207,7 +210,7 @@ void main() {
     );
     final context = tester.element(find.byKey(const Key('warmup')));
     await tester.runAsync(() async {
-      for (final name in ['brenda', 'britany', 'logo', 'whatsapp']) {
+      for (final name in ['brenda', 'britany', 'logo', 'whatsapp', 'avatar_default']) {
         await precacheImage(AssetImage('assets/$name.png'), context);
       }
     });
@@ -237,6 +240,16 @@ void main() {
       (tester) async {
     await pumpApp(tester);
     await tester.tap(find.byTooltip(tr('menuWord')));
+    await settle(tester);
+    // La foto del acompañante se asoma detrás del menú y el logo
+    // del anillo va en el encabezado: sin precache, la primera
+    // captura del proceso los pilla vacíos.
+    await tester.runAsync(() async {
+      final ctx = tester.element(find.byType(MaterialApp));
+      for (final name in ['brenda', 'britany', 'kristian', 'app_icon']) {
+        await precacheImage(AssetImage('assets/$name.png'), ctx);
+      }
+    });
     await settle(tester);
     await shot(tester, 'fix2_drawer.png');
   });
@@ -270,6 +283,23 @@ void main() {
           onShowShareApp: () {},
           trackTopics: const ['estequiometria'],
         ));
+    // El avatar del círculo (avatar_default con estos prefs) y la
+    // miniatura de "Hoy te acompaña…" (compañero del día) se
+    // decodifican en real-async: sin precache, la primera captura
+    // del proceso los pilla vacíos (el warm-up no corre cuando el
+    // test se lanza solo con --plain-name). Precargarlos aquí hace
+    // el golden determinista en ambos casos.
+    await tester.runAsync(() async {
+      final ctx = tester.element(find.byType(AccountScreen));
+      await precacheImage(
+        const AssetImage('assets/avatar_default.png'),
+        ctx,
+      );
+      for (final name in ['brenda', 'britany', 'kristian']) {
+        await precacheImage(AssetImage('assets/$name.png'), ctx);
+      }
+    });
+    await settle(tester);
     await shot(tester, 'fix2_cuenta.png');
   });
 
@@ -283,6 +313,20 @@ void main() {
           trackTopics: const ['estequiometria'],
         ),
         dark: true);
+    // Como en fix2_cuenta: precache del avatar del círculo y de
+    // la miniatura del acompañante para que el golden no dependa
+    // del orden de ejecución.
+    await tester.runAsync(() async {
+      final ctx = tester.element(find.byType(AccountScreen));
+      await precacheImage(
+        const AssetImage('assets/avatar_default.png'),
+        ctx,
+      );
+      for (final name in ['brenda', 'britany', 'kristian']) {
+        await precacheImage(AssetImage('assets/$name.png'), ctx);
+      }
+    });
+    await settle(tester);
     await shot(tester, 'fix2_cuenta_dark.png');
   });
 

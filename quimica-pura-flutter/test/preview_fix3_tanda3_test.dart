@@ -194,8 +194,9 @@ void main() {
   }
 
   // Calentamiento: decodifica las imágenes (los tres compañeros,
-  // logo, WhatsApp) ANTES de la primera captura, esperando la
-  // decodificación de verdad con runAsync + precacheImage.
+  // logo, WhatsApp y el avatar por defecto del círculo de Cuenta)
+  // ANTES de la primera captura, esperando la decodificación de
+  // verdad con runAsync + precacheImage.
   testWidgets('warm-up imágenes', (tester) async {
     await setPhone(tester);
     await tester.pumpWidget(
@@ -215,6 +216,8 @@ void main() {
                   width: 40, height: 40),
               Image(image: AssetImage('assets/whatsapp.png'),
                   width: 40, height: 40),
+              Image(image: AssetImage('assets/avatar_default.png'),
+                  width: 40, height: 40),
             ],
           ),
         ),
@@ -222,8 +225,14 @@ void main() {
     );
     final context = tester.element(find.byKey(const Key('warmup')));
     await tester.runAsync(() async {
-      for (final name in
-          ['brenda', 'britany', 'kristian', 'logo', 'whatsapp']) {
+      for (final name in [
+        'brenda',
+        'britany',
+        'kristian',
+        'logo',
+        'whatsapp',
+        'avatar_default'
+      ]) {
         await precacheImage(AssetImage('assets/$name.png'), context);
       }
     });
@@ -250,6 +259,24 @@ void main() {
           onShowShareApp: () {},
           trackTopics: const ['estequiometria'],
         ));
+    // El avatar del círculo (kristian: género Masculino en el
+    // setUp de este archivo) y la miniatura de "Hoy te acompaña…"
+    // (compañero del día) se decodifican en real-async: sin
+    // precache, la primera captura del proceso los pilla vacíos
+    // (el warm-up no corre cuando el test se lanza solo con
+    // --plain-name). Precargarlos aquí hace el golden
+    // determinista en ambos casos.
+    await tester.runAsync(() async {
+      final ctx = tester.element(find.byType(AccountScreen));
+      await precacheImage(
+        const AssetImage('assets/kristian.png'),
+        ctx,
+      );
+      for (final name in ['brenda', 'britany']) {
+        await precacheImage(AssetImage('assets/$name.png'), ctx);
+      }
+    });
+    await settle(tester);
     await shot(tester, 'fix3_cuenta.png');
   });
 

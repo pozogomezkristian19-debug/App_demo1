@@ -119,6 +119,18 @@ class _Fix6FakeNotifications extends AndroidFlutterLocalNotificationsPlugin
     return true;
   }
 
+  /// Canales de notificación (Zona G, 7.1): sendTestDetailed()
+  /// consulta los canales antes de enviar (isTestChannelBlocked).
+  /// Sin este override, la llamada cae en el MethodChannel sin
+  /// mock y su Future no se resuelve nunca: el tope de 2 s se
+  /// come el tiempo falso del test y el test de sendTest se queda
+  /// colgado esperando (la copia del icono grande, con su propio
+  /// tope de 3 s, ya no cabe en el pump de 4 s). Por defecto
+  /// ninguno (el canal de prueba aún no existe) → no bloqueado.
+  @override
+  Future<List<AndroidNotificationChannel>?> getNotificationChannels() async =>
+      const [];
+
   @override
   Future<void> show({
     required int id,

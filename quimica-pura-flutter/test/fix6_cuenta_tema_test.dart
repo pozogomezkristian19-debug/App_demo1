@@ -2,11 +2,15 @@
 // - Tema por defecto = 'sistema': quien no eligió nada sigue al
 //   brillo del teléfono; quien guardó 'claro' u 'oscuro' lo
 //   mantiene; el legado isDark=true sigue dando 'oscuro'.
-// - Cuenta reordenada: las tres primeras filas son Estadísticas,
-//   Mis errores y Cómo se juega; el resto en su orden de siempre.
+// - Cuenta reordenada (7.1, Zona H): Vincular con Google
+//   (prominente, primera fila), Estadísticas, Mis errores,
+//   Amigos, Tabla de posiciones, Torneo, Grupos de estudio,
+//   Tienda, Acerca de, Compartir, Soporte y Ajustes; el resto
+//   vive en la pantalla Ajustes.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quimica_pura/screens/account_screen.dart';
+import 'package:quimica_pura/screens/settings_screen.dart';
 import 'package:quimica_pura/services/localization.dart';
 import 'package:quimica_pura/services/progress.dart';
 import 'package:quimica_pura/services/user_prefs.dart';
@@ -82,10 +86,10 @@ void main() {
     });
   });
 
-  group('Cuenta reordenada (fix6, ítem 4)', () {
-    testWidgets('las tres primeras filas son Estadísticas, Mis errores '
-        'y Cómo se juega', (tester) async {
-      // Ventana alta para que el ListView construya las 13 filas.
+  group('Cuenta reordenada (7.1, Zona H)', () {
+    testWidgets('las filas van en el orden 7.1, con Google primera',
+        (tester) async {
+      // Ventana alta para que el ListView construya las 12 filas.
       tester.view.physicalSize = const Size(800, 3000);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
@@ -113,33 +117,28 @@ void main() {
 
       // Las filas son tarjetas redondeadas (organización 6.3, ya
       // no ListTile): se leen por sus títulos de texto, en orden
-      // de aparición en la lista. Quemia 7.0: 19 filas — tras Tema
-      // entran las 6 nuevas (Tabla, Vincular con Google, Amigos,
-      // Torneos, Tienda, Grupos); las 3 primeras no cambian.
+      // de aparición en la lista. Quemia 7.1: 12 filas — Google
+      // prominente la primera (puerta a todo lo online), y las 11
+      // del orden pedido; Tema, Cómo se juega, Idioma, Cambiar
+      // versión, Favoritos, Recordatorio, Compartir progreso y
+      // Buscar actualización ya NO están aquí: viven en Ajustes.
       // (Diseño 7.0: la fila "Compartir mi progreso" se quitó;
       // compartir es automático.)
       final expectedOrder = [
+        tr('accountLinkGoogle'),
         tr('accountStats'),
         tr('accountReview'),
-        tr('howToPlayTitle'),
-        tr('themeTitle'),
-        tr('accountLeaderboard'),
-        tr('accountLinkGoogle'),
         tr('accountFriends'),
+        tr('accountLeaderboard'),
         tr('accountTournaments'),
-        tr('accountShop'),
         tr('accountGroups'),
-        tr('accountLanguage'),
-        tr('accountVersion'),
-        tr('accountFavorites'),
-        tr('accountReminder'),
-        tr('accountShareProgress'),
-        tr('accountShareApp'),
-        tr('checkUpdateTitle'),
+        tr('accountShop'),
         tr('accountAbout'),
+        tr('accountShareApp'),
         tr('supportWord'),
+        tr('settingsTitle'),
       ];
-      expect(expectedOrder.length, 19);
+      expect(expectedOrder.length, 12);
       final texts = tester
           .widgetList<Text>(find.byType(Text))
           .map((t) => t.data ?? '')
@@ -151,31 +150,84 @@ void main() {
         if (titles.isEmpty || titles.last != data) titles.add(data);
       }
       expect(titles, expectedOrder);
-      // Las 3 primeras no cambian.
+      // Las 3 primeras no cambian: Google, Estadísticas, Errores.
       expect(titles.sublist(0, 3), [
+        tr('accountLinkGoogle'),
         tr('accountStats'),
         tr('accountReview'),
-        tr('howToPlayTitle'),
       ]);
-      // El resto sigue en su mismo orden relativo.
+      // El resto sigue el orden pedido.
       expect(titles.sublist(3), [
-        tr('themeTitle'),
-        tr('accountLeaderboard'),
-        tr('accountLinkGoogle'),
         tr('accountFriends'),
+        tr('accountLeaderboard'),
         tr('accountTournaments'),
-        tr('accountShop'),
         tr('accountGroups'),
+        tr('accountShop'),
+        tr('accountAbout'),
+        tr('accountShareApp'),
+        tr('supportWord'),
+        tr('settingsTitle'),
+      ]);
+      // Nada de lo que se mudó a Ajustes queda en Cuenta.
+      for (final moved in [
+        tr('howToPlayTitle'),
+        tr('themeTitle'),
         tr('accountLanguage'),
         tr('accountVersion'),
         tr('accountFavorites'),
         tr('accountReminder'),
         tr('accountShareProgress'),
-        tr('accountShareApp'),
         tr('checkUpdateTitle'),
-        tr('accountAbout'),
-        tr('supportWord'),
-      ]);
+      ]) {
+        expect(find.text(moved), findsNothing);
+      }
+    });
+
+    testWidgets('Ajustes trae las filas mudadas, en su orden',
+        (tester) async {
+      // Ventana alta para que el ListView construya las 9 filas.
+      tester.view.physicalSize = const Size(800, 3000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+      await UserPrefs.saveThemeMode('claro');
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(useMaterial3: true),
+          home: Scaffold(
+            body: SettingsScreen(
+              onOpenScreen: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final expectedOrder = [
+        tr('themeTitle'),
+        tr('accountReminder'),
+        tr('inboxTitle'),
+        tr('howToPlayTitle'),
+        tr('checkUpdateTitle'),
+        tr('accountLanguage'),
+        tr('accountVersion'),
+        tr('accountFavorites'),
+        tr('accountShareProgress'),
+      ];
+      expect(expectedOrder.length, 9);
+      final texts = tester
+          .widgetList<Text>(find.byType(Text))
+          .map((t) => t.data ?? '')
+          .toList();
+      final titles = <String>[];
+      for (final data in texts.where(expectedOrder.contains)) {
+        if (titles.isEmpty || titles.last != data) titles.add(data);
+      }
+      expect(titles, expectedOrder);
+      expect(find.text(tr('settingsTitle')), findsOneWidget);
     });
   });
 }

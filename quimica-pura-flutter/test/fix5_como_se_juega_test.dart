@@ -168,16 +168,28 @@ void main() {
     expect(find.text('abrir'), findsOneWidget);
   });
 
-  testWidgets('la fila de Cuenta abre la pantalla', (tester) async {
+  testWidgets('la fila de Ajustes abre la pantalla', (tester) async {
     await setPhone(tester);
     await tester.pumpWidget(const MelliQuiApp());
     await settle(tester);
-    // Ir a Cuenta (quinta pestaña).
+    // Ir a Cuenta (quinta pestaña) y de ahí a Ajustes (última
+    // fila, 7.1): "¿Cómo se juega?" vive ahora en Ajustes. La
+    // fila está al final de la lista: hay que bajar hasta ella
+    // para que se construya (el ListView solo pinta lo visible).
     await tester.tap(find.text(tr('accountTitle')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
+    await tester.scrollUntilVisible(
+      find.text(tr('settingsTitle')),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pump();
+    await tester.tap(find.text(tr('settingsTitle')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
     // La fila "¿Cómo se juega?" puede quedar bajo el pliegue en
-    // Cuenta: se lleva a la vista antes de tocarla.
+    // Ajustes: se lleva a la vista antes de tocarla.
     await tester.ensureVisible(find.text(tr('howToPlayTitle')));
     await tester.pump();
     await tester.tap(find.text(tr('howToPlayTitle')));
@@ -186,7 +198,7 @@ void main() {
     expect(find.byType(HowToPlayScreen), findsOneWidget);
     expectFiveRules();
     expect(find.byType(AlertDialog), findsNothing);
-    // Cerrar vuelve a Cuenta (dos pulsos: la salida de la ruta
+    // Cerrar vuelve a Ajustes (dos pulsos: la salida de la ruta
     // dura 300 ms).
     await tester.tap(find.text(tr('closeWord')));
     await tester.pump();

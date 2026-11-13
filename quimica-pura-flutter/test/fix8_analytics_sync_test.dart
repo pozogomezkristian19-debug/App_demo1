@@ -367,8 +367,8 @@ void main() {
     expect(fake.users['fake-anon-uid']?['points'], 33);
   });
 
-  test('link con fallback credential-already-in-use: entra en el uid y '
-      'restaura', () async {
+  test('link con credential-already-in-use: falla SIN cambiar de uid '
+      'ni tocar el progreso local', () async {
     fake.users['uid-1'] = {
       'username': 'kristian',
       'points': 42,
@@ -381,11 +381,17 @@ void main() {
     authFake.googleUid = 'uid-1';
     authFake.simulateAlreadyInUse = true;
 
-    expect(await AnalyticsSync.linkGoogleAndRestore(), isTrue);
-    expect(AuthService.currentUid, 'uid-1');
-    expect(AnalyticsSync.deviceId, 'uid-1');
-    expect(ProgressService.instance.points, 42);
-    expect(ProgressService.instance.unlockedLevel('estequiometria'), 3);
+    // 7.1: el enlace falla y NO se entra en la cuenta de Google: el
+    // uid sigue siendo el anónimo y no se restaura nada del otro uid.
+    expect(await AnalyticsSync.linkGoogleAndRestore(), isFalse);
+    expect(AuthService.currentUid, 'uid-2');
+    expect(AuthService.isGoogleLinked, isFalse);
+    expect(AnalyticsSync.deviceId, 'uid-2');
+    // El progreso local no se tocó: no se restauró nada del otro
+    // uid (puntos en 0; el nivel 1 es el desbloqueado por defecto,
+    // no el 3 del documento de uid-1).
+    expect(ProgressService.instance.points, 0);
+    expect(ProgressService.instance.unlockedLevel('estequiometria'), 1);
   });
 
   test('link con fallo total devuelve false sin lanzar', () async {

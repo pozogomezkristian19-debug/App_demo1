@@ -322,6 +322,10 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    // Zona G (7.1): el mensaje ya NO es el genérico
+    // tr('notifTestFailedSystem') sino el detalle real del error
+    // (la falsa excepción es PlatformException SHOW_FAILED sin
+    // mensaje): la pantalla nombra la causa.
     testWidgets('con show() fallando, el botón muestra el fallo y nunca '
         '"Aviso enviado"', (tester) async {
       fake.showThrows = true;
@@ -331,7 +335,11 @@ void main() {
       await tester.pump(const Duration(seconds: 4));
       await tester.pump(const Duration(milliseconds: 300));
       await tester.pump(const Duration(milliseconds: 300));
-      expect(find.text(tr('notifTestFailedSystem')), findsOneWidget);
+      expect(
+          find.text(tr('notifTestFailedDetail')
+              .replaceFirst('{detail}', 'PlatformException(SHOW_FAILED)')),
+          findsOneWidget);
+      expect(find.text(tr('notifTestFailedSystem')), findsNothing);
       expect(find.text(tr('notifSent')), findsNothing);
       expect(fake.shown, isEmpty);
       expect(await NotificationService.lastReminderSentTime(), isNull);

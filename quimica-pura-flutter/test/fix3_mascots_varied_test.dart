@@ -1,11 +1,10 @@
 // Pruebas fix3 — mascotas (ronda #3; rediseño Duolingo 7.0):
-// - Cabecera de Cuenta (restauración 6.3, corrección de Kristian
-//   2026-11-11): tarjeta redondeada con la foto GRANDE de la
-//   compañera del día (96 dp) y la línea "Hoy te acompaña…".
-//   La foto grande ES la compañera (foto y línea coinciden); el
-//   avatar premium equipado ya NO se muestra aquí (sigue en Tabla
-//   de posiciones, Amigos y Torneos). Sin selector de avatar
-//   propio y sin repetir el nombre bajo la foto.
+// - Cabecera de Cuenta (alcance 9, 7.1): tarjeta redondeada con
+//   el CÍRCULO GRANDE del avatar del usuario (96 dp, editable)
+//   y la línea "Hoy te acompaña…" con su miniatura de compañera
+//   (22 dp). El círculo grande ya NO es la compañera del día.
+//   Sin selector de avatar propio viejo y sin repetir el nombre
+//   bajo la foto.
 // - Mensajes de los muñecos variados: 5 variantes por compañero
 //   (Brenda, Britany, Kristian) y categoría (pregunta, ánimo,
 //   consuelo) en los 6 idiomas, rotando sin repetirse seguidas;
@@ -149,25 +148,28 @@ void main() {
     }
 
     testWidgets(
-        'foto grande de la compañera del día (96 dp) en la tarjeta '
-        'de la cabecera, sin avatar premium ni selector',
+        'círculo grande del avatar del usuario (96 dp) + miniatura '
+        'de la compañera (22 dp) junto a la línea, sin selector viejo',
         (tester) async {
       await pumpAccount(tester);
       final companion = companionOfTheDay();
-      // Restauración 6.3: la foto grande de la cabecera ES la
-      // compañera del día (CompanionAvatar de 96 dp), así foto y
-      // línea "Hoy te acompaña…" coinciden. El avatar premium
-      // equipado (SocialAvatar) ya no se muestra en Cuenta.
+      // Alcance 9 (7.1): el círculo grande de la cabecera ES el
+      // avatar del usuario (SocialAvatar de 96 dp, con su lápiz),
+      // ya NO la compañera del día. La compañera sigue en su
+      // miniatura (CompanionAvatar de 22 dp) junto a la línea
+      // "Hoy te acompaña…", así foto y línea coinciden.
+      expect(find.byType(SocialAvatar), findsOneWidget);
+      expect(tester.getSize(find.byType(SocialAvatar)),
+          const Size(96, 96));
       expect(find.byType(CompanionAvatar), findsOneWidget);
       expect(tester.getSize(find.byType(CompanionAvatar)),
-          const Size(96, 96));
-      expect(find.byType(SocialAvatar), findsNothing);
+          const Size(22, 22));
       // La línea "Hoy te acompaña…" dice el nombre UNA vez…
       expect(
           find.text(tr(companionOfDayKey(companion))), findsOneWidget);
       // …y no hay etiqueta de nombre suelta bajo la foto.
       expect(find.text(companionName(companion)), findsNothing);
-      // Sin avatar del usuario ni selector.
+      // Sin avatar dibujado con código ni selector viejo.
       expect(find.byType(MelliAvatar), findsNothing);
       expect(find.text(tr('accountAvatarTitle')), findsNothing);
       expect(find.text(tr('accountAvatarHint')), findsNothing);

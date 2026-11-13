@@ -9,8 +9,10 @@
 // - fix6_niveles: Niveles SOLO con el camino (sin pregunta del día,
 //   sin "Practicar de otra forma").
 // - fix6_niveles_dark: Niveles en oscuro.
-// - fix6_cuenta: Cuenta reordenada (Estadísticas, Mis errores,
-//   Cómo se juega primero).
+// - fix6_cuenta: Cuenta reordenada (7.1: Google prominente
+//   primero, luego Estadísticas, Mis errores, Amigos, Tabla,
+//   Torneo, Grupos, Tienda, Acerca de, Compartir, Soporte y
+//   Ajustes).
 // - fix6_menu: menú hamburguesa rediseñado, en claro.
 // - fix6_menu_dark: menú hamburguesa rediseñado, en oscuro.
 // - fix6_recordatorios: Recordatorios con la sección de diagnóstico
@@ -402,13 +404,14 @@ void main() {
     await tester.tap(find.text(tr('accountTitle')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
-    // Las tres primeras filas, en orden: las filas en tarjeta ya
-    // no son ListTile — se leen por sus títulos de texto, en
-    // orden de aparición en la lista.
+    // Las tres primeras filas, en orden (7.1): Vincular con Google
+    // (prominente, primera fila), Estadísticas y Mis errores. Las
+    // filas en tarjeta ya no son ListTile — se leen por sus títulos
+    // de texto, en orden de aparición en la lista.
     final expectedOrder = [
+      tr('accountLinkGoogle'),
       tr('accountStats'),
       tr('accountReview'),
-      tr('howToPlayTitle'),
     ];
     final seenTitles = tester
         .widgetList<Text>(find.byType(Text))
@@ -416,9 +419,20 @@ void main() {
         .where((data) => expectedOrder.contains(data))
         .toList();
     expect(seenTitles, expectedOrder);
-    // Precarga de las fotos de los compañeros: la foto grande de
-    // la cabecera es la del acompañante del día.
+    // Precarga de las fotos de los compañeros: la miniatura de la
+    // línea "Hoy te acompaña…" es la del acompañante del día.
     await warmCompanions(tester);
+    // Y la del AVATAR DEL USUARIO del círculo grande (alcance 9,
+    // 7.1): con estos prefs es avatar_default. Sin precache, la
+    // primera captura del proceso lo pilla vacío (carrera de
+    // decodificación real-async) y el golden sale distinto según
+    // el orden de ejecución.
+    final ctx = tester.element(find.byType(MaterialApp));
+    await tester.runAsync(() async {
+      await precacheImage(
+          const AssetImage('assets/avatar_default.png'), ctx);
+    });
+    await tester.pump();
     await shot(tester, 'fix6_cuenta.png');
   });
 
@@ -428,6 +442,16 @@ void main() {
     await openDrawer(tester);
     expect(find.text('Quemia'), findsOneWidget);
     expect(find.text(tr('notesTitle')), findsNothing);
+    // La foto del acompañante se asoma detrás del menú: sin
+    // precache, la primera captura del proceso la pilla vacía.
+    await warmCompanions(tester);
+    // Y el logo del anillo del encabezado (assets/app_icon.png,
+    // alcance 10): mismo artefacto de decodificación.
+    final ctx = tester.element(find.byType(MaterialApp));
+    await tester.runAsync(() async {
+      await precacheImage(const AssetImage('assets/app_icon.png'), ctx);
+    });
+    await tester.pump();
     await shot(tester, 'fix6_menu.png');
   });
 
@@ -437,6 +461,12 @@ void main() {
     await openDrawer(tester);
     expect(find.text('Quemia'), findsOneWidget);
     expect(find.text(tr('notesTitle')), findsNothing);
+    await warmCompanions(tester);
+    final ctx = tester.element(find.byType(MaterialApp));
+    await tester.runAsync(() async {
+      await precacheImage(const AssetImage('assets/app_icon.png'), ctx);
+    });
+    await tester.pump();
     await shot(tester, 'fix6_menu_dark.png');
   });
 

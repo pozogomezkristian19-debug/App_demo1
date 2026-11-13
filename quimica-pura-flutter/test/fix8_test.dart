@@ -7,9 +7,11 @@
 //
 // La recuperación por nombre de usuario se ELIMINÓ (cambio 09:08):
 // estos tests comprueban que no queda rastro de esa fila.
-// El inicio con Google va SOLO por Firebase Auth
-// (signInWithProvider/linkWithProvider): aquí se usa el
-// FakeAuthProvider del servicio, nunca el plugin google_sign_in.
+// El inicio con Google va NATIVO con google_sign_in (7.1): el
+// selector de cuentas vive dentro de la app y la credencial (idToken)
+// se entrega a Firebase Auth con linkWithCredential /
+// signInWithCredential. Aquí se usa el FakeAuthProvider del
+// servicio, nunca el plugin real.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -456,12 +458,17 @@ void main() {
       expect(find.text(tr('accountLeaderboard')), findsOneWidget);
       expect(find.text(tr('accountLinkGoogle')), findsOneWidget);
       expect(find.text('Recuperar mi progreso'), findsNothing);
-      // Orden: el grupo nuevo va antes de Idioma.
+      // Orden 7.1: Amigos va antes que la tabla, y la tabla antes
+      // que Torneo. Idioma ya no está en Cuenta: vive en Ajustes.
+      final yFriends =
+          tester.getCenter(find.text(tr('accountFriends'))).dy;
       final yLeaderboard =
           tester.getCenter(find.text(tr('accountLeaderboard'))).dy;
-      final yLanguage =
-          tester.getCenter(find.text(tr('accountLanguage'))).dy;
-      expect(yLeaderboard, lessThan(yLanguage));
+      final yTournaments =
+          tester.getCenter(find.text(tr('accountTournaments'))).dy;
+      expect(yFriends, lessThan(yLeaderboard));
+      expect(yLeaderboard, lessThan(yTournaments));
+      expect(find.text(tr('accountLanguage')), findsNothing);
     });
 
     testWidgets('"Tabla de posiciones" abre la pantalla de leaderboard',

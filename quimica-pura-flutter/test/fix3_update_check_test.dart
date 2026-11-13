@@ -15,21 +15,21 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:quimica_pura/screens/account_screen.dart';
+import 'package:quimica_pura/screens/settings_screen.dart';
 import 'package:quimica_pura/services/progress.dart';
 import 'package:quimica_pura/services/update_check.dart';
 import 'package:quimica_pura/services/user_prefs.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const _newerJson =
-    '{"latest":"7.1","apk_url":"https://example.com/app.apk","notes":"Novedades de la versión","force":false}';
+    '{"latest":"7.2","apk_url":"https://example.com/app.apk","notes":"Novedades de la versión","force":false}';
 const _forcedJson =
-    '{"latest":"7.1","apk_url":"https://example.com/app.apk","notes":"Actualización obligatoria","force":true}';
+    '{"latest":"7.2","apk_url":"https://example.com/app.apk","notes":"Actualización obligatoria","force":true}';
 
 final _now = DateTime(2026, 11, 10, 18, 30);
 
 const _updateInfo = UpdateInfo(
-  latest: '7.1',
+  latest: '7.2',
   apkUrl: 'https://example.com/app.apk',
   notes: 'Novedades de la versión',
   force: false,
@@ -105,7 +105,7 @@ void main() {
       expect(compareVersions('6.0', '6.2'), lessThan(0));
       expect(compareVersions('6.0', '6.0'), 0);
       expect(compareVersions('5.9', '6.0'), lessThan(0));
-      expect(compareVersions('7.0', '6.9'), greaterThan(0));
+      expect(compareVersions('7.1', '6.9'), greaterThan(0));
     });
 
     test('"6.0" < "6.0.1" (un componente más)', () {
@@ -169,7 +169,7 @@ void main() {
     test('versión nueva sin descartar y sin comprobar hoy: avisa', () {
       expect(
         shouldShowUpdate(
-          latest: '7.1',
+          latest: '7.2',
           force: false,
           dismissedVersion: null,
         ),
@@ -180,18 +180,18 @@ void main() {
     test('versión descartada con "Más tarde" no vuelve a preguntar', () {
       expect(
         shouldShowUpdate(
-          latest: '7.1',
+          latest: '7.2',
           force: false,
-          dismissedVersion: '7.1',
+          dismissedVersion: '7.2',
         ),
         isFalse,
       );
       // Otra versión más nueva sí vuelve a avisar.
       expect(
         shouldShowUpdate(
-          latest: '7.1',
+          latest: '7.2',
           force: false,
-          dismissedVersion: '7.0',
+          dismissedVersion: '7.1',
         ),
         isTrue,
       );
@@ -200,9 +200,9 @@ void main() {
     test('con force no se puede posponer: avisa aunque se descartó', () {
       expect(
         shouldShowUpdate(
-          latest: '7.1',
+          latest: '7.2',
           force: true,
-          dismissedVersion: '7.1',
+          dismissedVersion: '7.2',
         ),
         isTrue,
       );
@@ -215,7 +215,7 @@ void main() {
       // se acabara de mirar hace un minuto o hace un mes.
       expect(
         shouldShowUpdate(
-          latest: '7.1',
+          latest: '7.2',
           force: false,
           dismissedVersion: null,
         ),
@@ -223,7 +223,7 @@ void main() {
       );
       expect(
         shouldShowUpdate(
-          latest: '7.1',
+          latest: '7.2',
           force: true,
           dismissedVersion: null,
         ),
@@ -232,9 +232,9 @@ void main() {
       // La versión descartada sigue sin avisar, con o sin force.
       expect(
         shouldShowUpdate(
-          latest: '7.1',
+          latest: '7.2',
           force: false,
-          dismissedVersion: '7.1',
+          dismissedVersion: '7.2',
         ),
         isFalse,
       );
@@ -242,14 +242,14 @@ void main() {
   });
 
   group('kAppVersion (fix4, punto 6)', () {
-    test('la versión instalada es la 7.0', () {
-      expect(kAppVersion, '7.0');
-      expect(compareVersions('7.0', '6.0'), greaterThan(0));
-      // Nada más instalar la 7.0, la 7.0 remota no avisa (sin falso
-      // aviso); la 7.1 sí.
+    test('la versión instalada es la 7.1', () {
+      expect(kAppVersion, '7.1');
+      expect(compareVersions('7.1', '6.0'), greaterThan(0));
+      // Nada más instalar la 7.1, la 7.1 remota no avisa (sin falso
+      // aviso); la 7.2 sí.
       expect(
         shouldShowUpdate(
-          latest: '7.0',
+          latest: '7.1',
           force: false,
           dismissedVersion: null,
         ),
@@ -257,7 +257,7 @@ void main() {
       );
       expect(
         shouldShowUpdate(
-          latest: '7.1',
+          latest: '7.2',
           force: false,
           dismissedVersion: null,
         ),
@@ -270,7 +270,7 @@ void main() {
     test('sin recordatorio previo: se programa', () {
       expect(
         shouldScheduleReminder(
-          latest: '7.1',
+          latest: '7.2',
           scheduledVersion: null,
           scheduledAt: null,
           now: _now,
@@ -282,8 +282,8 @@ void main() {
     test('ya hay uno para ESTA versión y aún no llegó: no se duplica', () {
       expect(
         shouldScheduleReminder(
-          latest: '7.1',
-          scheduledVersion: '7.1',
+          latest: '7.2',
+          scheduledVersion: '7.2',
           scheduledAt: _now.add(const Duration(hours: 2)),
           now: _now,
         ),
@@ -295,7 +295,7 @@ void main() {
       expect(
         shouldScheduleReminder(
           latest: '6.6',
-          scheduledVersion: '7.1',
+          scheduledVersion: '7.2',
           scheduledAt: _now.add(const Duration(hours: 2)),
           now: _now,
         ),
@@ -306,8 +306,8 @@ void main() {
     test('el recordatorio ya pasó: se programa el siguiente', () {
       expect(
         shouldScheduleReminder(
-          latest: '7.1',
-          scheduledVersion: '7.1',
+          latest: '7.2',
+          scheduledVersion: '7.2',
           scheduledAt: _now.subtract(const Duration(hours: 1)),
           now: _now,
         ),
@@ -369,14 +369,14 @@ void main() {
       expect(dl.progress.value, 1);
       expect(seen, contains(1.0));
       expect(await file!.readAsBytes(), bytes);
-      expect(file.path.endsWith('quemia-7.1.apk'), isTrue);
+      expect(file.path.endsWith('quemia-7.2.apk'), isTrue);
       expect(dl.downloadedPath, file.path);
-      expect(dl.downloadedVersion, '7.1');
+      expect(dl.downloadedVersion, '7.2');
     });
 
     test('si el APK ya está descargado, no descarga de nuevo', () async {
       final bytes = List<int>.generate(50, (i) => i);
-      await File('${dir.path}/quemia-7.1.apk').writeAsBytes(bytes);
+      await File('${dir.path}/quemia-7.2.apk').writeAsBytes(bytes);
       var calls = 0;
       final dl = UpdateDownloader();
       final file = await dl.download(
@@ -410,11 +410,11 @@ void main() {
       expect(dl.state.value, UpdateDownloadState.idle);
       expect(dl.progress.value, 0);
       expect(
-        await File('${dir.path}/quemia-7.1.apk').exists(),
+        await File('${dir.path}/quemia-7.2.apk').exists(),
         isFalse,
       );
       expect(
-        await File('${dir.path}/quemia-7.1.apk.part').exists(),
+        await File('${dir.path}/quemia-7.2.apk.part').exists(),
         isFalse,
       );
     });
@@ -446,7 +446,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Hay una nueva actualización'), findsOneWidget);
-      expect(find.text('Versión 7.1 disponible'), findsOneWidget);
+      expect(find.text('Versión 7.2 disponible'), findsOneWidget);
       expect(find.text('Novedades de la versión'), findsOneWidget);
       expect(find.text('Actualizar ahora'), findsOneWidget);
       expect(find.text('Más tarde'), findsOneWidget);
@@ -484,15 +484,15 @@ void main() {
       expect(find.text('Hay una nueva actualización'), findsNothing);
 
       final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString(kUpdateDismissedKey), '7.1');
+      expect(prefs.getString(kUpdateDismissedKey), '7.2');
       // La info pendiente queda guardada: al tocar el recordatorio
       // el diálogo sale con estos datos aunque no haya internet.
       final pending = prefs.getString(kUpdatePendingKey);
       expect(pending, isNotNull);
       final pendingJson =
           jsonDecode(pending!) as Map<String, dynamic>;
-      expect(UpdateInfo.fromJson(pendingJson)?.latest, '7.1');
-      expect(prefs.getString(kUpdateReminderVersionKey), '7.1');
+      expect(UpdateInfo.fromJson(pendingJson)?.latest, '7.2');
+      expect(prefs.getString(kUpdateReminderVersionKey), '7.2');
       final atMs = prefs.getInt(kUpdateReminderAtKey);
       expect(atMs, isNotNull);
       // Mañana, no hoy: al día siguiente.
@@ -503,7 +503,7 @@ void main() {
     testWidgets('versión descartada: al abrir no hay diálogo, solo el '
         'recordatorio (una vez al día)', (tester) async {
       SharedPreferences.setMockInitialValues({
-        kUpdateDismissedKey: '7.1',
+        kUpdateDismissedKey: '7.2',
       });
       var calls = 0;
       await tester.pumpWidget(
@@ -520,7 +520,7 @@ void main() {
       expect(calls, 1);
       expect(find.text('Hay una nueva actualización'), findsNothing);
       final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString(kUpdateReminderVersionKey), '7.1');
+      expect(prefs.getString(kUpdateReminderVersionKey), '7.2');
 
       // La comprobación inicial reprograma el recordatorio (con
       // E/S real de archivos, que en testWidgets solo avanza en
@@ -550,7 +550,7 @@ void main() {
     testWidgets('desde el recordatorio, la versión descartada SÍ muestra '
         'el diálogo', (tester) async {
       SharedPreferences.setMockInitialValues({
-        kUpdateDismissedKey: '7.1',
+        kUpdateDismissedKey: '7.2',
       });
       await tester.pumpWidget(
         _Harness(
@@ -670,13 +670,13 @@ void main() {
         () => Directory.systemTemp.createTemp('melli_apk_'),
       );
       addTearDown(() => dir!.deleteSync(recursive: true));
-      final apk = File('${dir!.path}/quemia-7.1.apk');
+      final apk = File('${dir!.path}/quemia-7.2.apk');
       await tester.runAsync(
         () => apk.writeAsBytes(List<int>.generate(20, (i) => i)),
       );
       SharedPreferences.setMockInitialValues({
         kUpdateApkPathKey: apk.path,
-        kUpdateApkVersionKey: '7.1',
+        kUpdateApkVersionKey: '7.2',
       });
       await tester.pumpWidget(
         _Harness(fetcher: (_) async => _newerJson, now: _now),
@@ -694,7 +694,7 @@ void main() {
 
     // La versión instalada: la primera mirada no avisa nada.
     const sameVersionJson =
-        '{"latest":"7.0","apk_url":"https://example.com/app.apk","notes":"","force":false}';
+        '{"latest":"7.1","apk_url":"https://example.com/app.apk","notes":"","force":false}';
 
     /// Espera a que la comprobación inicial (disparada por el primer
     /// frame) termine de verdad: pumpAndSettle no espera a sus
@@ -744,14 +744,20 @@ void main() {
         '"Más tarde" sigue sin repetirse al volver a primer plano '
         '(solo comprueba, el recordatorio es el que avisa)',
         (tester) async {
-      // El recordatorio ya está programado para mañana: la
-      // comprobación inicial no vuelve a programarlo (esa ruta, con
-      // E/S real, la cubre el test de "Más tarde").
+      // El recordatorio ya está programado para mañana: la hora es
+      // la REAL (no _now, que es 2026-11-10), para que el test no
+      // dependa de la fecha en que se ejecuta. Con _now + 24 h el
+      // recordatorio caducaba al correr el test después del
+      // 2026-11-11 y la comprobación al volver a primer plano (que
+      // usa DateTime.now()) lo reprogramaba, dejando el
+      // temporizador de 3 s de la copia del icono pendiente al
+      // terminar el test.
       SharedPreferences.setMockInitialValues({
-        kUpdateDismissedKey: '7.1',
-        kUpdateReminderVersionKey: '7.1',
-        kUpdateReminderAtKey:
-            _now.add(const Duration(hours: 24)).millisecondsSinceEpoch,
+        kUpdateDismissedKey: '7.2',
+        kUpdateReminderVersionKey: '7.2',
+        kUpdateReminderAtKey: DateTime.now()
+            .add(const Duration(hours: 24))
+            .millisecondsSinceEpoch,
       });
       var calls = 0;
       await tester.pumpWidget(
@@ -764,12 +770,12 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      // La primera mirada ve la 7.1 descartada: no hay diálogo y el
+      // La primera mirada ve la 7.2 descartada: no hay diálogo y el
       // recordatorio por notificación sigue programado.
       expect(calls, 1);
       expect(find.text('Hay una nueva actualización'), findsNothing);
       final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString(kUpdateReminderVersionKey), '7.1');
+      expect(prefs.getString(kUpdateReminderVersionKey), '7.2');
 
       // La comprobación inicial reprograma el recordatorio: se
       // espera a que termine antes de la vuelta a primer plano.
@@ -783,17 +789,17 @@ void main() {
       // ...pero la versión pospuesta NO vuelve a avisar: el aviso
       // queda en el recordatorio (no se duplica).
       expect(find.text('Hay una nueva actualización'), findsNothing);
-      expect(prefs.getString(kUpdateReminderVersionKey), '7.1');
+      expect(prefs.getString(kUpdateReminderVersionKey), '7.2');
     });
 
     testWidgets('force: al volver a primer plano vuelve a avisar '
         'aunque esa versión se descartó', (tester) async {
-      // La primera mirada ve la 7.1 normal y descartada (no la
+      // La primera mirada ve la 7.2 normal y descartada (no la
       // misma versión: esa limpiaría el descartado al actualizar).
       // El recordatorio ya está programado (ver el test anterior).
       SharedPreferences.setMockInitialValues({
-        kUpdateDismissedKey: '7.1',
-        kUpdateReminderVersionKey: '7.1',
+        kUpdateDismissedKey: '7.2',
+        kUpdateReminderVersionKey: '7.2',
         kUpdateReminderAtKey:
             _now.add(const Duration(hours: 24)).millisecondsSinceEpoch,
       });
@@ -898,13 +904,13 @@ void main() {
         () => Directory.systemTemp.createTemp('melli_inst_'),
       );
       addTearDown(() => dir!.deleteSync(recursive: true));
-      final apk = File('${dir!.path}/quemia-7.1.apk');
+      final apk = File('${dir!.path}/quemia-7.2.apk');
       await tester.runAsync(
         () => apk.writeAsBytes(List<int>.generate(10, (i) => i)),
       );
       SharedPreferences.setMockInitialValues({
         kUpdateApkPathKey: apk.path,
-        kUpdateApkVersionKey: '7.1',
+        kUpdateApkVersionKey: '7.2',
       });
       await tester.pumpWidget(
         const MaterialApp(home: Scaffold(body: Text('Inicio'))),
@@ -932,13 +938,13 @@ void main() {
         () => Directory.systemTemp.createTemp('melli_inst2_'),
       );
       addTearDown(() => dir!.deleteSync(recursive: true));
-      final apk = File('${dir!.path}/quemia-7.1.apk');
+      final apk = File('${dir!.path}/quemia-7.2.apk');
       await tester.runAsync(
         () => apk.writeAsBytes(List<int>.generate(10, (i) => i)),
       );
       SharedPreferences.setMockInitialValues({
         kUpdateApkPathKey: apk.path,
-        kUpdateApkVersionKey: '7.1',
+        kUpdateApkVersionKey: '7.2',
       });
       await tester.pumpWidget(
         const MaterialApp(home: Scaffold(body: Text('Inicio'))),
@@ -1009,7 +1015,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final apk = File('${dir!.path}/quemia-7.1.apk');
+      final apk = File('${dir!.path}/quemia-7.2.apk');
       expect(await tester.runAsync(() => apk.exists()), isTrue);
       expect(await tester.runAsync(() => apk.readAsBytes()), bytes);
       expect(installedPaths, [apk.path]);
@@ -1017,7 +1023,7 @@ void main() {
           UpdateDownloadState.installing);
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getString(kUpdateApkPathKey), apk.path);
-      expect(prefs.getString(kUpdateApkVersionKey), '7.1');
+      expect(prefs.getString(kUpdateApkVersionKey), '7.2');
     });
   });
 
@@ -1046,7 +1052,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('Hay una nueva actualización'), findsOneWidget);
-      expect(find.text('Versión 7.1 disponible'), findsOneWidget);
+      expect(find.text('Versión 7.2 disponible'), findsOneWidget);
 
       // Cerrar con "Más tarde" para que el método termine.
       await tester.tap(find.text('Más tarde'));
@@ -1092,7 +1098,7 @@ void main() {
     testWidgets('pasa por encima de "Más tarde": versión descartada '
         'SÍ muestra el diálogo', (tester) async {
       SharedPreferences.setMockInitialValues({
-        kUpdateDismissedKey: '7.1',
+        kUpdateDismissedKey: '7.2',
       });
       final context = await pumpHome(tester);
 
@@ -1118,11 +1124,12 @@ void main() {
     });
   });
 
-  group('botón "Buscar actualización" en Cuenta (fix4, punto 7)', () {
+  group('botón "Buscar actualización" en Ajustes (fix4, punto 7; '
+      '7.1: mudado de Cuenta)', () {
     tearDown(() => UpdateCheckService.resetForTests());
 
     const sameJson =
-        '{"latest":"7.0","apk_url":"https://example.com/app.apk","notes":"","force":false}';
+        '{"latest":"7.1","apk_url":"https://example.com/app.apk","notes":"","force":false}';
 
     Future<void> pumpAccount(WidgetTester tester) async {
       SharedPreferences.setMockInitialValues({});
@@ -1131,21 +1138,18 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: AccountScreen(
+            body: SettingsScreen(
               onOpenScreen: (_) {},
-              onShowAbout: () {},
-              onShowShareApp: () {},
-              trackTopics: const [],
             ),
           ),
         ),
       );
-      // Sin pumpAndSettle: el corazón de la tarjeta de estadísticas
-      // late sin parar (PulseWidget repite cada 1200 ms) y
-      // pumpAndSettle no terminaría nunca. Unos pumps bastan.
+      // Unos pumps bastan (sin pumpAndSettle: en la app real el
+      // corazón de la tarjeta de estadísticas late sin parar y
+      // pumpAndSettle no terminaría nunca).
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      // La fila está al final de la lista: hay que bajar hasta ella
+      // La fila está en Ajustes, no en Cuenta: se baja hasta ella
       // para que se construya (el ListView solo pinta lo visible).
       await tester.scrollUntilVisible(
         find.text('Buscar actualización'),
@@ -1160,8 +1164,8 @@ void main() {
         (tester) async {
       await pumpAccount(tester);
       // La comprobación al abrir arma el servicio con el falso (que
-      // primero dice 7.0, la instalada); el botón usa ese mismo
-      // falso y en su segunda llamada dice 7.1.
+      // primero dice 7.1, la instalada); el botón usa ese mismo
+      // falso y en su segunda llamada dice 7.2.
       var calls = 0;
       Future<String?> statefulFetcher(Uri url) async {
         calls++;
@@ -1182,7 +1186,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       expect(calls, 2);
       expect(find.text('Hay una nueva actualización'), findsOneWidget);
-      expect(find.text('Versión 7.1 disponible'), findsOneWidget);
+      expect(find.text('Versión 7.2 disponible'), findsOneWidget);
     });
 
     testWidgets('sin versión nueva, avisa "Ya tienes la última versión"',

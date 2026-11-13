@@ -11,6 +11,7 @@ import 'package:quimica_pura/screens/lab_quiz_screen.dart';
 import 'package:quimica_pura/screens/lab_screen.dart';
 import 'package:quimica_pura/screens/onboarding_screen.dart';
 import 'package:quimica_pura/screens/practicar_screen.dart';
+import 'package:quimica_pura/screens/settings_screen.dart';
 import 'package:quimica_pura/screens/tabla_screen.dart';
 import 'package:quimica_pura/screens/table_quiz_screen.dart';
 import 'package:quimica_pura/screens/theme_screen.dart';
@@ -23,6 +24,7 @@ import 'package:quimica_pura/widgets/avatar.dart';
 import 'package:quimica_pura/widgets/brand_logo.dart';
 import 'package:quimica_pura/widgets/lucide_icons.dart';
 import 'package:quimica_pura/widgets/main_bottom_nav.dart';
+import 'package:quimica_pura/widgets/social_avatar.dart';
 import 'package:quimica_pura/widgets/support_button.dart';
 import 'package:quimica_pura/widgets/twin_avatars.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -75,8 +77,13 @@ void main() {
       UserPrefs.themeAccent = 'verde';
       expect(AppAccent.primary, const Color(0xFF00C2A8));
       expect(AppAccent.primaryDark, const Color(0xFF00A18D));
-      expect(AppAccent.tabColor(0), const Color(0xFF00C2A8));
-      expect(AppAccent.tabColor(1), const Color(0xFF8B5CF6));
+      // Regla 9 (rediseño Duolingo): UN solo color de acción — todas
+      // las pestañas llevan el acento elegido, no un color por
+      // pestaña. La lista de colores por pestaña quedó retirada
+      // (ver AppAccent.tabColor en accent.dart).
+      for (var i = 0; i < 5; i++) {
+        expect(AppAccent.tabColor(i), const Color(0xFF00C2A8));
+      }
       UserPrefs.themeAccent = 'violeta';
       expect(AppAccent.primary, const Color(0xFF8B5CF6));
       // Con violeta, TODAS las pestañas llevan violeta.
@@ -301,8 +308,16 @@ void main() {
 
   group('Cuenta (items 6 y 12)', () {
     testWidgets(
-        'sin selector de avatar propio; con fila Tema que abre '
-        'su pantalla', (tester) async {
+        'avatar editable en el círculo; sin género escrito; Tema '
+        'vive en Ajustes y abre su pantalla', (tester) async {
+      // Con nombre y género puestos, el saludo es "Bienvenido
+      // Kristian" SIN "· Masculino" (alcance 10).
+      UserPrefs.userName = 'Kristian';
+      UserPrefs.userGender = 'Masculino';
+      addTearDown(() {
+        UserPrefs.userName = '';
+        UserPrefs.userGender = '';
+      });
       final opened = <String>[];
       await tester.pumpWidget(
         MaterialApp(
@@ -319,35 +334,69 @@ void main() {
       );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
+      // Nada de avatares dibujados con código (eso sigue
+      // rechazado) ni del selector viejo.
       expect(find.byType(MelliAvatar), findsNothing);
       expect(find.text(tr('accountAvatarTitle')), findsNothing);
-      // Corrección fix3: en Cuenta NO hay avatar del USUARIO ni su
-      // selector (eso fue lo único que se pidió quitar), PERO la
-      // foto de la compañera del día SÍ está (48 px, con su aro de
-      // color, junto a la línea "Hoy te acompaña…"). No son
-      // TwinAvatarA/B (la API nueva es CompanionAvatar, que cubre
-      // a los tres, incluido Kristian) ni hay etiqueta de nombre
-      // bajo la foto.
+      // Alcance 9: el CÍRCULO GRANDE (96 dp) es el avatar del
+      // USUARIO (SocialAvatar, con su lápiz), no la compañera.
+      // Tocar ahí abre la galería (clave 'avatar').
+      expect(find.byType(SocialAvatar), findsOneWidget);
+      expect(tester.getSize(find.byType(SocialAvatar)),
+          const Size(96, 96));
+      await tester.tap(find.byType(SocialAvatar));
+      await tester.pump();
+      expect(opened, ['avatar']);
+      // La compañera del día sigue, pero en MINIATURA (22 dp)
+      // junto a la línea "Hoy te acompaña…": no es TwinAvatarA/B
+      // (la API nueva es CompanionAvatar, que cubre a los tres,
+      // incluido Kristian) ni hay etiqueta de nombre bajo la foto.
+      expect(find.byType(CompanionAvatar), findsOneWidget);
+      expect(tester.getSize(find.byType(CompanionAvatar)),
+          const Size(22, 22));
       expect(find.byType(TwinAvatarA), findsNothing);
       expect(find.byType(TwinAvatarB), findsNothing);
       expect(find.text(tr('accountTitle')), findsOneWidget);
       expect(find.text(tr(companionOfDayKey(companionOfTheDay()))),
           findsOneWidget);
-      // Fix6, ítem 3: el tema por defecto es 'sistema' (el estático
-      // nace así y load() sin nada guardado también), así que el
-      // subtítulo de la fila Tema es "Verde · Sistema".
+      // Alcance 10: el saludo dice "Bienvenido Kristian" y el
+      // género NO se muestra escrito en ningún sitio de Cuenta.
+      expect(find.text('Bienvenido Kristian'), findsOneWidget);
+      expect(find.text('Masculino'), findsNothing);
+      expect(find.text('Femenino'), findsNothing);
+      // Alcance 6: la fila Tema ya NO está en Cuenta; vive en
+      // Ajustes. Fix6, ítem 3: el tema por defecto es 'sistema'
+      // (el estático nace así y load() sin nada guardado también),
+      // así que el subtítulo de la fila Tema es "Verde · Sistema".
+      expect(find.text(tr('themeTitle')), findsNothing);
       await UserPrefs.saveThemeMode('sistema');
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(useMaterial3: true),
+          home: Scaffold(
+            body: SettingsScreen(
+              onOpenScreen: opened.add,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
       expect(find.text(tr('themeTitle')), findsOneWidget);
       expect(find.text('${tr('themeGreen')} · ${tr('themeSystem')}'),
           findsOneWidget);
       expect(find.text(tr('themeViolet')), findsNothing);
       expect(find.text(tr('themeModeLabel')), findsNothing);
       // Tocar la fila abre la pantalla Tema.
-      await tester.ensureVisible(find.text(tr('themeTitle')));
+      await tester.scrollUntilVisible(
+        find.text(tr('themeTitle')),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.pump();
       await tester.tap(find.text(tr('themeTitle')));
       await tester.pump();
-      expect(opened, ['theme']);
+      expect(opened, ['avatar', 'theme']);
       // En la pantalla dedicada, el selector de color funciona.
       await tester.pumpWidget(
         MaterialApp(
@@ -387,9 +436,12 @@ void main() {
         ),
         findsOneWidget,
       );
-      // Icono ARRIBA del texto y ambas tarjetas iguales de alto
-      // (auditoría fix2: los botones viejos partían el texto en
-      // 3 líneas apretado).
+      // Icono ARRIBA del texto y ambas tarjetas DE ACCIÓN iguales
+      // de alto (auditoría fix2: los botones viejos partían el
+      // texto en 3 líneas apretado). Se comparan por su etiqueta,
+      // no "primera y última Card del árbol": el contenido del tema
+      // debajo también trae tarjetas desde la 7.1 (ítem 5a) y la
+      // última del árbol ya no es la del cuestionario.
       final icon = find.descendant(
         of: firstCard,
         matching: lucide(LucideIcons.flaskConical),
@@ -397,11 +449,22 @@ void main() {
       expect(icon, findsOneWidget);
       expect(tester.getCenter(icon).dy,
           lessThan(tester.getCenter(find.text(tr('labSimTitle'))).dy));
-      final sizes = find.byType(Card).evaluate().map((e) {
-        final box = e.renderObject as RenderBox;
-        return box.size.height;
-      }).toList();
-      expect(sizes.first, sizes.last);
+      final simCard = find
+          .ancestor(
+            of: find.text(tr('labSimTitle')),
+            matching: find.byType(Card),
+          )
+          .first;
+      final quizCard = find
+          .ancestor(
+            of: find.text(tr('labQuizButton')),
+            matching: find.byType(Card),
+          )
+          .first;
+      expect(
+        tester.getSize(simCard).height,
+        tester.getSize(quizCard).height,
+      );
     });
 
   });

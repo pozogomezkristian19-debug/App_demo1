@@ -99,6 +99,15 @@ class _Fix5FakeNotifications extends AndroidFlutterLocalNotificationsPlugin
     return true;
   }
 
+  /// Canales de notificación (Zona G, 7.1): la confirmación
+  /// tipada y la prueba consultan los canales antes de enviar.
+  /// Sin este override, la llamada cae en el MethodChannel sin
+  /// mock y su Future no se resuelve nunca. Por defecto ninguno
+  /// (el canal de prueba aún no existe) → no bloqueado.
+  @override
+  Future<List<AndroidNotificationChannel>?> getNotificationChannels() async =>
+      const [];
+
   @override
   Future<void> show({
     required int id,
@@ -217,6 +226,11 @@ void main() {
     test('enable() con el permiso concedido dispara UNA notificación '
         'de confirmación inmediata', () async {
       expect(await NotificationService.enable(), isTrue);
+      // La confirmación se dispara sin esperar (unawaited) y la
+      // versión tipada (Zona G) consulta el canal antes de enviar:
+      // hay que darle un turno al bucle de eventos para que el
+      // show() llegue a ejecutarse antes de comprobarlo.
+      await Future<void>.delayed(const Duration(milliseconds: 50));
       expect(fake.shown, hasLength(1));
       expect(fake.shown.single.id, 9998);
       expect(fake.shown.single.title, 'Quemia');

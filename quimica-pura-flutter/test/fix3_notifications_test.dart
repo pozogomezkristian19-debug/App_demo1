@@ -47,6 +47,18 @@ class _FakeAndroidNotifications extends AndroidFlutterLocalNotificationsPlugin
   @override
   Future<bool?> requestExactAlarmsPermission() async => true;
 
+  /// Permiso real (Zona G, 7.1): la prueba tipada y la
+  /// confirmación consultan areNotificationsEnabled() y los
+  /// canales antes de enviar. Sin estos overrides, la llamada cae
+  /// en el MethodChannel sin mock, su Future no se resuelve nunca
+  /// y el tope de 2 s deja un Timer pendiente que rompe el test.
+  @override
+  Future<bool?> areNotificationsEnabled() async => permissionGranted;
+
+  @override
+  Future<List<AndroidNotificationChannel>?> getNotificationChannels() async =>
+      const [];
+
   @override
   Future<void> cancelAll() async {}
 
@@ -307,6 +319,15 @@ void main() {
 
   testWidgets('la pantalla simplificada no muestra el próximo aviso '
       '(solo interruptor y botón de prueba)', (tester) async {
+    // Permiso CONCEDIDO (Zona G): el fake ya no se queda colgado
+    // en areNotificationsEnabled (antes el tope de 100 ms de
+    // isPermissionGranted asumía "sí" y el interruptor salía ON
+    // aunque el permiso estuviera negado por defecto). Con el
+    // permiso negado, el interruptor refleja la realidad y queda
+    // APAGADO; para comprobar la pantalla con el interruptor ON
+    // hay que concederlo de verdad.
+    FlutterLocalNotificationsPlatform.instance =
+        _FakeAndroidNotifications(permissionGranted: true);
     final next = DateTime.now().add(const Duration(minutes: 30));
     SharedPreferences.setMockInitialValues({
       'melli_reminder_on': true,

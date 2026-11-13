@@ -1,15 +1,16 @@
 // Pruebas de la ronda fix3 2026-11-10 (punto 13: el cambio de tema
-// vive SOLO en Cuenta): el modo Claro / Oscuro / Sistema se elige
-// en Cuenta, se guarda en el teléfono y cambia el tema de toda la
-// app en el acto, sin el icono de sol/luna de la AppBar. El selector
-// de color Verde/Violeta sigue donde estaba. Último cambio de la
-// ronda: en Cuenta Tema ya NO es una tarjeta inline, es una fila
+// vive SOLO en Ajustes desde la 7.1 — antes vivía en Cuenta): el
+// modo Claro / Oscuro / Sistema se elige en Ajustes, se guarda en
+// el teléfono y cambia el tema de toda la app en el acto, sin el
+// icono de sol/luna de la AppBar. El selector de color
+// Verde/Violeta sigue donde estaba. En Ajustes Tema es una fila
 // táctil ("Verde · Claro") que abre su propia pantalla dedicada
 // (ThemeScreen) con el color y el modo.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quimica_pura/main.dart';
 import 'package:quimica_pura/screens/account_screen.dart';
+import 'package:quimica_pura/screens/settings_screen.dart';
 import 'package:quimica_pura/screens/theme_screen.dart';
 import 'package:quimica_pura/services/localization.dart';
 import 'package:quimica_pura/services/progress.dart';
@@ -48,6 +49,24 @@ Future<void> pumpTheme(WidgetTester tester) async {
     ),
   );
   await tester.pump();
+}
+
+// 7.1 (ítem 9): Tema vive en Ajustes, no en Cuenta. La fila es la
+// misma (título + subtítulo de la selección actual + abre ThemeScreen),
+// solo cambia la pantalla que la contiene.
+Future<void> pumpSettings(WidgetTester tester) async {
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: ThemeData(useMaterial3: true),
+      home: Scaffold(
+        body: SettingsScreen(
+          onOpenScreen: (_) {},
+        ),
+      ),
+    ),
+  );
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 100));
 }
 
 void main() {
@@ -157,15 +176,50 @@ void main() {
     });
   });
 
-  group('Cuenta: fila "Tema" + pantalla dedicada', () {
+  group('Ajustes: fila "Tema" + pantalla dedicada', () {
+    testWidgets('Cuenta ya NO muestra Tema; muestra la fila Ajustes',
+        (tester) async {
+      // 7.1 (ítem 9): Tema, Recordatorios, Notificaciones, Cómo se
+      // juega y Buscar actualización viven en Ajustes; Cuenta solo
+      // guarda la puerta (última fila).
+      final opened = <String>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(useMaterial3: true),
+          home: Scaffold(
+            body: AccountScreen(
+              onOpenScreen: opened.add,
+              onShowAbout: () {},
+              onShowShareApp: () {},
+              trackTopics: const ['estequiometria'],
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text(tr('themeTitle')), findsNothing);
+      // La fila Ajustes es la ÚLTIMA de la lista: hay que bajar
+      // hasta verla (ListView perezoso, no se monta fuera de vista).
+      await tester.scrollUntilVisible(
+        find.text(tr('settingsTitle')),
+        300,
+      );
+      await tester.pump();
+      expect(find.text(tr('settingsTitle')), findsOneWidget);
+      await tester.tap(find.text(tr('settingsTitle')));
+      await tester.pump();
+      expect(opened, ['settings']);
+    });
+
     testWidgets('la fila Tema muestra la selección actual en el '
         'subtítulo', (tester) async {
-      await pumpAccount(tester);
+      await pumpSettings(tester);
       expect(find.text(tr('themeTitle')), findsOneWidget);
       expect(
           find.text('${tr('themeGreen')} · ${tr('lightWord')}'),
           findsOneWidget);
-      // Las opciones viven en la pantalla dedicada, no en Cuenta.
+      // Las opciones viven en la pantalla dedicada, no en Ajustes.
       expect(find.text(tr('themeViolet')), findsNothing);
       expect(find.text(tr('themeModeLabel')), findsNothing);
       expect(find.text(tr('darkWord')), findsNothing);
@@ -176,7 +230,7 @@ void main() {
         (tester) async {
       await UserPrefs.saveThemeAccent('violeta');
       await UserPrefs.saveThemeMode('oscuro');
-      await pumpAccount(tester);
+      await pumpSettings(tester);
       expect(
           find.text('${tr('themeViolet')} · ${tr('darkWord')}'),
           findsOneWidget);
@@ -189,11 +243,8 @@ void main() {
         MaterialApp(
           theme: ThemeData(useMaterial3: true),
           home: Scaffold(
-            body: AccountScreen(
+            body: SettingsScreen(
               onOpenScreen: opened.add,
-              onShowAbout: () {},
-              onShowShareApp: () {},
-              trackTopics: const ['estequiometria'],
             ),
           ),
         ),
@@ -297,8 +348,8 @@ void main() {
     });
   });
 
-  group('La app entera sigue al modo elegido en Cuenta', () {
-    testWidgets('cambiar el modo en Cuenta cambia el ThemeMode',
+  group('La app entera sigue al modo elegido en Ajustes', () {
+    testWidgets('cambiar el modo cambia el ThemeMode',
         (tester) async {
       tester.view.physicalSize = const Size(800, 1700);
       tester.view.devicePixelRatio = 1.0;

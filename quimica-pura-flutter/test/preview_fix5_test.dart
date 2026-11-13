@@ -207,11 +207,22 @@ void main() {
 
   testWidgets(
       'fix5_como_se_juega_pantalla: "Cómo se juega" como pantalla '
-      'completa desde Cuenta, todo visible sin scroll', (tester) async {
+      'completa desde Ajustes, todo visible sin scroll', (tester) async {
     await setPhone(tester);
     await tester.pumpWidget(const MelliQuiApp());
     await settle(tester);
     await tester.tap(find.text(tr('accountTitle')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    // 7.1: "¿Cómo se juega?" vive en Ajustes (última fila de
+    // Cuenta): hay que bajar hasta ella para que se construya.
+    await tester.scrollUntilVisible(
+      find.text(tr('settingsTitle')),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pump();
+    await tester.tap(find.text(tr('settingsTitle')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
     await tester.ensureVisible(find.text(tr('howToPlayTitle')));

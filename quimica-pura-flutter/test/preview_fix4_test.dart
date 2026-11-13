@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:quimica_pura/main.dart';
 import 'package:quimica_pura/screens/account_screen.dart';
 import 'package:quimica_pura/screens/notifications_screen.dart';
+import 'package:quimica_pura/screens/settings_screen.dart';
 import 'package:quimica_pura/screens/tabla_screen.dart';
 import 'package:quimica_pura/services/localization.dart';
 import 'package:quimica_pura/services/notification_inbox.dart';
@@ -108,8 +109,15 @@ void main() {
   /// artefacto del render, no un bug de la app.
   Future<void> warmCompanions(WidgetTester tester) async {
     final ctx = tester.element(find.byType(MaterialApp));
+    // La precarga va dentro de runAsync (como en preview_fix6):
+    // sin él, el Future de precacheImage no se completa en la
+    // zona fake-async y el test se cuelga cuando la caché está
+    // fría (p. ej. al lanzar el test solo con --plain-name, sin
+    // el warm-up previo).
     for (final c in Companion.values) {
-      await precacheImage(AssetImage(companionAsset(c)), ctx);
+      await tester.runAsync(() async {
+        await precacheImage(AssetImage(companionAsset(c)), ctx);
+      });
     }
     await tester.pump();
   }
@@ -245,25 +253,23 @@ void main() {
   });
 
   testWidgets(
-      'fix4_update_check_button: Cuenta con "Buscar '
-      'actualización"', (tester) async {
+      'fix4_update_check_button: Ajustes con "Buscar '
+      'actualización" (7.1: mudado de Cuenta)', (tester) async {
     await setPhone(tester);
     await tester.pumpWidget(
       MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: ThemeData(useMaterial3: true),
         home: Scaffold(
-          body: AccountScreen(
+          body: SettingsScreen(
             onOpenScreen: (_) {},
-            onShowAbout: () {},
-            onShowShareApp: () {},
-            trackTopics: const [],
           ),
         ),
       ),
     );
-    // Sin pumpAndSettle: el corazón de la tarjeta de estadísticas
-    // late sin parar (PulseWidget repite cada 1200 ms).
+    // Unos pumps bastan (sin pumpAndSettle: en la app real el
+    // corazón de la tarjeta de estadísticas late sin parar y
+    // pumpAndSettle no terminaría nunca).
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     await tester.scrollUntilVisible(
@@ -445,6 +451,16 @@ void main() {
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
+    // La foto del acompañante se asoma detrás del menú: sin
+    // precache, la primera captura del proceso la pilla vacía.
+    await warmCompanions(tester);
+    // Y el logo del anillo del encabezado (assets/app_icon.png,
+    // alcance 10): mismo artefacto de decodificación.
+    final ctx = tester.element(find.byType(MaterialApp));
+    await tester.runAsync(() async {
+      await precacheImage(const AssetImage('assets/app_icon.png'), ctx);
+    });
+    await tester.pump();
     await shot(tester, 'fix4_drawer.png');
   });
 

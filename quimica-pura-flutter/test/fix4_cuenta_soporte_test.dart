@@ -95,7 +95,7 @@ void main() {
   }
 
   group('Soporte como una opción más en Cuenta (fix4, punto 11)', () {
-    testWidgets('es la última opción, después de Acerca de Quemia',
+    testWidgets('va después de Acerca de Quemia, antes de Ajustes',
         (tester) async {
       await pumpAccount(tester);
       await tester.scrollUntilVisible(
@@ -110,10 +110,12 @@ void main() {
       final supportY = tester.getTopLeft(find.text(tr('supportWord'))).dy;
       final aboutY = tester.getTopLeft(find.text(tr('accountAbout'))).dy;
       expect(supportY, greaterThan(aboutY));
-      // ...y por encima del pie ("Quemia · Creador: CraigKamer"):
-      // es la última opción, no hay más filas debajo.
+      // ...y por encima de "Ajustes" (7.1: Ajustes es la última
+      // fila, antes del pie "Quemia · Creador: CraigKamer").
+      final settingsY = tester.getTopLeft(find.text(tr('settingsTitle'))).dy;
+      expect(supportY, lessThan(settingsY));
       final footerY = tester.getTopLeft(find.text('Quemia')).dy;
-      expect(supportY, lessThan(footerY));
+      expect(settingsY, lessThan(footerY));
     });
 
     testWidgets(
