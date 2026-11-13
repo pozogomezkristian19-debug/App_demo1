@@ -79,6 +79,14 @@ class _LivesHeartPainter extends CustomPainter {
 /// Kristian): fondo #FDE8E8, corazón #FF4B4B + número en rojo
 /// #FF4B4B, redondeada, en claro y en oscuro. Antes era fondo
 /// transparente (rediseño Duolingo §3.9.5).
+/// Altura EXACTA de las tres píldoras de la barra superior (vidas,
+/// repaso, campana): 36 dp. Las tres miden LO MISMO de alto SIEMPRE
+/// (regla de Kristian 2026-11-12): la campana, sin número, quedaba
+/// 6 dp más baja que las otras dos (30 dp) porque su altura salía
+/// solo del icono + padding; con la altura fija ya no puede
+/// descolgarse aunque cambie el contenido.
+const double kTopBarPillHeight = 36.0;
+
 class LivesChip extends StatelessWidget {
   const LivesChip({
     super.key,
@@ -104,10 +112,12 @@ class LivesChip extends StatelessWidget {
     return Container(
       // Píldora rosa claro con el número dentro (imagen de
       // Kristian): fondo #FDE8E8 en los dos temas, número en rojo.
+      // Altura fija kTopBarPillHeight: igual que repaso y campana.
       decoration: BoxDecoration(
         color: const Color(0xFFFDE8E8),
         borderRadius: BorderRadius.circular(999),
       ),
+      height: kTopBarPillHeight,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       child: Row(
         mainAxisSize: MainAxisSize.min,

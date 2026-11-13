@@ -923,10 +923,12 @@ class _ReviewChip extends StatelessWidget {
         child: Container(
           // Píldora teal oscura con el número dentro (imagen de
           // Kristian): fondo #134E4A, icono + número en menta.
+          // Altura fija kTopBarPillHeight: igual que vidas y campana.
           decoration: BoxDecoration(
             color: const Color(0xFF134E4A),
             borderRadius: BorderRadius.circular(999),
           ),
+          height: kTopBarPillHeight,
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -991,15 +993,17 @@ class _NotificationBell extends StatelessWidget {
                   child: Container(
                     // Píldora teal oscura con la campana dentro
                     // (imagen de Kristian): fondo #134E4A, campana
-                    // en menta. Padding horizontal 18 (no 10) para
-                    // que la píldora mida LO MISMO que las otras
-                    // dos (vidas y repaso llevan icono + número):
-                    // antes, sin número, quedaba más estrecha y se
-                    // veía más pequeña (corrección 2026-11-12).
+                    // en menta. Altura fija kTopBarPillHeight (36):
+                    // la campana, sin número, quedaba 6 dp más baja
+                    // que vidas y repaso (30 dp) y se veía más
+                    // pequeña; el padding horizontal 18 iguala el
+                    // ancho, la altura fija iguala el alto
+                    // (corrección 2026-11-12, el alto, no el ancho).
                     decoration: BoxDecoration(
                       color: const Color(0xFF134E4A),
                       borderRadius: BorderRadius.circular(999),
                     ),
+                    height: kTopBarPillHeight,
                     padding:
                         const EdgeInsets.symmetric(horizontal: 18, vertical: 5),
                     child: const LucideIcon(LucideIcons.bell,
