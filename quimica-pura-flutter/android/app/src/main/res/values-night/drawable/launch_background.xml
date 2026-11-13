@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Splash nativo en frío, modo oscuro (zona E): mismo anillo
+     órbita centrado sobre el fondo oscuro del tema por defecto
+     (verde, #131F24 = scaffoldBackground del tema oscuro). Android
+     elige este drawable automáticamente cuando el sistema está en
+     modo oscuro; el LaunchTheme de values-night/styles.xml ya
+     apunta a @drawable/launch_background. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="#131F24" />
+
+    <item>
+        <bitmap
+            android:gravity="center"
+            android:src="@drawable/splash_logo" />
+    </item>
+</layer-list>

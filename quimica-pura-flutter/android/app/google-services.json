@@ -7,12 +7,25 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:898001909401:android:f4c91c3bfcfca657076a08",
+        "mobilesdk_app_id": "1:898001909401:android:c5c003015f8234d0076a08",
         "android_client_info": {
-          "package_name": "com.melliqui.quimica_pura"
+          "package_name": "com.melliqui.quemia_admin"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "898001909401-u7phhs5t7oofhv0ifo1ios1d7rhpkvc0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.melliqui.quemia_admin",
+            "certificate_hash": "e8c25aadc6a17883278ac697618b34b13ee347e7"
+          }
+        },
+        {
+          "client_id": "898001909401-o2ins4m72vvgb5hg6v5rgsl0llgu9glj.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyC6y3wEHo4kPp5JA_4nsfp4vgTxLmip7KY"
@@ -20,7 +33,49 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "898001909401-o2ins4m72vvgb5hg6v5rgsl0llgu9glj.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:898001909401:android:f4c91c3bfcfca657076a08",
+        "android_client_info": {
+          "package_name": "com.melliqui.quimica_pura"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "898001909401-3i9l9it1a6cu75ktcg9v92os83ai7od8.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.melliqui.quimica_pura",
+            "certificate_hash": "e8c25aadc6a17883278ac697618b34b13ee347e7"
+          }
+        },
+        {
+          "client_id": "898001909401-o2ins4m72vvgb5hg6v5rgsl0llgu9glj.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC6y3wEHo4kPp5JA_4nsfp4vgTxLmip7KY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "898001909401-o2ins4m72vvgb5hg6v5rgsl0llgu9glj.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
