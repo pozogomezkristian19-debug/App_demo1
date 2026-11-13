@@ -209,7 +209,6 @@ void main() {
       final expectedOrder = [
         tr('themeTitle'),
         tr('accountReminder'),
-        tr('inboxTitle'),
         tr('howToPlayTitle'),
         tr('checkUpdateTitle'),
         tr('accountLanguage'),
@@ -217,7 +216,7 @@ void main() {
         tr('accountFavorites'),
         tr('accountShareProgress'),
       ];
-      expect(expectedOrder.length, 9);
+      expect(expectedOrder.length, 8);
       final texts = tester
           .widgetList<Text>(find.byType(Text))
           .map((t) => t.data ?? '')

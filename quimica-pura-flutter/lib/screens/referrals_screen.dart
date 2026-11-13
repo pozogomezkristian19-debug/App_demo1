@@ -53,16 +53,24 @@ class _ReferralsScreenState extends State<ReferralsScreen> {
   }
 
   Future<void> _load() async {
-    // Cobrar primero (si hay algo nuevo se celebra con un aviso);
-    // loadState vuelve a cobrar, pero es idempotente.
-    final claim = await ReferralService.claimInviterRewards();
+    // Quemia 7.5: primero lo guardado en el teléfono (instantáneo)
+    // y luego el refresco de la red en segundo plano. Antes la
+    // pantalla esperaba a TODAS las llamadas en serie y con la
+    // conexión lenta tardaba 30-60 s en abrir. El cobro va dentro
+    // de loadState (una sola vez) y su aviso sale de state.claim.
+    final local = await ReferralService.localState();
+    if (!mounted) return;
+    setState(() {
+      _state = local;
+      _loading = false;
+    });
     final state = await ReferralService.loadState();
     if (!mounted) return;
     setState(() {
       _state = state;
-      _loading = false;
     });
-    if (claim.hasNews) {
+    final claim = state.claim;
+    if (claim != null && claim.hasNews) {
       final parts = <String>[];
       if (claim.newReferrals.isNotEmpty) {
         parts.add(tr('referralNewFriend')

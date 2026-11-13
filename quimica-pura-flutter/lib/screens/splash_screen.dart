@@ -34,9 +34,16 @@
 // segundo plano Android enseña la última pantalla (comportamiento
 // del sistema) y aquí no se fuerza ningún splash.
 //
-// Tamaño 180 dp: el anillo dentro de la baldosa ocupa ~137 dp, muy
-// cerca de los ~128 dp del anillo nativo, así el paso del splash
-// nativo a este no pega un salto de tamaño visible.
+// Tamaño 128 dp (Quemia 7.5, Kristian: "carga doble"): el anillo
+// visible queda en ~94 dp, IGUAL que el splash nativo. Antes era
+// 180 dp y el anillo se veía a ~132 dp, así al pasar del splash
+// nativo a este el logo PEGABA UN SALTO a más grande y parecía
+// que la app cargaba dos veces. La cuenta: splash_logo.png mide
+// 512 px en drawable-xxxhdpi y el anillo ocupa 376 px (73%);
+// Android lo enseña a 128 dp y el anillo visible queda en 94 dp
+// en cualquier teléfono. Con la caja a 128 dp aquí, el anillo
+// visible también es 94 dp y el paso de un splash al otro no se
+// nota: parece un solo logo desde que se abre la app.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -98,14 +105,14 @@ class _SplashScreenState extends State<SplashScreen> {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Center(
         child: ClipRRect(
-          // El radio propio del icono (~13% de 180): recorta los
+          // El radio propio del icono (~16% de 128): recorta los
           // píxeles negros de fuera de su cuadrado redondeado.
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: BorderRadius.circular(20),
           child: Image.asset(
             isDark ? 'assets/ring_logo.png' : 'assets/app_icon.png',
             key: const Key('splashLogo'),
-            width: 180,
-            height: 180,
+            width: 128,
+            height: 128,
             fit: BoxFit.cover,
             semanticLabel: 'Quemia',
           ),

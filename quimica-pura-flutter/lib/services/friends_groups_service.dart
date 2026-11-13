@@ -487,16 +487,23 @@ class FriendsGroupsService {
       return null;
     }
     String? code;
-    for (var attempt = 0; attempt < 5 && code == null; attempt++) {
+    for (var attempt = 0; attempt < 3 && code == null; attempt++) {
       final candidate = _randomCode();
-      final clash = await OnlineCommon.call(() => _repo.queryDocs(
-            'groups',
-            whereField: 'code',
-            isEqualTo: candidate,
-            limit: 1,
-          ));
-      if (clash != null && clash.isEmpty) code = candidate;
+      // Con la conexión lenta la consulta puede agotar sus 5 s:
+      // se reintenta (Quemia 7.5) en vez de rendirse al primer
+      // fallo y no crear el grupo. El código casi nunca choca
+      // (6 caracteres de 31 símbolos), así que 3 intentos bastan.
+      List<Map<String, dynamic>>? clash;
+      for (var retry = 0; retry < 3 && clash == null; retry++) {
+        clash = await OnlineCommon.call(() => _repo.queryDocs(
+              'groups',
+              whereField: 'code',
+              isEqualTo: candidate,
+              limit: 1,
+            ));
+      }
       if (clash == null) return null; // Sin red: no se crea a ciegas.
+      if (clash.isEmpty) code = candidate;
     }
     if (code == null) return null;
     final now = DateTime.now().millisecondsSinceEpoch;

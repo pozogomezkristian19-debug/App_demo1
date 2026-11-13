@@ -128,6 +128,7 @@ class ReferralState {
     this.topReferrers = const [],
     this.needsGoogle = false,
     this.offline = false,
+    this.claim,
   });
 
   final String code;
@@ -138,6 +139,13 @@ class ReferralState {
   final List<TopReferrer> topReferrers;
   final bool needsGoogle;
   final bool offline;
+
+  /// Lo que se cobró al cargar (referidos nuevos / hitos): lo pone
+  /// [ReferralService.loadState] para que la pantalla celebre el
+  /// cobro sin llamar dos veces a claimInviterRewards (Quemia 7.5:
+  /// la pantalla lo llamaba y loadState también, y el doble cobro
+  /// en paralelo podía pagar dos veces).
+  final ClaimResult? claim;
 
   /// Mensaje listo para compartir (mockup Invitar). Usa la misma
   /// clave que la tarjeta "Mensaje listo" de la pantalla.
@@ -561,21 +569,72 @@ class ReferralService {
 
   // ---- Estado para la pantalla ----
 
+  /// Estado SOLO con lo guardado en el teléfono (Quemia 7.5): sin
+  /// red, instantáneo. La pantalla lo enseña al abrir y luego lo
+  /// refresca con [loadState]; así Invitar no se queda en el
+  /// circulito esperando a la conexión lenta. La línea de "sin
+  /// conexión" avisa de que son los datos guardados.
+  static Future<ReferralState> localState() async {
+    if (!OnlineCommon.allowed || _me.isEmpty) {
+      return const ReferralState(needsGoogle: true);
+    }
+    final prefs = await _prefs;
+    final lastInvitee = prefs.getString(_kLastInvitee);
+    return ReferralState(
+      code: prefs.getString(_kMyCode) ?? '',
+      referralsCount: prefs.getInt(_kCount) ?? 0,
+      milestonesGranted:
+          (prefs.getStringList(_kMilestones) ?? <String>[])
+              .map((g) => int.tryParse(g) ?? 0)
+              .toList(),
+      lastInvitee:
+          lastInvitee != null && lastInvitee.isNotEmpty ? lastInvitee : null,
+      offline: true,
+    );
+  }
+
   /// Carga todo lo que enseña Invitar: código, usos restantes,
   /// conteo, hitos, último invitado y la tabla. Aprovecha para
   /// cobrar los referidos confirmados. Sin Google devuelve el
   /// estado "necesita Google"; sin internet, los valores locales.
+  /// Quemia 7.5: las llamadas van en PARALELO (Future.wait), no
+  /// una detrás de otra — en serie, con la conexión lenta, la
+  /// pantalla tardaba 30-60 s en abrir. El cobro se hace UNA sola
+  /// vez aquí y su resultado viaja en el estado (la pantalla ya no
+  /// lo llama aparte: el doble cobro en paralelo podía pagar dos
+  /// veces el mismo referido).
   static Future<ReferralState> loadState() async {
     if (!OnlineCommon.allowed || _me.isEmpty) {
       return const ReferralState(needsGoogle: true);
     }
     var offline = false;
     try {
-      await retryPending();
-      await ensureUniqueUsername();
-      final code = await ensureMyCode();
+      // Lote 1 (independientes): reintentos, nombre y código.
+      final first = await Future.wait([
+        retryPending(),
+        ensureUniqueUsername(),
+        ensureMyCode(),
+      ]);
+      final code = first[2] as String;
       if (code.isEmpty) offline = true;
-      await claimInviterRewards();
+      // Lote 2 (independientes con el código ya en mano): cobrar,
+      // documento propio, usos restantes y tabla.
+      final second = await Future.wait([
+        claimInviterRewards(),
+        OnlineCommon.call(() => _repo.getDoc('users', _me)),
+        code.isEmpty
+            ? Future<List<Map<String, dynamic>>?>.value(null)
+            : OnlineCommon.call(() => _repo.queryDocs(
+                  'referrals',
+                  whereField: 'code',
+                  isEqualTo: code,
+                )),
+        topReferrers(),
+      ]);
+      final claim = second[0] as ClaimResult;
+      final doc = second[1] as Map<String, dynamic>?;
+      final used = second[2] as List<Map<String, dynamic>>?;
+      final top = second[3] as List<TopReferrer>;
       final prefs = await _prefs;
       var count = prefs.getInt(_kCount) ?? 0;
       final granted = prefs.getStringList(_kMilestones) ?? <String>[];
@@ -583,7 +642,6 @@ class ReferralService {
       // El documento propio manda si trae más (cambio de teléfono:
       // las prefs locales están vacías pero la nube recuerda el
       // conteo, los hitos y el último invitado).
-      final doc = await OnlineCommon.call(() => _repo.getDoc('users', _me));
       if (doc != null) {
         final docCount = (doc['referralsCount'] as num?)?.toInt() ?? 0;
         if (docCount > count) count = docCount;
@@ -607,18 +665,13 @@ class ReferralService {
       }
       var usesLeft = kReferralMaxUses;
       if (code.isNotEmpty) {
-        final used = await OnlineCommon.call(() => _repo.queryDocs(
-              'referrals',
-              whereField: 'code',
-              isEqualTo: code,
-            ));
         if (used == null) {
           offline = true;
         } else {
-          usesLeft = (kReferralMaxUses - used.length).clamp(0, kReferralMaxUses);
+          usesLeft =
+              (kReferralMaxUses - used.length).clamp(0, kReferralMaxUses);
         }
       }
-      final top = await topReferrers();
       return ReferralState(
         code: code,
         usesLeft: usesLeft,
@@ -629,6 +682,7 @@ class ReferralService {
             lastInvitee != null && lastInvitee.isNotEmpty ? lastInvitee : null,
         topReferrers: top,
         offline: offline,
+        claim: claim,
       );
     } catch (_) {
       return const ReferralState(offline: true);

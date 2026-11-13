@@ -34,6 +34,12 @@ class _GroupsScreenState extends State<GroupsScreen> {
   String? _createdCode;
   String? _joinError;
 
+  /// Creando grupo (Quemia 7.5): mientras se crea, el botón se
+  /// desactiva y se ve el circulito; si falla (sin Google, sin
+  /// internet, la consulta del código agotó), se avisa con un
+  /// mensaje claro en vez de no pasar nada.
+  var _creating = false;
+
   @override
   void initState() {
     super.initState();
@@ -50,9 +56,19 @@ class _GroupsScreenState extends State<GroupsScreen> {
   }
 
   Future<void> _create() async {
+    if (_creating) return;
     final name = _nameCtrl.text.trim();
+    if (name.isEmpty) return;
+    setState(() => _creating = true);
     final group = await SocialService.createGroup(name);
-    if (!mounted || group == null) return;
+    if (!mounted) return;
+    setState(() => _creating = false);
+    if (group == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(tr('groupsCreateFailed'))),
+      );
+      return;
+    }
     setState(() {
       _createdCode = group.inviteCode;
       _nameCtrl.clear();
@@ -154,9 +170,21 @@ class _GroupsScreenState extends State<GroupsScreen> {
                       // Píldora 3D del acento con degradado + brillo.
                       DuoButton.primary(
                         label: tr('groupsCreate').toUpperCase(),
-                        onPressed: _create,
+                        onPressed: _creating ? null : _create,
                         fontSize: 15,
                       ),
+                      if (_creating) ...[
+                        const SizedBox(height: 10),
+                        const Center(
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                            ),
+                          ),
+                        ),
+                      ],
                       if (_createdCode != null) ...[
                         const SizedBox(height: 10),
                         Text(

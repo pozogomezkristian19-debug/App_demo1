@@ -43,6 +43,7 @@
 // de entrada, para que siempre se vea completa desde el primer
 // fotograma: nada de la cabecera depende del tema ni de un FadeIn.
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -225,11 +226,16 @@ class _AccountScreenState extends State<AccountScreen> {
       );
       return;
     }
-    await AnalyticsSync.restoreFromCloud();
-    if (!mounted) return;
+    // Enlazado: quitar "Vinculando…" YA y enseñar el correo. El
+    // respaldo de la nube se trae en segundo plano (Quemia 7.5):
+    // con la conexión lenta tardaba y la fila se quedaba colgada
+    // en "Vinculando…" aunque el enlace ya había salido bien.
+    setState(() => _googleBusy = false);
     await _loadGoogleState();
     if (!mounted) return;
-    setState(() => _googleBusy = false);
+    unawaited(AnalyticsSync.restoreFromCloud().then((_) {
+      if (mounted) _loadGoogleState();
+    }));
   }
 
   /// Diálogo de desvincular: muestra el correo vinculado y pide

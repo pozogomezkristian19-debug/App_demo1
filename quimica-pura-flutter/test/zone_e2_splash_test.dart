@@ -92,11 +92,15 @@ void main() {
       expect(scaffold.backgroundColor, Colors.white);
       final image = tester.widget<Image>(find.byKey(const Key('splashLogo')));
       expect((image.image as AssetImage).assetName, 'assets/app_icon.png');
-      // Centrado en la pantalla de 360x800.
+      // Centrado en la pantalla de 360x800. 128 dp (Quemia 7.5):
+      // el anillo visible queda en ~94 dp, igual que el splash
+      // nativo (splash_logo.png 512 px en xxxhdpi, anillo 73%);
+      // a 180 dp el logo pegaba un salto a más grande y parecía
+      // que la app cargaba dos veces.
       final rect = tester.getRect(find.byKey(const Key('splashLogo')));
       expect(rect.center, const Offset(180, 400));
-      expect(rect.width, 180);
-      expect(rect.height, 180);
+      expect(rect.width, 128);
+      expect(rect.height, 128);
       // Sin desbordamiento: el logo cabe entero en la pantalla.
       expect(rect.left, greaterThanOrEqualTo(0.0));
       expect(rect.top, greaterThanOrEqualTo(0.0));

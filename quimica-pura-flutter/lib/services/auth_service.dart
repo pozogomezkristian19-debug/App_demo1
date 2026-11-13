@@ -157,7 +157,9 @@ class FirebaseAuthProvider implements AuthProvider {
   static Future<OAuthCredential?> _nativeGoogleCredential() async {
     try {
       await _ensureGoogleSignInInitialized();
-      final account = await GoogleSignIn.instance.authenticate();
+      final account = await GoogleSignIn.instance
+          .authenticate()
+          .timeout(kGoogleAuthenticateTimeout);
       final idToken = account.authentication.idToken;
       if (idToken == null) {
         _lastGoogleError = 'google_sign_in:no_id_token';
@@ -167,6 +169,12 @@ class FirebaseAuthProvider implements AuthProvider {
       // google_sign_in v7 ya no expone accessToken (eso vive en el
       // cliente de autorización); a Firebase le basta el idToken.
       return GoogleAuthProvider.credential(idToken: idToken);
+    } on TimeoutException {
+      // El selector o la obtención del token se quedó colgado
+      // (conexión muy lenta): no dejar "Vinculando…" para siempre.
+      _lastGoogleError = 'google_sign_in:timeout_auth';
+      debugPrint('[Google] authenticate() agotó 60 s.');
+      return null;
     } on GoogleSignInException catch (e) {
       // Cancelado por el usuario: fallo silencioso, pero el código
       // queda registrado para diagnosticar (no es un error).
@@ -201,6 +209,18 @@ class FirebaseAuthProvider implements AuthProvider {
   /// apareciera el selector. Ahora 15 s.
   static const kAnonymousLinkTimeout = Duration(seconds: 15);
 
+  /// Timeout de cada llamada a Firebase Auth al enlazar/entrar con
+  /// Google (Quemia 7.5): linkWithCredential y signInWithCredential
+  /// NO llevaban timeout y con la conexión lenta se quedaban
+  /// colgadas para siempre en "Vinculando…". 20 s: suficiente para
+  /// una conexión lenta, pero la pantalla nunca se queda colgada.
+  static const kGoogleLinkTimeout = Duration(seconds: 20);
+
+  /// Timeout del selector de Google + obtención del idToken
+  /// (Quemia 7.5): 60 s, generoso porque el usuario tarda en elegir
+  /// su cuenta; solo salta si la llamada se queda colgada de verdad.
+  static const kGoogleAuthenticateTimeout = Duration(seconds: 60);
+
   /// Espera el inicio anónimo con el timeout de enlace. Se extrae
   /// para poder probarlo sin Firebase: el test pasa un Future lento
   /// y comprueba que no se rinde antes de 15 s, y que al agotarse
@@ -226,15 +246,44 @@ class FirebaseAuthProvider implements AuthProvider {
     try {
       var user = _auth.currentUser;
       if (user == null) {
-        final cred =
-            await waitForAnonymous(_auth.signInAnonymously());
-        user = cred?.user;
+        // El anónimo es solo el paso previo al enlace: si falla
+        // (apagado en Firebase, sin red, lento), Google NO se
+        // bloquea (Quemia 7.5): se entra directo con la cuenta.
+        try {
+          final cred =
+              await waitForAnonymous(_auth.signInAnonymously());
+          user = cred?.user;
+        } catch (e) {
+          debugPrint('[Google] anónimo falló, se sigue sin él: $e');
+          user = null;
+        }
       }
-      if (user == null) return false;
       final credential = await _nativeGoogleCredential();
       if (credential == null) return false;
+      if (user == null) {
+        // Sin sesión anónima: entrar directo con Google (la cuenta
+        // ya existe en Firebase o se crea ahora).
+        try {
+          final cred = await _auth
+              .signInWithCredential(credential)
+              .timeout(kGoogleLinkTimeout);
+          if (cred.user == null) return false;
+          _lastGoogleError = null;
+          return true;
+        } on FirebaseAuthException catch (e) {
+          _lastGoogleError = 'firebase_auth:${e.code}';
+          debugPrint('[Google] signInWithCredential falló: ${e.code}');
+          return false;
+        } on TimeoutException {
+          _lastGoogleError = 'link:timeout_signin';
+          debugPrint('[Google] signInWithCredential agotó 20 s.');
+          return false;
+        }
+      }
       try {
-        await user.linkWithCredential(credential);
+        await user
+            .linkWithCredential(credential)
+            .timeout(kGoogleLinkTimeout);
         _lastGoogleError = null;
         return true;
       } on FirebaseAuthException catch (e) {
@@ -251,28 +300,45 @@ class FirebaseAuthProvider implements AuthProvider {
           // progreso del anónimo antes de perderlo. El progreso
           // local no se toca aquí: vive en el teléfono y no
           // depende del uid.
-          _lastGoogleError = 'firebase_auth:credential-already-in-use';
           debugPrint('[Google] linkWithCredential: cuenta ya en otro '
               'uid; fallback a signInWithCredential.');
           try {
-            final cred = await _auth.signInWithCredential(credential);
+            final cred = await _auth
+                .signInWithCredential(credential)
+                .timeout(kGoogleLinkTimeout);
             if (cred.user == null) return false;
+            _lastGoogleError = null;
             return true;
           } on FirebaseAuthException catch (e2) {
             _lastGoogleError = 'firebase_auth:${e2.code}';
             debugPrint('[Google] fallback signInWithCredential '
                 'falló: ${e2.code}');
             return false;
+          } on TimeoutException {
+            _lastGoogleError = 'link:timeout_signin';
+            debugPrint('[Google] fallback signInWithCredential '
+                'agotó 20 s.');
+            return false;
           }
         }
         _lastGoogleError = 'firebase_auth:${e.code}';
         debugPrint('[Google] linkWithCredential falló: ${e.code}');
         return false;
+      } on TimeoutException {
+        _lastGoogleError = 'link:timeout_link';
+        debugPrint('[Google] linkWithCredential agotó 20 s.');
+        return false;
       }
     } catch (e) {
-      // Quemia 7.4: guardar el tipo real en vez de un 'unknown'
-      // opaco, para diagnosticar el fallo de verdad.
-      _lastGoogleError = 'link:${e.runtimeType}';
+      // Quemia 7.5: guardar el CÓDIGO real de Firebase (no solo el
+      // tipo), para diagnosticar el fallo de verdad. Antes todo
+      // salía como 'link:FirebaseAuthException' y no se sabía si
+      // era red, permiso o credencial.
+      if (e is FirebaseAuthException) {
+        _lastGoogleError = 'link:${e.code}';
+      } else {
+        _lastGoogleError = 'link:${e.runtimeType}';
+      }
       debugPrint('[Google] linkWithGoogle falló: $e');
       return false;
     }
@@ -283,13 +349,19 @@ class FirebaseAuthProvider implements AuthProvider {
     try {
       final credential = await _nativeGoogleCredential();
       if (credential == null) return false;
-      final cred = await _auth.signInWithCredential(credential);
+      final cred = await _auth
+          .signInWithCredential(credential)
+          .timeout(kGoogleLinkTimeout);
       if (cred.user == null) return false;
       _lastGoogleError = null;
       return true;
     } on FirebaseAuthException catch (e) {
       _lastGoogleError = 'firebase_auth:${e.code}';
       debugPrint('[Google] signInWithCredential falló: ${e.code}');
+      return false;
+    } on TimeoutException {
+      _lastGoogleError = 'sign_in:timeout';
+      debugPrint('[Google] signInWithCredential agotó 20 s.');
       return false;
     } catch (e) {
       _lastGoogleError = 'sign_in:unknown';

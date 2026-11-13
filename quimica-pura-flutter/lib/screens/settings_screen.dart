@@ -153,15 +153,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 : tr('menuReminderOff'),
             onTap: () => widget.onOpenScreen('reminder'),
           ),
-          // Notificaciones: la bandeja (antes solo se abría desde
-          // la campana de la barra superior).
-          _SettingsRow(
-            icon: LucideIcons.bell,
-            iconColor: amber,
-            title: tr('inboxTitle'),
-            subtitle: tr('settingsNotificationsSub'),
-            onTap: () => widget.onOpenScreen('notifications'),
-          ),
           // Cómo se juega: las reglas, como pantalla completa.
           _SettingsRow(
             icon: LucideIcons.circleHelp,

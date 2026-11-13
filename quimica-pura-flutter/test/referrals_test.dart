@@ -317,6 +317,45 @@ void main() {
     expect(state.usesLeft, 8);
   });
 
+  test('localState enseña lo guardado sin tocar la red (7.5)', () async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('referral_my_code', 'Q8M4K2');
+    await prefs.setInt('referral_count', 2);
+    await prefs.setStringList('referral_milestones', ['3']);
+    await prefs.setString('referral_last_invitee', 'Carlos');
+    final state = await ReferralService.localState();
+    expect(state.code, 'Q8M4K2');
+    expect(state.referralsCount, 2);
+    expect(state.milestonesGranted, [3]);
+    expect(state.lastInvitee, 'Carlos');
+    expect(state.offline, isTrue);
+    expect(state.needsGoogle, isFalse);
+  });
+
+  test('loadState cobra una sola vez y trae el aviso en el estado (7.5)',
+      () async {
+    const code = 'Q8M4K2';
+    await fake.createDoc('referrals', {
+      'code': code,
+      'inviterUid': 'fake-anon-uid',
+      'inviteeUid': 'guest-1',
+      'inviteeUsername': 'Carlos',
+      'status': 'rewarded',
+      'inviterRewarded': false,
+      'createdAtMs': 1,
+    });
+    final first = await ReferralService.loadState();
+    expect(first.claim, isNotNull);
+    expect(first.claim!.hasNews, isTrue);
+    expect(first.claim!.newReferrals, ['Carlos']);
+    expect(ProgressService.instance.points, 50);
+    // Segunda carga: ya cobrado, no vuelve a pagar.
+    final second = await ReferralService.loadState();
+    expect(second.claim, isNotNull);
+    expect(second.claim!.hasNews, isFalse);
+    expect(ProgressService.instance.points, 50);
+  });
+
   test('ShopItem referralOnly sobrevive al mapa', () {
     final item = kAvatarEmbajador;
     expect(item.referralOnly, isTrue);
