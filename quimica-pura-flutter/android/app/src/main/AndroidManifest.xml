@@ -98,6 +98,16 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+        <!-- Icono pequeño de notificación (campana blanca): se
+             referencia por NOMBRE desde Dart (_smallIcon =
+             'ic_notif_bell'), así que el shrinking de recursos no ve
+             la referencia y lo eliminó del APK 7.2 y 7.3 (sin él,
+             "Probar un aviso ahora" falla con invalid_icon). Este
+             meta-data lo referencia de verdad para que el shrinking
+             lo conserve. (El keep.xml de res/values/ no bastó.) -->
+        <meta-data
+            android:name="com.melliqui.quimica_pura.NOTIFICATION_ICON"
+            android:resource="@drawable/ic_notif_bell" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
