@@ -1,6 +1,6 @@
 {
   "apk_url": "https://github.com/pozogomezkristian19-debug/App_demo1/releases/download/melli-qui-v2/melli-qui-release.apk",
   "force": false,
-  "latest": "7.5",
-  "notes": "Google ya no se cuelga, Referidos abre al instante, grupos con aviso, arranque con un solo logo, Google en el inicio entra por su flujo corto"
+  "latest": "7.6",
+  "notes": "Grupos ya funcionan, soporte sin Google, arranque rápido, código de referido en su propia pantalla, Canjear código en Cuenta"
 }
