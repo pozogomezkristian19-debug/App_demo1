@@ -3,6 +3,8 @@
 // idioma en el teléfono, y cada entrada saluda "Bienvenido/a
 // [primer nombre]" (Kristian).
 
+import 'dart:async';
+
 import '../data/i18n/content_i18n.dart';
 import 'package:flutter/material.dart';
 import '../widgets/duo_button.dart';
@@ -105,8 +107,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         _nameController.text.trim().isEmpty) {
       _nameController.text = name;
     }
-    await AnalyticsSync.restoreFromCloud();
+    // Enlazado: quitar la carga YA. El respaldo de la nube se trae
+    // en segundo plano (Quemia 7.5, igual que en Cuenta): con la
+    // conexión lenta tardaba y el botón se quedaba cargando aunque
+    // el enlace ya había salido bien. El nombre ya se prellenó con
+    // el de Google, así que el respaldo no tiene nada que repintar
+    // aquí.
     if (mounted) setState(() => _googleBusy = false);
+    unawaited(AnalyticsSync.restoreFromCloud().then((_) {}));
   }
 
   @override
