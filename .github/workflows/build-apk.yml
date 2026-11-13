@@ -39,10 +39,11 @@ jobs:
             base64 -d "$b" > "${b%.b64}"
             echo "Restaurado: ${b%.b64}"
           done
-          # The Gradle wrapper jar and the launcher icons arrive as base64
-          # text too (no .b64 extension); restore them if needed. If a file
+          # The Gradle wrapper jar, the launcher icons, the splash logo
+          # and the notification bell PNGs arrive as base64 text too
+          # (no .b64 extension); restore them if needed. If a file
           # is already a real binary, leave it as is.
-          for f in android/gradle/wrapper/gradle-wrapper.jar android/app/src/main/res/mipmap-*/ic_launcher.png android/app/src/main/res/drawable-xxxhdpi/splash_logo.png; do
+          for f in android/gradle/wrapper/gradle-wrapper.jar android/app/src/main/res/mipmap-*/ic_launcher.png android/app/src/main/res/drawable-xxxhdpi/splash_logo.png android/app/src/main/res/drawable-*/ic_notif_bell.png; do
             if [ ! -f "$f" ]; then
               echo "Falta: $f (se salta)"
               continue
