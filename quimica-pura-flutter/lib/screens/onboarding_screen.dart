@@ -66,9 +66,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   /// "Continuar con Google" (ronda #8, cambio 09:08): enlaza la
   /// sesión anónima con Google (mismo uid, sin cambiarlo) y trae
   /// el respaldo de la nube si esa cuenta ya tenía progreso en
-  /// otro teléfono. Prellena el nombre con el de la cuenta de
-  /// Google si el campo está vacío. Opcional: se puede seguir
-  /// sin Google (el botón Siguiente no depende de esto).
+  /// otro teléfono. El nombre ya viene de la cuenta de Google, no
+  /// se escribe a mano.
+  ///
+  /// Tras enlazar NO se entra directo (Quemia 7.5, Kristian): se
+  /// abre el flujo corto de Google — 1) "Ya has iniciado sesión",
+  /// 2) solo "Elige tu género", 3) notificaciones — y de ahí a la
+  /// pantalla principal. Así no hay que escribir el nombre ni
+  /// darle a Siguiente, pero el género sí se elige (Google no lo
+  /// da) y el permiso de notificaciones no se salta.
   ///
   /// Error honesto (09:13): mientras se firma, el botón muestra
   /// carga y queda deshabilitado; si linkWithGoogle() devuelve
@@ -77,6 +83,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   /// sin quedarse en carga. linkWithGoogle() nunca lanza.
   var _googleBusy = false;
   String? _googleError;
+
+  /// Flujo corto de Google (Quemia 7.5): true tras enlazar con
+  /// Google; la pantalla pasa a ser [_GoogleOnboardingFlow].
+  var _googleFlow = false;
+  String _googleName = '';
+  String? _googleEmail;
 
   Future<void> _linkGoogle() async {
     if (_googleBusy) return;
@@ -101,27 +113,26 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       });
       return;
     }
-    // Con Google, el nombre ya viene de la cuenta: se entra
-    // DIRECTO a la app (Quemia 7.5, Kristian: "si ya toco iniciar
-    // sesión con Google ya cojo la cuenta y automáticamente va a
-    // la pantalla"). No hay que escribir el nombre, ni elegir el
-    // género, ni darle a Siguiente, ni pasar por las páginas de
-    // notificaciones e idioma: el nombre es el de Google (o el
-    // escrito, si ya escribió uno) y el género es el elegido en
-    // esta pantalla, o Masculino si no se eligió (el saludo y el
-    // avatar ya usan Masculino como predeterminado cuando no es
-    // Femenino). El respaldo de la nube se trae en segundo plano.
+    // Enlazado: se abre el flujo corto de Google (Quemia 7.5,
+    // Kristian): "Ya has iniciado sesión" → solo el género →
+    // notificaciones → principal. El nombre es el de Google (o el
+    // escrito, si ya escribió uno). El respaldo de la nube se trae
+    // en segundo plano; el género elegido en esta pantalla se
+    // lleva al flujo para que ya salga marcado.
     final typedName = _nameController.text.trim();
     final googleName = AuthService.googleDisplayName ?? '';
     final name = typedName.isNotEmpty ? typedName : googleName.trim();
     if (name.isNotEmpty) {
       if (typedName.isEmpty) _nameController.text = name;
-      final gender = _gender ?? 'Masculino';
-      if (mounted) setState(() => _googleBusy = false);
+      if (mounted) {
+        setState(() {
+          _googleBusy = false;
+          _googleFlow = true;
+          _googleName = name;
+          _googleEmail = AuthService.googleEmail;
+        });
+      }
       unawaited(AnalyticsSync.restoreFromCloud().then((_) {}));
-      await UserPrefs.saveProfile(name, gender);
-      if (!mounted) return;
-      widget.onFinished();
       return;
     }
     // Sin nombre (Google no dio nombre y el campo está vacío): se
@@ -139,6 +150,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Flujo corto de Google (Quemia 7.5): tras enlazar, la
+    // pantalla pasa a ser el flujo "Ya has iniciado sesión" →
+    // género → notificaciones → principal.
+    if (_googleFlow) {
+      return _GoogleOnboardingFlow(
+        name: _googleName,
+        email: _googleEmail,
+        initialGender: _gender,
+        onFinish: (name, gender) async {
+          await UserPrefs.saveProfile(name, gender);
+          widget.onFinished();
+        },
+      );
+    }
     // resizeToAvoidBottomInset: false para que, al abrirse el teclado,
     // el botón Siguiente se quede fijo abajo y no suba a tapar nada.
     // El contenido de cada página ya es desplazable, y la página del
@@ -217,6 +242,180 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       ),
                     )
                   : const SizedBox.shrink(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Flujo corto tras enlazar con Google (Quemia 7.5, Kristian):
+/// 1) "Ya has iniciado sesión" (la cuenta de Google),
+/// 2) solo "Elige tu género",
+/// 3) notificaciones,
+/// y de ahí a la pantalla principal. El nombre ya viene de Google,
+/// no se escribe a mano; el género sí se elige (Google no lo da).
+/// Al terminar, [onFinish] guarda el perfil y entra a la app.
+class _GoogleOnboardingFlow extends StatefulWidget {
+  const _GoogleOnboardingFlow({
+    required this.name,
+    required this.email,
+    required this.initialGender,
+    required this.onFinish,
+  });
+
+  final String name;
+  final String? email;
+  final String? initialGender;
+  final Future<void> Function(String name, String gender) onFinish;
+
+  @override
+  State<_GoogleOnboardingFlow> createState() => _GoogleOnboardingFlowState();
+}
+
+class _GoogleOnboardingFlowState extends State<_GoogleOnboardingFlow> {
+  /// 0 = "Ya has iniciado sesión", 1 = género, 2 = notificaciones.
+  var _step = 0;
+  String? _gender;
+
+  @override
+  void initState() {
+    super.initState();
+    _gender = widget.initialGender;
+  }
+
+  Future<void> _finish() async {
+    final gender = _gender;
+    if (gender == null) return;
+    await widget.onFinish(widget.name, gender);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final ink = isDark ? Colors.white : const Color(0xFF4B4B4B);
+    final sub = isDark
+        ? Colors.white.withValues(alpha: 0.7)
+        : const Color(0xFF6B7280);
+    const violet = Color(0xFF8B5CF6);
+    const blue = Color(0xFF3B82F6);
+    return Scaffold(
+      resizeToAvoidBottomInset: false,
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 12, 24, 4),
+              child: _ProgressBar(progress: (_step + 1) / 3),
+            ),
+            Expanded(
+              child: switch (_step) {
+                // 1) "Ya has iniciado sesión": la cuenta de Google.
+                0 => SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Center(
+                          child: Container(
+                            width: 96,
+                            height: 96,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF14B8A6),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const LucideIcon(
+                              LucideIcons.check,
+                              size: 56,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        Text(
+                          tr('obGoogleSignedIn'),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w800,
+                            color: ink,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          widget.name,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: ink,
+                          ),
+                        ),
+                        if (widget.email != null &&
+                            widget.email!.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            widget.email!,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 15, color: sub),
+                          ),
+                        ],
+                        const SizedBox(height: 32),
+                        DuoButton.primary(
+                          label: tr('obNext').toUpperCase(),
+                          onPressed: () => setState(() => _step = 1),
+                          fontSize: 17,
+                        ),
+                      ],
+                    ),
+                  ),
+                // 2) Solo el género: dos azulejos; al tocar uno se
+                // elige y se avanza a notificaciones.
+                1 => SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          tr('obGoogleChooseGender'),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w800,
+                            color: ink,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        _GenderTile(
+                          label: tr('obFemale'),
+                          selected: _gender == 'Femenino',
+                          tint: const Color(0xFFEDE9FE),
+                          borderColor: violet,
+                          onTap: () => setState(() {
+                            _gender = 'Femenino';
+                            _step = 2;
+                          }),
+                        ),
+                        const SizedBox(height: 10),
+                        _GenderTile(
+                          label: tr('obMale'),
+                          selected: _gender == 'Masculino',
+                          tint: const Color(0xFFDBEAFE),
+                          borderColor: blue,
+                          onTap: () => setState(() {
+                            _gender = 'Masculino';
+                            _step = 2;
+                          }),
+                        ),
+                      ],
+                    ),
+                  ),
+                // 3) Notificaciones: la misma página del onboarding
+                // normal; al continuar se guarda el perfil y se
+                // entra a la app.
+                _ => OnboardingNotificationsPage(onNext: _finish),
+              },
             ),
           ],
         ),
