@@ -517,6 +517,16 @@ class _AccountScreenState extends State<AccountScreen> {
             subtitle: tr('accountReferralsSub'),
             onTap: () => widget.onOpenScreen('referrals'),
           ),
+          // Canjear código (7.6, Kristian): apartado SEPARADO en
+          // Cuenta, como en la app de Muse (fila "Canjea el código
+          // de recomendación"). Abre directo las 6 casillas.
+          _Row(
+            icon: LucideIcons.gift,
+            iconColor: AppAccent.primary,
+            title: tr('accountRedeem'),
+            subtitle: tr('accountRedeemSub'),
+            onTap: () => widget.onOpenScreen('redeem'),
+          ),
           _Row(
             icon: LucideIcons.info,
             iconColor: _violet,

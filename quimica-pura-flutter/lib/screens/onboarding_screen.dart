@@ -48,7 +48,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       );
       return;
     }
-    if (_page < 6) {
+    // 8 páginas (Quemia 7.6): 0 bienvenida, 1-3 explicación,
+    // 4 perfil, 5 código de referido, 6 notificaciones, 7 idioma.
+    if (_page < 7) {
       await _pageController.nextPage(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
@@ -189,21 +191,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             // esta barra, no los puntos.
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 12, 24, 4),
-              child: _ProgressBar(progress: (_page + 1) / 7),
+              child: _ProgressBar(progress: (_page + 1) / 8),
             ),
             Expanded(
               child: PageView(
                 controller: _pageController,
                 onPageChanged: (i) => setState(() => _page = i),
                 children: [
-                  // Bienvenida (Quemia 7.6, Kristian): también
-                  // tiene "Continuar con Google"; al iniciar sesión
-                  // salta automáticamente al flujo de Google.
-                  _WelcomePage(
-                    onGoogleSignIn: _linkGoogle,
-                    googleBusy: _googleBusy,
-                    googleError: _googleError,
-                  ),
+                  // Bienvenida (Quemia 7.6, Kristian, al ver la
+                  // foto): SIN botón de Google. Google se vincula
+                  // solo en la pantalla del perfil.
+                  const _WelcomePage(),
                   _ExplainPage(
                     icon: LucideIcons.calculator,
                     title: tr('obSolveTitle'),
@@ -230,15 +228,23 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     nameController: _nameController,
                     gender: _gender,
                     onGenderChanged: (g) => setState(() => _gender = g),
-                    referralController: _referralController,
                     onGoogleSignIn: _linkGoogle,
                     googleBusy: _googleBusy,
                     googleError: _googleError,
                   ),
+                  // Código de referido (Quemia 7.6, Kristian):
+                  // PÁGINA APARTE, después del perfil y antes de
+                  // notificaciones. Como la de canjear de la app
+                  // de Muse (regalo + 6 casillas). Opcional: se
+                  // puede seguir con las casillas vacías.
+                  _ReferralPage(
+                    referralController: _referralController,
+                    onNext: _next,
+                  ),
                   // Fix3, punto 9: permiso de notificaciones, después
-                  // del nombre y antes del idioma ("Finalizar"). Tiene
-                  // sus propios botones; el "Siguiente" de abajo no
-                  // sale en esta página.
+                  // del código de referido y antes del idioma
+                  // ("Finalizar"). Tiene sus propios botones; el
+                  // "Siguiente" de abajo no sale en esta página.
                   OnboardingNotificationsPage(onNext: _next),
                   _LanguagePage(onFinish: _finish),
                 ],
@@ -246,8 +252,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
             // Botón "Siguiente" fijado abajo (diseño Duolingo §1.4):
             // sólido teal + labio, texto "SIGUIENTE" 17 pt peso 800.
-            // En la página de notificaciones (5) y en la de idioma (6)
-            // no sale: cada una tiene sus propios botones.
+            // En la página del código (5), en la de notificaciones
+            // (6) y en la de idioma (7) no sale: cada una tiene sus
+            // propios botones.
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
               child: _page < 5
@@ -271,7 +278,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 /// Flujo corto tras enlazar con Google (Quemia 7.5, Kristian):
 /// 1) "Ya has iniciado sesión" (la cuenta de Google),
 /// 2) solo "Elige tu género",
-/// 3) notificaciones,
+/// 3) código de referido (página aparte, Quemia 7.6),
+/// 4) notificaciones,
 /// y de ahí a la pantalla principal. El nombre ya viene de Google,
 /// no se escribe a mano; el género sí se elige (Google no lo da).
 /// Al terminar, [onFinish] guarda el perfil y entra a la app.
@@ -293,7 +301,8 @@ class _GoogleOnboardingFlow extends StatefulWidget {
 }
 
 class _GoogleOnboardingFlowState extends State<_GoogleOnboardingFlow> {
-  /// 0 = "Ya has iniciado sesión", 1 = género, 2 = notificaciones.
+  /// 0 = "Ya has iniciado sesión", 1 = género,
+  /// 2 = código de referido, 3 = notificaciones.
   var _step = 0;
   String? _gender;
 
@@ -346,7 +355,7 @@ class _GoogleOnboardingFlowState extends State<_GoogleOnboardingFlow> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 12, 24, 4),
-              child: _ProgressBar(progress: (_step + 1) / 3),
+              child: _ProgressBar(progress: (_step + 1) / 4),
             ),
             Expanded(
               child: switch (_step) {
@@ -426,68 +435,10 @@ class _GoogleOnboardingFlowState extends State<_GoogleOnboardingFlow> {
                           ),
                         ),
                         const SizedBox(height: 24),
-                        // Código de referido (Quemia 7.6, Kristian):
-                        // VA ARRIBA del género, porque al tocar un
-                        // género se avanza enseguida. Opcional, con
-                        // y sin Google, y sin internet (se guarda en
-                        // local y se canjea solo cuando hay conexión).
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            tr('obReferralLabel'),
-                            style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                color: ink),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        SizedBox(
-                          height: 56,
-                          child: TextField(
-                            controller: _referralController,
-                            textCapitalization: TextCapitalization.characters,
-                            textAlign: TextAlign.center,
-                            maxLength: 6,
-                            buildCounter: (context,
-                                    {required currentLength,
-                                    required isFocused,
-                                    maxLength}) =>
-                                null,
-                            style: const TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF4B4B4B)),
-                            decoration: InputDecoration(
-                              hintText: tr('obReferralHint'),
-                              hintStyle: const TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.normal,
-                                color: Color(0xFF9CA3AF),
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                  vertical: 14, horizontal: 16),
-                              filled: true,
-                              fillColor: Colors.white,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                borderSide: const BorderSide(
-                                    color: Color(0xFFE5E5E5), width: 2),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                borderSide: const BorderSide(
-                                    color: Color(0xFFE5E5E5), width: 2),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                borderSide: const BorderSide(
-                                    color: Color(0xFF5EEAD4), width: 2),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 24),
+                        // Código de referido: ya NO va aquí (Quemia
+                        // 7.6, Kristian). Tiene su propia pantalla
+                        // aparte ([_ReferralPage], paso 2), igual
+                        // que en el onboarding normal.
                         _GenderTile(
                           label: tr('obFemale'),
                           selected: _gender == 'Femenino',
@@ -512,6 +463,14 @@ class _GoogleOnboardingFlowState extends State<_GoogleOnboardingFlow> {
                       ],
                     ),
                   ),
+                // 2) Código de referido: página aparte (regalo + 6
+                // casillas), como la de canjear de la app de Muse.
+                // Opcional: se puede saltar. Al continuar, a
+                // notificaciones.
+                2 => _ReferralPage(
+                    referralController: _referralController,
+                    onNext: () => setState(() => _step = 3),
+                  ),
                 // 3) Notificaciones: la misma página del onboarding
                 // normal; al continuar se guarda el perfil y se
                 // entra a la app.
@@ -520,6 +479,205 @@ class _GoogleOnboardingFlowState extends State<_GoogleOnboardingFlow> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Pantalla del código de referido (Quemia 7.6, Kristian): PÁGINA
+/// APARTE en el onboarding, después del perfil y antes de
+/// notificaciones — como la de canjear de la app de Muse (regalo +
+/// 6 casillas + botón). El código es OPCIONAL: se puede seguir con
+/// las casillas vacías ("Saltar"). Se escribe en
+/// [referralController] y se guarda en local al terminar el
+/// onboarding ([_OnboardingScreenState._finish] /
+/// [_GoogleOnboardingFlowState._finish]); se canjea solo cuando hay
+/// conexión. Se usa en el onboarding normal (página 5) y en el
+/// flujo de Google (paso 2).
+class _ReferralPage extends StatefulWidget {
+  const _ReferralPage({
+    required this.referralController,
+    required this.onNext,
+  });
+
+  final TextEditingController referralController;
+  final VoidCallback onNext;
+
+  @override
+  State<_ReferralPage> createState() => _ReferralPageState();
+}
+
+class _ReferralPageState extends State<_ReferralPage> {
+  final _controllers = List.generate(6, (_) => TextEditingController());
+  final _nodes = List.generate(6, (_) => FocusNode());
+
+  @override
+  void initState() {
+    super.initState();
+    // Si vuelve atrás, las casillas ya traen el código escrito.
+    final code = widget.referralController.text;
+    for (var i = 0; i < 6; i++) {
+      if (i < code.length) _controllers[i].text = code[i];
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final c in _controllers) {
+      c.dispose();
+    }
+    for (final n in _nodes) {
+      n.dispose();
+    }
+    super.dispose();
+  }
+
+  String get _code => _controllers.map((c) => c.text).join();
+
+  void _onBoxChanged(int index, String value) {
+    final clean =
+        value.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
+    if (clean != value) {
+      _controllers[index].value = TextEditingValue(
+        text: clean,
+        selection: TextSelection.collapsed(offset: clean.length),
+      );
+    }
+    // El código vive en el controlador compartido: al terminar el
+    // onboarding se guarda en local y se canjea solo.
+    widget.referralController.text = _code;
+    if (clean.length == 1 && index < 5) {
+      _nodes[index + 1].requestFocus();
+    } else if (clean.isEmpty && index > 0) {
+      _nodes[index - 1].requestFocus();
+    }
+  }
+
+  void _skip() {
+    widget.referralController.clear();
+    for (final c in _controllers) {
+      c.clear();
+    }
+    widget.onNext();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final ink = isDark ? Colors.white : const Color(0xFF4B4B4B);
+    final sub = isDark
+        ? Colors.white.withValues(alpha: 0.7)
+        : const Color(0xFF6B7280);
+    final boxBorder = isDark
+        ? Colors.white.withValues(alpha: 0.2)
+        : const Color(0xFFE5E5E5);
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Regalo en círculo teal claro (como la de canjear).
+          Center(
+            child: Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppAccent.primary.withValues(alpha: 0.14),
+              ),
+              alignment: Alignment.center,
+              child: LucideIcon(
+                LucideIcons.gift,
+                size: 56,
+                color: AppAccent.primary,
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            tr('obReferralTitle'),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.w800,
+              color: ink,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            tr('obReferralBody'),
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 16, height: 1.4, color: sub),
+          ),
+          const SizedBox(height: 24),
+          // Las 6 casillas (como la de canjear de la app de Muse).
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              for (var i = 0; i < 6; i++)
+                SizedBox(
+                  width: 48,
+                  height: 56,
+                  child: TextField(
+                    controller: _controllers[i],
+                    focusNode: _nodes[i],
+                    textAlign: TextAlign.center,
+                    textCapitalization: TextCapitalization.characters,
+                    keyboardType: TextInputType.text,
+                    maxLength: 1,
+                    buildCounter: (context,
+                            {required currentLength,
+                            required isFocused,
+                            maxLength}) =>
+                        null,
+                    onChanged: (v) => _onBoxChanged(i, v),
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
+                      color: AppAccent.primary,
+                    ),
+                    decoration: InputDecoration(
+                      counterText: '',
+                      contentPadding: EdgeInsets.zero,
+                      filled: true,
+                      fillColor: isDark
+                          ? (AppAccent.isViolet
+                              ? const Color(0xFF1C1533)
+                              : const Color(0xFF0F241E))
+                          : Colors.white,
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide(color: boxBorder, width: 2),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide(
+                            color: AppAccent.primary, width: 2),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          DuoButton.primary(
+            label: tr('obNext').toUpperCase(),
+            onPressed: widget.onNext,
+            fontSize: 17,
+          ),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: _skip,
+            child: Text(
+              tr('obReferralSkip'),
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: sub,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -565,18 +723,7 @@ class _ProgressBar extends StatelessWidget {
 }
 
 class _WelcomePage extends StatelessWidget {
-  const _WelcomePage({
-    this.onGoogleSignIn,
-    this.googleBusy = false,
-    this.googleError,
-  });
-
-  /// "Continuar con Google" en la bienvenida (Quemia 7.6,
-  /// Kristian): al iniciar sesión salta automáticamente al flujo
-  /// de Google (sin pasar por las pantallas de explicación).
-  final Future<void> Function()? onGoogleSignIn;
-  final bool googleBusy;
-  final String? googleError;
+  const _WelcomePage();
 
   @override
   Widget build(BuildContext context) {
@@ -622,53 +769,9 @@ class _WelcomePage extends StatelessWidget {
             textAlign: TextAlign.center,
             style: const TextStyle(fontSize: 17, height: 1.5),
           ),
-          const SizedBox(height: 28),
-          // Botón Google (mismo estilo que en el perfil: blanco +
-          // borde 2 pt #E5E5E5 + labio + texto #4B4B4B 17 pt +
-          // logo G real). Quemia 7.6: también en la bienvenida.
-          SizedBox(
-            width: double.infinity,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                SizedBox(
-                  width: double.infinity,
-                  child: DuoButton.secondary(
-                    label: 'Google',
-                    onPressed: googleBusy || onGoogleSignIn == null
-                        ? null
-                        : () => onGoogleSignIn!(),
-                    textColor: const Color(0xFF4B4B4B),
-                    edgeColor: const Color(0xFFE5E5E5),
-                    fontSize: 17,
-                  ),
-                ),
-                Positioned(
-                  left: 20,
-                  child: IgnorePointer(
-                    child: googleBusy
-                        ? const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(strokeWidth: 2.5),
-                          )
-                        : const GoogleGIcon(size: 24),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (googleError != null) ...[
-            const SizedBox(height: 12),
-            Text(
-              googleError!,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 15,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
+          // Quemia 7.6 (Kristian, al ver la foto): SIN botón de
+          // Google en la bienvenida. Google se vincula solo en la
+          // pantalla del perfil (nombre + género + código).
         ],
       ),
     );
@@ -796,7 +899,6 @@ class _ProfilePage extends StatelessWidget {
     required this.nameController,
     required this.gender,
     required this.onGenderChanged,
-    this.referralController,
     this.onGoogleSignIn,
     this.googleBusy = false,
     this.googleError,
@@ -804,11 +906,6 @@ class _ProfilePage extends StatelessWidget {
   final TextEditingController nameController;
   final String? gender;
   final ValueChanged<String> onGenderChanged;
-
-  /// Código de referido (Quemia 7.6, Kristian): va en esta
-  /// pantalla, después del género, con y sin Google, y funciona
-  /// sin internet (se guarda en local y se canjea solo).
-  final TextEditingController? referralController;
 
   /// "Continuar con Google" (opcional): enlaza con Google y
   /// prellena el nombre. Inyectable para probar la página.
@@ -859,16 +956,15 @@ class _ProfilePage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Brenda + Britany ilustradas juntas (Quemia 7.6: 56 dp
-          // en vez de 90, para que la página con el campo de
-          // código de referido siga cabiendo sin desplazar en
-          // 360x800).
+          // Brenda + Britany ilustradas juntas (como antes: 90 dp;
+          // el código de referido ya NO va en esta pantalla, tiene
+          // su propia pantalla aparte).
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Image.asset('assets/brenda.png', height: 48),
-              Image.asset('assets/britany.png', height: 48),
+              Image.asset('assets/brenda.png', height: 90),
+              Image.asset('assets/britany.png', height: 90),
             ],
           ),
           const SizedBox(height: 8),
@@ -962,65 +1058,10 @@ class _ProfilePage extends StatelessWidget {
             borderColor: blue,
             onTap: () => onGenderChanged('Masculino'),
           ),
-          // Código de referido (Quemia 7.6, Kristian): opcional,
-          // después del género. Funciona con y sin Google y sin
-          // internet: se guarda en local y se canjea solo cuando
-          // hay conexión. Mismo campo que el nombre (radio 16,
-          // borde 2 pt #E5E5E5, 56 pt de alto, blanco en ambos
-          // temas), texto centrado en mayúsculas.
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              tr('obReferralLabel'),
-              style: TextStyle(
-                  fontSize: 14, fontWeight: FontWeight.w700, color: ink),
-            ),
-          ),
-          const SizedBox(height: 6),
-          SizedBox(
-            height: 48,
-            child: TextField(
-              controller: referralController,
-              textCapitalization: TextCapitalization.characters,
-              textAlign: TextAlign.center,
-              maxLength: 6,
-              buildCounter: (context,
-                      {required currentLength,
-                      required isFocused,
-                      maxLength}) =>
-                  null,
-              style: const TextStyle(
-                  fontSize: 20, fontWeight: FontWeight.w700, color: fieldInk),
-              decoration: InputDecoration(
-                hintText: tr('obReferralHint'),
-                hintStyle: const TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.normal,
-                  color: hintColor,
-                ),
-                contentPadding:
-                    const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide:
-                      const BorderSide(color: Color(0xFFE5E5E5), width: 2),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide:
-                      const BorderSide(color: Color(0xFFE5E5E5), width: 2),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide:
-                      const BorderSide(color: Color(0xFF5EEAD4), width: 2),
-                ),
-              ),
-            ),
-          ),
+          // Código de referido: ya NO va aquí (Quemia 7.6,
+          // Kristian: "se ve una cantidad de cosas"). Tiene su
+          // propia pantalla aparte ([_ReferralPage]), después del
+          // perfil y antes de notificaciones.
           // Ronda #8 (cambio 09:08): "Continuar con Google" DEBAJO
           // del nombre y el género. Opcional: enlaza la sesión con
           // Google y prellena el nombre con el de la cuenta.

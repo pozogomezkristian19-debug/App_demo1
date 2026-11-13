@@ -309,50 +309,10 @@ class _ReferralsScreenState extends State<ReferralsScreen> {
                                 ),
                               ),
                               const SizedBox(height: 12),
-                              // Canjear el código de un amigo: BOTÓN
-                              // grande a todo lo ancho (Quemia 7.6,
-                              // Kristian: el enlace chiquito no se
-                              // veía; aquí es donde se pone el código
-                              // que te da un amigo). Abre las 6
-                              // casillas.
-                              SizedBox(
-                                width: double.infinity,
-                                child: OutlinedButton.icon(
-                                  onPressed: () {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (_) =>
-                                            const RedeemCodeScreen(),
-                                      ),
-                                    );
-                                  },
-                                  icon: LucideIcon(
-                                    LucideIcons.gift,
-                                    size: 20,
-                                    color: AppAccent.primary,
-                                  ),
-                                  label: Text(
-                                    tr('referralHaveCode'),
-                                    style: TextStyle(
-                                      fontSize: 17,
-                                      fontWeight: FontWeight.w800,
-                                      color: AppAccent.primary,
-                                    ),
-                                  ),
-                                  style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(
-                                        vertical: 14),
-                                    side: BorderSide(
-                                      color: AppAccent.primary,
-                                      width: 2,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(16),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
+                              // Canjear el código de un amigo ya NO
+                              // vive aquí: es un apartado SEPARADO en
+                              // Cuenta ("Canjear código", Quemia 7.6,
+                              // Kristian, como en la app de Muse).
                               // Los dos ganan: dos tarjetas
                               // EXACTAMENTE iguales (regla 8).
                               Row(

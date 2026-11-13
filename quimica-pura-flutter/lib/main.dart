@@ -1320,11 +1320,16 @@ class _HomeScreenState extends State<HomeScreen> {
         page = const ShopScreen();
       case 'groups':
         page = const GroupsScreen();
-      // Referidos (7.3): invita con tu código y canjea el de un
-      // amigo. La entrada vive en Cuenta (fila Referidos) y en el
-      // menú, junto a Amigos y Grupos.
+      // Referidos (7.3): invita con tu código y los dos ganan
+      // puntos. Va justo después de la Tienda: los premios de
+      // los hitos son artículos de la tienda.
       case 'referrals':
         page = const ReferralsScreen();
+      // Canjear código (7.6, Kristian): apartado SEPARADO en
+      // Cuenta, como en la app de Muse. Abre directo las 6
+      // casillas (RedeemCodeScreen), sin pasar por Referidos.
+      case 'redeem':
+        page = const RedeemCodeScreen();
       // Soporte en la app (7.0, Kristian 09:52): ventanita con hilo
       // y compositor (ya no abre WhatsApp directo).
       case 'support':

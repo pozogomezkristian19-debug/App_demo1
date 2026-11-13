@@ -445,13 +445,13 @@ void main() {
 
 void _noop() {}
 
-/// Llega a la página del idioma (6) por el flujo real: 4 taps hasta
-/// el perfil y luego dos deslizamientos del PageView (perfil →
-/// notificaciones → idioma). El deslizamiento evita los dos
-/// requisitos que no se verifican aquí: el botón Siguiente de la
-/// página 4 exige nombre+género y el de la 5 llama al servicio de
-/// notificaciones. Lo que se verifica es el contraste y el ajuste
-/// de la página 6, no esos botones.
+/// Llega a la página del idioma (7) por el flujo real: 4 taps hasta
+/// el perfil y luego tres deslizamientos del PageView (perfil →
+/// código de referido → notificaciones → idioma). El deslizamiento
+/// evita los requisitos que no se verifican aquí: el botón Siguiente
+/// de la página 4 exige nombre+género y el de la 6 llama al servicio
+/// de notificaciones. Lo que se verifica es el contraste y el ajuste
+/// de la página 7, no esos botones.
 Future<void> _driveToLanguagePage(
   WidgetTester tester, {
   required ThemeData theme,
@@ -477,6 +477,10 @@ Future<void> _driveToLanguagePage(
   expect(find.text(tr('obProfileTitle')), findsOneWidget);
   await tester.drag(
       find.text(tr('obProfileTitle')), const Offset(-360, 0));
+  await tester.pumpAndSettle();
+  expect(find.text(tr('obReferralTitle')), findsOneWidget);
+  await tester.drag(
+      find.text(tr('obReferralTitle')), const Offset(-360, 0));
   await tester.pumpAndSettle();
   expect(find.text(tr('obNotifTitle')), findsOneWidget);
   await tester.drag(find.text(tr('obNotifTitle')), const Offset(-360, 0));
