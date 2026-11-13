@@ -6,7 +6,14 @@
      válida que Android elige en modo oscuro. Mismo anillo órbita
      centrado sobre #131F24 (scaffoldBackground del tema oscuro). -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="#131F24" />
+    <!-- Fondo oscuro: un color crudo (#131F24) NO vale como
+         android:drawable (aapt2: "incompatible with attribute
+         drawable") — hay que ponerlo como <shape> sólido. -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#131F24" />
+        </shape>
+    </item>
 
     <item>
         <bitmap
