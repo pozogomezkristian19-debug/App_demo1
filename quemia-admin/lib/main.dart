@@ -4,11 +4,14 @@
 // falta android/app/google-services.json), la app muestra una pantalla clara
 // "Falta configurar Firebase" en vez de romperse.
 
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
 import 'auth_service.dart';
+import 'push_service.dart';
 import 'repositories.dart';
 import 'screens.dart';
 
@@ -19,6 +22,12 @@ Future<void> main() async {
     await Firebase.initializeApp();
   } catch (e) {
     firebaseError = '$e';
+  }
+  if (firebaseError == null) {
+    // Receptor de pushes FCM del panel: nunca bloquea ni rompe el arranque
+    // (PushService.init() traga cualquier fallo). El token solo se guarda
+    // después, desde HomeShell, cuando el admin ya está verificado.
+    unawaited(PushService.shared.init());
   }
   runApp(QuemiaAdminApp(firebaseError: firebaseError));
 }

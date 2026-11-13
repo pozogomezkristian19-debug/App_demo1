@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "898001909401-u7phhs5t7oofhv0ifo1ios1d7rhpkvc0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.melliqui.quemia_admin",
+            "certificate_hash": "e8c25aadc6a17883278ac697618b34b13ee347e7"
+          }
+        },
+        {
           "client_id": "898001909401-o2ins4m72vvgb5hg6v5rgsl0llgu9glj.apps.googleusercontent.com",
           "client_type": 3
         }
@@ -42,6 +50,14 @@
         }
       },
       "oauth_client": [
+        {
+          "client_id": "898001909401-3i9l9it1a6cu75ktcg9v92os83ai7od8.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.melliqui.quimica_pura",
+            "certificate_hash": "e8c25aadc6a17883278ac697618b34b13ee347e7"
+          }
+        },
         {
           "client_id": "898001909401-o2ins4m72vvgb5hg6v5rgsl0llgu9glj.apps.googleusercontent.com",
           "client_type": 3

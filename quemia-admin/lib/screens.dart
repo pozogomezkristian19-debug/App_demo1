@@ -9,11 +9,14 @@
 // Firestore como valor por defecto, para poder inyectar fakes en tests y
 // previews.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'auth_service.dart';
 import 'design.dart';
 import 'models.dart';
+import 'push_service.dart';
 import 'repositories.dart';
 import 'stats.dart';
 
@@ -810,6 +813,32 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   AdminSection _section = AdminSection.panel;
+
+  @override
+  void initState() {
+    super.initState();
+    // Toques en pushes FCM: navegar a la sección que corresponde.
+    PushService.pendingSection.addListener(_onPushSection);
+    // Si la app se abrió tocando un push, la sección ya está pendiente.
+    _onPushSection();
+    // El admin ya está verificado aquí: guardar su token FCM para que las
+    // Cloud Functions le manden los pushes (nunca antes, ver push_service.dart).
+    unawaited(PushService.shared.registerAdmin(widget.me.uid));
+  }
+
+  void _onPushSection() {
+    final section = PushService.pendingSection.value;
+    if (section == null) return;
+    PushService.pendingSection.value = null;
+    setState(() => _section = section);
+  }
+
+  @override
+  void dispose() {
+    PushService.pendingSection.removeListener(_onPushSection);
+    PushService.shared.unregisterAdmin();
+    super.dispose();
+  }
 
   late final UsersRepository _users =
       widget.users ?? FirestoreUsersRepository();

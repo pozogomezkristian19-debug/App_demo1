@@ -61,6 +61,10 @@ class FailingAdminsRepository implements AdminsRepository {
   @override
   Future<void> deleteAdmin(String uid) async =>
       throw Exception('Sin conexión a internet');
+
+  @override
+  Future<void> saveFcmToken(String uid, String token) async =>
+      throw Exception('Sin conexión a internet');
 }
 
 class FailingSettingsRepository implements SettingsRepository {

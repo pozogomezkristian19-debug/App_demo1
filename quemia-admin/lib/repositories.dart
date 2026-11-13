@@ -161,6 +161,13 @@ abstract class AdminsRepository {
 
   Future<void> updatePermissions(String uid, AdminPermissions permissions);
   Future<void> deleteAdmin(String uid);
+
+  /// Guarda el token FCM del admin (para los pushes): escribe 'fcmToken' y
+  /// 'fcmTokenUpdatedAt' (ms desde epoch) en su documento de 'admins'.
+  /// Solo la llama PushService después de que el admin ya está verificado
+  /// (desde HomeShell): escribirlo antes crearía con set-merge un documento
+  /// parcial que resolveAdmin leería como admin válido. Ver push_service.dart.
+  Future<void> saveFcmToken(String uid, String token);
 }
 
 class FirestoreAdminsRepository implements AdminsRepository {
@@ -288,6 +295,16 @@ class FirestoreAdminsRepository implements AdminsRepository {
   Future<void> deleteAdmin(String uid) async {
     await _withTimeout(_col.doc(uid).delete());
   }
+
+  @override
+  Future<void> saveFcmToken(String uid, String token) async {
+    await _withTimeout(
+      _col.doc(uid).set(<String, dynamic>{
+        'fcmToken': token,
+        'fcmTokenUpdatedAt': DateTime.now().millisecondsSinceEpoch,
+      }, SetOptions(merge: true)),
+    );
+  }
 }
 
 /// Fake en memoria de la colección 'admins'.
@@ -403,6 +420,18 @@ class FakeAdminsRepository implements AdminsRepository {
   @override
   Future<void> deleteAdmin(String uid) async {
     _admins.remove(uid);
+  }
+
+  final Map<String, String> _fcmTokens = {};
+  final Map<String, int> _fcmTokenUpdatedAt = {};
+
+  String? fcmTokenFor(String uid) => _fcmTokens[uid];
+  int? fcmTokenUpdatedAtFor(String uid) => _fcmTokenUpdatedAt[uid];
+
+  @override
+  Future<void> saveFcmToken(String uid, String token) async {
+    _fcmTokens[uid] = token;
+    _fcmTokenUpdatedAt[uid] = DateTime.now().millisecondsSinceEpoch;
   }
 }
 
