@@ -20,6 +20,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../services/accent.dart';
 
 import '../services/localization.dart';
 import '../services/notification_inbox.dart';
@@ -127,6 +128,15 @@ class _NotificationsScreenState extends State<NotificationsScreen>
         // Solicitud de amistad: se confirma o se elimina en Amigos.
         Navigator.of(context).pop();
         widget.onOpenScreen('friends');
+      case InboxKind.duel:
+        // Duelo (reto o resultado): se juega en Amigos, sección
+        // "Mis duelos abiertos".
+        Navigator.of(context).pop();
+        widget.onOpenScreen('friends');
+      case InboxKind.announcement:
+        // Aviso del admin: la bandeja YA es su destino; solo se
+        // marca como leída.
+        break;
     }
   }
 
@@ -239,15 +249,19 @@ class _EntryTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final (icon, color) = switch (entry.kind) {
-      InboxKind.update => (LucideIcons.download, const Color(0xFF00C2A8)),
+      InboxKind.update => (LucideIcons.download, AppAccent.primary),
       InboxKind.reminder => (LucideIcons.bell, const Color(0xFFF59E0B)),
       InboxKind.achievement => (LucideIcons.trophy, const Color(0xFF8B5CF6)),
       InboxKind.streak => (LucideIcons.flame, const Color(0xFFF97316)),
-      InboxKind.support => (LucideIcons.messageCircle, const Color(0xFF00C2A8)),
+      InboxKind.support => (LucideIcons.messageCircle, AppAccent.primary),
       InboxKind.friendRequest => (
           LucideIcons.userRound,
-          const Color(0xFF00C2A8)
+          AppAccent.primary
         ),
+      InboxKind.duel =>
+        (LucideIcons.trophy, AppAccent.primary),
+      InboxKind.announcement =>
+        (LucideIcons.bell, AppAccent.primary),
     };
     final unread = !entry.read;
     return Column(

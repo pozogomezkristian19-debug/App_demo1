@@ -5,6 +5,7 @@
 // de cuestionario (tema de laboratorio) y la estrellita de favorito.
 
 import 'package:flutter/material.dart';
+import '../services/accent.dart';
 import '../widgets/lucide_icons.dart';
 
 import '../data/i18n/content_i18n.dart';
@@ -13,6 +14,7 @@ import '../models.dart';
 import '../services/favorites.dart';
 import '../services/localization.dart';
 import '../widgets/molecule_diagrams.dart';
+import '../widgets/quemia_scrollbar.dart';
 import 'lab_quiz_screen.dart';
 
 class TopicDetailScreen extends StatefulWidget {
@@ -65,22 +67,33 @@ class _TopicDetailViewState extends State<TopicDetailView> {
   Widget build(BuildContext context) {
     final topic = localizedTopic(widget.topic);
     // Diseño Duolingo §3.14 (solo tokens): secciones 20 pt peso 800
-    // #4B4B4B, cuerpo 16 pt #4B4B4B, secciones planas separadas por
-    // líneas #E5E5E5, sin sombras.
+    // #4B4B4B, cuerpo 16 pt #4B4B4B.
     // Tinta según el tema: en oscuro el #4B4B4B fijo no se leía sobre
     // el fondo oscuro (bug del rediseño). onSurface es #4B4B4B en
     // claro y #E6F4EE (o #EDE9F7 violeta) en oscuro.
+    // Corrección 2026-11-12 (Zona F): sin líneas divisorias
+    // rústicas — las secciones se separan con aire (20 pt) y la
+    // sección "Fórmulas" vive en su propia tarjeta, como el resto
+    // de la app. El contenido y el orden no cambian.
     final ink = Theme.of(context).colorScheme.onSurface;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor = isDark ? AppAccent.darkCard : Colors.white;
+    final borderColor =
+        isDark ? const Color(0xFF37464F) : const Color(0xFFE5E5E5);
     final section =
         TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: ink);
     final body = TextStyle(fontSize: 16, color: ink);
-    const divider = Divider(height: 25, thickness: 1, color: Color(0xFFE5E5E5));
-    return ListView(
+    const gap = SizedBox(height: 20);
+    // Barra de desplazamiento bonita SOLO aquí (pantalla de estudio;
+    // en las principales no hay barra, 2026-11-12).
+    return ScrollConfiguration(
+      behavior: const QuemiaScrollBehavior(),
+      child: ListView(
       padding: const EdgeInsets.all(16),
       children: [
         Text(topic.level,
             style: TextStyle(
-              color: ink.withValues(alpha: 0.8),
+              color: ink,
               fontWeight: FontWeight.w700,
               fontSize: 14,
             )),
@@ -90,20 +103,38 @@ class _TopicDetailViewState extends State<TopicDetailView> {
             padding: const EdgeInsets.only(bottom: 8),
             child: Text(p, style: body),
           ),
-        divider,
-        Text(tr('formulasWord'), style: section),
-        for (final f in topic.formulas)
-          Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: Text('• ${f.name}: ${f.expr} — ${f.note}', style: body),
+        gap,
+        Card(
+          margin: EdgeInsets.zero,
+          elevation: 0,
+          color: cardColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: borderColor),
           ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(tr('formulasWord'), style: section),
+                for (final f in topic.formulas)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child:
+                        Text('• ${f.name}: ${f.expr} — ${f.note}', style: body),
+                  ),
+              ],
+            ),
+          ),
+        ),
         // Diagramas 3D de moléculas (tema de química orgánica).
         if (topic.molecules.isNotEmpty) ...[
-          divider,
+          gap,
           Text(tr('moleculesWord'), style: section),
           for (final key in topic.molecules) MoleculeCard(moleculeKey: key),
         ],
-        divider,
+        gap,
         Text('${tr('exampleWord')}: ${topic.exampleTitle}', style: section),
         for (var i = 0; i < topic.exampleSteps.length; i++)
           Padding(
@@ -116,14 +147,14 @@ class _TopicDetailViewState extends State<TopicDetailView> {
               style: TextStyle(
                   fontSize: 16, fontWeight: FontWeight.w700, color: ink)),
         ),
-        divider,
+        gap,
         Text(tr('errorsWord'), style: section),
         for (final e in topic.errors)
           Padding(
             padding: const EdgeInsets.only(top: 4),
             child: Text('• $e', style: body),
           ),
-        divider,
+        gap,
         Text('${tr('tipWord')}: ${topic.tip}',
             style: TextStyle(
                 fontSize: 16, fontStyle: FontStyle.italic, color: ink)),
@@ -146,6 +177,7 @@ class _TopicDetailViewState extends State<TopicDetailView> {
             ),
           ),
       ],
+      ),
     );
   }
 }

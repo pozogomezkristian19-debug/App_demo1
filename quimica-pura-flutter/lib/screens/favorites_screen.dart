@@ -2,6 +2,7 @@
 // estrellita, todos juntos en su pantalla. Al tocar uno, se abre.
 
 import 'package:flutter/material.dart';
+import '../services/accent.dart';
 import '../widgets/lucide_icons.dart';
 
 import '../data/periodic_table.dart';
@@ -51,7 +52,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                     Card(
                       margin: const EdgeInsets.only(bottom: 6),
                       elevation: 2,
-                      shadowColor: const Color(0xFF00C2A8)
+                      shadowColor: AppAccent.primary
                           .withValues(alpha: 0.15),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
@@ -80,7 +81,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                     Card(
                       margin: const EdgeInsets.only(bottom: 6),
                       elevation: 2,
-                      shadowColor: const Color(0xFF00C2A8)
+                      shadowColor: AppAccent.primary
                           .withValues(alpha: 0.15),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
@@ -109,7 +110,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                     Card(
                       margin: const EdgeInsets.only(bottom: 6),
                       elevation: 2,
-                      shadowColor: const Color(0xFF00C2A8)
+                      shadowColor: AppAccent.primary
                           .withValues(alpha: 0.15),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),

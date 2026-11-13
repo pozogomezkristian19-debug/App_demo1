@@ -2,11 +2,13 @@
 // general), guardadas en el teléfono. Sin internet.
 
 import 'package:flutter/material.dart';
+import '../services/accent.dart';
 import '../widgets/lucide_icons.dart';
 
 import '../data/topics.dart';
 import '../services/localization.dart';
 import '../services/notes.dart';
+import '../widgets/quemia_scrollbar.dart';
 
 class NotesScreen extends StatefulWidget {
   const NotesScreen({super.key});
@@ -23,9 +25,13 @@ class _NotesScreenState extends State<NotesScreen> {
     ];
     return Scaffold(
       appBar: AppBar(title: Text(tr('notesTitle'))),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
+      // Barra de desplazamiento bonita SOLO aquí (pantalla de
+      // estudio; en las principales no hay barra, 2026-11-12).
+      body: ScrollConfiguration(
+        behavior: const QuemiaScrollBehavior(),
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
           const Text(
             'Escribe tus propias notas en cada tema. Se guardan en el teléfono.',
           ),
@@ -35,7 +41,7 @@ class _NotesScreenState extends State<NotesScreen> {
               margin: const EdgeInsets.only(bottom: 8),
               elevation: 2,
               shadowColor:
-                  const Color(0xFF00C2A8).withValues(alpha: 0.15),
+                  AppAccent.primary.withValues(alpha: 0.15),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
               ),
@@ -65,6 +71,7 @@ class _NotesScreenState extends State<NotesScreen> {
               ),
             ),
         ],
+        ),
       ),
     );
   }

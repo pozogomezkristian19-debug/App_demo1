@@ -336,6 +336,12 @@ const Map<String, Map<String, String>> _strings = {
     'accountShareProgressSub': 'Tu progreso como imagen',
     'accountShareApp': 'Compartir la app',
     'accountAbout': 'Acerca de Quemia',
+    'settingsTitle': 'Ajustes',
+    'settingsSub': 'Tema, idioma, recordatorios y más',
+    'settingsNotificationsSub': 'Avisos y recordatorios de la app',
+    'avatarTitle': 'Mi avatar',
+    'avatarSub':
+        'Toca un avatar para elegirlo. Los premium bloqueados se compran en la Tienda.',
     'checkUpdateTitle': 'Buscar actualización',
     'checkUpdateSub': 'Versión instalada: %s',
     'checkUpdateLatest': 'Ya tienes la última versión',
@@ -394,6 +400,7 @@ const Map<String, Map<String, String>> _strings = {
         'El canal «Aviso de prueba» está desactivado: actívalo en Ajustes de notificaciones',
     'notifTestFailedSystem':
         'No se pudo enviar el aviso: error del sistema. Inténtalo de nuevo',
+    'notifTestFailedDetail': 'No se pudo enviar el aviso: {detail}',
     'notifTestPending':
         'Al volver con el permiso concedido, el aviso se enviará solo',
     'labPrecipitation': 'Precipitación',
@@ -765,6 +772,12 @@ const Map<String, Map<String, String>> _strings = {
     'accountShareProgressSub': 'Your progress as an image',
     'accountShareApp': 'Share the app',
     'accountAbout': 'About Quemia',
+    'settingsTitle': 'Settings',
+    'settingsSub': 'Theme, language, reminders and more',
+    'settingsNotificationsSub': 'App alerts and reminders',
+    'avatarTitle': 'My avatar',
+    'avatarSub':
+        'Tap an avatar to choose it. Locked premium ones are bought in the Shop.',
     'checkUpdateTitle': 'Check for updates',
     'checkUpdateSub': 'Installed version: %s',
     'checkUpdateLatest': 'You already have the latest version',
@@ -822,6 +835,7 @@ const Map<String, Map<String, String>> _strings = {
         'The “Test reminder” channel is off: turn it on in notification settings',
     'notifTestFailedSystem':
         'Couldn’t send the reminder: system error. Try again',
+    'notifTestFailedDetail': 'Couldn’t send the reminder: {detail}',
     'notifTestPending':
         'When you come back with permission granted, the reminder will send itself',
     'labPrecipitation': 'Precipitation',
@@ -1240,6 +1254,12 @@ const Map<String, Map<String, String>> _strings = {
     'accountShareProgressSub': 'Tes progrès en image',
     'accountShareApp': 'Partager l’appli',
     'accountAbout': 'À propos de Quemia',
+    'settingsTitle': 'Réglages',
+    'settingsSub': 'Thème, langue, rappels et plus',
+    'settingsNotificationsSub': 'Alertes et rappels de l’appli',
+    'avatarTitle': 'Mon avatar',
+    'avatarSub':
+        'Touche un avatar pour le choisir. Les premium verrouillés s’achètent dans la Boutique.',
     'checkUpdateTitle': 'Vérifier les mises à jour',
     'checkUpdateSub': 'Version installée : %s',
     'checkUpdateLatest': 'Vous avez déjà la dernière version',
@@ -1299,6 +1319,7 @@ const Map<String, Map<String, String>> _strings = {
         'Le canal « Rappel d’essai » est désactivé : active-le dans les réglages des notifications',
     'notifTestFailedSystem':
         'Impossible d’envoyer le rappel : erreur système. Réessaie',
+    'notifTestFailedDetail': 'Impossible d’envoyer le rappel : {detail}',
     'notifTestPending':
         'Au retour, si l’autorisation est accordée, le rappel s’enverra tout seul',
     'labPrecipitation': 'Précipitation',
@@ -1718,6 +1739,12 @@ const Map<String, Map<String, String>> _strings = {
     'accountShareProgressSub': 'I tuoi progressi come immagine',
     'accountShareApp': 'Condividi l’app',
     'accountAbout': 'Info su Quemia',
+    'settingsTitle': 'Impostazioni',
+    'settingsSub': 'Tema, lingua, promemoria e altro',
+    'settingsNotificationsSub': 'Avvisi e promemoria dell’app',
+    'avatarTitle': 'Il mio avatar',
+    'avatarSub':
+        'Tocca un avatar per sceglierlo. I premium bloccati si comprano nel Negozio.',
     'checkUpdateTitle': 'Cerca aggiornamenti',
     'checkUpdateSub': 'Versione installata: %s',
     'checkUpdateLatest': 'Hai già l’ultima versione',
@@ -1775,6 +1802,8 @@ const Map<String, Map<String, String>> _strings = {
         'Il canale « Promemoria di prova » è disattivato: attivalo nelle impostazioni delle notifiche',
     'notifTestFailedSystem':
         'Impossibile inviare il promemoria: errore di sistema. Riprova',
+    'notifTestFailedDetail':
+        'Impossibile inviare il promemoria: {detail}',
     'notifTestPending':
         'Quando tornerai con il permesso concesso, il promemoria si invierà da solo',
     'labPrecipitation': 'Precipitazione',
@@ -2339,6 +2368,12 @@ const Map<String, Map<String, String>> _strings = {
     'accountShareProgressSub': 'O teu progresso como imagem',
     'accountShareApp': 'Partilhar a app',
     'accountAbout': 'Sobre o Quemia',
+    'settingsTitle': 'Ajustes',
+    'settingsSub': 'Tema, idioma, lembretes e mais',
+    'settingsNotificationsSub': 'Avisos e lembretes do app',
+    'avatarTitle': 'Meu avatar',
+    'avatarSub':
+        'Toque em um avatar para escolhê-lo. Os premium bloqueados são comprados na Loja.',
     'checkUpdateTitle': 'Buscar atualizações',
     'checkUpdateSub': 'Versão instalada: %s',
     'checkUpdateLatest': 'Você já tem a versão mais recente',
@@ -2396,6 +2431,7 @@ const Map<String, Map<String, String>> _strings = {
         'O canal « Aviso de teste » está desativado: ative-o nos ajustes de notificações',
     'notifTestFailedSystem':
         'Não foi possível enviar o aviso: erro do sistema. Tente novamente',
+    'notifTestFailedDetail': 'Não foi possível enviar o aviso: {detail}',
     'notifTestPending':
         'Ao voltar com a permissão concedida, o aviso será enviado sozinho',
     'labPrecipitation': 'Precipitação',
@@ -3017,6 +3053,12 @@ const Map<String, Map<String, String>> _strings = {
     'accountShareProgressSub': 'Твой прогресс картинкой',
     'accountShareApp': 'Поделиться приложением',
     'accountAbout': 'О Quemia',
+    'settingsTitle': 'Настройки',
+    'settingsSub': 'Тема, язык, напоминания и другое',
+    'settingsNotificationsSub': 'Оповещения и напоминания приложения',
+    'avatarTitle': 'Мой аватар',
+    'avatarSub':
+        'Нажмите на аватар, чтобы выбрать его. Заблокированные премиум-аватары покупаются в Магазине.',
     'checkUpdateTitle': 'Проверить обновления',
     'checkUpdateSub': 'Установленная версия: %s',
     'checkUpdateLatest': 'У вас уже последняя версия',
@@ -3073,6 +3115,7 @@ const Map<String, Map<String, String>> _strings = {
         'Канал « Тестовое напоминание » отключён: включи его в настройках уведомлений',
     'notifTestFailedSystem':
         'Не удалось отправить напоминание: системная ошибка. Попробуй ещё раз',
+    'notifTestFailedDetail': 'Не удалось отправить напоминание: {detail}',
     'notifTestPending':
         'Когда вернёшься с выданным разрешением, напоминание отправится само',
     'labPrecipitation': 'Осаждение',

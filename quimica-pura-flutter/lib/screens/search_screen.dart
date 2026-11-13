@@ -3,6 +3,7 @@
 // va directo a él. Se abre con la lupita de la barra de arriba.
 
 import 'package:flutter/material.dart';
+import '../services/accent.dart';
 import '../widgets/lucide_icons.dart';
 
 import '../data/search_index.dart';
@@ -131,7 +132,7 @@ class _SearchScreenState extends State<SearchScreen> {
                             Card(
                               margin: const EdgeInsets.only(bottom: 6),
                               elevation: 1,
-                              shadowColor: const Color(0xFF00C2A8)
+                              shadowColor: AppAccent.primary
                                   .withValues(alpha: 0.12),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(16),
@@ -196,7 +197,7 @@ class _RecentSearches extends StatelessWidget {
               margin: const EdgeInsets.only(bottom: 6),
               elevation: 1,
               shadowColor:
-                  const Color(0xFF00C2A8).withValues(alpha: 0.12),
+                  AppAccent.primary.withValues(alpha: 0.12),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
               ),

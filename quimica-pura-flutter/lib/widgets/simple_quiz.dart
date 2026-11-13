@@ -13,6 +13,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import '../services/accent.dart';
 import 'duo_button.dart';
 import 'lucide_icons.dart';
 
@@ -26,11 +27,8 @@ import '../services/sound_service.dart';
 import '../screens/calculator_screen.dart';
 import 'twin_avatars.dart';
 
-/// Tokens claros (paleta propia de Melli-Qui, sin verde Duolingo):
-/// teal #00C2A8 como color principal, teal oscuro #00A18D.
-const _teal = Color(0xFF00C2A8);
-const _tealDark = Color(0xFF00A18D);
-
+// El color principal ya no es un teal fijo: es el acento elegido
+// (AppAccent.primary / primaryDark). Ver duo_button.dart.
 /// Estado visual de una opción de respuesta: sin contestar, o
 /// juzgada al momento (el flujo original: tocar la opción la
 /// juzga, sin paso de COMPROBAR).
@@ -76,9 +74,9 @@ class QuizOptionButton extends StatelessWidget {
           ink,
         ),
       QuizOptionState.correct => (
-          const Color(0xFFCCFBF1),
-          _teal,
-          _tealDark,
+          AppAccent.primarySoft,
+          AppAccent.primary,
+          AppAccent.primaryDark,
         ),
       QuizOptionState.wrong => (
           const Color(0xFFFFDFE0),
@@ -140,25 +138,33 @@ class DuoProgressBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return ClipRRect(
       borderRadius: BorderRadius.circular(999),
       child: Container(
         height: 12,
-        color: const Color(0xFFE5E5E5),
+        // Pista según el tema (antes #E5E5E5 fijo: resplandecía
+        // en blanco sobre el fondo oscuro).
+        color: isDark
+            ? scheme.surfaceContainerHighest
+            : const Color(0xFFE5E5E5),
         child: Align(
           alignment: Alignment.centerLeft,
           child: FractionallySizedBox(
             widthFactor: value.clamp(0.0, 1.0),
             child: Container(
               height: 12,
-              color: _teal,
-              child: const Align(
+              color: AppAccent.primary,
+              child: Align(
                 alignment: Alignment.topCenter,
                 child: SizedBox(
                   height: 3,
                   width: double.infinity,
                   child: DecoratedBox(
-                    decoration: BoxDecoration(color: Color(0xFF14D3B8)),
+                    decoration: BoxDecoration(
+                        color: Color.lerp(
+                            AppAccent.primary, Colors.white, 0.35)),
                   ),
                 ),
               ),
@@ -193,22 +199,30 @@ class DuoCheckButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     if (onPressed == null) {
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         decoration: BoxDecoration(
-          color: const Color(0xFFE5E5E5),
+          // Deshabilitado según el tema: en oscuro el gris claro
+          // #E5E5E5 se veía como una píldora blanca con texto gris.
+          color: isDark
+              ? scheme.surfaceContainerHighest
+              : const Color(0xFFE5E5E5),
           borderRadius: BorderRadius.circular(999),
         ),
         alignment: Alignment.center,
         child: Text(
           label.toUpperCase(),
           maxLines: 1,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 17,
             fontWeight: FontWeight.w800,
-            color: Color(0xFFAFAFAF),
+            color: isDark
+                ? scheme.onSurface.withValues(alpha: 0.45)
+                : const Color(0xFFAFAFAF),
           ),
         ),
       );
@@ -240,10 +254,10 @@ class DuoCloseButton extends StatelessWidget {
       child: IconButton(
         padding: EdgeInsets.zero,
         onPressed: onPressed,
-        icon: const Icon(
+        icon: Icon(
           Icons.close,
           size: 24,
-          color: Color(0xFF4B4B4B),
+          color: Theme.of(context).colorScheme.onSurface,
         ),
       ),
     );
@@ -261,10 +275,10 @@ class DuoQuizTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 14,
         fontWeight: FontWeight.w500,
-        color: Color(0xFF777777),
+        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8),
       ),
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
@@ -550,8 +564,10 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
                   style: TextStyle(fontSize: 20, color: scheme.onSurface),
                   textAlign: TextAlign.center),
             Text('$percent%',
-                style: const TextStyle(
-                    fontSize: 48, fontWeight: FontWeight.bold, color: _teal),
+                style: TextStyle(
+                    fontSize: 48,
+                    fontWeight: FontWeight.bold,
+                    color: AppAccent.primary),
                 textAlign: TextAlign.center),
             const SizedBox(height: 4),
             Text('${tr('pointsWord')}: $pointsText',
@@ -587,8 +603,8 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
             DuoButton.secondary(
               label: tr('quizBack').toUpperCase(),
               onPressed: widget.onExit,
-              textColor: _tealDark,
-              edgeColor: const Color(0xFF99E5D8),
+              textColor: AppAccent.primaryDark,
+              edgeColor: AppAccent.primarySoft,
               fontSize: 17,
             ),
           ],
@@ -636,10 +652,11 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
                       child: timed
                           ? Text(
                               '${tr('timedAnswered')}: $_answered · ${tr('quizScore')}: $_score · ${tr('pointsWord')}: ${_points >= 0 ? '+$_points' : '$_points'}',
-                              style: const TextStyle(
+                              style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w500,
-                                  color: Color(0xFF777777)),
+                                  color: scheme.onSurface
+                                      .withValues(alpha: 0.8)),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             )
@@ -653,8 +670,8 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
                       Chip(
                         backgroundColor: scheme.surfaceContainerHighest,
                         side: BorderSide(color: scheme.outlineVariant),
-                        avatar: const LucideIcon(LucideIcons.timer,
-                            size: 18, color: _tealDark, threeD: true),
+                        avatar: LucideIcon(LucideIcons.timer,
+                            size: 18, color: AppAccent.primaryDark, threeD: true),
                         label: Text(_timeText,
                             style: TextStyle(
                                 fontWeight: FontWeight.bold,
@@ -688,10 +705,10 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
                 // las demás (solo para calcular a mano).
                 QuestionCalculatorButton(
                   question: Text(_q.question,
-                      style: const TextStyle(
+                      style: TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.w800,
-                          color: Color(0xFF4B4B4B))),
+                          color: scheme.onSurface)),
                   scientific: _q.isNumeric,
                   unit: _q.numericUnit,
                   onResult: _q.isNumeric ? _answerNumeric : null,
@@ -736,14 +753,14 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
                       fontSize: 17,
                       fontWeight: FontWeight.w800,
                       color: wasCorrect
-                          ? _tealDark
+                          ? AppAccent.primaryDark
                           : const Color(0xFFEA2B2B),
                     ),
                   ),
                   const SizedBox(height: 6),
                   Text(_q.explanation,
-                      style: const TextStyle(
-                          fontSize: 16, color: Color(0xFF4B4B4B))),
+                      style: TextStyle(
+                          fontSize: 16, color: scheme.onSurface)),
                   const SizedBox(height: 16),
                 ],
               ],

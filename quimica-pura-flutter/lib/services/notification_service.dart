@@ -240,12 +240,21 @@ class NotificationService {
   /// ("Canal «Aviso de prueba»: activado/desactivado").
   static String get testChannelName => _testChannelName;
 
+  /// Id del canal de prueba (Zona G2): distinto del canal de
+  /// recordatorios y del canal de push, para que las tres capas
+  /// no se pisen en Ajustes.
+  static String get testChannelId => _testChannelId;
+
   /// Nombre del canal de recordatorios, tal y como lo muestra el
   /// sistema en Ajustes (etiqueta fija en español, igual en todos
   /// los idiomas). Es el canal viejo ('melli_study_reminders'): si
   /// está desactivado en Ajustes, los avisos programados no llegan
   /// aunque el permiso general esté concedido.
   static String get remindersChannelName => _channelName;
+
+  /// Id del canal de recordatorios (Zona G2): distinto del canal
+  /// de prueba y del canal de push.
+  static String get remindersChannelId => _channelId;
 
   /// Payload de TODAS las notificaciones: tocar la notificación (o su
   /// acción "Repasar ahora") abre el repaso de errores.
@@ -374,15 +383,22 @@ class NotificationService {
       final android = _plugin.resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>();
       if (android == null) return false;
-      // Tope de 100 ms (como areNotificationsEnabled en
-      // isPermissionGranted): si el canal no responde, el botón no se
-      // puede quedar esperando (en tests, los fakes viejos no
-      // implementan getNotificationChannels y su Future no se resuelve
-      // nunca): se asume que no está bloqueado y el aviso se intenta
-      // igualmente. El TimeoutException lo traga el catch de abajo.
+      // Tope de 2 s (Zona G; antes 100 ms): si el canal no
+      // responde, el botón no se puede quedar esperando (en
+      // tests, los fakes viejos no implementan
+      // getNotificationChannels y su Future no se resuelve nunca):
+      // se asume que no está bloqueado y el aviso se intenta
+      // igualmente. El TimeoutException lo traga el catch de
+      // abajo. 100 ms mentía en el teléfono: en un MIUI ocupado
+      // la llamada al NotificationManager puede tardar más y el
+      // canal bloqueado parecía "no bloqueado", así que la prueba
+      // decía "Aviso enviado" sin que llegara nada. Una consulta
+      // local responde en ms; 2 s solo es el tope, no la espera
+      // habitual (y es el mismo tope que la comprobación
+      // estricta del permiso en sendTestDetailed).
       final channels = await android
           .getNotificationChannels()
-          .timeout(const Duration(milliseconds: 100));
+          .timeout(const Duration(seconds: 2));
       if (channels == null) return false;
       for (final channel in channels) {
         if (channel.id == channelId) {
@@ -501,8 +517,19 @@ class NotificationService {
             NavRequests.requestReview();
             // La bandeja anota el aviso que se tocó ANTES de
             // reprogramar la tanda (que borra las horas pasadas).
+            // Zona G2: la cadena lleva su propio try/catch — si
+            // reprogramar falla (p. ej. zona horaria sin inicializar
+            // en un arranque raro), el toque NO debe soltar un error
+            // sin capturar: el repaso ya quedó pedido arriba.
             unawaited(
-              reconcileFiredReminders().then((_) => scheduleNext()),
+              () async {
+                try {
+                  await reconcileFiredReminders();
+                  await scheduleNext();
+                } catch (_) {
+                  // El repaso ya está pedido; reprogramar es opcional.
+                }
+              }(),
             );
           } else if (response.payload == updatePayload) {
             // Recordatorio de actualización: la app se abre y sale el
@@ -929,7 +956,26 @@ class NotificationService {
   /// Devuelve false si no se pudo mostrar (sin permiso, sin plugin).
   /// Sin tope: en enable() se llama sin esperar (unawaited), así
   /// que un canal que no responda no puede colgar la activación.
-  static Future<bool> sendEnabledConfirmation() async {
+  /// Envoltorio bool de [sendEnabledConfirmationDetailed] (Zona G,
+  /// regla general: el mismo defecto que la prueba — el catch ciego
+  /// tragaba la causa — estaba también aquí y queda corregido con
+  /// la versión tipada).
+  static Future<bool> sendEnabledConfirmation() async =>
+      (await sendEnabledConfirmationDetailed()).sent;
+
+  /// Versión TIPADA de la confirmación (Zona G, regla general):
+  /// el show() de la 9998 tenía el mismo `catch (_) { return
+  /// false; }` que la prueba: si la confirmación fallaba al
+  /// conceder el permiso, nadie sabía si fue el permiso, el canal
+  /// o el plugin. Ahora clasifica el error igual que
+  /// [sendTestDetailed] y comprueba el canal de avisos inmediatos
+  /// ANTES de enviar (si está bloqueado, el show() no lanzaría y
+  /// la confirmación se perdería en silencio, como le pasaba a la
+  /// prueba). No re-comprueba el permiso: enable() lo acaba de
+  /// pedir con el diálogo del sistema, y si el show() lanzara
+  /// SecurityException se clasifica como permissionDenied igual.
+  static Future<NotificationTestResult>
+      sendEnabledConfirmationDetailed() async {
     // La confirmación se intenta SIEMPRE (ronda #6, punto 2): si
     // init() fallara, el aviso no debe perderse con él (antes se
     // devolvía false sin mostrar nada). Mostrarlo no necesita que
@@ -944,6 +990,11 @@ class NotificationService {
         // Sin inicializar, el aviso se intenta igual.
       }
     }
+    if (await isTestChannelBlocked()) {
+      return const NotificationTestResult(
+        NotificationTestOutcome.channelBlocked,
+      );
+    }
     try {
       await _plugin.show(
         id: 9998,
@@ -954,9 +1005,9 @@ class NotificationService {
       // Salió de verdad: queda anotado para el diagnóstico
       // (ronda #6, punto 2).
       await _recordLastSent();
-      return true;
-    } catch (_) {
-      return false;
+      return const NotificationTestResult(NotificationTestOutcome.sent);
+    } catch (error) {
+      return resultForShowError(error);
     }
   }
 
@@ -981,21 +1032,59 @@ class NotificationService {
   /// recordatorio). Sirve para comprobar en el teléfono que los avisos
   /// llegan y que el permiso está dado. Usa los detalles de prueba
   /// ([_testDetails]: icono, gemela y acción, en el canal propio de
-  /// prueba con Importance.high, ronda #7). Devuelve true SOLO si el
-  /// show() completó sin lanzar: ANTES decía "Aviso enviado" aunque
-  /// fallara, porque se tragaba todas las excepciones y devolvía
-  /// void. Si sale, queda anotada la hora para el diagnóstico
-  /// (ronda #6, punto 2): si esta llega y los programados no, el
-  /// problema era la programación, no el permiso. Si el show()
-  /// lanza, devuelve false y NO se anota la hora (no hubo aviso).
-  /// "Lo mejor posible": si el canal falla, no rompe la pantalla.
-  static Future<bool> sendTest() async {
+  /// prueba con Importance.high, ronda #7). Si sale, queda anotada la
+  /// hora para el diagnóstico (ronda #6, punto 2): si esta llega y
+  /// los programados no, el problema era la programación, no el
+  /// permiso. Si el show() lanza, NO se anota la hora (no hubo aviso).
+  ///
+  /// Zona G (Quemia 7.1) — diagnóstico real, verificado en el fuente
+  /// de flutter_local_notifications 23.0.0 (pub-cache):
+  ///  - El show() de Java (FlutterLocalNotificationsPlugin.java,
+  ///    `show`) NO tiene try/catch alrededor de
+  ///    showNotification → NotificationManagerCompat.notify: en
+  ///    API 33+, sin POST_NOTIFICATIONS, notify() lanza
+  ///    SecurityException; y si el icono no es válido,
+  ///    extractNotificationDetails devuelve result.error con
+  ///    código invalid_icon / invalid_large_icon / etc. (el Dart
+  ///    lo ve como PlatformException con ese código). Un plugin
+  ///    sin inicializar NO lanza desde show (el lado Java solo
+  ///    necesita el applicationContext). Un canal bloqueado
+  ///    (Importance.none) TAMPOCO lanza: el sistema descarta el
+  ///    aviso en silencio y show() devuelve normal.
+  ///  - Por eso el "error del sistema" de la 6.4 solo podía ser
+  ///    una excepción LANZADA por show() (permiso denegado en el
+  ///    momento del notify, icono no válido u otro RuntimeException),
+  ///    nunca un canal bloqueado ni un init() fallido. Pero
+  ///    sendTest() la tragaba con `catch (_) { return false; }`,
+  ///    así que en el teléfono no quedaba NINGUNA pista de cuál
+  ///    era. La 6.4 cambió el canal y el tipo de retorno sin
+  ///    guardar la excepción: el mismo síntoma, sin información
+  ///    nueva. Ahora la excepción se captura, se clasifica y se
+  ///    muestra: [sendTestDetailed] devuelve el resultado TIPADO
+  ///    y la pantalla nombra la causa real.
+  ///  - El permiso podía llegar denegado hasta show() aunque la
+  ///    pantalla dijera lo contrario: [isPermissionGranted] (y
+  ///    [_isChannelBlocked]) usan un tope de 100 ms y, al
+  ///    expirar o fallar, ASUMEN que sí ("se asume que sí" / "no
+  ///    bloqueado"). En un MIUI ocupado la llamada al
+  ///    NotificationManager puede tardar más de 100 ms, así que
+  ///    el interruptor podía mostrar ON con el permiso denegado
+  ///    de verdad. La prueba ya no se fía de esa suposición:
+  ///    [_isPermissionGrantedStrict] espera hasta 2 s y, si no
+  ///    puede comprobarlo, lo dice (null) en vez de mentir.
+  static Future<bool> sendTest() async =>
+      (await sendTestDetailed()).sent;
+
+  /// Resultado TIPADO de la prueba (Zona G). La pantalla lo usa
+  /// para nombrar la causa real en vez del genérico
+  /// "error del sistema".
+  static Future<NotificationTestResult> sendTestDetailed() async {
     // El aviso de prueba se intenta SIEMPRE (ronda #6, punto 2):
     // si init() fallara, la prueba no debe perderse con él (antes
     // se salía sin mostrar nada). Mostrarlo no necesita que el
     // servicio esté inicializado. Ronda #7 (6.4): el init() va en
-    // try/catch — si lanza, se sigue al show() igual: el booleano
-    // devuelto refleja el show(), no el init().
+    // try/catch — si lanza, se sigue al show() igual: el resultado
+    // refleja el show(), no el init().
     if (!_ready) {
       try {
         await init();
@@ -1003,6 +1092,29 @@ class NotificationService {
         // Sin inicializar, la prueba se intenta igual.
       }
     }
+    // 1) Permiso REAL, comprobación estricta: si dice que NO, no
+    // se intenta el show(): en API 33+ el notify() lanzaría
+    // SecurityException y la pantalla diría "error del sistema"
+    // en vez de la causa real ("permiso denegado"). Si NO se pudo
+    // comprobar (null), se sigue: el show() lo dirá con su
+    // excepción.
+    final granted = await _isPermissionGrantedStrict();
+    if (granted == false) {
+      return const NotificationTestResult(
+        NotificationTestOutcome.permissionDenied,
+      );
+    }
+    // 2) Canal de prueba bloqueado en Ajustes: el show() NO
+    // lanzaría (el sistema descarta el aviso en silencio), así
+    // que hay que detectarlo ANTES o la pantalla mentiría
+    // diciendo "Aviso enviado" sin que llegara nada.
+    if (await isTestChannelBlocked()) {
+      return const NotificationTestResult(
+        NotificationTestOutcome.channelBlocked,
+      );
+    }
+    // 3) Enviar, guardando ESTA VEZ la excepción: es la única
+    // prueba de lo que falla en el teléfono.
     try {
       await _plugin.show(
         id: 9999,
@@ -1012,12 +1124,77 @@ class NotificationService {
         notificationDetails: await _testDetails(),
       );
       await _recordLastSent();
-      return true;
-    } catch (_) {
-      // Sin plugin, sin permiso o canal bloqueado: no hay aviso
-      // que anotar y la pantalla debe decirlo (false).
-      return false;
+      return const NotificationTestResult(NotificationTestOutcome.sent);
+    } catch (error) {
+      return resultForShowError(error);
     }
+  }
+
+  /// Permiso REAL con comprobación estricta (Zona G, solo para la
+  /// prueba): como [isPermissionGranted] pero sin mentir nunca.
+  /// Espera hasta 2 s (una consulta local responde en ms, pero en
+  /// un teléfono ocupado 100 ms es demasiado justo) y devuelve
+  /// null si no se pudo comprobar: en ese caso la prueba se
+  /// intenta igual y es el show() el que dice si el permiso está
+  /// dado. NO se toca [isPermissionGranted]: su valor por defecto
+  /// ("sí" ante cualquier fallo) lo usan scheduleNext y el
+  /// interruptor, y cambiarlo ahí borraría tandas programadas por
+  /// un fallo transitorio.
+  static Future<bool?> _isPermissionGrantedStrict() async {
+    try {
+      final android = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      final enabled = android?.areNotificationsEnabled();
+      if (enabled == null) return null;
+      return await enabled.timeout(const Duration(seconds: 2));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Clasifica la excepción que lanzó show() (Zona G): en API 33+
+  /// el notify() sin permiso lanza SecurityException, así que un
+  /// error que hable de permiso/seguridad ES un permiso denegado
+  /// (aunque la comprobación previa dijera que sí: la del
+  /// notify es la que manda); el resto es un error del plugin y
+  /// su texto real va en [NotificationTestResult.detail] para
+  /// mostrarlo (nunca el genérico "error del sistema"). Función
+  /// pura y visible para las pruebas: se alimenta con excepciones
+  /// falsas y se comprueba el resultado.
+  @visibleForTesting
+  static NotificationTestResult resultForShowError(Object error) {
+    final text = error.toString();
+    final lower = text.toLowerCase();
+    if (lower.contains('securityexception') ||
+        lower.contains('post_notifications') ||
+        lower.contains('not allowed to post') ||
+        lower.contains('permission')) {
+      return NotificationTestResult(
+        NotificationTestOutcome.permissionDenied,
+        _shortError(error),
+      );
+    }
+    return NotificationTestResult(
+      NotificationTestOutcome.pluginError,
+      _shortError(error),
+    );
+  }
+
+  /// Texto corto del error para el snackbar (máx. 120 caracteres):
+  /// de una PlatformException, "código: mensaje"; del resto, su
+  /// toString() recortado.
+  static String _shortError(Object error) {
+    final String text;
+    if (error is PlatformException) {
+      final message = error.message;
+      text = message == null || message.isEmpty
+          ? 'PlatformException(${error.code})'
+          : '${error.code}: $message';
+    } else {
+      text = error.toString();
+    }
+    const max = 120;
+    return text.length <= max ? text : '${text.substring(0, max)}…';
   }
 
   /// Elige un mensaje al azar en el idioma actual. Una de cada tres
@@ -1166,9 +1343,18 @@ class NotificationService {
   /// Detalles de la notificación de descarga: canal propio, icono
   /// pequeño blanco, color teal (la barra de progreso se ve verde
   /// sobre el fondo blanco del sistema) y barra de progreso limpia.
+  ///
+  /// Zona C (2026-11-12): cuando el total aún no se conoce
+  /// ([indeterminate] true), la barra es indeterminada
+  /// (AndroidNotificationDetails.indeterminate, soportado por
+  /// flutter_local_notifications 23.0.0: el lado Java llama a
+  /// NotificationCompat.Builder.setProgress(max, progress, true)).
+  /// Así la descarga se ve desde el primer instante, aunque el
+  /// servidor no haya dicho el tamaño total.
   static NotificationDetails _updateDetails({
     int? progress,
     bool ongoing = false,
+    bool indeterminate = false,
     List<AndroidNotificationAction>? actions,
   }) {
     return NotificationDetails(
@@ -1182,6 +1368,7 @@ class NotificationService {
         showProgress: progress != null,
         maxProgress: 100,
         progress: progress ?? 0,
+        indeterminate: indeterminate,
         ongoing: ongoing,
         onlyAlertOnce: true,
         autoCancel: !ongoing,
@@ -1192,10 +1379,15 @@ class NotificationService {
 
   /// Progreso de la descarga (id 9001, se actualiza por trozos).
   /// Tocar la notificación abre la app (y el diálogo de actualización).
+  /// Con [indeterminate] true (total desconocido) la barra es
+  /// indeterminada pero la notificación existe y se ve desde el
+  /// primer momento; en cuanto se conoce el total, el llamador pasa
+  /// a valores 0..100 determinados.
   static Future<bool> showUpdateProgress({
     required String title,
     required String body,
     required int progress,
+    bool indeterminate = false,
   }) async {
     try {
       await _plugin.show(
@@ -1203,8 +1395,11 @@ class NotificationService {
         title: title,
         body: body,
         payload: updatePayload,
-        notificationDetails:
-            _updateDetails(progress: progress.clamp(0, 100), ongoing: true),
+        notificationDetails: _updateDetails(
+          progress: progress.clamp(0, 100),
+          ongoing: true,
+          indeterminate: indeterminate,
+        ),
       );
       return true;
     } catch (_) {
@@ -1262,4 +1457,44 @@ class NotificationService {
       // Sin plugin, no hay nada que cancelar.
     }
   }
+}
+
+/// Qué pasó con la prueba de aviso (Zona G, Quemia 7.1): el
+/// resultado TIPADO que devuelve [NotificationService.sendTestDetailed]
+/// para que la pantalla nombre la causa real en vez del genérico
+/// "error del sistema".
+enum NotificationTestOutcome {
+  /// El show() completó: el aviso se envió de verdad.
+  sent,
+
+  /// El sistema no deja avisar (permiso denegado en el momento del
+  /// notify): el único arreglo es "Ir a Ajustes".
+  permissionDenied,
+
+  /// El canal 'quemia_prueba_avisos' está desactivado en Ajustes:
+  /// el show() no lanzaría (el aviso se descartaría en silencio),
+  /// así que hay que detectarlo antes de enviar.
+  channelBlocked,
+
+  /// El show() lanzó otra cosa (icono no válido, plugin sin
+  /// registrar, error interno): [NotificationTestResult.detail]
+  /// trae el texto real del error.
+  pluginError,
+}
+
+/// Resultado de [NotificationService.sendTestDetailed]: qué pasó con
+/// la prueba y, si falló por un error del plugin, el texto real del
+/// error (corto, apto para un snackbar).
+class NotificationTestResult {
+  const NotificationTestResult(this.outcome, [this.detail]);
+
+  final NotificationTestOutcome outcome;
+
+  /// Texto real del fallo (para [NotificationTestOutcome.pluginError]
+  /// y, a veces, [NotificationTestOutcome.permissionDenied]): la
+  /// excepción tal y como llegó del plugin, recortada a 120
+  /// caracteres. null cuando no hay detalle que mostrar.
+  final String? detail;
+
+  bool get sent => outcome == NotificationTestOutcome.sent;
 }

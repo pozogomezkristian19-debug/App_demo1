@@ -7,6 +7,7 @@ import '../widgets/lucide_icons.dart';
 import '../data/extra_content.dart';
 import '../data/i18n/content_i18n.dart';
 import '../services/localization.dart';
+import '../widgets/quemia_scrollbar.dart';
 
 class GlossaryScreen extends StatefulWidget {
   const GlossaryScreen({super.key, this.initialQuery = ''});
@@ -51,7 +52,12 @@ class _GlossaryScreenState extends State<GlossaryScreen> {
             ),
           ),
           Expanded(
-            child: ListView(
+            // Barra de desplazamiento bonita SOLO aquí (pantalla
+            // de estudio; en las principales no hay barra,
+            // 2026-11-12).
+            child: ScrollConfiguration(
+              behavior: const QuemiaScrollBehavior(),
+              child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
                 for (final g in visible)
@@ -79,6 +85,7 @@ class _GlossaryScreenState extends State<GlossaryScreen> {
                         textAlign: TextAlign.center),
                   ),
               ],
+              ),
             ),
           ),
         ],

@@ -7,6 +7,7 @@
 // identidad); sin internet, lista vacía, nunca un error. Un aviso
 // sin 'active' se considera activo (los viejos no llevan el campo).
 import 'analytics_sync.dart';
+import 'notification_inbox.dart';
 import 'online_common.dart';
 
 /// Un aviso del creador.
@@ -71,5 +72,29 @@ class AnnouncementsService {
   static Future<Announcement?> latestAnnouncement() async {
     final all = await fetchAnnouncements();
     return all.isEmpty ? null : all.first;
+  }
+
+  /// Sincroniza la bandeja con los avisos del creador (Zona G2,
+  /// capa sin push): un aviso publicado mientras no había internet
+  /// (o sin que el push llegara) aparece en Notificaciones al abrir
+  /// la app. El id es el MISMO que usa el push
+  /// ('announcement-<id>', ver push_service.dart), así que un aviso
+  /// que llegó por push y luego se sincroniza no deja dos entradas.
+  /// El título y el cuerpo son los que escribió el creador (no hay
+  /// traducción: el aviso es su texto). Sin Google o sin internet,
+  /// vacío y sin hacer nada; nunca lanza.
+  static Future<void> syncToInbox() async {
+    final all = await fetchAnnouncements();
+    for (final a in all) {
+      final title = a.title.trim();
+      final body = a.body.trim();
+      await NotificationInbox.addIfAbsent(
+        id: 'announcement-${a.id}',
+        kind: InboxKind.announcement,
+        title: title.isEmpty ? 'Nuevo aviso de Quemia' : title,
+        body: body.isEmpty ? 'Abre la app para leerlo.' : body,
+        data: {'announcementId': a.id, 'pushType': 'announcement'},
+      );
+    }
   }
 }

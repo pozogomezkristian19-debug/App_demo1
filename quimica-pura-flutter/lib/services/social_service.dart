@@ -23,6 +23,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models.dart';
+import 'auth_service.dart';
+import 'duels_service.dart';
 import 'localization.dart';
 import 'notification_inbox.dart';
 import 'progress.dart';
@@ -1394,6 +1396,7 @@ class SocialService {
     _equippedThemeId = null;
     _equippedAvatarId = null;
     _equippedBadgeId = null;
+    equippedAvatarIdNotifier.value = null;
   }
 
   static Future<T> _safe<T>(Future<T> Function() run, T fallback) async {
@@ -1476,6 +1479,55 @@ class SocialService {
     }
   }
 
+  /// Sincroniza la bandeja con mis duelos (Zona G2, capa sin push):
+  /// un reto o un resultado que llegó mientras no había internet
+  /// (o sin que el push llegara) aparece en Notificaciones al abrir
+  /// la app, igual que las solicitudes. Los ids son los MISMOS que
+  /// usa el push ('duel-challenge-<id>' / 'duel-result-<id>', ver
+  /// push_service.dart), así que un duelo que llegó por push y luego
+  /// se sincroniza no deja dos entradas. Solo se sincronizan los
+  /// resultados de duelos creados en los últimos 7 días (un duelo
+  /// viejo ya se vio en su pantalla de resultado). Sin Google o sin
+  /// internet no hace nada (myOpenDuels y myFinishedDuels devuelven
+  /// vacío) y nunca lanza.
+  static Future<void> syncDuelInbox() async {
+    final open = await myOpenDuels();
+    for (final d in open) {
+      if (!d.incoming) continue;
+      if (d.phase == DuelPhase.finished ||
+          d.phase == DuelPhase.abandoned) {
+        continue;
+      }
+      await NotificationInbox.addIfAbsent(
+        id: 'duel-challenge-${d.matchId}',
+        kind: InboxKind.duel,
+        title: tr('duelAgainst').replaceFirst('%s', d.opponentName),
+        body: tr('duelStart'),
+        data: {'duelId': d.matchId, 'pushType': 'duel_challenge'},
+      );
+    }
+    final finished =
+        await _safe(() => DuelService.myFinishedDuels(), <Duel>[]);
+    if (finished.isEmpty) return;
+    final me = AuthService.currentUid ?? '';
+    final weekAgo = DateTime.now().millisecondsSinceEpoch -
+        const Duration(days: 7).inMilliseconds;
+    for (final duel in finished) {
+      if (duel.createdAtMs < weekAgo) continue;
+      final rival = duel.rivalName(me);
+      final title = duel.winnerUid == null
+          ? tr('duelDraw')
+          : (duel.winnerUid == me ? tr('duelYouWin') : tr('duelYouLose'));
+      await NotificationInbox.addIfAbsent(
+        id: 'duel-result-${duel.id}',
+        kind: InboxKind.duel,
+        title: title,
+        body: tr('duelAgainst').replaceFirst('%s', rival),
+        data: {'duelId': duel.id, 'pushType': 'duel_result'},
+      );
+    }
+  }
+
   // --- Duelos ---
 
   static Future<DuelState?> createDuel(
@@ -1547,6 +1599,7 @@ class SocialService {
       _owned ??= <String>{};
     }
     _prefsLoaded = true;
+    equippedAvatarIdNotifier.value = _equippedAvatarId;
   }
 
   static Future<Set<String>> ownedItemIds() async {
@@ -1582,20 +1635,66 @@ class SocialService {
     return null;
   }
 
-  /// Foto de avatar premium equipada (su asset), o null sin foto.
+  /// Foto de avatar equipada (su asset), o null sin foto.
   /// Es la foto del usuario: se ve en la cabecera de Cuenta, en
   /// Amigos y en las filas de la tabla en lugar del disco con la
-  /// inicial.
+  /// inicial. Cubre los premium del catálogo Y los gratuitos de
+  /// la galería (alcance 9).
   static String? get equippedAvatarAsset =>
       avatarAssetForId(_equippedAvatarId);
 
-  /// Id del avatar premium equipado (síncrono), o null.
+  /// Id del avatar equipado (síncrono), o null.
   static String? get equippedAvatarId => _equippedAvatarId;
 
-  /// Asset de la foto de un avatar por su id de catálogo, o null
-  /// si el id no es un avatar.
+  /// Avatares GRATUITOS de la galería del editor (alcance 9,
+  /// Quemia 7.1): no son artículos de la tienda, así que no están
+  /// en kShopCatalog (la Tienda no cambia). La foto por defecto es
+  /// neutra; Brenda y Britany son las gemelas; Kristian es la cara
+  /// masculina. Se equipan con [equipItem] igual que los premium:
+  /// mismo campo [equippedAvatar] local y misma sincronización.
+  static const Map<String, String> freeAvatarAssets = {
+    'avatar_default': 'assets/avatar_default.png',
+    'avatar_brenda': 'assets/brenda.png',
+    'avatar_britany': 'assets/britany.png',
+    'avatar_kristian': 'assets/kristian.png',
+  };
+
+  /// Avatar por defecto según el género del onboarding (alcance 9):
+  /// Femenino → cara femenina (Brenda), Masculino → cara masculina
+  /// (Kristian); sin género elegido → neutro.
+  static String defaultAvatarIdForGender(String gender) => switch (gender) {
+        'Femenino' => 'avatar_brenda',
+        'Masculino' => 'avatar_kristian',
+        _ => 'avatar_default',
+      };
+
+  /// Foto del avatar que se muestra (alcance 9): la equipada si
+  /// hay una, si no la de por defecto según el género. Nunca null:
+  /// sin nada equipado cae al neutro.
+  static String displayAvatarAssetForGender(String gender) =>
+      equippedAvatarAsset ??
+      avatarAssetForId(defaultAvatarIdForGender(gender)) ??
+      'assets/avatar_default.png';
+
+  /// Id del avatar que se muestra: el equipado si hay uno, si no
+  /// el de por defecto según el género.
+  static String displayAvatarIdForGender(String gender) =>
+      _equippedAvatarId ?? defaultAvatarIdForGender(gender);
+
+  /// Avisa a quien escucha (la cabecera de Cuenta) cuando cambia
+  /// el avatar equipado: el editor lo toca al elegir, y Cuenta
+  /// repinta el círculo sin falta de volver a entrar. El valor es
+  /// el id equipado (null = ninguno, se usa el de por defecto).
+  static final ValueNotifier<String?> equippedAvatarIdNotifier =
+      ValueNotifier<String?>(null);
+
+  /// Asset de la foto de un avatar por su id, o null si el id no
+  /// es un avatar. Busca en el catálogo de la tienda (premium) y
+  /// en los gratuitos de la galería.
   static String? avatarAssetForId(String? id) {
     if (id == null) return null;
+    final free = freeAvatarAssets[id];
+    if (free != null) return free;
     for (final item in kShopCatalog) {
       if (item.id == id) return item.asset;
     }
@@ -1639,6 +1738,14 @@ class SocialService {
         _equippedBadgeId = item.id;
     }
     await init();
+    // Si init() acababa de cargar las preferencias (primera
+    // llamada), habría pisado lo equipado con el valor guardado:
+    // se vuelve a poner el avatar elegido y se avisa a la
+    // cabecera de Cuenta para que repinte el círculo al instante.
+    if (item.kind == 'avatar') {
+      _equippedAvatarId = item.id;
+      equippedAvatarIdNotifier.value = item.id;
+    }
     try {
       final prefs = await SharedPreferences.getInstance();
       switch (item.kind) {

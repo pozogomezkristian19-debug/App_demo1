@@ -4,12 +4,16 @@
 // sombra. Al pulsar, el botón baja 4 pt y el labio colapsa, como
 // una tecla física real.
 //
-//   - primary: cara sólida [bottomColor] (por defecto teal
-//     #00C2A8), labio [edgeColor] (#00A18D), texto blanco.
+//   - primary: cara sólida [bottomColor] (por defecto el color
+//     del acento elegido: teal con Verde, violeta con Violeta),
+//     labio [edgeColor] (por defecto el acento oscuro), texto
+//     blanco. Los call-sites que pasan un color propio (p. ej.
+//     el azul de compra #1CB0F6) lo conservan.
 //   - secondary: cara blanca + borde 2 pt #E5E5E5 + labio 4 pt
 //     #E5E5E5 + texto Eel #4B4B4B.
-//   - deshabilitado (onPressed null): relleno #E5E5E5, texto
-//     #AFAFAF, sin labio.
+//   - deshabilitado (onPressed null): relleno #E5E5E5 en claro
+//     (surfaceContainerHighest en oscuro), texto #AFAFAF en
+//     claro (onSurface al 45 % en oscuro), sin labio.
 //
 // Texto: 17 pt, peso 800, tracking ~0.6 px. Radio píldora 999.
 // REGLA DURA: la etiqueta se muestra TAL COMO LLEGA — el widget
@@ -29,6 +33,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../services/accent.dart';
 import 'lucide_icons.dart';
 
 class DuoButton extends StatefulWidget {
@@ -38,8 +43,11 @@ class DuoButton extends StatefulWidget {
     required this.onPressed,
     // Ignorado: la cara es sólida [bottomColor], sin degradado.
     this.topColor = const Color(0xFF14D3B8),
-    this.bottomColor = const Color(0xFF00C2A8),
-    this.edgeColor = const Color(0xFF00A18D),
+    // Sin color explícito: el color del acento elegido
+    // (AppAccent.primary / primaryDark). Antes el defecto era
+    // teal fijo y con Violeta los botones se quedaban verdes.
+    this.bottomColor,
+    this.edgeColor,
     this.textColor = Colors.white,
     this.icon,
     this.fontSize = 17,
@@ -68,12 +76,14 @@ class DuoButton extends StatefulWidget {
   /// para no romper los call-sites que lo pasan (tienda, torneos).
   final Color topColor;
 
-  /// Color sólido de la cara del botón (primary).
-  final Color bottomColor;
+  /// Color sólido de la cara del botón (primary). null = el color
+  /// del acento elegido (AppAccent.primary).
+  final Color? bottomColor;
 
   /// Color del labio (borde inferior de 4 pt). En secondary es
   /// también el color del borde de 2 pt que rodea el botón.
-  final Color edgeColor;
+  /// null = el acento oscuro (AppAccent.primaryDark).
+  final Color? edgeColor;
 
   /// Color del texto. En secondary, los call-sites que pasan un
   /// color propio (p. ej. el botón de Google, que toca la Zona D)
@@ -106,13 +116,25 @@ class _DuoButtonState extends State<DuoButton> {
     final minHeight = fullHeight ? 56.0 : 48.0;
     final verticalPadding = fullHeight ? 16.0 : 12.0;
 
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Cara y labio: el acento elegido si el call-site no pasa
+    // color propio (buy-blue y demás explícitos se conservan).
+    final bottomColor =
+        widget.bottomColor ?? AppAccent.primary;
+    final edgeColor = widget.edgeColor ?? AppAccent.primaryDark;
+
     final face = disabled
-        ? const Color(0xFFE5E5E5)
+        ? (isDark
+            ? scheme.surfaceContainerHighest
+            : const Color(0xFFE5E5E5))
         : widget._secondary
             ? Colors.white
-            : widget.bottomColor;
+            : bottomColor;
     final text = disabled
-        ? const Color(0xFFAFAFAF)
+        ? (isDark
+            ? scheme.onSurface.withValues(alpha: 0.45)
+            : const Color(0xFFAFAFAF))
         : widget.textColor;
     // Labio de 4 pt: colapsa a 0 al pulsar; sin labio si está
     // deshabilitado. En secondary el borde de 2 pt rodea el botón
@@ -124,17 +146,17 @@ class _DuoButtonState extends State<DuoButton> {
     final lipWidth = disabled || pressed ? 0.0 : 4.0;
     final Border? border = widget._secondary
         ? Border(
-            top: BorderSide(color: widget.edgeColor, width: 2),
-            left: BorderSide(color: widget.edgeColor, width: 2),
-            right: BorderSide(color: widget.edgeColor, width: 2),
+            top: BorderSide(color: edgeColor, width: 2),
+            left: BorderSide(color: edgeColor, width: 2),
+            right: BorderSide(color: edgeColor, width: 2),
             bottom: lipWidth > 0
-                ? BorderSide(color: widget.edgeColor, width: lipWidth)
+                ? BorderSide(color: edgeColor, width: lipWidth)
                 : BorderSide.none,
           )
         : lipWidth > 0
             ? Border(
                 bottom:
-                    BorderSide(color: widget.edgeColor, width: lipWidth),
+                    BorderSide(color: edgeColor, width: lipWidth),
               )
             : null;
 

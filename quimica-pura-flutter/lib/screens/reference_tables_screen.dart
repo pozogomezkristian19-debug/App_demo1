@@ -4,6 +4,7 @@
 
 import '../widgets/shadows.dart';
 import 'package:flutter/material.dart';
+import '../services/accent.dart';
 
 import '../data/reference_tables.dart';
 import '../services/localization.dart';
@@ -89,7 +90,7 @@ class _ActivityTab extends StatelessWidget {
             child: ListTile(
               leading: CircleAvatar(
                 backgroundColor: i < 11
-                    ? Colors.teal.withValues(alpha: 0.18)
+                    ? AppAccent.primary.withValues(alpha: 0.18)
                     : Colors.grey.withValues(alpha: 0.25),
                 child: Text(
                   metalActivitySeries[i].symbol,

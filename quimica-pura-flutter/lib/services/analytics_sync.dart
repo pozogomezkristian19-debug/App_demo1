@@ -933,10 +933,12 @@ class AnalyticsSync {
     }
   }
 
-  /// Enlaza Google a la sesión actual y, solo si el enlace fue una
-  /// RECUPERACIÓN (el uid cambió a la cuenta de Google: teléfono
-  /// nuevo), restaura el progreso de la nube. Tras un enlace normal
-  /// el uid no cambia y no hace falta restaurar. Después respalda lo
+  /// Enlaza Google a la sesión actual y, solo si el enlace cambió el
+  /// uid, restaura el progreso de la nube. Desde la 7.1 el enlace
+  /// NUNCA cambia el uid (si la cuenta ya vive en otro uid, el
+  /// enlace falla sin más): la restauración tras cambiar de uid
+  /// pasa por [signInGoogleAndRestore]. Tras un enlace normal el uid
+  /// no cambia y no hace falta restaurar. Después respalda lo
   /// fusionado. Lo llama Cuenta tras el botón de Google. Devuelve
   /// true si el enlace salió bien, false si falló (sin lanzar).
   static Future<bool> linkGoogleAndRestore() async {

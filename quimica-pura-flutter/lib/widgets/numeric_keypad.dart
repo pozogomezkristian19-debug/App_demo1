@@ -41,6 +41,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../services/accent.dart';
 import '../services/calculator.dart';
 import '../services/localization.dart';
 import '../services/numeric_answer.dart';
@@ -294,23 +295,31 @@ class _NumericKeypadState extends State<NumericKeypad> {
   }) {
     final scheme = Theme.of(context).colorScheme;
     final disabled = !widget.enabled;
-    // Tecla 3D (ronda de diseño 7.0): degradado + borde inferior
-    // oscuro + sombra suave tintada; antes era un color plano con un
-    // borde fino gris todo alrededor. El degradado y el borde los
-    // pinta el Container de fuera: el FilledButton de dentro es
-    // transparente (los tests buscan las teclas por FilledButton).
-    // Dígitos en blanco, operadores con tinte teal.
-    final top = accent
-        ? scheme.primary.withValues(alpha: 0.22)
-        : Colors.white;
-    final bottom = accent
-        ? scheme.primary.withValues(alpha: 0.08)
-        : const Color(0xFFF1F5F9);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Tecla SÓLIDA, sin degradado (corrección 2026-11-12, Kristian:
+    // "esos degradados, esos blancos contra blanco"). El degradado
+    // y el blanco sobre blanco se ven feos: ahora la tecla es un
+    // color plano con labio oscuro, como Duolingo. Y la tecla
+    // SIEMPRE se distingue del fondo: en claro es gris visible
+    // (#E8ECF0, no blanca sobre blanco); en oscuro es blanca,
+    // como en 7.0 (resalta sobre el fondo oscuro). El texto es
+    // oscuro fijo (#4B4B4B) en los dos temas, así se lee siempre.
+    // El degradado y el borde los pinta el Container de fuera: el
+    // FilledButton de dentro es transparente (los tests buscan las
+    // teclas por FilledButton). Dígitos en gris/blanco, operadores
+    // con tinte del acento.
+    final fill = accent
+        ? scheme.primary.withValues(alpha: 0.15)
+        : isDark
+            ? Colors.white
+            : const Color(0xFFE8ECF0);
     final edge = accent
         ? scheme.primary.withValues(alpha: 0.45)
-        : const Color(0xFFE5E7EB);
+        : isDark
+            ? const Color(0xFFE5E7EB)
+            : const Color(0xFFCBD5E1);
     final shadow = accent ? scheme.primary : const Color(0xFF64748B);
-    final fg = accent ? scheme.primary : scheme.onSurface;
+    final fg = accent ? scheme.primary : const Color(0xFF4B4B4B);
     return SizedBox(
       height: height,
       child: Opacity(
@@ -318,11 +327,7 @@ class _NumericKeypadState extends State<NumericKeypad> {
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [top, bottom],
-            ),
+            color: fill,
             border: Border(bottom: BorderSide(color: edge, width: 3)),
             boxShadow: [
               standardShadow(shadow),
@@ -361,11 +366,15 @@ class _NumericKeypadState extends State<NumericKeypad> {
   }) {
     final scheme = Theme.of(context).colorScheme;
     final onPressed = widget.enabled && enabled ? onTap : null;
-    // Tecla pequeña 3D (ronda de diseño 7.0): degradado + borde
-    // inferior oscuro + sombra suave tintada; antes era un color
-    // plano. El botón de dentro es transparente: el degradado lo
-    // pinta el Container (los tests buscan las teclas por
-    // FilledButton/OutlinedButton). '=' en teal, resto en blanco.
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Tecla pequeña SÓLIDA, sin degradado (corrección 2026-11-12,
+    // Kristian: "esos degradados, esos blancos contra blanco"):
+    // color plano con labio oscuro, como Duolingo. '=' en el color
+    // del acento sólido; "Borrar" y "Limpiar" en gris visible en
+    // claro (#E8ECF0) y blancas en oscuro (como en 7.0), con texto
+    // oscuro fijo en los dos temas. El botón de dentro es
+    // transparente: el color lo pinta el Container (los tests
+    // buscan las teclas por FilledButton/OutlinedButton).
     if (primary) {
       return SizedBox(
         height: 48,
@@ -374,14 +383,10 @@ class _NumericKeypadState extends State<NumericKeypad> {
           child: Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
-              gradient: const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0xFF14D3B8), Color(0xFF00C2A8)],
-              ),
-              border: const Border(
-                  bottom:
-                      BorderSide(color: Color(0xFF00A18D), width: 3)),
+              color: AppAccent.primary,
+              border: Border(
+                  bottom: BorderSide(
+                      color: AppAccent.primaryDark, width: 3)),
               boxShadow: [
                 standardShadow(scheme.primary),
               ],
@@ -394,7 +399,10 @@ class _NumericKeypadState extends State<NumericKeypad> {
                 shadowColor: Colors.transparent,
                 elevation: 0,
                 foregroundColor: Colors.white,
-                disabledForegroundColor: Colors.white70,
+                // Blanco entero al deshabilitar (antes white70
+                // + Opacity 0.45: texto oscuro sobre teal
+                // oscurecido, ilegible).
+                disabledForegroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
                 ),
@@ -418,13 +426,13 @@ class _NumericKeypadState extends State<NumericKeypad> {
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
-            gradient: const LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Colors.white, Color(0xFFF1F5F9)],
-            ),
-            border: const Border(
-                bottom: BorderSide(color: Color(0xFFE5E7EB), width: 3)),
+            color: isDark ? Colors.white : const Color(0xFFE8ECF0),
+            border: Border(
+                bottom: BorderSide(
+                    color: isDark
+                        ? const Color(0xFFE5E7EB)
+                        : const Color(0xFFCBD5E1),
+                    width: 3)),
             boxShadow: [
               standardShadow(const Color(0xFF64748B)),
             ],
@@ -435,7 +443,9 @@ class _NumericKeypadState extends State<NumericKeypad> {
               backgroundColor: Colors.transparent,
               shadowColor: Colors.transparent,
               elevation: 0,
-              foregroundColor: scheme.onSurface,
+              // Texto oscuro fijo en los dos temas: la tecla es
+              // gris visible en claro y blanca en oscuro.
+              foregroundColor: const Color(0xFF4B4B4B),
               // Sin contorno: el del tema es teal de 2 px y chocaría
               // con el borde inferior gris del Container.
               side: BorderSide.none,

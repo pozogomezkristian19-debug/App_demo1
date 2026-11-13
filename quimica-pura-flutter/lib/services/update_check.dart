@@ -56,7 +56,7 @@ import 'notification_service.dart';
 /// Versión actual de la app: ÚNICA fuente de verdad en el código.
 /// Debe coincidir con `latest` de version.json en la build que se
 /// publica, para que no salga un aviso falso nada más instalar.
-const String kAppVersion = '7.0';
+const String kAppVersion = '7.1';
 
 /// version.json en la raíz del repo, servido en crudo por GitHub.
 const String kUpdateCheckUrl =
@@ -228,6 +228,100 @@ Future<ApkDownloadSource> _httpApkSource(Uri url) async {
 /// idle → downloading → downloaded → installing.
 enum UpdateDownloadState { idle, downloading, downloaded, installing }
 
+/// Decisión pura de cuándo actualizar la notificación de progreso de
+/// la descarga (zona C, 2026-11-12).
+///
+/// Antes, `startDownload` solo mostraba la notificación cuando
+/// llegaba el primer trozo Y el total era conocido: si la conexión
+/// tardaba (GitHub redirige el APK) o el servidor no daba
+/// Content-Length (total <= 0), la notificación no aparecía nunca y
+/// Kristian veía que "no pasaba nada" aunque la descarga estuviera
+/// en marcha. Ahora la regla es:
+///
+/// - la PRIMERA decisión siempre muestra algo: 0 % determinado si el
+///   total ya se conoce, o barra indeterminada si no ([percentFor]
+///   devuelve -1 con total <= 0);
+/// - con total desconocido se sigue mostrando indeterminada hasta que
+///   el total se conoce: ese cambio se muestra DE INMEDIATO, sin
+///   esperar al intervalo mínimo;
+/// - después solo se muestra si el porcentaje CAMBIÓ (y nunca hacia
+///   atrás) y pasaron al menos [minInterval] desde la última vez:
+///   en una descarga rápida, 100 `show()` seguidos los funde MIUI y
+///   la barra parece atascada; con ~1 aviso cada 500 ms como mucho,
+///   cada actualización llega.
+///
+/// Es una clase con estado (guarda el último porcentaje y la hora),
+/// pero la decisión en sí es pura dados (received, total, now): se
+/// crea una por descarga en [UpdateCheckService.startDownload].
+class UpdateProgressThrottle {
+  UpdateProgressThrottle({
+    this.minInterval = const Duration(milliseconds: 500),
+  });
+
+  /// Intervalo mínimo entre dos actualizaciones de la notificación.
+  final Duration minInterval;
+
+  /// Último porcentaje mostrado, o -1 si lo mostrado es la barra
+  /// indeterminada, o null si aún no se mostró nada.
+  int? _lastPercent;
+
+  /// Hora de la última actualización mostrada.
+  DateTime? _lastShownAt;
+
+  /// ¿Lo que se está mostrando ahora es la barra indeterminada?
+  bool get showingIndeterminate => _lastPercent == -1;
+
+  /// Último porcentaje mostrado (-1 = indeterminado, null = nada aún).
+  int? get lastPercent => _lastPercent;
+
+  /// Porcentaje 0..100 de [received] sobre [total], o -1 si el total
+  /// es desconocido (<= 0). No lanza nunca y nunca pasa de 100.
+  static int percentFor(int received, int total) {
+    if (total <= 0) return -1;
+    if (received <= 0) return 0;
+    final pct = received * 100 ~/ total;
+    return pct.clamp(0, 100);
+  }
+
+  /// ¿Hay que actualizar la notificación con este progreso?
+  /// Si devuelve true, el llamador muestra [percentFor] (o la barra
+  /// indeterminada si es -1) y esta llamada queda registrada como
+  /// la última mostrada.
+  bool shouldShow({
+    required int received,
+    required int total,
+    required DateTime now,
+  }) {
+    final pct = percentFor(received, total);
+    // Nada mostrado aún: la primera vez siempre se muestra, sea 0 %
+    // o indeterminada. Es lo que hace visible la descarga antes del
+    // primer byte.
+    if (_lastPercent == null) {
+      _record(pct, now);
+      return true;
+    }
+    // Total aún desconocido y ya se muestra indeterminada: nada nuevo.
+    if (pct < 0) return false;
+    // El total se acaba de conocer (antes indeterminada): el cambio
+    // de indeterminada a 0 % se muestra de inmediato, sin esperar.
+    if (_lastPercent! < 0) {
+      _record(pct, now);
+      return true;
+    }
+    // Sin cambio, o hacia atrás: no se muestra.
+    if (pct <= _lastPercent!) return false;
+    // Mismo segundo que la última: MIUI funde avisos tan seguidos.
+    if (now.difference(_lastShownAt!) < minInterval) return false;
+    _record(pct, now);
+    return true;
+  }
+
+  void _record(int pct, DateTime now) {
+    _lastPercent = pct;
+    _lastShownAt = now;
+  }
+}
+
 /// Descarga del APK a un archivo, con progreso. No toca notificaciones
 /// ni permisos: eso lo orquesta UpdateCheckService.
 class UpdateDownloader {
@@ -266,6 +360,14 @@ class UpdateDownloader {
     final tmp = File('${target.path}.part');
     try {
       final source = await (fetcher ?? _httpApkSource)(Uri.parse(info.apkUrl));
+      // Zona C (2026-11-12): avisar del 0 % ANTES del primer trozo.
+      // El llamador (startDownload) ya mostró la notificación al
+      // arrancar, pero este aviso es el que dice el total real en
+      // cuanto se conocen las cabeceras: con total conocido pasa de
+      // indeterminada a 0 % determinado; con total desconocido sigue
+      // indeterminada. Sin esto, con un servidor lento en el primer
+      // trozo no habría ningún progreso hasta que llegara.
+      onProgress?.call(0, source.totalBytes);
       var received = 0;
       final sink = tmp.openWrite();
       await for (final chunk in source.stream) {
@@ -1021,23 +1123,45 @@ class UpdateCheckService {
     dir ??= await _downloadDir();
     if (dir == null) return;
     final dl = downloader ?? UpdateCheckService.downloader;
-    var lastShown = -1;
+    final throttle = UpdateProgressThrottle();
+    final versionBody =
+        t['downloadingBody']!.replaceAll('{v}', info.latest);
+
+    /// Muestra la notificación de progreso si el regulador dice que
+    /// toca (ver [UpdateProgressThrottle]): la primera vez siempre,
+    /// luego solo si el porcentaje cambió y pasaron 500 ms.
+    Future<void> postProgress(int received, int total) async {
+      if (!throttle.shouldShow(
+        received: received,
+        total: total,
+        now: DateTime.now(),
+      )) {
+        return;
+      }
+      final pct = UpdateProgressThrottle.percentFor(received, total);
+      await NotificationService.showUpdateProgress(
+        title: t['downloadingTitle']!,
+        body: pct < 0 ? versionBody : '$versionBody · $pct%',
+        progress: pct < 0 ? 0 : pct,
+        indeterminate: pct < 0,
+      );
+    }
+
+    // Zona C (2026-11-12): la notificación se publica AHORA, antes
+    // de conectar siquiera (total aún desconocido → barra
+    // indeterminada al 0 %). Antes no se publicaba nada hasta que
+    // llegaba el primer trozo con total conocido: con la redirección
+    // de GitHub o un Content-Length ausente, el usuario no veía
+    // ninguna barra aunque la descarga estuviera en marcha. Se
+    // espera a que se publique para que el `download()` de abajo no
+    // empiece sin que haya nada visible.
+    await postProgress(0, -1);
     final file = await dl.download(
       info: info,
       dir: dir,
       fetcher: fetcher,
       onProgress: (received, total) {
-        if (total <= 0) return;
-        final pct = (received * 100 ~/ total);
-        if (pct != lastShown) {
-          lastShown = pct;
-          NotificationService.showUpdateProgress(
-            title: t['downloadingTitle']!,
-            body:
-                '${t['downloadingBody']!.replaceAll('{v}', info.latest)} · $pct%',
-            progress: pct,
-          );
-        }
+        unawaited(postProgress(received, total));
       },
     );
     if (file == null) {

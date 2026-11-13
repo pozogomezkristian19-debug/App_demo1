@@ -11,6 +11,7 @@
 // cuando está hecha), nunca la banderita con círculo rústica.
 
 import 'package:flutter/material.dart';
+import '../services/accent.dart';
 
 import '../services/localization.dart';
 import '../services/progress.dart';
@@ -30,18 +31,22 @@ class StatsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = ProgressService.instance;
     final scheme = Theme.of(context).colorScheme;
-    // En modo oscuro, los iconos son verdes (item 8: oscuro verde,
-    // sin violeta/azul/ámbar): la estrella, la llama y el trofeo
-    // cambian a menta; en claro siguen ámbar, naranja y violeta.
+    // En modo oscuro, los iconos siguen el acento (item 8):
+    // la estrella, la llama, el trofeo y la meta cambian al
+    // color del acento en oscuro; en claro siguen ámbar,
+    // naranja, violeta y teal.
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    // En oscuro los iconos siguen el acento (menta con Verde,
+    // violeta claro con Violeta); en claro cada icono conserva
+    // su color propio.
     final starColor =
-        isDark ? const Color(0xFF2DD4BF) : const Color(0xFFF59E0B);
+        isDark ? scheme.primary : const Color(0xFFF59E0B);
     final flameColor =
-        isDark ? const Color(0xFF2DD4BF) : Colors.deepOrange;
+        isDark ? scheme.primary : Colors.deepOrange;
     final trophyColor =
-        isDark ? const Color(0xFF2DD4BF) : const Color(0xFF8B5CF6);
+        isDark ? scheme.primary : const Color(0xFF8B5CF6);
     final goalColor =
-        isDark ? const Color(0xFF2DD4BF) : const Color(0xFF00C2A8);
+        isDark ? scheme.primary : const Color(0xFF00C2A8);
     Widget cell(Widget icon, Widget value, String label) {
       return Expanded(
         child: Column(
@@ -64,10 +69,10 @@ class StatsCard extends StatelessWidget {
     const valueStyle = TextStyle(fontSize: 16, fontWeight: FontWeight.bold);
     return Card(
       margin: EdgeInsets.zero,
-      // Tarjeta con vida: radio 16 + sombra suave tintada teal
+      // Tarjeta con vida: radio 16 + sombra suave tintada del acento
       // (antes plana, radio 4 por defecto y sin sombra).
       elevation: 2,
-      shadowColor: const Color(0xFF00C2A8).withValues(alpha: 0.2),
+      shadowColor: AppAccent.primary.withValues(alpha: 0.2),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
       ),

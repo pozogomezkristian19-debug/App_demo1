@@ -124,10 +124,10 @@ class _SectionTitle extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
       child: Text(
         text,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 20,
           fontWeight: FontWeight.w800,
-          color: Color(0xFF4B4B4B),
+          color: Theme.of(context).colorScheme.onSurface,
         ),
       ),
     );
@@ -255,10 +255,10 @@ class _TournamentCard extends StatelessWidget {
                       children: [
                         Text(
                           t.title,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.w800,
-                            color: Color(0xFF4B4B4B),
+                            color: Theme.of(context).colorScheme.onSurface,
                           ),
                         ),
                         Text(
@@ -276,7 +276,7 @@ class _TournamentCard extends StatelessWidget {
               const SizedBox(height: 10),
               Text(
                 '${t.topic} · ${tr('tournQuestions').replaceFirst('%s', '${t.questionCount}')}',
-                style: const TextStyle(fontSize: 16, color: Color(0xFF4B4B4B)),
+                style: TextStyle(fontSize: 16, color: Theme.of(context).colorScheme.onSurface),
               ),
               const SizedBox(height: 4),
               // El premio va en su propia línea: compartiendo la
@@ -296,10 +296,10 @@ class _TournamentCard extends StatelessWidget {
                       tr('tournPrize').replaceFirst('%s', '${t.prizePoints}'),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFF4B4B4B),
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
                   ),
@@ -533,10 +533,10 @@ class _DetailBody extends StatelessWidget {
               children: [
                 Text(
                   t.title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
-                    color: Color(0xFF4B4B4B),
+                    color: Theme.of(context).colorScheme.onSurface,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -563,10 +563,10 @@ class _DetailBody extends StatelessWidget {
                         tr('tournPrize').replaceFirst('%s', '${t.prizePoints}'),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFF4B4B4B),
+                          color: Theme.of(context).colorScheme.onSurface,
                         ),
                       ),
                     ),
@@ -653,10 +653,10 @@ class _DetailBody extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(4, 20, 4, 8),
           child: Text(
             tr('tournRanking'),
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w800,
-              color: Color(0xFF4B4B4B),
+              color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
         ),
@@ -702,7 +702,6 @@ class _RankingRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const teal = Color(0xFF00C2A8);
     final content = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       child: Row(
@@ -738,7 +737,7 @@ class _RankingRow extends StatelessWidget {
     );
     // Filas planas (diseño §3.15, como la tabla de posiciones):
     // sin tarjeta gris con sombra (regla 3), separadas por una
-    // línea 1 pt #E5E5E5. Mi fila: fondo teal suave, sin borde y
+    // línea 1 pt #E5E5E5. Mi fila: fondo del acento suave, sin borde y
     // sin sombra — el resaltado es el fondo, como en la tabla.
     if (!isMe) {
       return Column(
@@ -751,7 +750,7 @@ class _RankingRow extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: teal.withValues(alpha: isDark ? 0.25 : 0.14),
+        color: scheme.primary.withValues(alpha: isDark ? 0.25 : 0.14),
         borderRadius: BorderRadius.circular(16),
       ),
       child: content,

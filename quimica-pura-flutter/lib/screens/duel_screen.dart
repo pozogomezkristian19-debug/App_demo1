@@ -10,6 +10,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../services/accent.dart';
 
 import '../services/localization.dart';
 import '../services/social_service.dart';
@@ -379,7 +380,7 @@ class _IntroView extends StatelessWidget {
                   label: tr('duelCancel').toUpperCase(),
                   onPressed: onCancel,
                   textColor: const Color(0xFF00A18D),
-                  edgeColor: const Color(0xFF99E9DB),
+                  edgeColor: AppAccent.primarySoft,
                   fontSize: 15,
                 ),
               ],
@@ -404,7 +405,7 @@ String _fmtTime(int ms) {
 /// celebrando, título amarillo, confeti, 2 tarjetas de color
 /// sólido EXACTAMENTE iguales (mismo alto y ancho, con la cara
 /// de cada jugador dentro, texto BLANCO en negrita) y un solo
-/// botón grande teal "VOLVER". La corona del ganador va SOBRE
+/// botón grande del acento "VOLVER". La corona del ganador va SOBRE
 /// LA FOTO de la mascota, nunca dentro de una tarjeta (cero
 /// amarillo sobre verde). El contenido reparte la pantalla: nada
 /// de medio pantalla vacía.
@@ -505,7 +506,7 @@ class _ResultView extends StatelessWidget {
                           children: [
                             Expanded(
                               child: _DuelScoreCard(
-                                color: const Color(0xFF00C2A8),
+                                color: AppAccent.primary,
                                 name: tr('youWord'),
                                 score: '${match.myScore}/$total',
                                 avatar: SocialAvatar(
@@ -662,7 +663,7 @@ class _AbandonedView extends StatelessWidget {
               label: tr('duelCancel').toUpperCase(),
               onPressed: onCancel,
               textColor: const Color(0xFF00A18D),
-              edgeColor: const Color(0xFF99E9DB),
+              edgeColor: AppAccent.primarySoft,
               fontSize: 15,
             ),
           ],

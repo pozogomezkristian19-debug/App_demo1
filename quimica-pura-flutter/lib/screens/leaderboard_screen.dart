@@ -3,7 +3,7 @@
 // cabecera de tabla y sin columna de niveles — nombre + racha con
 // llama + XP a la derecha. El top 3 lleva SOLO el laurel de 72 dp
 // (decisión de Kristian: se quedan los laureles, sin trofeo, sin
-// medalla, sin corona). Puestos 4+: número en teal. Usuario actual
+// medalla, sin corona). Puestos 4+: número en el color del acento. Usuario actual
 // con fondo verde claro #CCFBF1, sin borde. Avatar = SocialAvatar
 // (cara por defecto o foto premium, nunca inicial).
 //
@@ -11,7 +11,7 @@
 // (leaderboardStream): ordenada por puntos de mayor a menor,
 // con puesto, nombre de usuario, niveles superados, puntos y
 // racha. El usuario actual (deviceId == AnalyticsSync.deviceId)
-// va resaltado con tinte teal y "(tú)". Deslizar hacia abajo
+// va resaltado con tinte del acento y "(tú)". Deslizar hacia abajo
 // vuelve a escuchar el stream (pull-to-refresh). Sin nadie
 // todavía: la mascota + "¡No te duermas! Haz un nivel para
 // empezar a subir en la tabla".
@@ -23,6 +23,7 @@ import '../widgets/shadows.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../services/accent.dart';
 
 import '../services/analytics_sync.dart';
 import '../services/localization.dart';
@@ -294,8 +295,6 @@ class _EntryRow extends StatelessWidget {
   final bool isDark;
   final ColorScheme scheme;
 
-  static const _teal = Color(0xFF00C2A8);
-
   @override
   Widget build(BuildContext context) {
     final name = isMe ? '${entry.username} ${tr('youSuffix')}' : entry.username;
@@ -320,7 +319,7 @@ class _EntryRow extends StatelessWidget {
             // Avatares por rango (diseño 7.0, añadido de
             // Kristian): solo del 4º en adelante — el aspecto
             // del avatar depende del puesto y se ve igual para
-            // todo el que mira la tabla. 4º-10º marco teal,
+            // todo el que mira la tabla. 4º-10º marco del color del acento,
             // 11º en adelante avatar normal. El hueco es fijo
             // (42) para que los nombres queden alineados. Con
             // marco de rango, la foto de avatar premium se dibuja
@@ -401,11 +400,11 @@ class _EntryRow extends StatelessWidget {
     // Fila plana (rediseño Duolingo 7.0): sin tarjeta, sin sombra,
     // sin fondo gris. La línea divisoria la pone el separador de la
     // lista. El usuario actual lleva fondo verde claro #CCFBF1,
-    // sin borde (en oscuro, tinte teal).
+    // sin borde (en oscuro, tinte del acento).
     return Container(
       key: isMe ? const ValueKey('leaderboard-me') : null,
       color: isMe
-          ? (isDark ? _teal.withValues(alpha: 0.25) : const Color(0xFFCCFBF1))
+          ? (isDark ? scheme.primary.withValues(alpha: 0.25) : AppAccent.primarySoft)
           : Colors.transparent,
       child: content,
     );
@@ -445,7 +444,7 @@ class _RankLaurel extends StatelessWidget {
   }
 }
 
-/// Número del puesto, del 4º en adelante: en teal (rediseño
+/// Número del puesto, del 4º en adelante: en el color del acento (rediseño
 /// Duolingo 7.0), no en oscuro.
 class _RankNumber extends StatelessWidget {
   const _RankNumber({required this.rank});
@@ -460,10 +459,10 @@ class _RankNumber extends StatelessWidget {
       child: Center(
         child: Text(
           '$rank',
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 17,
             fontWeight: FontWeight.bold,
-            color: Color(0xFF00C2A8),
+            color: Theme.of(context).colorScheme.primary,
           ),
         ),
       ),
@@ -519,10 +518,10 @@ class _RankUpBanner extends StatelessWidget {
         key: const ValueKey('rank-up-banner'),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: const Color(0xFF00C2A8),
+          color: AppAccent.primary,
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
-            standardShadow(const Color(0xFF00C2A8)),
+            standardShadow(AppAccent.primary),
           ],
         ),
         child: Row(

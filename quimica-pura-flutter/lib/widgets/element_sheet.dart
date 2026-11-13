@@ -16,11 +16,18 @@ import '../services/favorites.dart';
 import '../services/localization.dart';
 
 /// Muestra la ficha de un elemento en un bottom sheet arrastrable.
+/// OPACA (Zona F, 2026-11-12): el fondo es el surface sólido del
+/// tema, sin transparencia — el degradado anterior terminaba en el
+/// primario al 6 % y la tabla de detrás se transparentaba y se
+/// mezclaba con los datos (captura de Kristian: la Leyenda y el
+/// navbar se veían a través de la hoja). La barrera del modal
+/// (negro al 54 % por defecto) oscurece lo de detrás, como en los
+/// bottom sheets normales.
 void showElementSheet(BuildContext context, ChemicalElement e) {
   showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
-    backgroundColor: Colors.transparent,
+    backgroundColor: Theme.of(context).colorScheme.surface,
     builder: (context) => DraggableScrollableSheet(
       initialChildSize: 0.6,
       minChildSize: 0.35,
@@ -82,16 +89,12 @@ class _ElementSheetState extends State<ElementSheet> {
     final isFav = FavoritesService.instance.isFav(favId);
     return Container(
       decoration: BoxDecoration(
-        // Degradado suave superficie → tinte teal + sombra suave:
-        // la hoja ya no es un plano.
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            scheme.surface,
-            scheme.primary.withValues(alpha: 0.06),
-          ],
-        ),
+        // Fondo SÓLIDO del surface del tema: nada de degradado
+        // (el degradado a primario al 6 % era el que dejaba ver
+        // la tabla a través de la hoja). Sin transparencia: el
+        // contenido de detrás no se mezcla con los datos, en
+        // claro ni en oscuro.
+        color: scheme.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         boxShadow: [
           BoxShadow(

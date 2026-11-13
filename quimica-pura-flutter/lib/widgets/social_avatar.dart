@@ -6,9 +6,9 @@
 // RANGO (diseño 7.0): con [rank] el avatar muestra el rango en la
 // tabla de posiciones — 1º marco dorado + corona, 2º marco
 // plateado + medalla de plata, 3º marco bronce + medalla de
-// bronce, 4º-10º marco teal, 11º en adelante avatar normal.
+// bronce, 4º-10º marco del color del acento, 11º en adelante avatar normal.
 // Los marcos son anillos PLANOS de 3 px con colores SÓLIDOS
-// (oro #FFC800, plata #D6D6D6, bronce #CD7F32, teal #00C2A8):
+// (oro #FFC800, plata #D6D6D6, bronce #CD7F32, acento):
 // sin degradado, sin sombra borrosa.
 //
 // Las insignias de rango (corona 1º, medalla 2º/3º) y las
@@ -24,6 +24,7 @@
 // badgeId, rank, uniformTeal) para no romper a las demás zonas.
 
 import 'package:flutter/material.dart';
+import '../services/accent.dart';
 
 import 'lucide_icons.dart';
 
@@ -55,12 +56,12 @@ class SocialAvatar extends StatelessWidget {
   /// disco (sin foto, todos usan la misma cara por defecto).
   final bool uniformTeal;
 
-  /// Color SÓLIDO del marco de rango: oro, plata, bronce o teal.
+  /// Color SÓLIDO del marco de rango: oro, plata, bronce o acento.
   Color? get _rankColor => switch (rank ?? 0) {
         1 => const Color(0xFFFFC800),
         2 => const Color(0xFFD6D6D6),
         3 => const Color(0xFFCD7F32),
-        >= 4 && <= 10 => const Color(0xFF00C2A8),
+        >= 4 && <= 10 => AppAccent.primary,
         _ => null,
       };
 
@@ -127,7 +128,7 @@ class SocialAvatar extends StatelessWidget {
               rankBadgeIcon,
               size: badgeSize * 0.6,
               // La insignia de plata es clara: el icono va en gris
-              // oscuro; en oro, bronce y teal va en blanco.
+              // oscuro; en oro, bronce y acento va en blanco.
               color: rank == 2 ? const Color(0xFF424242) : Colors.white,
             ),
           );

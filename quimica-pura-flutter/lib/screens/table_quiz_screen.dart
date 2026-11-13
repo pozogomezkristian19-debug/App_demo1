@@ -11,6 +11,7 @@ import '../widgets/shadows.dart';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import '../services/accent.dart';
 
 import '../data/i18n/content_i18n.dart';
 import '../data/periodic_table.dart';
@@ -150,10 +151,10 @@ class _TableQuizScreenState extends State<TableQuizScreen> {
                       style: const TextStyle(fontSize: 20),
                       textAlign: TextAlign.center),
                   Text('${_score * 10}%',
-                      style: const TextStyle(
+                      style: TextStyle(
                           fontSize: 48,
                           fontWeight: FontWeight.bold,
-                          color: Colors.tealAccent),
+                          color: AppAccent.primary),
                       textAlign: TextAlign.center),
                   const SizedBox(height: 4),
                   Text(
@@ -178,10 +179,10 @@ class _TableQuizScreenState extends State<TableQuizScreen> {
               padding: const EdgeInsets.all(16),
               children: [
                 // Selector de modo 3D (ronda de diseño 7.0): segmento
-                // elegido en teal con texto blanco, resto en blanco
+                // elegido en el color del acento con texto blanco, resto en blanco
                 // con sombra suave y borde gris claro. El degradado
                 // no cabe en un SegmentedButton, así que el elegido
-                // es teal liso con su sombra tintada.
+                // es el color del acento liso con su sombra tintada.
                 SegmentedButton<bool>(
                   segments: [
                     ButtonSegment(
@@ -198,7 +199,7 @@ class _TableQuizScreenState extends State<TableQuizScreen> {
                     backgroundColor: Colors.white,
                     foregroundColor:
                         Theme.of(context).colorScheme.onSurface,
-                    selectedBackgroundColor: const Color(0xFF00C2A8),
+                    selectedBackgroundColor: AppAccent.primary,
                     selectedForegroundColor: Colors.white,
                     side: const BorderSide(color: Color(0xFFE5E7EB)),
                     shape: RoundedRectangleBorder(
@@ -206,7 +207,7 @@ class _TableQuizScreenState extends State<TableQuizScreen> {
                     ),
                     elevation: 2,
                     shadowColor:
-                        const Color(0xFF00C2A8).withValues(alpha: 0.30),
+                        AppAccent.primary.withValues(alpha: 0.30),
                   ),
                 ),
                 const SizedBox(height: 16),

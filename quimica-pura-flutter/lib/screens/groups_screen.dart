@@ -4,6 +4,7 @@
 // Sin chat. Sin Google, la puerta.
 
 import 'package:flutter/material.dart';
+import '../services/accent.dart';
 
 import '../services/localization.dart';
 import '../services/social_service.dart';
@@ -87,7 +88,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    const teal = Color(0xFF00C2A8);
+    final accent = AppAccent.primary;
     return Scaffold(
       appBar: AppBar(title: Text(tr('groupsTitle'))),
       body: OnlineGate(
@@ -99,7 +100,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
               child: Card(
                 elevation: 3,
-                shadowColor: teal.withValues(alpha: 0.22),
+                shadowColor: accent.withValues(alpha: 0.22),
                 color:
                     isDark ? scheme.surfaceContainerHighest : Colors.white,
                 shape: RoundedRectangleBorder(
@@ -120,26 +121,26 @@ class _GroupsScreenState extends State<GroupsScreen> {
                         controller: _nameCtrl,
                         decoration: InputDecoration(
                           hintText: tr('groupsCreateHint'),
-                          // Borde teal claro (sistema Quemia), no
+                          // Borde del acento claro (sistema Quemia), no
                           // el gris oscuro por defecto.
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
                             borderSide: BorderSide(
-                              color: const Color(0xFF00C2A8)
+                              color: accent
                                   .withValues(alpha: 0.40),
                             ),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
                             borderSide: BorderSide(
-                              color: const Color(0xFF00C2A8)
+                              color: accent
                                   .withValues(alpha: 0.40),
                             ),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
-                            borderSide: const BorderSide(
-                              color: Color(0xFF00C2A8),
+                            borderSide: BorderSide(
+                              color: accent,
                               width: 2,
                             ),
                           ),
@@ -150,7 +151,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                         onSubmitted: (_) => _create(),
                       ),
                       const SizedBox(height: 10),
-                      // Píldora 3D teal con degradado + brillo.
+                      // Píldora 3D del acento con degradado + brillo.
                       DuoButton.primary(
                         label: tr('groupsCreate').toUpperCase(),
                         onPressed: _create,
@@ -171,26 +172,26 @@ class _GroupsScreenState extends State<GroupsScreen> {
                         controller: _codeCtrl,
                         decoration: InputDecoration(
                           hintText: tr('groupsJoinHint'),
-                          // Borde teal claro (sistema Quemia), no
+                          // Borde del acento claro (sistema Quemia), no
                           // el gris oscuro por defecto.
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
                             borderSide: BorderSide(
-                              color: const Color(0xFF00C2A8)
+                              color: accent
                                   .withValues(alpha: 0.40),
                             ),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
                             borderSide: BorderSide(
-                              color: const Color(0xFF00C2A8)
+                              color: accent
                                   .withValues(alpha: 0.40),
                             ),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
-                            borderSide: const BorderSide(
-                              color: Color(0xFF00C2A8),
+                            borderSide: BorderSide(
+                              color: accent,
                               width: 2,
                             ),
                           ),
@@ -205,8 +206,8 @@ class _GroupsScreenState extends State<GroupsScreen> {
                       DuoButton.secondary(
                         label: tr('groupsJoin').toUpperCase(),
                         onPressed: _join,
-                        textColor: const Color(0xFF00A18D),
-                        edgeColor: const Color(0xFF99E9DB),
+                        textColor: AppAccent.primaryDark,
+                        edgeColor: AppAccent.primarySoft,
                         fontSize: 15,
                       ),
                       if (_joinError != null) ...[
@@ -300,13 +301,13 @@ class _EmptyGroups extends StatelessWidget {
               height: 72,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: const Color(0xFF00C2A8).withValues(alpha: 0.12),
+                color: AppAccent.primary.withValues(alpha: 0.12),
               ),
               alignment: Alignment.center,
-              child: const LucideIcon(
+              child: LucideIcon(
                 LucideIcons.network,
                 size: 34,
-                color: Color(0xFF00C2A8),
+                color: AppAccent.primary,
               ),
             ),
             const SizedBox(height: 16),
@@ -343,7 +344,7 @@ class _GroupRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       elevation: 2,
-      shadowColor: const Color(0xFF00C2A8).withValues(alpha: 0.18),
+      shadowColor: AppAccent.primary.withValues(alpha: 0.18),
       margin: const EdgeInsets.only(bottom: 10),
       color: isDark ? scheme.surfaceContainerHighest : const Color(0xFFF7F7F7),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -359,13 +360,13 @@ class _GroupRow extends StatelessWidget {
                 height: 44,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: const Color(0xFF00C2A8).withValues(alpha: 0.14),
+                  color: AppAccent.primary.withValues(alpha: 0.14),
                 ),
                 alignment: Alignment.center,
-                child: const LucideIcon(
+                child: LucideIcon(
                   LucideIcons.network,
                   size: 22,
-                  color: Color(0xFF00C2A8),
+                  color: AppAccent.primary,
                 ),
               ),
               const SizedBox(width: 12),
@@ -441,7 +442,7 @@ class GroupDetailScreen extends StatelessWidget {
               children: [
                 Card(
                   elevation: 3,
-                  shadowColor: const Color(0xFF00C2A8).withValues(alpha: 0.22),
+                  shadowColor: AppAccent.primary.withValues(alpha: 0.22),
                   color:
                       isDark ? scheme.surfaceContainerHighest : Colors.white,
                   shape: RoundedRectangleBorder(
@@ -509,7 +510,7 @@ class _MemberRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       elevation: 2,
-      shadowColor: const Color(0xFF00C2A8).withValues(alpha: 0.18),
+      shadowColor: AppAccent.primary.withValues(alpha: 0.18),
       margin: const EdgeInsets.only(bottom: 10),
       color: isDark ? scheme.surfaceContainerHighest : const Color(0xFFF7F7F7),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),

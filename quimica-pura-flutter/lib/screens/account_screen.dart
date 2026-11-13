@@ -2,28 +2,34 @@
 // Duolingo 7.0, Zona C; ORGANIZACIÓN 6.3 restaurada 2026-11-11):
 // el perfil del usuario.
 // - Cabecera en TARJETA redondeada (no banner teal a todo lo
-//   ancho): título "Cuenta" + la FOTO GRANDE DEL ACOMPAÑANTE
-//   del día (96 dp, con su aro) + "Bienvenido/a [nombre] ·
-//   [género]" + la línea "Hoy te acompaña [compañero]" en el
-//   color del compañero. La foto grande ES el acompañante, así
-//   foto y línea coinciden; la miniatura de 22 px ya no hace
-//   falta. El avatar premium equipado ya NO va aquí: sigue
-//   mostrándose en Tabla de posiciones, Amigos y Torneos.
+//   ancho): título "Cuenta" + el CÍRCULO GRANDE del AVATAR DEL
+//   USUARIO (96 dp, editable tocándolo: abre la galería de
+//   avatares, alcance 9) + "Bienvenido/a [nombre]" SIN el
+//   género escrito (alcance 10) + la línea "Hoy te acompaña
+//   [compañero]" en el color del compañero, con su miniatura
+//   de compañera (22 dp). El círculo grande ya NO es la
+//   compañera del día. El avatar elegido se sigue mostrando en
+//   Tabla de posiciones, Amigos y Torneos.
 // - Estadísticas: UNA tarjeta (StatsCard) con 5 columnas CON
 //   ICONOS: Vidas, Puntos, Racha, Meta del día y Logros (x/10).
-// - Las 19 filas van cada una en su propia TARJETA redondeada
+// - Las 12 filas van cada una en su propia TARJETA redondeada
 //   con separación (organización 6.3), con el icono en un chip
-//   tintado — no filas planas con divisores.
+//   tintado — no filas planas con divisores. Orden 7.1 (Zona H):
+//   Vincular con Google (prominente, primera fila), Estadísticas,
+//   Mis errores, Amigos, Tabla de posiciones, Torneo, Grupos de
+//   estudio, Tienda, Acerca de, Compartir, Soporte y Ajustes.
+//   Todo lo demás (Tema, Recordatorios, Notificaciones, Cómo se
+//   juega, Buscar actualización, Idioma, Cambiar versión,
+//   Favoritos, Compartir progreso) vive en la pantalla Ajustes
+//   (settings_screen.dart), no aquí.
 // - El selector de foto del usuario (para subir una foto propia)
 //   sigue QUITADO (fix2, item 6: eso fue lo único que Kristian
-//   pidió quitar) — la única foto de usuario es la comprada en
-//   la tienda, no una subida.
-// - Aquí viven Idioma, Estadísticas, Cambiar versión y Errores, que
-//   antes estaban sueltos en el menú hamburguesa: el menú queda libre
-//   para el contenido. También están Favoritos, Recordatorio,
-//   Compartir progreso (imagen), Compartir la app, Buscar
-//   actualización (fix4, punto 7: chequeo manual con la versión
-//   instalada) y Acerca de.
+//   pidió quitar) — la galería de avatares (alcance 9) solo usa
+//   las fotos predefinidas del proyecto, no subidas.
+// - Aquí viven Estadísticas y Errores, que antes estaban sueltos
+//   en el menú hamburguesa: el menú queda libre para el
+//   contenido. También están Compartir la app (hoja nativa del
+//   sistema, sin diálogo con el enlace) y Acerca de.
 //
 // El contenido lleva padding inferior = altura de la barra
 // (MainBottomNav.barHeight, 64) + 16 pt, para que la barra no
@@ -47,14 +53,14 @@ import '../services/localization.dart';
 import '../services/accent.dart';
 
 import '../services/progress.dart';
+import '../services/social_service.dart';
 import '../services/sound_service.dart';
-import '../services/update_check.dart';
 import '../services/user_prefs.dart';
 import '../widgets/brand_logo.dart';
 import '../widgets/main_bottom_nav.dart';
+import '../widgets/social_avatar.dart';
 import '../widgets/stats_card.dart';
 import '../widgets/twin_avatars.dart';
-import 'theme_screen.dart';
 
 /// Tokens claros (rediseño Duolingo 7.0): texto #4B4B4B,
 /// terciario #777777, líneas #E5E5E5; teal #00C2A8 como color
@@ -133,9 +139,6 @@ class AccountScreen extends StatefulWidget {
 }
 
 class _AccountScreenState extends State<AccountScreen> {
-  /// Comprobación manual en curso (para no lanzar dos a la vez).
-  bool _checkingUpdate = false;
-
   @override
   void initState() {
     super.initState();
@@ -216,30 +219,6 @@ class _AccountScreenState extends State<AccountScreen> {
     await _loadGoogleState();
   }
 
-  /// Comprobación manual de actualización (fix4, punto 7): fuerza
-  /// el chequeo y dice qué pasó. El diálogo ya salió solo si hay
-  /// versión nueva; si no, un aviso abajo.
-  Future<void> _manualUpdateCheck() async {
-    if (_checkingUpdate) return;
-    setState(() => _checkingUpdate = true);
-    final result = await UpdateCheckService.checkForUpdateManual(context);
-    if (!mounted) return;
-    setState(() => _checkingUpdate = false);
-    switch (result) {
-      case ManualUpdateResult.upToDate:
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(tr('checkUpdateLatest'))),
-        );
-      case ManualUpdateResult.checkFailed:
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(tr('checkUpdateFailed'))),
-        );
-      case ManualUpdateResult.updateAvailable:
-        // El diálogo ya se mostró; nada más que avisar.
-        break;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final p = ProgressService.instance;
@@ -247,10 +226,11 @@ class _AccountScreenState extends State<AccountScreen> {
     // verde oscura, no blanca.
     final c = _CuentaColors.of(context);
     // La compañera del día (API nueva: los tres, incluido Kristian):
-    // su FOTO GRANDE (96 dp) es la foto de la tarjeta de cabecera,
-    // y la línea "Hoy te acompaña…" dice su nombre: foto y línea
-    // son el mismo compañero, así no se contradicen (organización
-    // 6.3). El avatar premium equipado ya no va aquí.
+    // su MINIATURA (22 dp) va junto a la línea "Hoy te
+    // acompaña…". El CÍRCULO GRANDE (96 dp) ya NO es la
+    // compañera (alcance 9, 7.1): es el AVATAR DEL USUARIO,
+    // editable tocándolo (abre la galería); la foto y la línea
+    // ya no tienen que coincidir.
     final companion = companionOfTheDay();
     final accent = companionAccent(companion);
     // Logros desbloqueados de los 10 que hay (Mis estadísticas
@@ -259,9 +239,11 @@ class _AccountScreenState extends State<AccountScreen> {
     final unlockedCount = allAchievements
         .where((a) => achievementUnlocked(a.id, p, widget.trackTopics))
         .length;
-    final greetingLine = UserPrefs.userGender.isEmpty
-        ? UserPrefs.greeting
-        : '${UserPrefs.greeting} · ${UserPrefs.userGender}';
+    // Saludo SIN el género escrito (alcance 10, 7.1): solo
+    // "Bienvenido/a [nombre]". El género sigue usándose por
+    // dentro (el saludo mismo es Bienvenido/Bienvenida según el
+    // género, y el avatar por defecto), pero no se muestra.
+    final greetingLine = UserPrefs.greeting;
     // greeting ya devuelve "Hola" sin nombre guardado: no hace
     // falta (ni se debe) caer al título "Cuenta", que repetiría
     // el título de la tarjeta.
@@ -276,8 +258,10 @@ class _AccountScreenState extends State<AccountScreen> {
             16, 16, 16, MainBottomNav.barHeight + 16),
         children: [
           // Tarjeta de cabecera redondeada (organización 6.3):
-          // título "Cuenta" + foto grande del acompañante del
-          // día + saludo con género + línea "Hoy te acompaña…".
+          // título "Cuenta" + CÍRCULO GRANDE del avatar del
+          // usuario (96 dp, editable: toca y abre la galería) +
+          // saludo SIN el género escrito + línea "Hoy te
+          // acompaña…" con su miniatura de compañera (22 dp).
           Container(
             decoration: BoxDecoration(
               color: c.card,
@@ -288,7 +272,18 @@ class _AccountScreenState extends State<AccountScreen> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                CompanionAvatar(companion: companion, size: 96),
+                // Avatar del usuario (alcance 9): el círculo se
+                // repinta solo al elegir otro en la galería
+                // (SocialService avisa con el notifier).
+                ListenableBuilder(
+                  listenable:
+                      SocialService.equippedAvatarIdNotifier,
+                  builder: (context, _) => _UserAvatarCircle(
+                    asset: SocialService.displayAvatarAssetForGender(
+                        UserPrefs.userGender),
+                    onTap: () => widget.onOpenScreen('avatar'),
+                  ),
+                ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
@@ -316,15 +311,27 @@ class _AccountScreenState extends State<AccountScreen> {
                         ),
                       ),
                       const SizedBox(height: 2),
-                      Text(
-                        tr(companionOfDayKey(companion)),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: accent,
-                        ),
+                      Row(
+                        children: [
+                          CompanionAvatar(
+                            companion: companion,
+                            size: 22,
+                            ring: false,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              tr(companionOfDayKey(companion)),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: accent,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -342,64 +349,16 @@ class _AccountScreenState extends State<AccountScreen> {
                   '$unlockedCount/${allAchievements.length}',
             ),
           ),
-          // Orden de Cuenta (ronda fix6, ítem 4): las TRES primeras
-          // filas son Estadísticas, Mis errores y Cómo se juega. El
-          // resto sigue en su mismo orden de siempre (Tema, Idioma,
-          // Cambiar versión, Favoritos, Recordatorio, Compartir…).
-          _Row(
-            icon: LucideIcons.chartColumn,
-            iconColor: _violet,
-            title: tr('accountStats'),
-            subtitle: tr('accountStatsSub'),
-            onTap: () => widget.onOpenScreen('stats'),
-          ),
-          _Row(
-            icon: LucideIcons.rotateCcw,
-            iconColor: _teal,
-            title: tr('accountReview'),
-            subtitle: '${p.failedCount} ${tr('reviewTitle')}',
-            onTap: () => widget.onOpenScreen('review'),
-          ),
-          _Row(
-            icon: LucideIcons.circleHelp,
-            iconColor: _blue,
-            title: tr('howToPlayTitle'),
-            subtitle: tr('howToPlaySub'),
-            onTap: () => widget.onOpenScreen('howToPlay'),
-          ),
-          // Tema (fix3, último cambio de la ronda): ya NO es una
-          // tarjeta inline en Cuenta. Es una fila táctil como las
-          // demás, con el subtítulo de la selección actual (p. ej.
-          // "Verde · Claro"), que abre su propia pantalla dedicada
-          // (ThemeScreen) con el color y el modo. El subtítulo se
-          // reconstruye solo al cambiar el tema (los dos notifiers)
-          // sin falta de volver a entrar a Cuenta.
-          ListenableBuilder(
-            listenable: Listenable.merge([
-              UserPrefs.themeAccentNotifier,
-              UserPrefs.themeModeNotifier,
-            ]),
-            builder: (context, _) => _Row(
-              icon: LucideIcons.sparkles,
-              iconColor: _violet,
-              title: tr('themeTitle'),
-              subtitle: themeSelectionSubtitle(),
-              onTap: () => widget.onOpenScreen('theme'),
-            ),
-          ),
-          // Ronda #8 (Quemia 6.5): tabla de posiciones, justo
-          // después del grupo principal (Estadísticas, Mis
-          // errores, Cómo se juega, Tema) y antes de Idioma.
-          // (Diseño 7.0: la fila "Compartir mi progreso" se quitó:
-          // compartir es automático con Google vinculada, sin
-          // preguntar nada.)
-          _Row(
-            icon: LucideIcons.trophy,
-            iconColor: _amber,
-            title: tr('accountLeaderboard'),
-            subtitle: tr('accountLeaderboardSub'),
-            onTap: () => widget.onOpenScreen('leaderboard'),
-          ),
+          // Orden de Cuenta (Quemia 7.1, Zona H): la cabecera y la
+          // tarjeta de estadísticas NO cambian; debajo van, en este
+          // orden exacto, Vincular con Google (prominente, primera
+          // fila: es la puerta a todo lo online), Estadísticas,
+          // Mis errores, Amigos, Tabla de posiciones, Torneo,
+          // Grupos de estudio, Tienda, Acerca de, Compartir,
+          // Soporte y Ajustes. Todo lo demás (Tema, Recordatorios,
+          // Notificaciones, Cómo se juega, Buscar actualización,
+          // Idioma, Cambiar versión, Favoritos, Compartir
+          // progreso) vive en la pantalla Ajustes.
           // Ronda #8 (cambio 09:08): vincular con Google — respaldo
           // con la cuenta de Google (el mismo uid recupera el
           // progreso en otro teléfono). Si está vinculada, la fila
@@ -415,14 +374,39 @@ class _AccountScreenState extends State<AccountScreen> {
                     : tr('accountLinkGoogleSub'),
             onTap: _onGoogleRowTap,
           ),
-          // Quemia 7.0: social (amigos, torneos, tienda, grupos),
-          // justo después de Google y antes de Idioma.
+          _Row(
+            icon: LucideIcons.chartColumn,
+            iconColor: _violet,
+            title: tr('accountStats'),
+            subtitle: tr('accountStatsSub'),
+            onTap: () => widget.onOpenScreen('stats'),
+          ),
+          _Row(
+            icon: LucideIcons.rotateCcw,
+            iconColor: _teal,
+            title: tr('accountReview'),
+            subtitle: '${p.failedCount} ${tr('reviewTitle')}',
+            onTap: () => widget.onOpenScreen('review'),
+          ),
+          // Quemia 7.0: social (amigos, torneos, tienda, grupos).
           _Row(
             icon: LucideIcons.userRound,
             iconColor: _teal,
             title: tr('accountFriends'),
             subtitle: tr('accountFriendsSub'),
             onTap: () => widget.onOpenScreen('friends'),
+          ),
+          // Ronda #8 (Quemia 6.5): tabla de posiciones.
+          // (Diseño 7.0: la fila "Compartir mi progreso" se quitó
+          // de aquí: compartir es automático con Google vinculada,
+          // sin preguntar nada; la fila vive ahora en Ajustes y
+          // abre Mis estadísticas.)
+          _Row(
+            icon: LucideIcons.trophy,
+            iconColor: _amber,
+            title: tr('accountLeaderboard'),
+            subtitle: tr('accountLeaderboardSub'),
+            onTap: () => widget.onOpenScreen('leaderboard'),
           ),
           _Row(
             icon: LucideIcons.award,
@@ -432,13 +416,6 @@ class _AccountScreenState extends State<AccountScreen> {
             onTap: () => widget.onOpenScreen('tournaments'),
           ),
           _Row(
-            icon: LucideIcons.gift,
-            iconColor: _violet,
-            title: tr('accountShop'),
-            subtitle: tr('accountShopSub'),
-            onTap: () => widget.onOpenScreen('shop'),
-          ),
-          _Row(
             icon: LucideIcons.network,
             iconColor: _blue,
             title: tr('accountGroups'),
@@ -446,60 +423,11 @@ class _AccountScreenState extends State<AccountScreen> {
             onTap: () => widget.onOpenScreen('groups'),
           ),
           _Row(
-            icon: LucideIcons.globe,
-            iconColor: _blue,
-            title: tr('accountLanguage'),
-            subtitle: AppLang.supported
-                .firstWhere((e) => e.$1 == AppLang.code,
-                    orElse: () => AppLang.supported.first)
-                .$2,
-            onTap: () => widget.onOpenScreen('language'),
-          ),
-          _Row(
-            icon: LucideIcons.refreshCw,
-            iconColor: _amber,
-            title: tr('accountVersion'),
-            subtitle: ProgressService.track == ProgressService.trackBach
-                ? tr('trackBach')
-                : tr('trackUni'),
-            onTap: () => widget.onOpenScreen('version'),
-          ),
-          _Row(
-            icon: LucideIcons.star,
-            iconColor: _amber,
-            title: tr('accountFavorites'),
-            subtitle: tr('menuFavoritesSub'),
-            onTap: () => widget.onOpenScreen('favorites'),
-          ),
-          _Row(
-            icon: LucideIcons.alarmClock,
+            icon: LucideIcons.gift,
             iconColor: _violet,
-            title: tr('accountReminder'),
-            subtitle: UserPrefs.reminderOn
-                ? tr('menuReminderOn')
-                : tr('menuReminderOff'),
-            onTap: () => widget.onOpenScreen('reminder'),
-          ),
-          _Row(
-            icon: LucideIcons.image,
-            iconColor: _teal,
-            title: tr('accountShareProgress'),
-            subtitle: tr('accountShareProgressSub'),
-            onTap: () => widget.onOpenScreen('stats'),
-          ),
-          _Row(
-            icon: LucideIcons.share2,
-            iconColor: _blue,
-            title: tr('accountShareApp'),
-            subtitle: tr('menuShare'),
-            onTap: widget.onShowShareApp,
-          ),
-          _Row(
-            icon: LucideIcons.download,
-            iconColor: _teal,
-            title: tr('checkUpdateTitle'),
-            subtitle: tr('checkUpdateSub').replaceFirst('%s', kAppVersion),
-            onTap: _manualUpdateCheck,
+            title: tr('accountShop'),
+            subtitle: tr('accountShopSub'),
+            onTap: () => widget.onOpenScreen('shop'),
           ),
           _Row(
             icon: LucideIcons.info,
@@ -507,6 +435,13 @@ class _AccountScreenState extends State<AccountScreen> {
             title: tr('accountAbout'),
             subtitle: tr('appSubtitle'),
             onTap: widget.onShowAbout,
+          ),
+          _Row(
+            icon: LucideIcons.share2,
+            iconColor: _blue,
+            title: tr('accountShareApp'),
+            subtitle: tr('menuShare'),
+            onTap: widget.onShowShareApp,
           ),
           // Soporte (7.0, Kristian 09:52): ya NO abre WhatsApp
           // directo — abre la ventanita dentro de la app (hilo +
@@ -521,6 +456,17 @@ class _AccountScreenState extends State<AccountScreen> {
             title: tr('supportWord'),
             subtitle: tr('supportSub'),
             onTap: () => widget.onOpenScreen('support'),
+          ),
+          // Ajustes (7.1): última fila; abre su propia pantalla
+          // con Tema, Recordatorios, Notificaciones, Cómo se
+          // juega, Buscar actualización, Idioma, Cambiar versión,
+          // Favoritos y Compartir progreso.
+          _Row(
+            icon: LucideIcons.settings,
+            iconColor: _violet,
+            title: tr('settingsTitle'),
+            subtitle: tr('settingsSub'),
+            onTap: () => widget.onOpenScreen('settings'),
           ),
           const SizedBox(height: 16),
           Center(
@@ -541,6 +487,70 @@ class _AccountScreenState extends State<AccountScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Círculo grande del avatar del USUARIO (alcance 9, 7.1): la
+/// foto equipada (o la de por defecto según el género) en 96 dp,
+/// con un distintivo de lápiz que dice que se puede cambiar.
+/// Al tocarlo se abre la galería de avatares. Usa SocialAvatar,
+/// el mismo widget que en Amigos, tabla y torneos: sin inicial,
+/// siempre una cara.
+class _UserAvatarCircle extends StatelessWidget {
+  const _UserAvatarCircle({
+    required this.asset,
+    required this.onTap,
+  });
+
+  final String asset;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: tr('avatarTitle'),
+      button: true,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: () {
+            SoundService.tap();
+            onTap();
+          },
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              SocialAvatar(
+                username: UserPrefs.userName,
+                size: 96,
+                avatarAsset: asset,
+              ),
+              Positioned(
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _teal,
+                    border:
+                        Border.all(color: Colors.white, width: 2),
+                  ),
+                  alignment: Alignment.center,
+                  child: const LucideIcon(
+                    LucideIcons.pencil,
+                    size: 14,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

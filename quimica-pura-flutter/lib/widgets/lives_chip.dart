@@ -36,11 +36,36 @@ class _LivesHeartPainter extends CustomPainter {
     canvas.save();
     canvas.scale(scale, scale);
     final path = LucideIcons.heart.paths.first;
-    // Corazón sólido #FF4B4B (rediseño Duolingo §3.2.6): antes era
-    // un degradado coral-rojo con brillito blanco.
+    // Corazón con degradado coral-rojo (#FF6B6B arriba →
+    // #EF4444 abajo) y brillito blanco en el medio (ronda de
+    // arreglo #1). EXCEPCIÓN EXPLÍCITA del usuario (alcance 7,
+    // 2026-11-12) a la regla "sin gradiente/brillo": él lo pide
+    // así, solo para el corazón de vidas, en todas partes donde
+    // aparece (píldora de la barra superior, tarjeta de
+    // estadísticas de Cuenta, Mis estadísticas, Cómo se juega).
+    // El degradado se quitó en el rediseño Duolingo §3.2.6
+    // (corazón plano #FF4B4B); se restaura por orden suya.
+    final gradient = const LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [Color(0xFFFF6B6B), Color(0xFFEF4444)],
+    ).createShader(const Rect.fromLTWH(0, 0, 24, 24));
     canvas.drawPath(
-        path, Paint()..style = PaintingStyle.fill
-        ..color = const Color(0xFFFF4B4B));
+        path, Paint()..style = PaintingStyle.fill..shader = gradient);
+    // Brillito blanco en el medio del lóbulo izquierdo,
+    // recortado a la forma del corazón para que no se salga:
+    // halo suave + punto más vivo encima.
+    canvas.save();
+    canvas.clipPath(path);
+    canvas.drawOval(
+        Rect.fromCenter(
+            center: const Offset(8.5, 7.5), width: 7, height: 4.5),
+        Paint()..color = Colors.white.withValues(alpha: 0.28));
+    canvas.drawOval(
+        Rect.fromCenter(
+            center: const Offset(8.5, 7), width: 4.5, height: 3),
+        Paint()..color = Colors.white.withValues(alpha: 0.6));
+    canvas.restore();
     canvas.restore();
   }
 
@@ -50,8 +75,10 @@ class _LivesHeartPainter extends CustomPainter {
 
 /// Chip compacto: corazón que respira + número de vidas.
 /// [showMax] muestra "4/5"; sin él, solo "4".
-/// Rediseño Duolingo (§3.2.6): fondo TRANSPARENTE (antes píldora
-/// rosa con sombra), corazón 20 pt #FF4B4B + número 18 pt peso 800.
+/// PÍLDORA rosa claro (Zona F, corrección 2026-11-12, imagen de
+/// Kristian): fondo #FDE8E8, corazón #FF4B4B + número en rojo
+/// #FF4B4B, redondeada, en claro y en oscuro. Antes era fondo
+/// transparente (rediseño Duolingo §3.9.5).
 class LivesChip extends StatelessWidget {
   const LivesChip({
     super.key,
@@ -74,21 +101,29 @@ class LivesChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final label = showMax ? '$lives/$maxLives' : '$lives';
     final heart = LivesHeart(size: heartSize);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        pulse ? PulseWidget(child: heart) : heart,
-        const SizedBox(width: 5),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: fontSize,
-            fontWeight: FontWeight.w800,
-            color: isDark ? Colors.white : const Color(0xFF4B4B4B),
+    return Container(
+      // Píldora rosa claro con el número dentro (imagen de
+      // Kristian): fondo #FDE8E8 en los dos temas, número en rojo.
+      decoration: BoxDecoration(
+        color: const Color(0xFFFDE8E8),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          pulse ? PulseWidget(child: heart) : heart,
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: fontSize,
+              fontWeight: FontWeight.w800,
+              color: const Color(0xFFFF4B4B),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

@@ -1,6 +1,7 @@
 import '../widgets/duo_button.dart';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import '../services/accent.dart';
 import '../widgets/lucide_icons.dart';
 import '../data/i18n/content_i18n.dart';
 import '../data/questions.dart';
@@ -821,7 +822,7 @@ class _TopicPathSection extends StatelessWidget {
                 child: Container(
                   // Banner de unidad Duolingo (§3.2.4): teal SÓLIDO
                   // (sin degradado, sin brillo, sin sombra), 140 pt
-                  // de alto, radio 16. Título en MAYÚSCULAS 22 pt
+                  // de alto, radio 16. Título en MAYÚSCULAS 20 pt
                   // peso 800 blanco (decisión de Kristian, ronda 3:
                   // los nombres de tema del camino van en mayúsculas,
                   // y el subtítulo también); subtítulo 15 pt peso 500
@@ -831,7 +832,7 @@ class _TopicPathSection extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: locked
                         ? const Color(0xFFE5E5E5)
-                        : const Color(0xFF00C2A8),
+                        : AppAccent.primary,
                     borderRadius: BorderRadius.circular(16),
                   ),
                   padding:
@@ -848,16 +849,47 @@ class _TopicPathSection extends StatelessWidget {
                             // el id interno: 'bach-disoluciones' se
                             // ve como 'Disoluciones y concentración',
                             // también en la tarjeta bloqueada.
-                            Text(localizedTopicTitle(topic).toUpperCase(),
-                                style: TextStyle(
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.w800,
-                                    color: locked
-                                        ? BrandColors.ink
-                                            .withValues(alpha: 0.6)
-                                        : Colors.white),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis),
+                            // Título auto-escalado (alcance 8,
+                            // 2026-11-12): el título NUNCA parte una
+                            // palabra ni se corta ("ESTEQUIOMETRÍ /
+                            // A Y EL MOL" en la captura). Base 20 pt
+                            // en MAYÚSCULAS; si no cabe en 2 líneas,
+                            // el FittedBox lo reduce hasta que quepa.
+                            // Las palabras solo se parten entre
+                            // ellas: el salto se decide al tamaño
+                            // base, donde la palabra más larga
+                            // ("ESTEQUIOMETRÍA") cabe en la línea.
+                            // La caja fija de 54 pt (= 2 líneas a
+                            // 20 pt) es lo que hace que el FittedBox
+                            // escale: sin altura acotada no hay nada
+                            // contra lo que escalar. Sin maxLines ni
+                            // ellipsis: nada se corta. Vale para
+                            // los 14 temas del camino (10 Uni + 4
+                            // Bach) en sus dos versiones
+                            // (bloqueado/desbloqueado) y los dos
+                            // temas (claro/oscuro).
+                            LayoutBuilder(
+                              builder: (context, constraints) => SizedBox(
+                                height: 54,
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerLeft,
+                                  child: SizedBox(
+                                    width: constraints.maxWidth,
+                                    child: Text(
+                                        localizedTopicTitle(topic)
+                                            .toUpperCase(),
+                                        style: TextStyle(
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.w800,
+                                            color: locked
+                                                ? BrandColors.ink
+                                                    .withValues(alpha: 0.6)
+                                                : Colors.white)),
+                                  ),
+                                ),
+                              ),
+                            ),
                             const SizedBox(height: 4),
                             Text(
                               locked
@@ -1024,8 +1056,8 @@ class _LevelNodeRowState extends State<_LevelNodeRow>
 
   @override
   Widget build(BuildContext context) {
-    const teal = Color(0xFF00C2A8);
-    const tealLip = Color(0xFF00A18D);
+    final accent = AppAccent.primary;
+    final accentDark = AppAccent.primaryDark;
     final progress = ProgressService.instance;
     final best = progress.bestScore('level:${widget.topic}:${widget.level}');
     // Pasado = desbloqueado el siguiente (fix5, punto 13): con la
@@ -1102,9 +1134,9 @@ class _LevelNodeRowState extends State<_LevelNodeRow>
                     child: Container(
                       width: 92,
                       height: 92,
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: Color(0x2E00C2A8),
+                        color: AppAccent.primary.withValues(alpha: 0.18),
                       ),
                     ),
                   ),
@@ -1143,14 +1175,14 @@ class _LevelNodeRowState extends State<_LevelNodeRow>
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: nodeLit
-                          ? teal
+                          ? accent
                           : const Color(0xFFE5E5E5),
                       // Labio 4 px: sombra sólida (sin desenfoque)
                       // del color oscuro, solo en nodos con color.
                       boxShadow: nodeLit
-                          ? const [
+                          ? [
                               BoxShadow(
-                                color: tealLip,
+                                color: accentDark,
                                 offset: Offset(0, 4),
                               ),
                             ]
@@ -1266,12 +1298,12 @@ class _FinalExamSection extends StatelessWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: unlocked
-                  ? const Color(0xFF00C2A8)
+                  ? AppAccent.primary
                   : const Color(0xFFE5E5E5),
               boxShadow: unlocked
-                  ? const [
+                  ? [
                       BoxShadow(
-                        color: Color(0xFF00A18D),
+                        color: AppAccent.primaryDark,
                         offset: Offset(0, 4),
                       ),
                     ]
@@ -1682,10 +1714,10 @@ class _QuizRunnerState extends State<_QuizRunner> {
               // así que el icono llega a los tres.
               QuestionCalculatorButton(
                 question: Text(_q.question,
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.w800,
-                        color: Color(0xFF4B4B4B))),
+                        color: Theme.of(context).colorScheme.onSurface)),
                 scientific: _q.isNumeric,
                 unit: _q.numericUnit,
                 onResult: _q.isNumeric ? _answerNumeric : null,
@@ -1730,14 +1762,15 @@ class _QuizRunnerState extends State<_QuizRunner> {
                     fontSize: 17,
                     fontWeight: FontWeight.w800,
                     color: wasCorrect
-                        ? const Color(0xFF00A18D)
+                        ? AppAccent.primaryDark
                         : const Color(0xFFEA2B2B),
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(_q.explanation,
-                    style: const TextStyle(
-                        fontSize: 16, color: Color(0xFF4B4B4B))),
+                    style: TextStyle(
+                        fontSize: 16,
+                        color: Theme.of(context).colorScheme.onSurface)),
                 const SizedBox(height: 16),
               ],
             ],
@@ -1879,7 +1912,7 @@ class _QuizRunnerState extends State<_QuizRunner> {
                             ),
                             const SizedBox(width: 12),
                             _ResultStatCard(
-                              color: const Color(0xFF00C2A8),
+                              color: AppAccent.primary,
                               label: tr('quizAccuracy'),
                               value: '$percent%',
                             ),

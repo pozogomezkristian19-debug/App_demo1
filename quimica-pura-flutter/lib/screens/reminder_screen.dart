@@ -122,12 +122,37 @@ class _ReminderScreenState extends State<ReminderScreen>
       setState(() => _granted = true);
     }
     if (NotificationService.takePendingTest()) {
-      final ok = await NotificationService.sendTest();
+      // La prueba pendiente también es TIPADA (Zona G, regla
+      // general): si al volver de Ajustes el aviso sigue sin
+      // poder enviarse, la pantalla dice LA CAUSA en vez de
+      // callarse (sin diálogo: el usuario acaba de venir de
+      // Ajustes, volver a abrirlo sería molesto).
+      final result = await NotificationService.sendTestDetailed();
       if (!mounted) return;
-      if (ok) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(tr('notifSent'))),
-        );
+      switch (result.outcome) {
+        case NotificationTestOutcome.sent:
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(tr('notifSent'))),
+          );
+        case NotificationTestOutcome.permissionDenied:
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(tr('notifTestFailedPerm'))),
+          );
+        case NotificationTestOutcome.channelBlocked:
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(tr('notifTestFailedChannel'))),
+          );
+        case NotificationTestOutcome.pluginError:
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                tr('notifTestFailedDetail').replaceFirst(
+                  '{detail}',
+                  result.detail ?? tr('notifTestFailedSystem'),
+                ),
+              ),
+            ),
+          );
       }
     }
   }
@@ -144,8 +169,14 @@ class _ReminderScreenState extends State<ReminderScreen>
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          // Contraste (Zona G): el #4B4B4B fijo era gris apagado
+          // sobre el fondo oscuro (ilegible); el onSurface del tema
+          // es #4B4B4B en claro y casi blanco en oscuro, como en la
+          // página de permiso del onboarding.
           Text(tr('notifExplain'),
-              style: const TextStyle(fontSize: 16, color: Color(0xFF4B4B4B))),
+              style: TextStyle(
+                  fontSize: 16,
+                  color: Theme.of(context).colorScheme.onSurface)),
           const SizedBox(height: 16),
           // El interruptor vive en una fila plana con su línea
           // #E5E5E5 (antes una tarjeta blanca con sombra). El
@@ -240,27 +271,55 @@ class _ReminderScreenState extends State<ReminderScreen>
                 }
                 return;
               }
-              // Permiso dado, pero el canal de pruebas puede estar
-              // bloqueado en Ajustes (sin diálogo: se silencia en
-              // Ajustes, no negando el permiso). Sin enviar nada.
-              if (await NotificationService.isTestChannelBlocked()) {
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(tr('notifTestFailedChannel'))),
-                );
-                await showNotificationSettingsDialog(context);
-                return;
-              }
-              final ok = await NotificationService.sendTest();
+              // Permiso dado según el diálogo del sistema: la prueba
+              // TIPADA (Zona G) vuelve a comprobar el permiso real y
+              // el canal ANTES de enviar, y si el show() lanza dice
+              // LA CAUSA, nunca el genérico "error del sistema":
+              // denegado → Ajustes, canal bloqueado → Ajustes, otro
+              // error → su texto real (Ajustes no lo arregla).
+              final result =
+                  await NotificationService.sendTestDetailed();
               if (!mounted) return;
-              if (ok) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(tr('notifSent'))),
-                );
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(tr('notifTestFailedSystem'))),
-                );
+              switch (result.outcome) {
+                case NotificationTestOutcome.sent:
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(tr('notifSent'))),
+                  );
+                case NotificationTestOutcome.permissionDenied:
+                  // El permiso se perdió entre la petición y el envío
+                  // (o el show() lo delató con SecurityException):
+                  // mismo camino que denegado de entrada: prueba
+                  // pendiente + diálogo de Ajustes.
+                  NotificationService.markTestPending();
+                  final went =
+                      await showNotificationSettingsDialog(context);
+                  if (went && mounted) {
+                    _waitingForPermission = true;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(tr('notifTestPending'))),
+                    );
+                  } else if (mounted) {
+                    NotificationService.takePendingTest();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(tr('notifTestFailedPerm'))),
+                    );
+                  }
+                case NotificationTestOutcome.channelBlocked:
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(tr('notifTestFailedChannel'))),
+                  );
+                  await showNotificationSettingsDialog(context);
+                case NotificationTestOutcome.pluginError:
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        tr('notifTestFailedDetail').replaceFirst(
+                          '{detail}',
+                          result.detail ?? tr('notifTestFailedSystem'),
+                        ),
+                      ),
+                    ),
+                  );
               }
             },
           ),

@@ -38,7 +38,7 @@ class LabScreen extends StatelessWidget {
         margin: EdgeInsets.zero,
         color: isDark ? AppAccent.darkCard : Colors.white,
         elevation: 3,
-        shadowColor: const Color(0xFF00C2A8).withValues(alpha: 0.20),
+        shadowColor: AppAccent.primary.withValues(alpha: 0.20),
         clipBehavior: Clip.antiAlias,
         child: Container(
           decoration: BoxDecoration(

@@ -3,12 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:share_plus/share_plus.dart';
 import 'widgets/lucide_icons.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'data/periodic_table.dart';
 import 'data/search_index.dart';
 import 'screens/account_screen.dart';
 import 'screens/aprender_screen.dart';
+import 'screens/avatar_editor_screen.dart';
 import 'screens/branches_screen.dart';
 import 'screens/compare_screen.dart';
 import 'screens/constants_screen.dart';
@@ -30,7 +31,9 @@ import 'screens/reference_tables_screen.dart';
 import 'screens/reminder_screen.dart';
 import 'screens/resolver_screen.dart';
 import 'screens/search_screen.dart';
+import 'screens/settings_screen.dart';
 import 'screens/shop_screen.dart';
+import 'screens/splash_screen.dart';
 import 'screens/stats_screen.dart';
 import 'screens/support_screen.dart';
 import 'screens/tabla_screen.dart';
@@ -47,6 +50,7 @@ import 'services/home_widget_service.dart';
 import 'services/localization.dart';
 import 'services/notification_inbox.dart';
 import 'services/notification_service.dart';
+import 'services/push_service.dart';
 import 'services/nav_requests.dart';
 import 'services/notes.dart';
 import 'services/progress.dart';
@@ -56,6 +60,7 @@ import 'services/update_check.dart';
 import 'services/user_prefs.dart';
 import 'services/accent.dart';
 import 'services/analytics_sync.dart';
+import 'services/announcements_service.dart';
 import 'services/auth_service.dart';
 import 'services/duels_service.dart';
 import 'services/firestore_social_repository.dart';
@@ -74,6 +79,11 @@ import 'widgets/main_bottom_nav.dart';
 /// URL de la página de descarga de Melli-Qui (landing en GitHub Pages).
 const String kLandingUrl =
     'https://pozogomezkristian19-debug.github.io/App_demo1/';
+
+/// Página pública de Quemia (Firebase Hosting, la misma de la bio
+/// de Instagram): es lo que se comparte al tocar "Compartir" — la
+/// invitación a la app con esta página, sin el APK.
+const String kShareUrl = 'https://quemia-8410a.web.app';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -108,6 +118,11 @@ Future<void> main() async {
   await AppLang.load();
   syncGeneratorLang();
   await NotificationService.init();
+  // Push FCM (7.1, Task 5): token, listeners y drenaje del stash.
+  // Sin esperar (unawaited): init() lleva timeouts y try/catch
+  // internos, así que FCM nunca bloquea el arranque ni el inicio
+  // de sesión; sin internet se salta en silencio.
+  unawaited(PushService.init());
   // Primera carga de datos del widget de inicio (pregunta del día,
   // racha, vidas y puntos). Si no hay widget, no pasa nada.
   await HomeWidgetService.update();
@@ -137,6 +152,16 @@ Future<void> main() async {
   unawaited(ShopService.retryPendingPurchases());
   unawaited(FriendsGroupsService.retryPendingFriendRequests());
   unawaited(TournamentsService.claimAllEndedPrizes());
+  // Bandeja al abrir (Zona G2, capa sin push): lo que llegó online
+  // mientras no había internet aparece en Notificaciones al abrir,
+  // sin depender de que llegara el push FCM: solicitudes, duelos
+  // (reto y resultado) y avisos del creador. Las respuestas de
+  // soporte ya las vigila SupportService.listenForReplies() abajo.
+  // Todo con try/catch interno y vacío sin internet: nunca bloquea
+  // el arranque.
+  unawaited(SocialService.syncFriendRequestInbox());
+  unawaited(SocialService.syncDuelInbox());
+  unawaited(AnnouncementsService.syncToInbox());
   // Soporte (7.0, Kristian 09:52): enviar lo que quedó encolado sin
   // internet y vigilar si el admin ya respondió a mis mensajes.
   // Con try/catch y sin bloquear el arranque.
@@ -244,6 +269,13 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
   bool _isDark = UserPrefs.isDark;
   bool _onboardingDone = UserPrefs.onboardingDone;
 
+  /// Logo al abrir (Zona E2, Quemia 7.1): true solo en el arranque en
+  /// frío. Mientras tanto la home es el SplashScreen (~1 s) y al
+  /// agotarse pasa a la principal o al onboarding. Al volver de
+  /// segundo plano no se vuelve a poner: es estado de arranque, no
+  /// de cada resume (Android enseña la última pantalla entonces).
+  bool _showSplash = true;
+
   /// ¿La cuenta está baneada ahora? Se re-chequea al volver a primer
   /// plano (ronda fix8): un baneo aplicado mientras la app estaba
   /// abierta se ve al volver, sin reiniciar.
@@ -301,6 +333,12 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
       unawaited(ShopService.retryPendingPurchases());
       unawaited(FriendsGroupsService.retryPendingFriendRequests());
       unawaited(TournamentsService.claimAllEndedPrizes());
+      // Bandeja al volver (Zona G2, capa sin push): igual que al
+      // abrir — lo online que llegó sin internet se sincroniza a
+      // Notificaciones sin esperar al push.
+      unawaited(SocialService.syncFriendRequestInbox());
+      unawaited(SocialService.syncDuelInbox());
+      unawaited(AnnouncementsService.syncToInbox());
       // Soporte (7.0): reenviar lo encolado y mirar si el admin
       // respondió mientras la app estaba en segundo plano.
       try {
@@ -402,7 +440,9 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: bg,
         elevation: 0,
-        indicatorColor: primary.withValues(alpha: 0.20),
+        // SIN resaltado detrás del tab activo (corrección de
+        // Kristian 2026-11-12; antes el primario al 20 %).
+        indicatorColor: Colors.transparent,
         iconTheme: WidgetStateProperty.resolveWith(
           (states) => IconThemeData(
             color: states.contains(WidgetState.selected) ? primary : unselected,
@@ -431,6 +471,18 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
       dividerTheme: const DividerThemeData(
         color: Color(0xFF37464F),
         thickness: 1,
+      ),
+      // Barra de desplazamiento BONITA y siempre visible (Zona F):
+      // thumb del color del acento en oscuro (menta con Verde,
+      // violeta claro con Violeta), redondeado y fino.
+      scrollbarTheme: ScrollbarThemeData(
+        thumbColor: WidgetStateProperty.all(primary),
+        thickness: WidgetStateProperty.all(6),
+        radius: const Radius.circular(8),
+        thumbVisibility: WidgetStateProperty.all(true),
+        trackVisibility: WidgetStateProperty.all(false),
+        crossAxisMargin: 2,
+        minThumbLength: 48,
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: surface,
@@ -600,7 +652,10 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: Colors.white,
         elevation: 0,
-        indicatorColor: const Color(0xFFCCFBF1),
+        // SIN resaltado detrás del tab activo: el tab activo se
+        // distingue SOLO por el color del icono y de la etiqueta
+        // (corrección de Kristian 2026-11-12; antes #CCFBF1).
+        indicatorColor: Colors.transparent,
         iconTheme: WidgetStateProperty.resolveWith(
           (states) => IconThemeData(
             color: states.contains(WidgetState.selected)
@@ -635,6 +690,18 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
       dividerTheme: const DividerThemeData(
         color: Color(0xFFE5E5E5),
         thickness: 1,
+      ),
+      // Barra de desplazamiento BONITA y siempre visible (Zona F,
+      // corrección 2026-11-12): thumb del color del acento,
+      // redondeado y fino, en todas las pantallas con scroll.
+      scrollbarTheme: ScrollbarThemeData(
+        thumbColor: WidgetStateProperty.all(AppAccent.primary),
+        thickness: WidgetStateProperty.all(6),
+        radius: const Radius.circular(8),
+        thumbVisibility: WidgetStateProperty.all(true),
+        trackVisibility: WidgetStateProperty.all(false),
+        crossAxisMargin: 2,
+        minThumbLength: 48,
       ),
       dialogTheme: const DialogThemeData(
         backgroundColor: Colors.white,
@@ -797,35 +864,50 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
           theme: _lightTheme(),
           darkTheme: _darkTheme(),
           themeMode: _themeMode,
-          home: _banned
-              ? const BannedScreen()
-              : _onboardingDone
-                  ? KeyedSubtree(
-                      key: ValueKey('home-$_reloadToken'),
-                      child: HomeScreen(
-                        isDark: _isDark,
-                        onToggleTheme: _toggleTheme,
-                        onTrackChanged: _reloadApp,
-                      ),
-                    )
-                  : OnboardingScreen(
-                      onFinished: () =>
-                          setState(() => _onboardingDone = true),
-                    ),
+          // Sin barra de desplazamiento global (corrección
+          // 2026-11-12, Kristian): la barra bonita SOLO va en
+          // las pantallas de estudio (detalle de tema, glosario,
+          // cuaderno, vía QuemiaScrollBehavior). En las pantallas
+          // principales no hay barra.
+          home: _showSplash
+              ? SplashScreen(
+                  onDone: () => setState(() => _showSplash = false),
+                )
+              : _banned
+                  ? const BannedScreen()
+                  : _onboardingDone
+                      ? KeyedSubtree(
+                          key: ValueKey('home-$_reloadToken'),
+                          child: HomeScreen(
+                            isDark: _isDark,
+                            onToggleTheme: _toggleTheme,
+                            onTrackChanged: _reloadApp,
+                          ),
+                        )
+                      : OnboardingScreen(
+                          onFinished: () =>
+                              setState(() => _onboardingDone = true),
+                        ),
         ),
       ),
     );
   }
 }
 
+/// Barra de desplazamiento bonita: vive en
+/// lib/widgets/quemia_scrollbar.dart y SOLO la usan las
+/// pantallas de estudio (detalle de tema, glosario,
+/// cuaderno). En las pantallas principales no hay barra
+/// (corrección 2026-11-12, Kristian).
+
 /// Chip de repaso en la AppBar (fix2, item 2): icono de repaso +
 /// cantidad de errores por repasar, con el color del tema.
 /// Icono ARRIBA del texto no: en la barra va en línea, como el chip
 /// de vidas, para que quepa junto a la campana.
-/// Rediseño Duolingo (§3.9.5, Zona A): FONDO TRANSPARENTE (sin
-/// píldora tintada), icono 20 pt + número 18 pt peso 800 — igual
-/// que el chip de vidas (LivesChip). El padding (9/5) es solo el
-/// área táctil, sin fondo.
+/// PÍLDORA teal oscura (Zona F, corrección 2026-11-12, imagen de
+/// Kristian): fondo #134E4A, icono + número en menta #2DD4BF,
+/// redondeada, en claro y en oscuro (color semántico, no de
+/// acento). Antes era fondo transparente con el color del tema.
 class _ReviewChip extends StatelessWidget {
   const _ReviewChip({required this.count, required this.onTap});
   final int count;
@@ -833,26 +915,31 @@ class _ReviewChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Material(
       color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(999),
         onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+        child: Container(
+          // Píldora teal oscura con el número dentro (imagen de
+          // Kristian): fondo #134E4A, icono + número en menta.
+          decoration: BoxDecoration(
+            color: const Color(0xFF134E4A),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              LucideIcon(LucideIcons.rotateCcw,
-                  size: 20, color: scheme.primary),
+              const LucideIcon(LucideIcons.rotateCcw,
+                  size: 20, color: Color(0xFF2DD4BF)),
               const SizedBox(width: 4),
               Text(
                 '$count',
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
-                  color: scheme.primary,
+                  color: Color(0xFF2DD4BF),
                 ),
               ),
             ],
@@ -873,12 +960,12 @@ class _ReviewChip extends StatelessWidget {
 const double _kTopBarGap = 6.0;
 
 /// Campana de notificaciones en la AppBar (fix4, puntos 8 y 9):
-/// FONDO TRANSPARENTE (rediseño Duolingo §3.9.5, Zona A: sin
-/// píldora tintada, igual que los otros dos chips), padding
-/// horizontal 9 y vertical 5 como área táctil, icono de 20 px.
-/// Lleva el numerito rojo de no leídos de la bandeja (como
-/// Facebook); sin no leídos, no hay numerito. Abre la bandeja de
-/// Notificaciones (ya no Recordatorios).
+/// PÍLDORA teal oscura (Zona F, corrección 2026-11-12, imagen de
+/// Kristian): fondo #134E4A, campana en menta #2DD4BF, icono de
+/// 20 px. Lleva el numerito rojo de no leídos de la bandeja (como
+/// Facebook) solapado arriba a la derecha de la píldora; sin no
+/// leídos, no hay numerito. Abre la bandeja de Notificaciones (ya
+/// no Recordatorios).
 class _NotificationBell extends StatelessWidget {
   const _NotificationBell({required this.onTap});
 
@@ -901,11 +988,22 @@ class _NotificationBell extends StatelessWidget {
               children: [
                 Tooltip(
                   message: tr('inboxTitle'),
-                  child: Padding(
+                  child: Container(
+                    // Píldora teal oscura con la campana dentro
+                    // (imagen de Kristian): fondo #134E4A, campana
+                    // en menta. Padding horizontal 18 (no 10) para
+                    // que la píldora mida LO MISMO que las otras
+                    // dos (vidas y repaso llevan icono + número):
+                    // antes, sin número, quedaba más estrecha y se
+                    // veía más pequeña (corrección 2026-11-12).
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF134E4A),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                    child: LucideIcon(LucideIcons.bell,
-                        size: 20, color: scheme.primary, threeD: true),
+                        const EdgeInsets.symmetric(horizontal: 18, vertical: 5),
+                    child: const LucideIcon(LucideIcons.bell,
+                        size: 20, color: Color(0xFF2DD4BF), threeD: true),
                   ),
                 ),
                 if (unread > 0)
@@ -979,6 +1077,9 @@ class _HomeScreenState extends State<HomeScreen> {
     // punto 9): sin este aviso, Niveles ya montada no volvería a
     // mirar el flag.
     NavRequests.reviewRequested.addListener(_onNotificationReviewRequest);
+    // Push FCM (7.1): tocar un aviso con la app ya abierta pide la
+    // pantalla que toca (Amigos, Soporte o la bandeja).
+    NavRequests.pushRequested.addListener(_onPushRequest);
     // Recordatorio de actualización e instalación del APK (fix3,
     // punto 20): tocar esas notificaciones con la app ya abierta
     // pide el diálogo o la instalación, igual que el repaso.
@@ -986,11 +1087,14 @@ class _HomeScreenState extends State<HomeScreen> {
     NavRequests.installRequested.addListener(_onNotificationInstallRequest);
     // Tras el primer frame: el diálogo de actualización si la app
     // se abrió desde su recordatorio, y si no, la comprobación
-    // normal vía GitHub (fix3, punto 20). El popup del elemento
-    // del día ya no existe (ronda fix5, punto 2): antes salía
-    // aquí y se pisaba con la ventanita "Cómo se juega".
+    // normal vía GitHub (fix3, punto 20). La pantalla pedida por
+    // un push (app cerrada) va primero: el usuario tocó ese aviso.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
+      final pushKey = NavRequests.takePendingPushScreen();
+      if (pushKey != null) {
+        _openScreenKey(pushKey);
+      }
       if (NavRequests.showUpdateDialog) {
         NavRequests.showUpdateDialog = false;
         await UpdateCheckService.showPendingUpdateDialog(context);
@@ -1006,6 +1110,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     NavRequests.reviewRequested.removeListener(_onNotificationReviewRequest);
+    NavRequests.pushRequested.removeListener(_onPushRequest);
     NavRequests.updateRequested.removeListener(_onNotificationUpdateRequest);
     NavRequests.installRequested.removeListener(_onNotificationInstallRequest);
     super.dispose();
@@ -1019,6 +1124,16 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_inSession) return;
     if (!mounted) return;
     _goToTab(2, startReview: true);
+  }
+
+  /// Push FCM tocado con la app ya abierta: ir a la pantalla que
+  /// toca (Amigos, Soporte o la bandeja). Igual que el repaso: un
+  /// toque explícito del usuario, así que navega aunque haya una
+  /// sesión de juego en curso (queda debajo, en la pila).
+  void _onPushRequest() {
+    final key = NavRequests.takePendingPushScreen();
+    if (key == null || !mounted) return;
+    _openScreenKey(key);
   }
 
   /// Recordatorio de actualización tocado (fix3, punto 20): la app
@@ -1126,6 +1241,16 @@ class _HomeScreenState extends State<HomeScreen> {
       // y compositor (ya no abre WhatsApp directo).
       case 'support':
         page = const SupportScreen();
+      // Ajustes (7.1, Zona H): última fila de Cuenta; abre su
+      // propia pantalla con Tema, Recordatorios, Notificaciones,
+      // Cómo se juega, Buscar actualización, Idioma, Cambiar
+      // versión, Favoritos y Compartir progreso.
+      case 'settings':
+        page = SettingsScreen(onOpenScreen: _openScreenKey);
+      // Avatar editable (7.1, alcance 9): el círculo grande de
+      // la cabecera de Cuenta abre la galería.
+      case 'avatar':
+        page = AvatarEditorScreen(onOpenScreen: _openScreenKey);
       case 'glossary':
         page = const GlossaryScreen();
       case 'compare':
@@ -1218,45 +1343,19 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
 
-  /// Diálogo para compartir la app: el enlace de descarga, para copiar
-  /// o para mandar por WhatsApp.
-  void _showShareApp(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(tr('menuShare')),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Pásale Quemia a otros estudiantes de química:'),
-            const SizedBox(height: 12),
-            SelectableText(kLandingUrl),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              await Clipboard.setData(const ClipboardData(text: kLandingUrl));
-              if (!context.mounted) return;
-              Navigator.of(dialogContext).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Enlace copiado')),
-              );
-            },
-            child: const Text('Copiar enlace'),
-          ),
-          TextButton(
-            onPressed: () async {
-              final uri = Uri.parse(
-                  'https://wa.me/?text=${Uri.encodeComponent('Descarga Quemia, la app de química pura: $kLandingUrl')}');
-              if (await canLaunchUrl(uri)) {
-                await launchUrl(uri, mode: LaunchMode.externalApplication);
-              }
-            },
-            child: const Text('WhatsApp'),
-          ),
-        ],
+  /// Compartir la app (Quemia 7.1, Zona H): abre DIRECTO la hoja
+  /// nativa del sistema (la de la captura: contactos y apps),
+  /// sin diálogo ni pantalla intermedia con el enlace. El texto
+  /// es la invitación a la app con la página
+  /// https://quemia-8410a.web.app (la misma de la bio de
+  /// Instagram; no tiene botón de descarga, así que compartirla
+  /// no filtra el APK). share_plus ya era dependencia (la usa
+  /// también el compartir del progreso como imagen).
+  Future<void> _showShareApp(BuildContext context) async {
+    await SharePlus.instance.share(
+      ShareParams(
+        text:
+            'Descarga Quemia, la app de química pura: $kShareUrl',
       ),
     );
   }
@@ -1505,6 +1604,13 @@ class _HomeScreenState extends State<HomeScreen> {
         SystemNavigator.pop();
       },
       child: Scaffold(
+        // Sin velo gris sobre la pantalla al abrir el menú
+        // (corrección 2026-11-12, Kristian): el scrim oscuro
+        // dejaba un cuadrado gris detrás del icono de Cuenta en
+        // la franja que el menú no cubre. Sin scrim, la pantalla
+        // de detrás se ve normal y el menú se distingue por su
+        // propia sombra; tocar fuera sigue cerrándolo.
+        drawerScrimColor: Colors.transparent,
         // Sin botón flotante de Soporte (fix2, ronda 2): el pill
         // verde tapaba contenido en Niveles y en Tabla. Soporte
         // vive ahora al pie del menú hamburguesa.
@@ -1575,7 +1681,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             // Rediseño Duolingo (§3.15, Zona A): PLANO, sin
                             // degradado ni radios inferiores — fondo blanco
                             // (superficie oscura en oscuro). Se quedan el
-                            // logo (72), "Quemia" 28 pt w800 y el subtítulo.
+                            // logo del anillo (56), "Quemia" 28 pt w800 y
+                            // el subtítulo (alcance 10: sin gemelas aquí).
                             Container(
                               width: double.infinity,
                               color: scheme.surface,
@@ -1584,10 +1691,20 @@ class _HomeScreenState extends State<HomeScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  // Fix3, punto 6: logo panorámico recortado a las
-                                  // gemelas (ancho 60, alto ~24), no el cuadrado
-                                  // marrón de 56 que dominaba la cabecera.
-                                  const BrandLogo(size: 72),
+                                  // Alcance 10 (7.1): el logo del
+                                  // ANILLO (el icono actual de la
+                                  // app, teal sobre blanco), no la
+                                  // pastilla marrón de las gemelas.
+                                  // Cuadrado 56x56 con radio 14.
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(14),
+                                    child: Image.asset(
+                                      'assets/app_icon.png',
+                                      width: 56,
+                                      height: 56,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
                                   const SizedBox(height: 14),
                                   const Text('Quemia',
                                       style: TextStyle(

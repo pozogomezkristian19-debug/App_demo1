@@ -73,19 +73,13 @@ class AppAccent {
   static Color get darkBorder =>
       isViolet ? const Color(0xFF2E2350) : const Color(0xFF1E4D42);
 
-  /// Color del icono de cada pestaña cuando está seleccionada, en el
-  /// tema claro: con el acento verde, cada pestaña conserva su color
-  /// propio (aprobado en el rediseño); con el violeta, todas van en
-  /// violeta. En modo oscuro la pestaña seleccionada lleva menta
-  /// (Verde) o violeta claro (Violeta): ver main.dart.
+  /// Color del icono de cada pestaña cuando está seleccionada: UN
+  /// SOLO color de acción (regla 9): el acento elegido (teal con
+  /// Verde, violeta con Violeta), en claro y en oscuro lo pasa
+  /// main.dart según el brillo. La lista de colores por pestaña de
+  /// antes (cada pestaña con su color propio) queda retirada: la
+  /// barra propia (MainBottomNav) usa este color único.
   static Color tabColor(int index) {
-    if (isViolet) return BrandColors.violet;
-    return const [
-      BrandColors.teal,
-      BrandColors.violet,
-      BrandColors.amber,
-      BrandColors.blue,
-      BrandColors.coral,
-    ][index];
+    return AppAccent.primary;
   }
 }

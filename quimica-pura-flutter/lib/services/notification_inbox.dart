@@ -28,7 +28,21 @@ import 'achievements.dart';
 import 'localization.dart';
 import 'progress.dart';
 
-enum InboxKind { update, reminder, achievement, streak, support, friendRequest }
+enum InboxKind {
+  update,
+  reminder,
+  achievement,
+  streak,
+  support,
+  friendRequest,
+
+  /// Reto o resultado de un duelo (push FCM, 7.1): se juega en
+  /// Amigos, sección "Mis duelos abiertos".
+  duel,
+
+  /// Aviso del admin (push FCM, 7.1): la bandeja es su destino.
+  announcement,
+}
 
 class InboxEntry {
   const InboxEntry({

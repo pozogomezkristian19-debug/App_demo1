@@ -29,8 +29,6 @@ import '../services/user_prefs.dart';
 
 /// Tokens claros (paleta propia de Melli-Qui, sin verde Duolingo):
 /// teal #00C2A8 como color principal, teal oscuro #00A18D.
-const _teal = Color(0xFF00C2A8);
-const _tealDark = Color(0xFF00A18D);
 const _ink = Color(0xFF3C3C3C);
 const _inkSoft = Color(0xFF6E6E6E);
 const _card = Color(0xFFF7F7F7);
@@ -86,7 +84,7 @@ class _StatsColors {
         flameIcon: violet ? BrandColors.violetLight : BrandColors.mintLight,
       );
     }
-    return const _StatsColors(
+    return _StatsColors(
       bg: Colors.white,
       card: _card,
       surface: Colors.white,
@@ -94,8 +92,8 @@ class _StatsColors {
       inkSoft: _inkSoft,
       border: _border,
       edgeGray: _edgeGray,
-      accent: _teal,
-      accentDark: _tealDark,
+      accent: AppAccent.primary,
+      accentDark: AppAccent.primaryDark,
       // Igual que antes: Colors.amber con alpha 0.15 y amber.shade800.
       unlockedBg: Color(0x26FFC107),
       unlockedIcon: Color(0xFFFF8F00),
@@ -634,7 +632,7 @@ class _StatsScreenState extends State<StatsScreen> {
                 title: Text('Sonido y vibración al contestar',
                     style: TextStyle(color: c.ink)),
                 value: UserPrefs.soundOn,
-                activeThumbColor: _teal,
+                activeThumbColor: AppAccent.primary,
                 onChanged: (v) async {
                   await UserPrefs.saveSoundOn(v);
                   setState(() {});
@@ -646,8 +644,8 @@ class _StatsScreenState extends State<StatsScreen> {
           _PillButton(
             icon: LucideIcons.image,
             label: tr('shareProgress'),
-            background: _teal,
-            edge: _tealDark,
+            background: AppAccent.primary,
+            edge: AppAccent.primaryDark,
             foreground: Colors.white,
             onPressed: _shareImage,
           ),

@@ -124,6 +124,15 @@ class _OnboardingNotificationsPageState
   @override
   Widget build(BuildContext context) {
     const teal = Color(0xFF14B8A6);
+    // Contraste (zona E): título y cuerpo con el on-surface del
+    // tema (#4B4B4B en claro, casi blanco en oscuro); el #4B4B4B y
+    // el #777777 fijos eran ilegibles sobre el fondo oscuro.
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final ink = scheme.onSurface;
+    final bodyColor = isDark
+        ? scheme.onSurface.withValues(alpha: 0.75)
+        : const Color(0xFF777777);
     return SingleChildScrollView(
       padding: const EdgeInsets.all(32),
       child: Column(
@@ -142,17 +151,17 @@ class _OnboardingNotificationsPageState
           Text(
             tr('obNotifTitle'),
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.w800,
-                color: Color(0xFF4B4B4B)),
+                color: ink),
           ),
           const SizedBox(height: 12),
           Text(
             tr('obNotifBody'),
             textAlign: TextAlign.center,
-            style: const TextStyle(
-                fontSize: 16, height: 1.5, color: Color(0xFF777777)),
+            style: TextStyle(
+                fontSize: 16, height: 1.5, color: bodyColor),
           ),
           const SizedBox(height: 32),
           SizedBox(

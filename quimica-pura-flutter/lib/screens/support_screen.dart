@@ -14,6 +14,7 @@
 //   por defecto +5356519431).
 // - La respuesta automática de Muse NO va en esta versión.
 import 'package:flutter/material.dart';
+import '../services/accent.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/localization.dart';
@@ -135,7 +136,7 @@ class _SupportScreenState extends State<SupportScreen> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    const teal = Color(0xFF00C2A8);
+    final accent = AppAccent.primary;
     return Scaffold(
       appBar: AppBar(title: Text(tr('supportTitle'))),
       body: OnlineGate(
@@ -160,7 +161,7 @@ class _SupportScreenState extends State<SupportScreen> {
                   }
                   return RefreshIndicator(
                     onRefresh: _refresh,
-                    color: teal,
+                    color: accent,
                     child: ListView(
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
                       children: [
@@ -199,7 +200,7 @@ class _SupportScreenState extends State<SupportScreen> {
 }
 
 /// Un mensaje mío con su respuesta (si la hay): mi burbuja a la
-/// derecha en teal suave, la respuesta del admin a la izquierda en
+/// derecha con tinte del acento, la respuesta del admin a la izquierda en
 /// tarjeta blanca, y debajo una línea pequeña de estado.
 class _ThreadItem extends StatelessWidget {
   const _ThreadItem({
@@ -216,7 +217,7 @@ class _ThreadItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const teal = Color(0xFF00C2A8);
+    final accent = AppAccent.primary;
     final status = pending
         ? tr('supportQueued')
         : message.isAnswered
@@ -235,9 +236,9 @@ class _ThreadItem extends StatelessWidget {
               ),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                // Burbuja propia: tinte teal sólido, sin degradado
+                // Burbuja propia: tinte del acento sólido, sin degradado
                 // y sin sombra (diseño Duolingo §3.15).
-                color: teal.withValues(alpha: isDark ? 0.25 : 0.14),
+                color: accent.withValues(alpha: isDark ? 0.25 : 0.14),
                 borderRadius: const BorderRadius.only(
                   topLeft: Radius.circular(18),
                   topRight: Radius.circular(18),
@@ -293,10 +294,10 @@ class _ThreadItem extends StatelessWidget {
                   children: [
                     Text(
                       tr('supportReplyTitle'),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
-                        color: teal,
+                        color: accent,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -353,13 +354,13 @@ class _WhatsAppOption extends StatelessWidget {
                 height: 44,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: const Color(0xFF00C2A8).withValues(alpha: 0.14),
+                  color: AppAccent.primary.withValues(alpha: 0.14),
                 ),
                 alignment: Alignment.center,
-                child: const LucideIcon(
+                child: LucideIcon(
                   LucideIcons.messageCircle,
                   size: 22,
-                  color: Color(0xFF00C2A8),
+                  color: AppAccent.primary,
                 ),
               ),
               const SizedBox(width: 12),
@@ -367,7 +368,7 @@ class _WhatsAppOption extends StatelessWidget {
                 child: Text(
                   tr('supportWhatsApp').replaceFirst('%s', number),
                   style:
-                      const TextStyle(fontSize: 15, color: Color(0xFF4B4B4B)),
+                      TextStyle(fontSize: 15, color: scheme.onSurface),
                 ),
               ),
               const LucideIcon(
@@ -383,7 +384,7 @@ class _WhatsAppOption extends StatelessWidget {
   }
 }
 
-/// Estado vacío bonito: círculo teal + texto, nada de error.
+/// Estado vacío bonito: círculo del acento + texto, nada de error.
 class _EmptySupport extends StatelessWidget {
   const _EmptySupport({required this.scheme});
 
@@ -391,7 +392,7 @@ class _EmptySupport extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const teal = Color(0xFF00C2A8);
+    final accent = AppAccent.primary;
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -403,13 +404,13 @@ class _EmptySupport extends StatelessWidget {
               height: 72,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: teal.withValues(alpha: 0.14),
+                color: accent.withValues(alpha: 0.14),
               ),
               alignment: Alignment.center,
-              child: const LucideIcon(
+              child: LucideIcon(
                 LucideIcons.messageCircle,
                 size: 32,
-                color: teal,
+                color: accent,
                 threeD: true,
               ),
             ),
@@ -430,7 +431,7 @@ class _EmptySupport extends StatelessWidget {
   }
 }
 
-/// Compositor: campo redondeado + botón teal de enviar.
+/// Compositor: campo redondeado + botón del acento de enviar.
 class _Composer extends StatelessWidget {
   const _Composer({
     required this.controller,
@@ -477,7 +478,7 @@ class _Composer extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 10),
-            // Botón de enviar: círculo teal sólido, sin degradado
+            // Botón de enviar: círculo del acento sólido, sin degradado
             // y sin sombra. Se conserva el icono arrowRight que
             // usan los tests para tocarlo.
             SizedBox(
@@ -490,9 +491,9 @@ class _Composer extends StatelessWidget {
                 child: InkWell(
                   onTap: sending ? null : onSend,
                   child: Container(
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: Color(0xFF00C2A8),
+                      color: AppAccent.primary,
                     ),
                     alignment: Alignment.center,
                     child: sending

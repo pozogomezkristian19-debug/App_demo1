@@ -3,6 +3,7 @@
 // energía y temperatura). Todo offline.
 
 import 'package:flutter/material.dart';
+import '../services/accent.dart';
 import '../widgets/lucide_icons.dart';
 
 import '../data/extra_content.dart';
@@ -148,21 +149,21 @@ class _ConstantsScreenState extends State<ConstantsScreen> {
                     _to = _categories[i].units.last.$1;
                     _result = null;
                   }),
-                  // Píldora 3D (ronda de diseño 7.0): teal + texto
+                  // Píldora 3D (ronda de diseño 7.0): color del acento + texto
                   // blanco + sombra tintada al seleccionar; blanco
                   // con sombra suave y borde gris claro sin
                   // seleccionar. Se mantiene ChoiceChip.
-                  selectedColor: const Color(0xFF00C2A8),
+                  selectedColor: AppAccent.primary,
                   backgroundColor: Colors.white,
                   elevation: 3,
                   shadowColor:
-                      const Color(0xFF00C2A8).withValues(alpha: 0.35),
+                      AppAccent.primary.withValues(alpha: 0.35),
                   selectedShadowColor:
-                      const Color(0xFF00C2A8).withValues(alpha: 0.45),
+                      AppAccent.primary.withValues(alpha: 0.45),
                   checkmarkColor: Colors.white,
                   side: BorderSide(
                       color: !_temperature && _catIndex == i
-                          ? const Color(0xFF00A18D)
+                          ? AppAccent.primaryDark
                           : const Color(0xFFE8E8E8)),
                   shape: const StadiumBorder(),
                 ),
@@ -178,17 +179,17 @@ class _ConstantsScreenState extends State<ConstantsScreen> {
                   _temperature = true;
                   _result = null;
                 }),
-                selectedColor: const Color(0xFF00C2A8),
+                selectedColor: AppAccent.primary,
                 backgroundColor: Colors.white,
                 elevation: 3,
                 shadowColor:
-                    const Color(0xFF00C2A8).withValues(alpha: 0.35),
+                    AppAccent.primary.withValues(alpha: 0.35),
                 selectedShadowColor:
-                    const Color(0xFF00C2A8).withValues(alpha: 0.45),
+                    AppAccent.primary.withValues(alpha: 0.45),
                 checkmarkColor: Colors.white,
                 side: BorderSide(
                     color: _temperature
-                        ? const Color(0xFF00A18D)
+                        ? AppAccent.primaryDark
                         : const Color(0xFFE8E8E8)),
                 shape: const StadiumBorder(),
               ),

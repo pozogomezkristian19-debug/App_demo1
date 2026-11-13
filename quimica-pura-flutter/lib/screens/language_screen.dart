@@ -4,6 +4,7 @@
 
 import '../data/i18n/content_i18n.dart';
 import 'package:flutter/material.dart';
+import '../services/accent.dart';
 import '../widgets/lucide_icons.dart';
 
 import '../services/localization.dart';
@@ -31,7 +32,7 @@ class LanguageScreen extends StatelessWidget {
               margin: const EdgeInsets.only(bottom: 8),
               elevation: 2,
               shadowColor:
-                  const Color(0xFF00C2A8).withValues(alpha: 0.15),
+                  AppAccent.primary.withValues(alpha: 0.15),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
               ),

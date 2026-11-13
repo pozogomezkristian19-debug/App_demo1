@@ -12,6 +12,7 @@ import '../widgets/shadows.dart';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import '../services/accent.dart';
 import '../widgets/lucide_icons.dart';
 
 import '../data/i18n/content_i18n.dart';
@@ -193,10 +194,10 @@ class _LabQuizPageState extends State<LabQuizPage> {
                       style: const TextStyle(fontSize: 20),
                       textAlign: TextAlign.center),
                   Text('${((100 * _score) / total).round()}%',
-                      style: const TextStyle(
+                      style: TextStyle(
                           fontSize: 48,
                           fontWeight: FontWeight.bold,
-                          color: Colors.tealAccent),
+                          color: AppAccent.primary),
                       textAlign: TextAlign.center),
                   const SizedBox(height: 4),
                   Text(
@@ -271,7 +272,7 @@ class _LabQuizPageState extends State<LabQuizPage> {
                 // al teclado (que ahora se abre con el icono); las
                 // conceptuales siguen con las opciones de siempre.
                 // Opciones 3D (ronda de diseño 7.0): tarjeta blanca
-                // con sombra en reposo, degradado teal/rojo con
+                // con sombra en reposo, degradado del acento/rojo con
                 // borde inferior oscuro al acertar/fallar (ver
                 // QuizOptionButton en simple_quiz.dart).
                 if (!_q.isNumeric)
@@ -288,7 +289,7 @@ class _LabQuizPageState extends State<LabQuizPage> {
                                   ? QuizOptionState.wrong
                                   : QuizOptionState.normal)),
                       // Texto legible (capturas 2026-11-10): sobre
-                      // fondo claro va tinta oscura; sobre teal o
+                      // fondo claro va tinta oscura; sobre el acento o
                       // rojo, blanco. Sin esto heredaba blanco.
                       textColor: _selected != null &&
                               (_order[i] == _q.answer || _selected == i)
@@ -309,8 +310,8 @@ class _LabQuizPageState extends State<LabQuizPage> {
                         end: Alignment.bottomCenter,
                         colors: _order[_selected!] == _q.answer
                             ? [
-                                Colors.teal.withValues(alpha: 0.18),
-                                Colors.teal.withValues(alpha: 0.08),
+                                AppAccent.primary.withValues(alpha: 0.18),
+                                AppAccent.primary.withValues(alpha: 0.08),
                               ]
                             : [
                                 Colors.redAccent.withValues(alpha: 0.18),
@@ -320,14 +321,14 @@ class _LabQuizPageState extends State<LabQuizPage> {
                       border: Border(
                         bottom: BorderSide(
                           color: (_order[_selected!] == _q.answer
-                                  ? Colors.teal
+                                  ? AppAccent.primary
                                   : Colors.redAccent)
                               .withValues(alpha: 0.45),
                           width: 3,
                         ),
                       ),
                       boxShadow: [
-                        standardShadow((_order[_selected!] == _q.answer ? Colors.teal : Colors.redAccent)),
+                        standardShadow((_order[_selected!] == _q.answer ? AppAccent.primary : Colors.redAccent)),
                       ],
                     ),
                     child: Padding(

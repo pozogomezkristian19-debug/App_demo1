@@ -15,6 +15,7 @@
 // puntos" como chip del HUD (estrella + número).
 
 import 'package:flutter/material.dart';
+import '../services/accent.dart';
 
 import '../services/localization.dart';
 import '../services/progress.dart';
@@ -250,7 +251,6 @@ class _ItemCard extends StatelessWidget {
     'avatar_teal': 'Teal como la app. Discreto por fuera, crack por dentro.',
   };
 
-  static const _teal = Color(0xFF00C2A8);
   static const _line = Color(0xFFE5E5E5);
   static const _lineDark = Color(0xFF37464F);
 
@@ -317,7 +317,7 @@ class _ItemCard extends StatelessWidget {
         child: LucideIcon(icon, size: 22, color: Color(0xFF4B4B4B)),
       );
     } else {
-      final base = item.color == null ? _teal : Color(item.color!);
+      final base = item.color == null ? AppAccent.primary : Color(item.color!);
       preview = Container(
         width: 44,
         height: 44,
@@ -456,13 +456,13 @@ class _StateChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const teal = Color(0xFF00C2A8);
+    final accent = AppAccent.primary;
     return Container(
       height: 56,
       alignment: Alignment.center,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: filled ? teal : Colors.transparent,
+        color: filled ? accent : Colors.transparent,
         borderRadius: BorderRadius.circular(12),
         border: filled
             ? null

@@ -11,12 +11,13 @@
 // DISEÑO (rediseño Duolingo 7.0, Zona C): filas planas sin
 // tarjeta y sin sombra, separadas por líneas finas #E5E5E5;
 // avatares con cara (SocialAvatar, nunca inicial); "Retar" =
-// DuoButton.secondary, "Confirmar" = teal sólido con labio,
+// DuoButton.secondary, "Confirmar" = color del acento sólido con labio,
 // "Eliminar"/"Cancelar" = secundario gris; campo de nombre con
 // radio 16 y botón "AGREGAR" a ancho completo debajo; sin icono
 // de papelera en las filas; secciones a 20 pt peso 800.
 
 import 'package:flutter/material.dart';
+import '../services/accent.dart';
 
 import '../services/localization.dart';
 import '../services/social_service.dart';
@@ -223,7 +224,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    const teal = Color(0xFF00C2A8);
+    final accent = AppAccent.primary;
     return Scaffold(
       appBar: AppBar(title: Text(tr('friendsTitle'))),
       body: OnlineGate(
@@ -248,13 +249,13 @@ class _FriendsScreenState extends State<FriendsScreen> {
                           height: 44,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: teal.withValues(alpha: 0.14),
+                            color: accent.withValues(alpha: 0.14),
                           ),
                           alignment: Alignment.center,
-                          child: const LucideIcon(
+                          child: LucideIcon(
                             LucideIcons.gamepad2,
                             size: 22,
-                            color: teal,
+                            color: accent,
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -436,9 +437,6 @@ class _FriendsScreenState extends State<FriendsScreen> {
                     child: DuoButton.primary(
                       label: tr('friendsAddButton').toUpperCase(),
                       onPressed: _adding ? null : _add,
-                      topColor: teal,
-                      bottomColor: teal,
-                      edgeColor: const Color(0xFF00A18D),
                       fontSize: 17,
                       shine: false,
                     ),
@@ -683,7 +681,7 @@ class _FriendRow extends StatelessWidget {
           ),
           // "Retar": botón secundario Duolingo (blanco + borde 2 pt
           // #E5E5E5 + labio 4 pt #E5E5E5 + texto #4B4B4B 17 pt
-          // peso 700), no píldora con borde teal.
+          // peso 700), no píldora con borde del acento.
           DuoButton.secondary(
             label: tr('friendsChallenge').toUpperCase(),
             onPressed: onChallenge,
@@ -701,7 +699,7 @@ class _FriendRow extends StatelessWidget {
 /// entrante = nombre + "te envió una solicitud" + Confirmar y
 /// Eliminar; enviada = nombre + "Solicitud enviada" + Cancelar.
 /// Fila plana sin tarjeta ni sombra (rediseño Duolingo 7.0):
-/// "Confirmar" es teal sólido con labio; "Eliminar"/"Cancelar"
+/// "Confirmar" es el color del acento sólido con labio; "Eliminar"/"Cancelar"
 /// son botones secundarios con texto gris.
 class _RequestRow extends StatelessWidget {
   const _RequestRow({
@@ -720,8 +718,6 @@ class _RequestRow extends StatelessWidget {
   final VoidCallback onConfirm;
   final VoidCallback onDelete;
 
-  static const _teal = Color(0xFF00C2A8);
-  static const _tealLip = Color(0xFF00A18D);
 
   @override
   Widget build(BuildContext context) {
@@ -772,9 +768,6 @@ class _RequestRow extends StatelessWidget {
                   child: DuoButton.primary(
                     label: tr('friendsRequestAccept').toUpperCase(),
                     onPressed: onConfirm,
-                    topColor: _teal,
-                    bottomColor: _teal,
-                    edgeColor: _tealLip,
                     fontSize: 17,
                     shine: false,
                   ),

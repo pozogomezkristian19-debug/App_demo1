@@ -394,6 +394,37 @@ class DuelService {
     return out;
   }
 
+  /// Duelos míos ya TERMINADOS (Zona G2, capa sin push): igual que
+  /// [myOpenDuels] pero con los terminados, para que la bandeja se
+  /// sincronice al abrir la app con el resultado aunque el push no
+  /// llegara. Sin Google o sin internet, vacío.
+  static Future<List<Duel>> myFinishedDuels() async {
+    if (!OnlineCommon.allowed || _me.isEmpty) return [];
+    final asA = await OnlineCommon.call(() => _repo.queryDocs(
+          'duels',
+          whereField: 'playerA',
+          isEqualTo: _me,
+          limit: 50,
+        ));
+    final asB = await OnlineCommon.call(() => _repo.queryDocs(
+          'duels',
+          whereField: 'playerB',
+          isEqualTo: _me,
+          limit: 50,
+        ));
+    final byId = <String, Duel>{};
+    for (final docs in [asA, asB]) {
+      if (docs == null) continue;
+      for (final d in docs) {
+        final duel = Duel.fromMap(d);
+        if (duel != null && duel.isFinished) byId[duel.id] = duel;
+      }
+    }
+    final out = byId.values.toList();
+    out.sort((a, b) => b.createdAtMs.compareTo(a.createdAtMs));
+    return out;
+  }
+
   /// Lee un duelo por id. Null sin Google, si no existe o sin red.
   static Future<Duel?> getDuel(String duelId) async {
     if (!OnlineCommon.allowed || duelId.isEmpty) return null;

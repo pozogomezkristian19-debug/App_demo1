@@ -4,6 +4,7 @@
 // cambiara la app entera). La elección se guarda en el teléfono.
 
 import 'package:flutter/material.dart';
+import '../services/accent.dart';
 import '../widgets/lucide_icons.dart';
 
 import '../services/localization.dart';
@@ -97,7 +98,7 @@ class _VersionScreenState extends State<VersionScreen> {
     return Card(
       color: selected ? scheme.primary.withValues(alpha: 0.15) : null,
       elevation: selected ? 3 : 2,
-      shadowColor: const Color(0xFF00C2A8).withValues(alpha: 0.2),
+      shadowColor: AppAccent.primary.withValues(alpha: 0.2),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
       ),

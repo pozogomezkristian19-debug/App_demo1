@@ -91,4 +91,30 @@ class NavRequests {
   /// Pestaña de Tabla que debe abrirse (0 periódica, 1 actividad, 2
   /// solubilidad). null = la que ya estaba.
   static int? tableTab;
+
+  /// Pantalla que debe abrirse al tocar un aviso push (7.1, FCM):
+  /// la pone PushService (o su toque) y HomeScreen la consume al
+  /// montarse (app cerrada) o al avisar [pushRequested] (app ya
+  /// abierta). Claves de HomeScreen._openScreenKey: 'friends'
+  /// (Amigos, con la sección "Mis duelos"), 'support' (Soporte) o
+  /// 'notifications' (la bandeja).
+  static String? pendingPushScreen;
+
+  /// Contador de peticiones de pantalla por push. Igual que
+  /// reviewRequested: el flag solo no bastaría si HomeScreen ya
+  /// está montada.
+  static final ValueNotifier<int> pushRequested = ValueNotifier(0);
+
+  /// Pide abrir la pantalla [screenKey] por un aviso push.
+  static void requestPushScreen(String screenKey) {
+    pendingPushScreen = screenKey;
+    pushRequested.value++;
+  }
+
+  /// Toma la pantalla pendiente (una sola vez) o null.
+  static String? takePendingPushScreen() {
+    final key = pendingPushScreen;
+    pendingPushScreen = null;
+    return key;
+  }
 }

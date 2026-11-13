@@ -295,39 +295,43 @@ class _ExplainPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Pantalla FIJA sin scroll (zona E): en un teléfono normal
+    // (360x800) todo cabe en una pantalla — icono 72, título 24,
+    // cuerpo 16 y huecos ajustados. Antes desbordaba ~80 px en
+    // teléfonos angostos y el texto quedaba cortado.
     return Padding(
-      padding: const EdgeInsets.all(32),
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Center(
             child: CircleAvatar(
-              radius: 44,
+              radius: 36,
               backgroundColor: const Color(0xFF14B8A6).withValues(alpha: 0.18),
-              child: LucideIcon(icon, size: 46, color: const Color(0xFF14B8A6)),
+              child: LucideIcon(icon, size: 38, color: const Color(0xFF14B8A6)),
             ),
           ),
-          const SizedBox(height: 28),
+          const SizedBox(height: 20),
           Text(
             title,
-            style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 12),
-          Text(body, style: const TextStyle(fontSize: 17, height: 1.5)),
-          const SizedBox(height: 20),
+          const SizedBox(height: 10),
+          Text(body, style: const TextStyle(fontSize: 16, height: 1.5)),
+          const SizedBox(height: 16),
           for (final p in points)
             Padding(
-              padding: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.only(bottom: 8),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text('•  ',
                       style:
-                          TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   Expanded(
                       child: Text(p,
-                          style: const TextStyle(fontSize: 17, height: 1.4))),
+                          style: const TextStyle(fontSize: 16, height: 1.4))),
                 ],
               ),
             ),
@@ -367,7 +371,7 @@ class _GenderTile extends StatelessWidget {
         onTap: onTap,
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             color: selected ? tint : Colors.white,
@@ -417,60 +421,76 @@ class _ProfilePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Diseño Duolingo (§3.10): Brenda + Britany ilustradas juntas en
-    // vez del emblema con degradado; título 24 pt peso 800 #4B4B4B;
-    // campo radio 16 con borde #E5E5E5 (al enfocar #5EEAD4), sin
-    // sombra teal; género en dos azulejos apilados; botón Google
-    // secundario Duolingo con la G real. Nada de bordes negros.
-    const ink = Color(0xFF4B4B4B);
+    // Contraste (zona E): el título, el subtítulo y las etiquetas
+    // usan el on-surface del tema: #4B4B4B en claro y casi blanco
+    // (#EDE9F7 violeta / #E6F4EE verde) en oscuro. El #4B4B4B fijo
+    // era gris oscuro sobre el fondo oscuro: ilegible. El campo y
+    // el botón de Google SON blancos en ambos temas, así que su
+    // tinta se queda fija en #4B4B4B (fieldInk) y el hint en un
+    // gris oscuro legible sobre blanco en ambos temas (#757575):
+    // el hint NO puede salir del on-surface del tema, porque en
+    // oscuro es casi blanco y sobre el campo blanco se vuelve
+    // invisible.
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final ink = scheme.onSurface;
+    final subtitleColor = isDark
+        ? scheme.onSurface.withValues(alpha: 0.75)
+        : const Color(0xFF777777);
+    const fieldInk = Color(0xFF4B4B4B);
+    const hintColor = Color(0xFF757575);
     const violet = Color(0xFF8B5CF6);
     const blue = Color(0xFF3B82F6);
     // El relleno de abajo crece con el teclado abierto, así el botón
     // Siguiente se puede subir por encima del teclado desplazando.
+    // Pantalla FIJA sin scroll en un teléfono normal: todo el
+    // contenido (mascotas ~96, título, campo, género, "o", Google)
+    // cabe en 360x800 sin desplazarse; el scroll solo queda para
+    // pantallas muy pequeñas o con el teclado abierto.
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(
         32,
-        16,
+        12,
         32,
-        32 + MediaQuery.of(context).viewInsets.bottom,
+        12 + MediaQuery.of(context).viewInsets.bottom,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Brenda + Britany ilustradas juntas (~140 dp), en vez del
+          // Brenda + Britany ilustradas juntas (~90 dp), en vez del
           // emblema circular con degradado y el icono genérico.
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Image.asset('assets/brenda.png', height: 140),
-              Image.asset('assets/britany.png', height: 140),
+              Image.asset('assets/brenda.png', height: 90),
+              Image.asset('assets/britany.png', height: 90),
             ],
-          ),
-          const SizedBox(height: 20),
-          Text(
-            tr('obProfileTitle'),
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-                fontSize: 24, fontWeight: FontWeight.w800, color: ink),
           ),
           const SizedBox(height: 12),
           Text(
+            tr('obProfileTitle'),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                fontSize: 24, fontWeight: FontWeight.w800, color: ink),
+          ),
+          const SizedBox(height: 8),
+          Text(
             tr('obProfileBody'),
             textAlign: TextAlign.center,
-            style: const TextStyle(
-                fontSize: 16, height: 1.5, color: Color(0xFF777777)),
+            style: TextStyle(
+                fontSize: 16, height: 1.5, color: subtitleColor),
           ),
-          const SizedBox(height: 28),
+          const SizedBox(height: 12),
           Align(
             alignment: Alignment.centerLeft,
             child: Text(
               tr('obNameLabel'),
-              style: const TextStyle(
+              style: TextStyle(
                   fontSize: 14, fontWeight: FontWeight.w700, color: ink),
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           // Campo de nombre: radio 16 (no píldora), borde 2 pt
           // #E5E5E5, 56 pt de alto, al enfocar borde #5EEAD4;
           // sin sombra teal.
@@ -481,16 +501,15 @@ class _ProfilePage extends StatelessWidget {
               textCapitalization: TextCapitalization.words,
               textAlign: TextAlign.center,
               style: const TextStyle(
-                  fontSize: 20, fontWeight: FontWeight.w700, color: ink),
+                  fontSize: 20, fontWeight: FontWeight.w700, color: fieldInk),
               decoration: InputDecoration(
                 hintText: tr('obNameHint'),
-                hintStyle: TextStyle(
+                // Hint gris oscuro fijo: el campo es blanco en ambos
+                // temas, así que el hint también es fijo (ver arriba).
+                hintStyle: const TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.normal,
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onSurface
-                      .withValues(alpha: 0.45),
+                  color: hintColor,
                 ),
                 contentPadding:
                     const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
@@ -514,14 +533,14 @@ class _ProfilePage extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 28),
+          const SizedBox(height: 12),
           Align(
             alignment: Alignment.centerLeft,
             child: Text(tr('obGender'),
-                style: const TextStyle(
+                style: TextStyle(
                     fontSize: 14, fontWeight: FontWeight.w700, color: ink)),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           // Género: dos azulejos de ancho completo APILADOS (no dos
           // píldoras lado a lado). Femenino violeta claro, Masculino
           // azul claro al seleccionar.
@@ -532,7 +551,7 @@ class _ProfilePage extends StatelessWidget {
             borderColor: violet,
             onTap: () => onGenderChanged('Femenino'),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           _GenderTile(
             label: tr('obMale'),
             selected: gender == 'Masculino',
@@ -543,7 +562,7 @@ class _ProfilePage extends StatelessWidget {
           // Ronda #8 (cambio 09:08): "Continuar con Google" DEBAJO
           // del nombre y el género. Opcional: enlaza la sesión con
           // Google y prellena el nombre con el de la cuenta.
-          const SizedBox(height: 32),
+          const SizedBox(height: 16),
           Row(
             children: [
               const Expanded(child: Divider()),
@@ -554,12 +573,13 @@ class _ProfilePage extends StatelessWidget {
               const Expanded(child: Divider()),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           // Botón Google secundario Duolingo: blanco + borde 2 pt
           // #E5E5E5 + labio 4 pt #E5E5E5 + texto #4B4B4B 17 pt +
           // logo G real (assets/google_g.png). La G va superpuesta
           // a la izquierda (DuoButton no admite icono de imagen);
-          // con IgnorePointer para no tapar el toque.
+          // con IgnorePointer para no tapar el toque. El texto se
+          // queda en #4B4B4B fijo: el botón es blanco en ambos temas.
           SizedBox(
             width: double.infinity,
             child: Stack(
@@ -572,7 +592,7 @@ class _ProfilePage extends StatelessWidget {
                     onPressed: googleBusy || onGoogleSignIn == null
                         ? null
                         : () => onGoogleSignIn!(),
-                    textColor: ink,
+                    textColor: fieldInk,
                     edgeColor: const Color(0xFFE5E5E5),
                     fontSize: 17,
                   ),
@@ -603,7 +623,7 @@ class _ProfilePage extends StatelessWidget {
               ),
             ),
           ],
-          const SizedBox(height: 32),
+          const SizedBox(height: 8),
         ],
       ),
     );
@@ -623,28 +643,32 @@ class _LanguagePage extends StatefulWidget {
 class _LanguagePageState extends State<_LanguagePage> {
   @override
   Widget build(BuildContext context) {
+    // Pantalla FIJA sin scroll (zona E): en un teléfono normal
+    // (360x800) todo cabe en una pantalla — título, cuerpo, chips
+    // y Finalizar. Antes el contenido desbordaba ~58 px y había
+    // que desplazar para ver el botón.
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(32),
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const SizedBox(height: 24),
+          const SizedBox(height: 8),
           Text(
             tr('obLangTitle'),
             textAlign: TextAlign.center,
             style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           Text(
             tr('obLangBody'),
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 17, height: 1.5),
+            style: const TextStyle(fontSize: 16, height: 1.5),
           ),
-          const SizedBox(height: 28),
+          const SizedBox(height: 16),
           Wrap(
             alignment: WrapAlignment.center,
-            spacing: 12,
-            runSpacing: 12,
+            spacing: 10,
+            runSpacing: 10,
             children: [
               for (final (code, name) in AppLang.supported)
                 ChoiceChip(
@@ -654,7 +678,7 @@ class _LanguagePageState extends State<_LanguagePage> {
                   // Material 3, más oscuro que #E5E5E5 (regla 4).
                   label: Text(name,
                       style: const TextStyle(
-                          fontSize: 17, color: Color(0xFF4B4B4B))),
+                          fontSize: 16, color: Color(0xFF4B4B4B))),
                   selected: AppLang.code == code,
                   selectedColor: const Color(0xFFCCFBF1),
                   backgroundColor: Colors.white,
@@ -674,7 +698,7 @@ class _LanguagePageState extends State<_LanguagePage> {
                 ),
             ],
           ),
-          const SizedBox(height: 36),
+          const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(

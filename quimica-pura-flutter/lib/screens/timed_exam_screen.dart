@@ -11,6 +11,7 @@ import '../widgets/shadows.dart';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import '../services/accent.dart';
 import '../widgets/lucide_icons.dart';
 
 import '../data/i18n/content_i18n.dart';
@@ -132,18 +133,18 @@ class _TimedExamScreenState extends State<TimedExamScreen> {
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                         colors: [
-                          Colors.teal.withValues(alpha: 0.20),
-                          Colors.teal.withValues(alpha: 0.07),
+                          AppAccent.primary.withValues(alpha: 0.20),
+                          AppAccent.primary.withValues(alpha: 0.07),
                         ],
                       ),
                       shape: BoxShape.circle,
                       boxShadow: [
-                        standardShadow(Colors.teal),
+                        standardShadow(AppAccent.primary),
                       ],
                     ),
                     alignment: Alignment.center,
-                    child: const LucideIcon(LucideIcons.timer,
-                        size: 48, color: Colors.teal),
+                    child: LucideIcon(LucideIcons.timer,
+                        size: 48, color: AppAccent.primary),
                   ),
                 ),
                   const SizedBox(height: 16),
@@ -172,7 +173,7 @@ class _TimedExamScreenState extends State<TimedExamScreen> {
                     runSpacing: 8,
                     children: [
                       // Chips de duración 3D (ronda de diseño 7.0):
-                      // elegido en teal con texto blanco, resto en
+                      // elegido en el color del acento con texto blanco, resto en
                       // blanco con sombra suave y borde gris claro.
                       for (final m in _durations)
                         ChoiceChip(
@@ -186,18 +187,18 @@ class _TimedExamScreenState extends State<TimedExamScreen> {
                           selected: _minutes == m,
                           onSelected: (_) =>
                               setState(() => _minutes = m),
-                          selectedColor: const Color(0xFF00C2A8),
+                          selectedColor: AppAccent.primary,
                           backgroundColor: Colors.white,
                           checkmarkColor: Colors.white,
                           elevation: 2,
                           pressElevation: 4,
                           shadowColor: const Color(0xFF64748B)
                               .withValues(alpha: 0.25),
-                          selectedShadowColor: const Color(0xFF00C2A8)
+                          selectedShadowColor: AppAccent.primary
                               .withValues(alpha: 0.35),
                           side: BorderSide(
                               color: _minutes == m
-                                  ? const Color(0xFF00A18D)
+                                  ? AppAccent.primaryDark
                                   : const Color(0xFFE5E7EB),
                               width: _minutes == m ? 2 : 1),
                           shape: const StadiumBorder(),
