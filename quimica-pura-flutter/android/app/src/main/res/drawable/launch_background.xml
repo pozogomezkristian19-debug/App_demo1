@@ -2,7 +2,7 @@
 <!-- Splash nativo en frío (zona E): fondo blanco + anillo órbita
      centrado. Se muestra desde el primer instante, antes de que
      Flutter pinte su primer frame. La variante oscura vive en
-     res/values-night/drawable/launch_background.xml. -->
+     res/drawable-night-v21/launch_background.xml. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@android:color/white" />
 

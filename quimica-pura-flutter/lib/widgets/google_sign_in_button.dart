@@ -70,37 +70,44 @@ class GoogleSignInButton extends StatelessWidget {
           child: Container(
             height: 54,
             padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (busy)
-                const SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2.5),
-                )
-              else
-                const GoogleGIcon(size: 24),
-              const SizedBox(width: 12),
-              // Flexible con puntos suspensivos: en un teléfono
-              // estrecho (o con la fuente de tests, más ancha) el
-              // texto no desborda el botón.
-              Flexible(
-                child: Text(
-                  tr('googleContinue'),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF3C4043),
+            // Quemia 7.3 (captura de Kristian): la "G" TAPABA la
+            // "C" de "CONTINUAR CON GOOGLE". Antes la fila era
+            // mainAxisSize.min con el texto en Flexible: con poco
+            // ancho, el texto se colocaba encima del logo. Ahora
+            // la fila ocupa todo el ancho, la G tiene su sitio
+            // fijo a la izquierda (24 + 12 de hueco) y el texto va
+            // en Expanded (centrado en lo que queda): el logo y el
+            // texto ya no pueden solaparse, en claro ni en oscuro,
+            // y el texto completo cabe con puntos suspensivos si el
+            // teléfono es muy estrecho.
+            child: Row(
+              mainAxisSize: MainAxisSize.max,
+              children: [
+                if (busy)
+                  const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2.5),
+                  )
+                else
+                  const GoogleGIcon(size: 24),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    tr('googleContinue'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF3C4043),
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
       ),
     ),
   );

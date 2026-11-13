@@ -43,7 +43,11 @@
 // de entrada, para que siempre se vea completa desde el primer
 // fotograma: nada de la cabecera depende del tema ni de un FadeIn.
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../widgets/avatar_frame_ring.dart';
 import '../widgets/lucide_icons.dart';
 
 import '../services/achievements.dart';
@@ -51,8 +55,10 @@ import '../services/analytics_sync.dart';
 import '../services/auth_service.dart';
 import '../services/localization.dart';
 import '../services/accent.dart';
+import '../services/referral_service.dart';
 
 import '../services/progress.dart';
+import '../services/remote_shop_catalog.dart';
 import '../services/social_service.dart';
 import '../services/sound_service.dart';
 import '../services/user_prefs.dart';
@@ -65,7 +71,8 @@ import '../widgets/twin_avatars.dart';
 /// Tokens claros (rediseño Duolingo 7.0): texto #4B4B4B,
 /// terciario #777777, líneas #E5E5E5; teal #00C2A8 como color
 /// principal, teal oscuro #00A18D.
-const _teal = Color(0xFF00C2A8);
+// (Quemia 7.3: el teal fijo de antes se sustituyó por el acento del
+// tema — AppAccent.primary — en cada uso; _teal ya no existe.)
 const _ink = Color(0xFF4B4B4B);
 const _inkSoft = Color(0xFF777777);
 const _border = Color(0xFFE5E5E5);
@@ -149,6 +156,12 @@ class _AccountScreenState extends State<AccountScreen> {
   bool _googleLinked = false;
   String? _googleEmail;
 
+  /// Mi nombre de usuario público (Quemia 7.3, Kristian): el que
+  /// le doy a un amigo para que me agregue. '' = aún sin reclamar
+  /// (se reclama al cargar Cuenta si hay Google; si no, se crea al
+  /// abrir Amigos o Referidos). Solo se muestra si no está vacío.
+  String _myUsername = '';
+
   Future<void> _loadGoogleState() async {
     final linked = AuthService.isGoogleLinked;
     final String? email = AuthService.googleEmail;
@@ -156,7 +169,26 @@ class _AccountScreenState extends State<AccountScreen> {
     setState(() {
       _googleLinked = linked;
       _googleEmail = email;
+      // Si ya hay un nombre guardado (reclamado antes), se muestra
+      // aunque ahora mismo no haya Google: es su nombre público y
+      // no depende de la sesión activa. Si hay Google, abajo se
+      // reclama/actualiza y se sobrescribe con el definitivo.
+      if (_myUsername.isEmpty) _myUsername = UserPrefs.publicUsername;
     });
+    if (linked) {
+      final username = await ReferralService.ensureUniqueUsername();
+      if (!mounted) return;
+      setState(() => _myUsername = username);
+    }
+  }
+
+  Future<void> _copyUsername() async {
+    if (_myUsername.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: _myUsername));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(tr('myUsernameCopied'))),
+    );
   }
 
   /// Fila "Vincular con Google" tocada (09:13): mientras se firma,
@@ -178,10 +210,16 @@ class _AccountScreenState extends State<AccountScreen> {
     if (!mounted) return;
     if (!ok) {
       setState(() => _googleBusy = false);
+      // Quemia 7.3: además del mensaje genérico, el CÓDIGO real del
+      // fallo (p. ej. google_sign_in:unknownError si el selector ni
+      // salió, o migration_failed): sin él no se puede diagnosticar.
+      final code = AuthService.lastGoogleError;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(AnalyticsSync.firebaseReady
-              ? tr('googleSignInFailed')
+              ? (code == null
+                  ? tr('googleSignInFailed')
+                  : '${tr('googleSignInFailed')} [$code]')
               : tr('googleNeedInternet')),
         ),
       );
@@ -271,14 +309,10 @@ class _AccountScreenState extends State<AccountScreen> {
               children: [
                 // Avatar del usuario (alcance 9): el círculo se
                 // repinta solo al elegir otro en la galería
-                // (SocialService avisa con el notifier).
-                ListenableBuilder(
-                  listenable: SocialService.equippedAvatarIdNotifier,
-                  builder: (context, _) => _UserAvatarCircle(
-                    asset: SocialService.displayAvatarAssetForGender(
-                        UserPrefs.userGender),
-                    onTap: () => widget.onOpenScreen('avatar'),
-                  ),
+                // (SocialService avisa con el notifier). Con marco
+                // equipado (7.3), el anillo del marco rodea la foto.
+                _UserAvatarSection(
+                  onTap: () => widget.onOpenScreen('avatar'),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -333,6 +367,45 @@ class _AccountScreenState extends State<AccountScreen> {
                           ),
                         ],
                       ),
+                      // Mi nombre de usuario (Quemia 7.3, Kristian):
+                      // en la misma tarjeta del saludo: "Usuario:
+                      // [nombre]" + un botoncito pequeño de copiar
+                      // al lado. Solo si ya existe (con Google y
+                      // reclamado).
+                      if (_myUsername.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '${tr('myUsernameShort')}: $_myUsername',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: c.inkSoft,
+                                ),
+                              ),
+                            ),
+                            // Botoncito de copiar: GestureDetector (no
+                            // InkWell — la tarjeta es un Container sin
+                            // Material y el InkWell exige uno; el icono
+                            // es pequeño y no necesita la onda de tinta).
+                            GestureDetector(
+                              onTap: _copyUsername,
+                              child: Padding(
+                                padding: const EdgeInsets.all(4),
+                                child: LucideIcon(
+                                  LucideIcons.copy,
+                                  size: 16,
+                                  color: accent,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -382,7 +455,7 @@ class _AccountScreenState extends State<AccountScreen> {
           ),
           _Row(
             icon: LucideIcons.rotateCcw,
-            iconColor: _teal,
+            iconColor: AppAccent.primary,
             title: tr('accountReview'),
             subtitle: '${p.failedCount} ${tr('reviewTitle')}',
             onTap: () => widget.onOpenScreen('review'),
@@ -390,7 +463,7 @@ class _AccountScreenState extends State<AccountScreen> {
           // Quemia 7.0: social (amigos, torneos, tienda, grupos).
           _Row(
             icon: LucideIcons.userRound,
-            iconColor: _teal,
+            iconColor: AppAccent.primary,
             title: tr('accountFriends'),
             subtitle: tr('accountFriendsSub'),
             onTap: () => widget.onOpenScreen('friends'),
@@ -428,6 +501,16 @@ class _AccountScreenState extends State<AccountScreen> {
             subtitle: tr('accountShopSub'),
             onTap: () => widget.onOpenScreen('shop'),
           ),
+          // Referidos (7.3): invita con tu código y los dos ganan
+          // puntos. Va justo después de la Tienda: los premios de
+          // los hitos son artículos de la tienda.
+          _Row(
+            icon: LucideIcons.heart,
+            iconColor: AppAccent.primary,
+            title: tr('accountReferrals'),
+            subtitle: tr('accountReferralsSub'),
+            onTap: () => widget.onOpenScreen('referrals'),
+          ),
           _Row(
             icon: LucideIcons.info,
             iconColor: _violet,
@@ -451,7 +534,7 @@ class _AccountScreenState extends State<AccountScreen> {
           // título "Soporte", chevron.
           _Row(
             icon: LucideIcons.messageCircle,
-            iconColor: _teal,
+            iconColor: AppAccent.primary,
             title: tr('supportWord'),
             subtitle: tr('supportSub'),
             onTap: () => widget.onOpenScreen('support'),
@@ -497,14 +580,81 @@ class _AccountScreenState extends State<AccountScreen> {
 /// Al tocarlo se abre la galería de avatares. Usa SocialAvatar,
 /// el mismo widget que en Amigos, tabla y torneos: sin inicial,
 /// siempre una cara.
+/// La foto del usuario en la cabecera (7.3): resuelve la foto
+/// remota del avatar equipado (si es un avatar nuevo de la
+/// tienda, su `imageUrl` ya descargada en disco) y el marco
+/// equipado (el anillo alrededor de la foto). Escucha los dos
+/// notifiers de SocialService, así el círculo repinta al instante
+/// al equipar otro avatar o marco sin volver a entrar.
+class _UserAvatarSection extends StatefulWidget {
+  const _UserAvatarSection({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  State<_UserAvatarSection> createState() => _UserAvatarSectionState();
+}
+
+class _UserAvatarSectionState extends State<_UserAvatarSection> {
+  File? _remoteFile;
+
+  @override
+  void initState() {
+    super.initState();
+    SocialService.equippedAvatarIdNotifier.addListener(_resolve);
+    SocialService.equippedFrameIdNotifier.addListener(_onFrameChanged);
+    _resolve();
+  }
+
+  void _onFrameChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _resolve() async {
+    final url = SocialService.equippedAvatarImageUrl;
+    File? file;
+    if (url != null && url.isNotEmpty) {
+      file = await ShopImageCache.ensureCached(url);
+    }
+    if (!mounted) return;
+    setState(() => _remoteFile = file);
+  }
+
+  @override
+  void dispose() {
+    SocialService.equippedAvatarIdNotifier.removeListener(_resolve);
+    SocialService.equippedFrameIdNotifier.removeListener(_onFrameChanged);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _UserAvatarCircle(
+      asset: SocialService.displayAvatarAssetForGender(UserPrefs.userGender),
+      avatarImageFile: _remoteFile,
+      frame: SocialService.equippedFrameItem,
+      onTap: widget.onTap,
+    );
+  }
+}
+
 class _UserAvatarCircle extends StatelessWidget {
   const _UserAvatarCircle({
     required this.asset,
     required this.onTap,
+    this.avatarImageFile,
+    this.frame,
   });
 
   final String asset;
   final VoidCallback onTap;
+
+  /// Foto remota del avatar equipado (caché en disco), o null si
+  /// el avatar es de asset.
+  final File? avatarImageFile;
+
+  /// Marco equipado de la tienda (7.3), o null sin marco.
+  final ShopItem? frame;
 
   @override
   Widget build(BuildContext context) {
@@ -522,10 +672,15 @@ class _UserAvatarCircle extends StatelessWidget {
           child: Stack(
             clipBehavior: Clip.none,
             children: [
-              SocialAvatar(
-                username: UserPrefs.userName,
-                size: 96,
-                avatarAsset: asset,
+              AvatarFrameRing(
+                frame: frame,
+                ringWidth: 4,
+                child: SocialAvatar(
+                  username: UserPrefs.userName,
+                  size: 96,
+                  avatarAsset: asset,
+                  avatarImageFile: avatarImageFile,
+                ),
               ),
               Positioned(
                 right: 0,
@@ -535,7 +690,7 @@ class _UserAvatarCircle extends StatelessWidget {
                   height: 28,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: _teal,
+                    color: AppAccent.primary,
                     border: Border.all(color: Colors.white, width: 2),
                   ),
                   alignment: Alignment.center,

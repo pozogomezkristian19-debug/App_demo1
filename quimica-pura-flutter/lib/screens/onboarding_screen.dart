@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import '../widgets/duo_button.dart';
 import '../widgets/google_sign_in_button.dart';
 import '../widgets/lucide_icons.dart';
+import '../services/accent.dart';
 import '../services/analytics_sync.dart';
 import '../services/auth_service.dart';
 import '../services/localization.dart';
@@ -84,10 +85,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final ok = await AuthService.linkWithGoogle();
     if (!mounted) return;
     if (!ok) {
+      // Quemia 7.3: el CÓDIGO real del fallo, para diagnosticar por
+      // qué ni siquiera salió el selector (p. ej.
+      // google_sign_in:unknownError = error 10 DEVELOPER_ERROR).
+      final code = AuthService.lastGoogleError;
       setState(() {
         _googleBusy = false;
         _googleError = AnalyticsSync.firebaseReady
-            ? tr('googleSignInFailed')
+            ? (code == null
+                ? tr('googleSignInFailed')
+                : '${tr('googleSignInFailed')} [$code]')
             : tr('googleNeedInternet');
       });
       return;
@@ -198,7 +205,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 }
 
 /// Barra de progreso del onboarding (12 pt, pista #E5E5E5, relleno
-/// teal con una franja superior #14D3B8 como brillo).
+/// con el color del acento y una franja superior más clara).
 class _ProgressBar extends StatelessWidget {
   const _ProgressBar({required this.progress});
   final double progress;
@@ -216,8 +223,8 @@ class _ProgressBar extends StatelessWidget {
       child: FractionallySizedBox(
         widthFactor: progress.clamp(0.0, 1.0),
         child: Container(
-          decoration: const BoxDecoration(
-            color: Color(0xFF00C2A8),
+          decoration: BoxDecoration(
+            color: AppAccent.primary,
             borderRadius: BorderRadius.only(
               topLeft: Radius.circular(999),
               bottomLeft: Radius.circular(999),
@@ -227,7 +234,7 @@ class _ProgressBar extends StatelessWidget {
             alignment: Alignment.topCenter,
             child: Container(
               height: 3,
-              color: const Color(0xFF14D3B8),
+              color: Color.lerp(AppAccent.primary, Colors.white, 0.35),
             ),
           ),
         ),
@@ -263,10 +270,17 @@ class _WelcomePage extends StatelessWidget {
           Text(
             tr('obChemist'),
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            // Quemia 7.3 (P12): el título seguía en menta fijo con el
+            // tema violeta; ahora sigue al acento elegido. En claro
+            // va el tono oscuro del acento (contraste 3,2 en verde);
+            // en oscuro el acento (el tono oscuro sería ilegible
+            // sobre oscuro en violeta: violetDeep da 2,4:1).
+            style: TextStyle(
               fontSize: 30,
               fontWeight: FontWeight.w600,
-              color: Color(0xFF14B8A6),
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? AppAccent.primary
+                  : AppAccent.primaryDark,
             ),
           ),
           const SizedBox(height: 20),
@@ -308,8 +322,10 @@ class _ExplainPage extends StatelessWidget {
           Center(
             child: CircleAvatar(
               radius: 36,
-              backgroundColor: const Color(0xFF14B8A6).withValues(alpha: 0.18),
-              child: LucideIcon(icon, size: 38, color: const Color(0xFF14B8A6)),
+              // Quemia 7.3 (P12): el círculo y el icono eran menta
+              // fija; ahora siguen al acento elegido.
+              backgroundColor: AppAccent.primarySoft,
+              child: LucideIcon(icon, size: 38, color: AppAccent.primary),
             ),
           ),
           const SizedBox(height: 20),
@@ -672,19 +688,21 @@ class _LanguagePageState extends State<_LanguagePage> {
               for (final (code, name) in AppLang.supported)
                 ChoiceChip(
                   // Azulejo Duolingo (§1.5): borde 2 pt #E5E5E5 sin
-                  // elegir; elegido, fondo #CCFBF1 + borde #14B8A6.
-                  // Sin esto el chip usa el borde `outline` de
-                  // Material 3, más oscuro que #E5E5E5 (regla 4).
+                  // elegir; elegido, fondo tintado del acento + borde
+                  // del acento. Sin esto el chip usa el borde `outline`
+                  // de Material 3, más oscuro que #E5E5E5 (regla 4).
+                  // Quemia 7.3 (P12): el menta fijo (#CCFBF1/#14B8A6)
+                  // se quedaba verde con el tema violeta.
                   label: Text(name,
                       style: const TextStyle(
                           fontSize: 16, color: Color(0xFF4B4B4B))),
                   selected: AppLang.code == code,
-                  selectedColor: const Color(0xFFCCFBF1),
+                  selectedColor: AppAccent.primarySoft,
                   backgroundColor: Colors.white,
-                  checkmarkColor: const Color(0xFF00A18D),
+                  checkmarkColor: AppAccent.primaryDark,
                   side: BorderSide(
                       color: AppLang.code == code
-                          ? const Color(0xFF14B8A6)
+                          ? AppAccent.primary
                           : const Color(0xFFE5E5E5),
                       width: 2),
                   shape: RoundedRectangleBorder(

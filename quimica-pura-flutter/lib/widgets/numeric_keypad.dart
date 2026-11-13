@@ -781,17 +781,30 @@ class _NumericKeypadState extends State<NumericKeypad> {
         // entregar; '=' ya deja el resultado en el visor.
         // Botón 3D del tema (ronda de diseño 7.0): sin styleFrom
         // propio, usa la píldora teal del tema; el styleFrom plano
-        // de antes lo dejaba sin vida.
+        // de antes lo dejaba sin vida. Letra BLANCA también
+        // deshabilitado: el gris por defecto sobre el teal apagado
+        // no se leía (foto73_teclado). Fondo teal OSCURO
+        // (primaryDark) sin Opacity: con Opacity el blanco se
+        // apagaba y en oscuro se volvía a ver gris.
+        // Y letra BLANCA también HABILITADO (foto73_all_calculadora
+        // oscuro): el onPrimary del tema oscuro es oscuro y el botón
+        // salía con letra oscura sobre teal, distinto del "=" (que
+        // sí es blanco) y contra la regla "nunca oscuro sobre teal".
         if (widget.onSubmit != null) ...[
           const SizedBox(height: 12),
           SizedBox(
             height: 56,
             child: FilledButton(
               onPressed: canSubmit ? _submit : null,
+              style: FilledButton.styleFrom(
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: AppAccent.primaryDark,
+                disabledForegroundColor: Colors.white,
+              ),
               child: Text(
                 tr('calcUseResult'),
-                style:
-                    const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                    fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ),
           ),

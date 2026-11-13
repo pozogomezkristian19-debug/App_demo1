@@ -27,8 +27,9 @@
 //   Antes, en claro, el color activo, la píldora y el círculo
 //   central eran teal FIJOS: con Violeta elegido, la barra entera
 //   seguía verde (la mezcla de la captura de Kristian).
-// - El orden es Resolver (0), Aprender (1), Niveles (2,
-//   centro), Tabla (3), Cuenta (4). onSelected recibe esos
+// - El orden es Aprender (0), Resolver (1), Niveles (2,
+//   centro), Tabla (3), Cuenta (4) — Quemia 7.3: Aprender
+//   primero, Resolver después. onSelected recibe esos
 //   mismos índices. El hueco central de la fila tiene flex 1
 //   (corrección 2026-11-12, alcance 7: con flex 2 los vecinos
 //   —Aprender y Tabla— quedaban MUY separados del círculo
@@ -76,8 +77,9 @@ class MainBottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Orden de la barra (ronda #8): Resolver (0), Aprender (1),
-    // Niveles (2, centro), Tabla (3), Cuenta (4).
+    // Orden de la barra (ronda #8; 7.3: Aprender primero):
+    // Aprender (0), Resolver (1), Niveles (2, centro), Tabla (3),
+    // Cuenta (4).
     // La barra mide 90 dp + una línea fina de 1 dp arriba (el
     // borde superior): 91 dp en total. La línea va como hija
     // propia (Container de 1 dp), no como borde del fondo, para
@@ -118,8 +120,8 @@ class MainBottomNav extends StatelessWidget {
                 Expanded(
                   child: _TabButton(
                     index: 0,
-                    icon: LucideIcons.calculator,
-                    label: tr('tabResolver'),
+                    icon: LucideIcons.bookOpen,
+                    label: tr('tabLearn'),
                     selectedIndex: selectedIndex,
                     onSelected: onSelected,
                     isDark: isDark,
@@ -129,8 +131,8 @@ class MainBottomNav extends StatelessWidget {
                 Expanded(
                   child: _TabButton(
                     index: 1,
-                    icon: LucideIcons.bookOpen,
-                    label: tr('tabLearn'),
+                    icon: LucideIcons.calculator,
+                    label: tr('tabResolver'),
                     selectedIndex: selectedIndex,
                     onSelected: onSelected,
                     isDark: isDark,

@@ -27,8 +27,6 @@ const _inkSoft = Color(0xFF777777);
 const _card = Color(0xFFF7F7F7);
 const _border = Color(0xFFE5E5E5);
 const _violet = Color(0xFF8B5CF6);
-const _blue = Color(0xFF3B82F6);
-const _amber = Color(0xFFF59E0B);
 
 /// Colores según el tema (igual que en Cuenta): en claro fondo
 /// blanco y tarjeta #F7F7F7; en oscuro verde oscuro, sin violeta,
@@ -161,6 +159,18 @@ class _ThemeScreenState extends State<ThemeScreen> {
     final c = _ThemeColors.of(context);
     final current = UserPrefs.themeAccent;
     final mode = UserPrefs.themeMode;
+    // (Kristian, 2026-11-13, por foto: en el tema CLARO el botón
+    // Claro se deja claro y el Oscuro lleva un toque más oscuro;
+    // en el tema OSCURO el botón Oscuro se deja así y el Claro va
+    // un poco más claro. Por eso los dos botones de modo dependen
+    // del tema en el que se está viendo la pantalla.)
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final claroColor = isDark
+        ? Color.lerp(AppAccent.primaryLightest, Colors.white, 0.3)!
+        : AppAccent.primaryLightest;
+    final oscuroColor = isDark
+        ? AppAccent.primaryDark
+        : Color.lerp(AppAccent.primaryDark, Colors.black, 0.25)!;
 
     return Scaffold(
       backgroundColor: c.bg,
@@ -234,7 +244,9 @@ class _ThemeScreenState extends State<ThemeScreen> {
                 onTap: () => UserPrefs.saveThemeMode('claro'),
                 onChanged: () => setState(() {}),
                 label: tr('lightWord'),
-                color: _amber,
+                // (Kristian, 2026-11-13: el botón Claro es el más
+                // claro; en oscuro va un poco más claro todavía.)
+                color: claroColor,
                 icon: LucideIcons.sun,
               ),
               const SizedBox(width: 10),
@@ -243,10 +255,10 @@ class _ThemeScreenState extends State<ThemeScreen> {
                 onTap: () => UserPrefs.saveThemeMode('oscuro'),
                 onChanged: () => setState(() {}),
                 label: tr('darkWord'),
-                // Pizarra medio (no azul marino): el anillo hueco
-                // y la luna se ven en tarjeta blanca y en la
-                // verde oscura del modo oscuro.
-                color: const Color(0xFF64748B),
+                // (Kristian, 2026-11-13: el botón Oscuro lleva el
+                // color del tema, más oscuro que el botón de claro;
+                // en claro lleva un toque más oscuro todavía.)
+                color: oscuroColor,
                 icon: LucideIcons.moon,
               ),
               const SizedBox(width: 10),
@@ -255,9 +267,9 @@ class _ThemeScreenState extends State<ThemeScreen> {
                 onTap: () => UserPrefs.saveThemeMode('sistema'),
                 onChanged: () => setState(() {}),
                 label: tr('themeSystem'),
-                // Azul propio (no el teal de Verde): cada una de
-                // las 5 opciones tiene su color.
-                color: _blue,
+                // Sistema va con un color NEUTRO (gris pizarra),
+                // ni claro ni oscuro.
+                color: const Color(0xFF64748B),
                 icon: LucideIcons.settings,
               ),
             ],

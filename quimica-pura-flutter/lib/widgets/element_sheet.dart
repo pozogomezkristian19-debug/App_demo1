@@ -6,6 +6,8 @@
 // Se usa desde la Tabla y desde la búsqueda. La estrellita marca el
 // elemento como favorito.
 
+import 'dart:ui';
+
 import '../data/i18n/content_i18n.dart';
 import 'package:flutter/material.dart';
 import 'lucide_icons.dart';
@@ -20,22 +22,67 @@ import '../services/localization.dart';
 /// tema, sin transparencia — el degradado anterior terminaba en el
 /// primario al 6 % y la tabla de detrás se transparentaba y se
 /// mezclaba con los datos (captura de Kristian: la Leyenda y el
-/// navbar se veían a través de la hoja). La barrera del modal
-/// (negro al 54 % por defecto) oscurece lo de detrás, como en los
-/// bottom sheets normales.
+/// navbar se veían a través de la hoja).
+///
+/// FONDO DIFUMINADO (Quemia 7.3, Kristian): al abrir un elemento,
+/// TODA la pantalla de atrás (tabla, barra y todo) se ve con UN
+/// solo difuminado uniforme + velo negro 35 %, como el del menú
+/// (main.dart _drawerBlurOverlay, sigma 10). Por eso ya no es un
+/// showModalBottomSheet normal (su barrera solo oscurece): es un
+/// showGeneralDialog con barrera transparente, que pinta el blur +
+/// velo a pantalla completa por detrás de la hoja; al cerrar, todo
+/// vuelve a la normalidad. Tocar fuera cierra la hoja (barrera).
 void showElementSheet(BuildContext context, ChemicalElement e) {
-  showModalBottomSheet<void>(
+  showGeneralDialog<void>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: Theme.of(context).colorScheme.surface,
-    builder: (context) => DraggableScrollableSheet(
-      initialChildSize: 0.6,
-      minChildSize: 0.35,
-      maxChildSize: 0.95,
-      expand: false,
-      builder: (context, scrollController) =>
-          ElementSheet(element: e, scrollController: scrollController),
-    ),
+    barrierDismissible: true,
+    barrierLabel:
+        MaterialLocalizations.of(context).modalBarrierDismissLabel,
+    barrierColor: Colors.transparent,
+    transitionDuration: const Duration(milliseconds: 250),
+    pageBuilder: (dialogContext, animation, secondaryAnimation) {
+      return Stack(
+        children: [
+          // UN solo difuminado uniforme + velo, a pantalla completa.
+          // IgnorePointer: los toques pasan a la barrera, que cierra
+          // la hoja al tocar fuera de ella.
+          Positioned.fill(
+            child: IgnorePointer(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: Container(
+                  color: Colors.black.withValues(alpha: 0.35),
+                ),
+              ),
+            ),
+          ),
+          // La hoja entra deslizándose desde abajo, como antes.
+          SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0, 1),
+              end: Offset.zero,
+            ).animate(CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOut,
+            )),
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: Material(
+                color: Colors.transparent,
+                child: DraggableScrollableSheet(
+                  initialChildSize: 0.6,
+                  minChildSize: 0.35,
+                  maxChildSize: 0.95,
+                  expand: false,
+                  builder: (context, scrollController) => ElementSheet(
+                      element: e, scrollController: scrollController),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    },
   );
 }
 

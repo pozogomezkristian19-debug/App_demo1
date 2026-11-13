@@ -34,10 +34,12 @@ class HowToPlayScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final scheme = Theme.of(context).colorScheme;
-    // Estrella de los puntos: ámbar en claro, menta en oscuro
-    // (como en la tarjeta de estadísticas, sin ámbar en oscuro).
+    // Estrella de los puntos: ámbar en claro, el primario del tema
+    // en oscuro (como la tarjeta de estadísticas, sin ámbar en
+    // oscuro; Quemia 7.3 P12: antes menta fija en oscuro, verde con
+    // el tema violeta).
     final starColor =
-        isDark ? const Color(0xFF2DD4BF) : const Color(0xFFF59E0B);
+        isDark ? scheme.primary : const Color(0xFFF59E0B);
     return Scaffold(
       appBar: AppBar(title: Text(tr('howToPlayTitle'))),
       // SingleChildScrollView por seguridad (textos largos en otros

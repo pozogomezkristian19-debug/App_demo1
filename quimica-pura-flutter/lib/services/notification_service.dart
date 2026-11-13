@@ -35,8 +35,11 @@
 //     con Doze; si no, se vuelve a inexactas sin romper nada.
 //  3. El icono pequeño era el logo a color: Android solo dibuja su
 //     silueta en blanco y salía un CUADRADO NEGRO. Ahora el icono
-//     pequeño es un vector blanco (res/drawable/ic_notif_bell.xml)
-//     y el icono grande es el compañero del día.
+//     pequeño es una campana blanca en PNG (res/drawable-*/ic_notif_bell.png
+//     en las 5 densidades, protegido de la limpieza de recursos por
+//     res/values/keep.xml con tools:keep="@drawable/ic_notif_bell";
+//     el vector anterior se eliminó) y el icono grande es el
+//     compañero del día.
 //
 // Límites que la app NO puede quitar: las alarmas programadas no
 // sobreviven a un reinicio del teléfono (se reprograman al abrir la
@@ -193,6 +196,7 @@ import 'package:timezone/timezone.dart' as tz;
 import '../data/i18n/content_i18n.dart';
 import '../data/questions.dart';
 import '../widgets/twin_avatars.dart';
+import 'accent.dart';
 import 'localization.dart';
 import 'nav_requests.dart';
 import 'notification_inbox.dart';
@@ -290,7 +294,8 @@ class NotificationService {
   /// Id de la acción "Repasar ahora" de la notificación.
   static const _reviewActionId = 'review_now';
 
-  /// Icono pequeño: campana blanca (vector), no el logo a color, que
+  /// Icono pequeño: campana blanca en PNG (res/drawable-*/ic_notif_bell.png,
+  /// protegido por res/values/keep.xml), no el logo a color, que
   /// Android pinta como un cuadrado negro.
   static const _smallIcon = 'ic_notif_bell';
 
@@ -871,7 +876,7 @@ class NotificationService {
     }
   }
 
-  /// Detalles de la notificación: icono pequeño blanco (vector),
+  /// Detalles de la notificación: icono pequeño blanco (PNG),
   /// color teal, icono grande con el compañero del día y acción
   /// "Repasar ahora". Si el compañero no se puede copiar, sale sin
   /// icono grande, pero con todo lo demás.
@@ -884,7 +889,7 @@ class NotificationService {
         importance: Importance.defaultImportance,
         priority: Priority.defaultPriority,
         icon: _smallIcon,
-        color: const Color(0xFF00C2A8),
+        color: AppAccent.primary,
         largeIcon: largeIcon,
         actions: <AndroidNotificationAction>[
           AndroidNotificationAction(_reviewActionId, tr('notifActionReview')),
@@ -894,7 +899,7 @@ class NotificationService {
   }
 
   /// Detalles de los avisos INMEDIATOS (prueba 9999): como
-  /// [_details] (icono pequeño blanco, color teal, icono grande con
+  /// [_details] (icono pequeño blanco, color del acento, icono grande con
   /// el compañero del día y acción "Repasar ahora"), pero en el canal
   /// propio de prueba ([_testChannelId]) con Importance.high y
   /// Priority.high, para que el aviso de prueba no se pierda entre
@@ -910,7 +915,7 @@ class NotificationService {
         importance: Importance.high,
         priority: Priority.high,
         icon: _smallIcon,
-        color: const Color(0xFF00C2A8),
+        color: AppAccent.primary,
         largeIcon: largeIcon,
         actions: <AndroidNotificationAction>[
           AndroidNotificationAction(_reviewActionId, tr('notifActionReview')),
@@ -1013,17 +1018,17 @@ class NotificationService {
 
   /// Detalles de la confirmación inmediata: canal propio de avisos
   /// inmediatos ([_testChannelId], ronda #7) con Importance.high,
-  /// icono pequeño blanco y acento teal, pero sin icono grande (sin
+  /// icono pequeño blanco y acento del tema, pero sin icono grande (sin
   /// espera) y sin la acción "Repasar ahora".
   static NotificationDetails _confirmationDetails() {
-    return const NotificationDetails(
+    return NotificationDetails(
       android: AndroidNotificationDetails(
         _testChannelId,
         _testChannelName,
         importance: Importance.high,
         priority: Priority.high,
         icon: _smallIcon,
-        color: Color(0xFF00C2A8),
+        color: AppAccent.primary,
       ),
     );
   }
@@ -1334,7 +1339,7 @@ class NotificationService {
         importance: Importance.defaultImportance,
         priority: Priority.defaultPriority,
         icon: _smallIcon,
-        color: const Color(0xFF00C2A8),
+        color: AppAccent.primary,
         largeIcon: largeIcon,
       ),
     );
@@ -1364,7 +1369,7 @@ class NotificationService {
         importance: Importance.defaultImportance,
         priority: Priority.defaultPriority,
         icon: _smallIcon,
-        color: const Color(0xFF00C2A8),
+        color: AppAccent.primary,
         showProgress: progress != null,
         maxProgress: 100,
         progress: progress ?? 0,

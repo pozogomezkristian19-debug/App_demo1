@@ -96,6 +96,7 @@ class LivesChip extends StatelessWidget {
     this.pulse = true,
     this.heartSize = 20,
     this.fontSize = 18,
+    this.compact = false,
   });
 
   final int lives;
@@ -105,10 +106,19 @@ class LivesChip extends StatelessWidget {
   final double heartSize;
   final double fontSize;
 
+  /// Variante compacta SOLO para "Mis estadísticas" (Quemia 7.3):
+  /// la píldora de la barra superior (36 dp) se veía demasiado
+  /// grande junto al texto "Vidas:". Compacta mide 26 dp de alto,
+  /// con menos relleno, corazón de 15 y texto de 14: proporcionada
+  /// con el texto, sin perder legibilidad. NO cambia el widget
+  /// compartido: sin `compact`, todo sigue exactamente igual (la
+  /// barra superior no se toca).
+  final bool compact;
+
   @override
   Widget build(BuildContext context) {
     final label = showMax ? '$lives/$maxLives' : '$lives';
-    final heart = LivesHeart(size: heartSize);
+    final heart = LivesHeart(size: compact ? 15 : heartSize);
     return Container(
       // Píldora rosa claro con el número dentro (imagen de
       // Kristian): fondo #FDE8E8 en los dos temas, número en rojo.
@@ -117,8 +127,9 @@ class LivesChip extends StatelessWidget {
         color: const Color(0xFFFDE8E8),
         borderRadius: BorderRadius.circular(999),
       ),
-      height: kTopBarPillHeight,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      height: compact ? 26 : kTopBarPillHeight,
+      padding: EdgeInsets.symmetric(
+          horizontal: compact ? 8 : 10, vertical: compact ? 2 : 5),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -127,7 +138,7 @@ class LivesChip extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              fontSize: fontSize,
+              fontSize: compact ? 14 : fontSize,
               fontWeight: FontWeight.w800,
               color: const Color(0xFFFF4B4B),
             ),

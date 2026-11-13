@@ -379,7 +379,7 @@ class _IntroView extends StatelessWidget {
                 DuoButton.secondary(
                   label: tr('duelCancel').toUpperCase(),
                   onPressed: onCancel,
-                  textColor: const Color(0xFF00A18D),
+                  textColor: AppAccent.primaryDark, // Quemia 7.3 (P12): antes teal fijo.
                   edgeColor: AppAccent.primarySoft,
                   fontSize: 15,
                 ),
@@ -662,7 +662,7 @@ class _AbandonedView extends StatelessWidget {
             DuoButton.secondary(
               label: tr('duelCancel').toUpperCase(),
               onPressed: onCancel,
-              textColor: const Color(0xFF00A18D),
+              textColor: AppAccent.primaryDark, // Quemia 7.3 (P12): antes teal fijo.
               edgeColor: AppAccent.primarySoft,
               fontSize: 15,
             ),

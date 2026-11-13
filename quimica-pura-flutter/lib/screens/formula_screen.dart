@@ -24,11 +24,19 @@ class _FormulaScreenState extends State<FormulaScreen> {
     // español (para el id de favorito, que no depende del idioma) y el
     // nombre a mostrar (traducido, v6).
     final groups = <String, List<(String, String, String, String)>>{};
+    // Sin duplicados (Kristian, 2026-11-13): "Gas ideal" salía 2
+    // veces en el Formulario — una del listado general y otra del
+    // tema "Gases ideales" (y otra más en "Química física"). Es la
+    // misma fórmula, así que se queda la primera y se saltan las
+    // demás con el mismo nombre.
+    final seenNames = <String>{};
     for (final f in formulary) {
+      final name = f['name'] ?? '';
+      if (!seenNames.add(name)) continue;
       groups.putIfAbsent(
           localizedFormularyGroup(f['group'] ?? 'Fórmulas'), () => []).add((
-        f['name'] ?? '',
-        localizedFormularyName(f['name'] ?? ''),
+        name,
+        localizedFormularyName(name),
         f['expr'] ?? '',
         '',
       ));
@@ -37,6 +45,7 @@ class _FormulaScreenState extends State<FormulaScreen> {
       final lt = localizedTopic(t);
       for (var j = 0; j < t.formulas.length; j++) {
         final f = t.formulas[j];
+        if (!seenNames.add(f.name)) continue;
         final tf = lt.formulas[j];
         groups.putIfAbsent(localizedTopicName(t.slug), () => []).add((
           f.name,

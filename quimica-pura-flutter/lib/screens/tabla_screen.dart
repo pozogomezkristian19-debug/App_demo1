@@ -191,6 +191,32 @@ class _TablaScreenState extends State<TablaScreen>
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       children: [
+        // Búsqueda ARRIBA de las pestañas (Kristian, 2026-11-13):
+        // la pidió arriba, pero que las pestañas se vean bien. La
+        // clave es el respiro: 12 dp arriba (de la barra) y 12 dp
+        // abajo (a las pestañas), su propia zona, sin pegarse a
+        // nada. Solo en la pestaña Periódica (la búsqueda es de
+        // elementos); al cambiar de pestaña se recoge con
+        // animación, sin salto.
+        AnimatedBuilder(
+          animation: _tabController,
+          builder: (context, child) {
+            final show = _tabController.index == 0;
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeInOut,
+              // Sin decoración visible: solo para que el clip
+              // funcione (Flutter exige decoration si clipBehavior
+              // no es none). El campo queda siempre montado y el
+              // alto 64↔0 lo recorta con suavidad al cambiar de
+              // pestaña; a 0 no ocupa nada ni recibe toques.
+              decoration: const BoxDecoration(),
+              clipBehavior: Clip.hardEdge,
+              height: show ? 64 : 0,
+              child: _searchField(),
+            );
+          },
+        ),
         TabBar(
           controller: _tabController,
           // Línea bajo las pestañas (rediseño Tabla 2026-11-12,
@@ -227,12 +253,11 @@ class _TablaScreenState extends State<TablaScreen>
       if (idx >= 0 && idx < grid.length) grid[idx] = e;
     }
     final searching = _query.isNotEmpty || _filterCategory != null;
-    // Cabecera común (búsqueda + chips): la misma en los tres
-    // modos (búsqueda, tabla normal y tabla angosta). Los chips
-    // quedan justo debajo del buscador (las tarjetas se quitaron)
-    // y la rejilla debajo, como contenido principal.
+    // Cabecera común (solo los chips): la búsqueda vive ARRIBA de
+    // las pestañas (build), fuera del scroll, con su propia zona.
+    // Los chips quedan justo debajo de las pestañas y la rejilla
+    // debajo, como contenido principal.
     final header = <Widget>[
-      _searchField(),
       _chipsRow(context),
     ];
     final legend = _legend(context);
@@ -303,16 +328,21 @@ class _TablaScreenState extends State<TablaScreen>
   Widget _searchField() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
-      // Compacto (re-verificación Zona D, test grande 430x900):
-      // padding superior 4 (antes 8); el campo mide 44 pt de alto
-      // (compacto, rediseño Tabla) y el tap no cambia.
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+      // Arriba de las pestañas (Kristian, 2026-11-13): 10 dp de la
+      // barra superior y 10 dp de las pestañas, su propia zona con
+      // respiro por los dos lados para que las pestañas se vean
+      // bien. Compacta (44 dp): el hueco del icono no fuerza 48
+      // (prefixIconConstraints 40) para que la página siga
+      // cabiendo a 400x852 sin desplazar.
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
       child: TextField(
         decoration: InputDecoration(
           labelText: tr('searchHint'),
           // Lupa pequeña (fix2, item 9): el tamaño por defecto
           // (24) se veía enorme en la cajita de búsqueda.
           prefixIcon: const LucideIcon(LucideIcons.search, size: 18),
+          prefixIconConstraints:
+              const BoxConstraints(minWidth: 40, minHeight: 40),
           // Campo de texto Duolingo §1.6: radio 16, borde 2 pt
           // #E5E5E5 en claro (#37464F en oscuro, auditoría 7.2);
           // al enfocar, borde #5EEAD4. Sin sombra. Compacto
@@ -365,63 +395,102 @@ class _TablaScreenState extends State<TablaScreen>
         // el chip cortado se lea como "hay más", y el respiro final
         // deja que el último chip entre entero en la vista. El fade
         // es solo visual (IgnorePointer): no tapa los toques.
+        // (Kristian, 2026-11-13: los chips llevan su tamaño
+        // original de 48 dp — se habían achicado a 36 dp sin que
+        // lo pidiera y él mostró la captura original para que se
+        // vean así; el degradado se ensanchó a 80 dp.)
         Stack(
       children: [
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
-          // Compacto (re-verificación Zona D, test grande 430x900):
-          // vertical 4 (antes 6); los chips no cambian de tamaño.
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          // 7 dp de las pestañas (antes 10, Kristian, 2026-11-13:
+          // al devolverles a los chips su tamaño original de 48 dp
+          // la página se pasaba 3 dp a 400x852; se recortan 3 dp
+          // aquí, no en los chips ni en el hueco de 16 a la rejilla,
+          // para que quepa sin tocar lo que él aprobó).
+          padding: const EdgeInsets.fromLTRB(12, 7, 12, 0),
           child: Row(
             children: [
               ChoiceChip(
                 label: Text(tr('allWord'),
                     style: TextStyle(
+                        fontSize: 14,
                         color: _filterCategory == null ? Colors.white : chipInk,
                         fontWeight: FontWeight.w700)),
                 selected: _filterCategory == null,
                 onSelected: (_) => setState(() => _filterCategory = null),
-                // Píldora 3D (ronda de diseño 7.0): teal + texto
-                // blanco + sombra tintada al seleccionar; blanco con
-                // sombra suave y borde gris claro sin seleccionar.
+                labelPadding:
+                    const EdgeInsets.symmetric(horizontal: 8),
+                // Píldora 3D (ronda de diseño 7.0): color del acento
+                // + texto blanco + sombra tintada al seleccionar;
+                // blanco con sombra suave y borde gris claro sin
+                // seleccionar. Quemia 7.3: el teal fijo (#00C2A8)
+                // dejaba el chip "Todos" verde con el tema violeta;
+                // ahora sigue al acento elegido, como el resto.
                 // Se mantiene ChoiceChip (los tests lo buscan por tipo);
                 // el degradado no cabe en un chip de Material.
-                selectedColor: const Color(0xFF00C2A8),
+                // (Kristian, 2026-11-13, mirando bien las fotos
+                // lado a lado: las cápsulas SÍ llevan sombra — la
+                // elevación 3 con sombra teñida es el efecto 3D
+                // que las levanta; mi arreglo anterior (elevación 0)
+                // las dejó planas y sin ese efecto. Y la sombra
+                // TEÑIDA va solo al seleccionar: en su captura
+                // "Todos" lleva el brillo teal, pero las blancas
+                // llevan sombra suave NEUTRA + borde gris, sin
+                // halo teal. Por eso shadowColor es neutra y
+                // solo selectedShadowColor es teñida.)
+                selectedColor: AppAccent.primary,
                 backgroundColor: chipBg,
+                // Borde fino 0,5 (antes 1, Kristian, 2026-11-13:
+                // "no le hagas los bordes tan gordos"). La sombra
+                // 3D va con elevación 3: neutra suave sin
+                // seleccionar, teñida del acento al seleccionar.
+                // Al seleccionar NO lleva borde: en su captura
+                // "Todos" es teal + brillo suave, sin anillo
+                // oscuro alrededor (el anillo era lo que se veía
+                // mal); el borde gris solo va en las blancas.
                 elevation: 3,
-                shadowColor: const Color(0xFF00C2A8).withValues(alpha: 0.35),
+                shadowColor: Colors.black.withValues(alpha: 0.12),
                 selectedShadowColor:
-                    const Color(0xFF00C2A8).withValues(alpha: 0.45),
+                    AppAccent.primary.withValues(alpha: 0.45),
                 checkmarkColor: Colors.white,
                 side: BorderSide(
+                    width: 0.5,
                     color: _filterCategory == null
-                        ? const Color(0xFF00A18D)
+                        ? Colors.transparent
                         : chipEdge),
                 shape: const StadiumBorder(),
               ),
               for (var i = 0; i < categoryNames.length; i++)
                 Padding(
-                  padding: const EdgeInsets.only(left: 6),
+                  // Separación de lado 12 dp (antes 6, Kristian,
+                  // 2026-11-13: "separa más"): las cápsulas son 11
+                  // y van en fila deslizable, pero con aire entre
+                  // ellas para que no se vean pegadas.
+                  padding: const EdgeInsets.only(left: 12),
                   child: ChoiceChip(
                     label: Text(categoryNames[i],
                         style: TextStyle(
+                            fontSize: 14,
                             color:
                                 _filterCategory == i ? Colors.white : chipInk,
                             fontWeight: FontWeight.w700)),
                     selected: _filterCategory == i,
                     onSelected: (_) => setState(() =>
                         _filterCategory = _filterCategory == i ? null : i),
-                    selectedColor: const Color(0xFF00C2A8),
+                    labelPadding:
+                        const EdgeInsets.symmetric(horizontal: 8),
+                    selectedColor: AppAccent.primary,
                     backgroundColor: chipBg,
                     elevation: 3,
-                    shadowColor:
-                        const Color(0xFF00C2A8).withValues(alpha: 0.35),
+                    shadowColor: Colors.black.withValues(alpha: 0.12),
                     selectedShadowColor:
-                        const Color(0xFF00C2A8).withValues(alpha: 0.45),
+                        AppAccent.primary.withValues(alpha: 0.45),
                     checkmarkColor: Colors.white,
                     side: BorderSide(
+                        width: 0.5,
                         color: _filterCategory == i
-                            ? const Color(0xFF00A18D)
+                            ? Colors.transparent
                             : chipEdge),
                     shape: const StadiumBorder(),
                   ),
@@ -438,7 +507,7 @@ class _TablaScreenState extends State<TablaScreen>
           bottom: 0,
           child: IgnorePointer(
             child: Container(
-              width: 64,
+              width: 80,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.centerLeft,
@@ -560,8 +629,11 @@ class _TablaScreenState extends State<TablaScreen>
     final aspect = (cellW / 22.5).clamp(0.85, 1.02).toDouble();
     return Padding(
       // Compacto (re-verificación Zona D, test grande 430x900):
-      // vertical 4 (antes 8); la rejilla no cambia de geometría.
-      padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+      // 16 arriba (antes 8): hueco de los chips para que la tabla
+      // no se vea pegada arriba ni chocando con las cápsulas
+      // (Kristian, 2026-11-13: "choca tan arriba"); 0 abajo, la
+      // rejilla no cambia de geometría.
+      padding: const EdgeInsets.fromLTRB(8, 16, 8, 0),
       child: _gridView(
         grid,
         available,
@@ -583,7 +655,7 @@ class _TablaScreenState extends State<TablaScreen>
         children: [
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.fromLTRB(8, 8, 8, 16),
+            padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
             child: _gridView(grid, _narrowGridWidth),
           ),
           Positioned(
@@ -633,8 +705,22 @@ class _TablaScreenState extends State<TablaScreen>
         // menos filas. La primera pasada ahorró ~91 dp y quedaban
         // 2,5 dp fuera: el runSpacing 3 (antes 4) los compensa.
         // El tap de cada categoría no cambia.
+        //
+        // Quemia 7.3 (Kristian): el padding inferior es 116 dp = la
+        // zona que ocupan las píldoras flotantes Comparar/Quiz
+        // (2 × 44 dp + 12 de hueco, a 16 dp del borde). Antes eran
+        // 132 dp y TAPABAN las últimas filas de la leyenda
+        // ("Actínido", "118 elementos."). Con 116, al bajar del
+        // todo la leyenda queda justo encima de las píldoras.
+        // Medido a 400x852: contenido 668 dp contra viewport 657
+        // (11 dp de más). Se recortaron 16 dp POR ENCIMA de la
+        // leyenda (búsqueda 4 + chips 8 + hueco de la leyenda 4)
+        // para que quepa sin desplazar: contenido 652, y la línea
+        // "118 elementos." queda 5 dp por encima de la píldora.
+        // El padding de 116 NO se toca: es lo que protege la
+        // leyenda de las píldoras.
         Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 116),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -642,10 +728,15 @@ class _TablaScreenState extends State<TablaScreen>
             tr('legendWord'),
             style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 4),
+          // Sin hueco entre el título y la primera fila (antes 4):
+          // compensa la separación nueva de la barra de búsqueda
+          // para que la página siga cabiendo a 400x852 sin desplazar.
           Wrap(
             spacing: 12,
-            runSpacing: 3,
+            // runSpacing 0 (antes 1): compensa el hueco mayor de
+            // la rejilla para que la página siga cabiendo
+            // a 400x852 sin desplazar.
+            runSpacing: 0,
             children: [
               for (var i = 0; i < categoryNames.length; i++)
                 InkWell(
@@ -671,7 +762,11 @@ class _TablaScreenState extends State<TablaScreen>
                 ),
             ],
           ),
-          const SizedBox(height: 4),
+          // Quemia 7.3: a 400x852 la página pasaba 11 dp del
+          // viewport; se quitan estos 4 dp (antes 4) como parte
+          // de los 16 dp que la dejan caber sin desplazar. El
+          // padding inferior de 116 dp NO se toca: es la zona de
+          // las píldoras flotantes y protege la leyenda.
           Text(
             '118 ${tr('elementsWord')}.',
             style: TextStyle(

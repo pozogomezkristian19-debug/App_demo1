@@ -380,21 +380,22 @@ void main() {
       await tester.pump();
     }
 
-    testWidgets('orden: Resolver, Aprender, Niveles, Tabla, Cuenta',
+    testWidgets('orden: Aprender, Resolver, Niveles, Tabla, Cuenta',
         (tester) async {
       await pumpNav(tester, selected: 2, tapped: []);
       final xs = <String, double>{
         for (final label in [
-          tr('tabResolver'),
           tr('tabLearn'),
+          tr('tabResolver'),
           tr('tabLevels'),
           tr('tabTable'),
           tr('accountTitle'),
         ])
           label: tester.getCenter(find.text(label)).dx,
       };
-      expect(xs[tr('tabResolver')], lessThan(xs[tr('tabLearn')]!));
-      expect(xs[tr('tabLearn')]!, lessThan(xs[tr('tabLevels')]!));
+      // Quemia 7.3 (Kristian): Aprender PRIMERO y Resolver después.
+      expect(xs[tr('tabLearn')]!, lessThan(xs[tr('tabResolver')]!));
+      expect(xs[tr('tabResolver')]!, lessThan(xs[tr('tabLevels')]!));
       expect(xs[tr('tabLevels')]!, lessThan(xs[tr('tabTable')]!));
       expect(xs[tr('tabTable')]!, lessThan(xs[tr('accountTitle')]!));
       // Sin NavigationBar: la barra es MainBottomNav.
@@ -422,11 +423,12 @@ void main() {
         (tester) async {
       final tapped = <int>[];
       await pumpNav(tester, selected: 2, tapped: tapped);
-      await tester.tap(find.text(tr('tabResolver')));
       await tester.tap(find.text(tr('tabLearn')));
+      await tester.tap(find.text(tr('tabResolver')));
       await tester.tap(find.text(tr('tabTable')));
       await tester.tap(find.text(tr('accountTitle')));
       await tester.tap(find.byKey(const ValueKey('nav-center-levels')));
+      // Quemia 7.3: Aprender es el 0 y Resolver el 1 (antes al revés).
       expect(tapped, [0, 1, 3, 4, 2]);
     });
 
@@ -441,11 +443,11 @@ void main() {
       // Otra seleccionada: su etiqueta también va en teal y negrita
       // (la barra nueva usa un solo color de acción, no un color
       // por pestaña).
+      // Quemia 7.3: el índice 0 es Aprender (antes Resolver).
       await pumpNav(tester, selected: 0, tapped: []);
-      final resolverText =
-          tester.widget<Text>(find.text(tr('tabResolver')));
-      expect(resolverText.style?.color, const Color(0xFF00C2A8));
-      expect(resolverText.style?.fontWeight, FontWeight.bold);
+      final learnText = tester.widget<Text>(find.text(tr('tabLearn')));
+      expect(learnText.style?.color, const Color(0xFF00C2A8));
+      expect(learnText.style?.fontWeight, FontWeight.bold);
     });
   });
 
@@ -841,6 +843,9 @@ class _SlowFakeAuth implements AuthProvider {
   String? email = 'lento@example.com';
   String? displayName = 'Lento';
   bool googleLinked = false;
+
+  @override
+  String? get lastGoogleError => null;
 
   @override
   Future<String?> ensureAnonymous() async => uid;

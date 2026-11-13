@@ -50,6 +50,9 @@ flutter:
     - assets/avatar_dorado.png
     - assets/avatar_violeta.png
     - assets/avatar_teal.png
+    - assets/avatar_embajador.png
+    - assets/avatar_leyenda.png
+    - assets/messenger.png
     - assets/avatar_default.png
     - assets/google_g.png
     - assets/sounds/correct.wav

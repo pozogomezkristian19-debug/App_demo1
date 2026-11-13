@@ -31,11 +31,13 @@
 //     mi doc (campo 'tournamentsJoined'). Los torneos terminados
 //     no se listan (la lista es activos + próximos), pero al
 //     listarlos se reclaman los premios si quedé entre los 3.
-//   - Tienda: el catálogo es local (kShopCatalog); lo que se
-//     sincroniza es la PROPIEDAD ('purchases' en mi doc). Lo
-//     equipado (tema/marco/insignia) es local por ahora: en la
-//     lista de amigos se muestra la primera insignia/marco que
-//     cada uno COMPRÓ, no la que lleva equipada.
+//   - Tienda: el catálogo es REMOTO (Firestore 'shop_items',
+//     RemoteShopCatalog, con caché y respaldo offline); la
+//     fachada ya no usa `shopItems()` del repositorio. Lo que se
+//     sincroniza es la PROPIEDAD ('purchases' en mi doc) y lo
+//     EQUIPADO (tema/avatar/insignia/marco, campos
+//     'equippedTheme'/'equippedAvatar'/'equippedBadge'/
+//     'equippedFrame').
 //   - Amigos: la lista muestra solo a los que dieron permiso.
 import 'dart:async';
 

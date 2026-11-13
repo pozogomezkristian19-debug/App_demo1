@@ -241,7 +241,9 @@ class _AvatarTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = _AvatarColors.of(context);
-    const teal = Color(0xFF00C2A8);
+    // Quemia 7.3: el aro + check de la elegida siguen al acento
+    // (antes teal fijo también con el tema violeta).
+    final teal = AppAccent.primary;
     return GestureDetector(
       onTap: onTap,
       child: Column(
@@ -280,7 +282,7 @@ class _AvatarTile extends StatelessWidget {
                   child: Container(
                     width: 26,
                     height: 26,
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: teal,
                     ),

@@ -55,6 +55,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'accent.dart';
 import 'analytics_sync.dart';
 import 'auth_service.dart';
 import 'nav_requests.dart';
@@ -237,7 +238,7 @@ class PushService {
   /// dos capas no se pisen en Ajustes.
   static String get channelId => _channelId;
 
-  /// Icono pequeño: la misma campana blanca (vector) que
+  /// Icono pequeño: la misma campana blanca (PNG) que
   /// NotificationService: Android pinta solo su silueta, y el logo
   /// a color saldría como un cuadrado negro.
   static const _smallIcon = 'ic_notif_bell';
@@ -691,14 +692,14 @@ class PushService {
             title: entry.title,
             body: entry.body,
             payload: jsonEncode(data),
-            notificationDetails: const NotificationDetails(
+            notificationDetails: NotificationDetails(
               android: AndroidNotificationDetails(
                 _channelId,
                 _channelName,
                 importance: Importance.high,
                 priority: Priority.high,
                 icon: _smallIcon,
-                color: Color(0xFF00C2A8),
+                color: AppAccent.primary,
               ),
             ),
           )
@@ -736,14 +737,14 @@ class PushService {
             title: entry.title,
             body: entry.body,
             payload: jsonEncode(data),
-            notificationDetails: const NotificationDetails(
+            notificationDetails: NotificationDetails(
               android: AndroidNotificationDetails(
                 _channelId,
                 _channelName,
                 importance: Importance.high,
                 priority: Priority.high,
                 icon: _smallIcon,
-                color: Color(0xFF00C2A8),
+                color: AppAccent.primary,
               ),
             ),
           )

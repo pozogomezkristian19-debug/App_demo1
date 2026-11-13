@@ -17,9 +17,11 @@
 // de papelera en las filas; secciones a 20 pt peso 800.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../services/accent.dart';
 
 import '../services/localization.dart';
+import '../services/referral_service.dart';
 import '../services/social_service.dart';
 import '../widgets/duo_button.dart';
 import '../widgets/lucide_icons.dart';
@@ -63,6 +65,12 @@ class _FriendsScreenState extends State<FriendsScreen> {
   /// Mis duelos abiertos (para que el retado abra el suyo).
   List<DuelState> _myDuels = [];
 
+  /// Mi nombre de usuario público (Quemia 7.3, Kristian): el que
+  /// le doy a un amigo para que me agregue. null = aún reclamándolo;
+  /// '' = no se pudo reclamar (sin internet). Se reclama al abrir
+  /// Amigos (idempotente: si ya existe, devuelve el mismo).
+  String? _myUsername;
+
   @override
   void initState() {
     super.initState();
@@ -71,6 +79,23 @@ class _FriendsScreenState extends State<FriendsScreen> {
     });
     _loadDuels();
     _loadRequests();
+    _loadUsername();
+  }
+
+  Future<void> _loadUsername() async {
+    final username = await ReferralService.ensureUniqueUsername();
+    if (!mounted) return;
+    setState(() => _myUsername = username);
+  }
+
+  Future<void> _copyUsername() async {
+    final username = _myUsername ?? '';
+    if (username.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: username));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(tr('myUsernameCopied'))),
+    );
   }
 
   Future<void> _loadDuels() async {
@@ -389,6 +414,84 @@ class _FriendsScreenState extends State<FriendsScreen> {
                   ],
                 ),
               ),
+            // Mi nombre de usuario (Quemia 7.3, Kristian): para
+            // que un amigo me agregue, le doy ESTE nombre, no el
+            // código de referido (ese es para invitar). Tarjeta con
+            // tinte del acento + botón COPIAR; si aún no existe
+            // (sin internet), se dice que aparecerá aquí.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: accent.withValues(alpha: 0.35),
+                    width: 1,
+                  ),
+                ),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      tr('myUsernameTitle'),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _myUsername == null
+                                ? '…'
+                                : (_myUsername!.isEmpty
+                                    ? tr('myUsernamePending')
+                                    : _myUsername!),
+                            // 2 líneas (antes 1): el mensaje pendiente
+                            // "Tu nombre de usuario aparecerá aquí" se
+                            // cortaba a "Tu nombre de usuario…" porque
+                            // el botón COPIAR ocupa ancho; el nombre
+                            // real es una sola palabra y cabe en 1.
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w800,
+                              color: _myUsername != null &&
+                                      _myUsername!.isNotEmpty
+                                  ? scheme.onSurface
+                                  : scheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        DuoButton.secondary(
+                          label: tr('referralCopy'),
+                          onPressed: (_myUsername != null &&
+                                  _myUsername!.isNotEmpty)
+                              ? _copyUsername
+                              : null,
+                          fontSize: 15,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      tr('myUsernameHint'),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
             // Agregar por nombre: campo con radio 16 y borde 2 pt
             // #E5E5E5, 56 pt de alto; el botón "AGREGAR" va a ancho
             // completo DEBAJO del campo (rediseño Duolingo 7.0).
@@ -594,13 +697,13 @@ class _EmptyFriends extends StatelessWidget {
               height: 72,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: const Color(0xFF00C2A8).withValues(alpha: 0.12),
+                color: AppAccent.primary.withValues(alpha: 0.12),
               ),
               alignment: Alignment.center,
-              child: const LucideIcon(
+              child: LucideIcon(
                 LucideIcons.userRound,
                 size: 34,
-                color: Color(0xFF00C2A8),
+                color: AppAccent.primary,
               ),
             ),
             const SizedBox(height: 16),

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- El icono pequeno de notificacion (campana blanca ic_notif_bell) solo
+     se referencia por NOMBRE desde Dart (notification_service.dart y
+     push_service.dart: _smallIcon = 'ic_notif_bell'), asi que el
+     shrinking de recursos no ve la referencia y lo elimino del APK 7.2
+     (por eso fallaba "Probar un aviso ahora" con invalid_icon).
+     Este keep evita que se elimine nunca. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_notif_bell" />

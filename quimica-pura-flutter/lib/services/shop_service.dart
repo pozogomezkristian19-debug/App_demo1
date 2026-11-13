@@ -5,13 +5,14 @@
 // para que la compra sobreviva a un cambio de teléfono (se
 // restaura con restoreFromCloud) y el admin la vea.
 //
-// Lo EQUIPADO también se sincroniza (syncEquipped): tema, avatar
-// e insignia se escriben en el mismo documento (campos
-// 'equippedTheme', 'equippedAvatar', 'equippedBadge'; cadena vacía
-// = quitado) para que sobrevivan a un cambio de teléfono y los
-// amigos vean lo que llevas puesto. La lectura de vuelta
-// (cloudEquipped) está lista para el respaldo: falta enchufarla al
-// restaurar en un teléfono nuevo (restoreFromCloud).
+// Lo EQUIPADO también se sincroniza (syncEquipped): tema, avatar,
+// insignia y marco (7.3) se escriben en el mismo documento
+// (campos 'equippedTheme', 'equippedAvatar', 'equippedBadge',
+// 'equippedFrame'; cadena vacía = quitado) para que sobrevivan a
+// un cambio de teléfono y los amigos vean lo que llevas puesto.
+// La lectura de vuelta (cloudEquipped) está lista para el
+// respaldo: falta enchufarla al restaurar en un teléfono nuevo
+// (restoreFromCloud).
 //
 // Reglas: sin Google vinculada no hay tienda (puerta de
 // identidad); sin internet la compra local NO se pierde: queda
@@ -74,17 +75,18 @@ class ShopService {
     return ok;
   }
 
-  /// Sincroniza LO EQUIPADO (tema, avatar o insignia) con el
-  /// documento del usuario. [itemId] null = se quitó (se escribe
-  /// cadena vacía; la lectura lo trata como "sin equipar").
-  /// Devuelve true si quedó en la nube; false si quedó pendiente
-  /// (sin internet) o sin Google. Sin internet lo local NO se
-  /// pierde: queda pendiente y se reintenta solo.
+  /// Sincroniza LO EQUIPADO (tema, avatar, insignia o marco) con
+  /// el documento del usuario. [itemId] null = se quitó (se
+  /// escribe cadena vacía; la lectura lo trata como "sin
+  /// equipar"). Devuelve true si quedó en la nube; false si quedó
+  /// pendiente (sin internet) o sin Google. Sin internet lo local
+  /// NO se pierde: queda pendiente y se reintenta solo.
   static Future<bool> syncEquipped(String kind, String? itemId) async {
     final field = switch (kind) {
       'theme' => 'equippedTheme',
       'avatar' => 'equippedAvatar',
       'badge' => 'equippedBadge',
+      'frame' => 'equippedFrame',
       _ => '',
     };
     if (field.isEmpty) return false;
@@ -115,6 +117,7 @@ class ShopService {
       'theme': 'equippedTheme',
       'avatar': 'equippedAvatar',
       'badge': 'equippedBadge',
+      'frame': 'equippedFrame',
     }.entries) {
       final value = doc[entry.value]?.toString().trim() ?? '';
       if (value.isNotEmpty) out[entry.key] = value;

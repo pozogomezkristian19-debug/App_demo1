@@ -109,6 +109,29 @@ class _ConstantsScreenState extends State<ConstantsScreen> {
         .replaceAll(RegExp(r'\.$'), '');
   }
 
+  // Campo estilo Duolingo (radio 16, borde 2 pt): EXPLÍCITO aquí
+  // y no solo en el tema de la app — sin él los campos salían con
+  // la línea rústica de Material por defecto (foto73_constantes).
+  // Mismos valores que el inputDecorationTheme de main.dart.
+  InputDecoration _fieldDecoration(String label, {Widget? prefixIcon}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final edge = isDark ? const Color(0xFF37464F) : const Color(0xFFE5E5E5);
+    BorderSide side(Color c) => BorderSide(color: c, width: 2);
+    return InputDecoration(
+      labelText: label,
+      prefixIcon: prefixIcon,
+      contentPadding:
+          const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16), borderSide: side(edge)),
+      enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16), borderSide: side(edge)),
+      focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: side(const Color(0xFF84D8FF))),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final cat = _categories[_catIndex];
@@ -126,19 +149,8 @@ class _ConstantsScreenState extends State<ConstantsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Text('Constantes',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          for (final c in chemConstants)
-            Card(
-              margin: const EdgeInsets.only(bottom: 6),
-              child: ListTile(
-                title: Text('${c.symbol} = ${c.value}',
-                    style: const TextStyle(fontWeight: FontWeight.w600)),
-                subtitle: Text(localizedConstantNote(c.note)),
-              ),
-            ),
-          const SizedBox(height: 16),
+          // Quemia 7.3 (Kristian): el conversor va PRIMERO y las
+          // constantes después — es lo que más se usa.
           const Text('Conversor de unidades',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
@@ -202,19 +214,18 @@ class _ConstantsScreenState extends State<ConstantsScreen> {
           ),
           const SizedBox(height: 12),
           TextField(
-            decoration: const InputDecoration(
-              labelText: 'Valor',
-              // Fix3, punto 6 (ampliación): el icono del campo Valor
-              // salía gigante en la captura (casi toda la altura del
-              // campo). La causa: en la APK instalada LucideIcon aún
-              // no llevaba el SizedBox de tamaño fijo y el
-              // prefixIcon estiraba el CustomPaint a la altura del
-              // campo. En el código actual el guard ya existe, pero
-              // el tamaño se fija aquí explícito (24 px, como el
-              // texto del campo) para que no vuelva a pasar.
-              prefixIcon: LucideIcon(LucideIcons.logIn, size: 24),
-            ),
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: _fieldDecoration('Valor',
+                // Fix3, punto 6 (ampliación): el icono del campo Valor
+                // salía gigante en la captura (casi toda la altura del
+                // campo). La causa: en la APK instalada LucideIcon aún
+                // no llevaba el SizedBox de tamaño fijo y el
+                // prefixIcon estiraba el CustomPaint a la altura del
+                // campo. En el código actual el guard ya existe, pero
+                // el tamaño se fija aquí explícito (24 px, como el
+                // texto del campo) para que no vuelva a pasar.
+                prefixIcon: const LucideIcon(LucideIcons.logIn, size: 24)),
+            keyboardType:
+                const TextInputType.numberWithOptions(decimal: true),
             onChanged: (v) {
               _input = v;
               _convert();
@@ -226,7 +237,7 @@ class _ConstantsScreenState extends State<ConstantsScreen> {
               Expanded(
                 child: DropdownButtonFormField<String>(
                   initialValue: _temperature ? _tempFrom : _from,
-                  decoration: const InputDecoration(labelText: 'De'),
+                  decoration: _fieldDecoration('De'),
                   items: (_temperature
                           ? ['°C', 'K', '°F']
                           : cat.units.map((u) => u.$1).toList())
@@ -253,7 +264,7 @@ class _ConstantsScreenState extends State<ConstantsScreen> {
               Expanded(
                 child: DropdownButtonFormField<String>(
                   initialValue: _temperature ? _tempTo : _to,
-                  decoration: const InputDecoration(labelText: 'A'),
+                  decoration: _fieldDecoration('A'),
                   items: (_temperature
                           ? ['°C', 'K', '°F']
                           : cat.units.map((u) => u.$1).toList())
@@ -290,6 +301,19 @@ class _ConstantsScreenState extends State<ConstantsScreen> {
               ),
             ),
           ],
+          const Text('Constantes',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          for (final c in chemConstants)
+            Card(
+              margin: const EdgeInsets.only(bottom: 6),
+              child: ListTile(
+                title: Text('${c.symbol} = ${c.value}',
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: Text(localizedConstantNote(c.note)),
+              ),
+            ),
+          const SizedBox(height: 16),
         ],
       ),
     );

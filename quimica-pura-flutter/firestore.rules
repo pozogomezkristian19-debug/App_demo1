@@ -82,7 +82,10 @@ service cloud.firestore {
       return ['username', 'joinedAt', 'lastActive', 'levelsPassed',
               'points', 'streak', 'track', 'appVersion',
               'purchases', 'friends', 'tournamentMedals',
-              'bestTournamentScores'];
+              'bestTournamentScores',
+              'referralCode', 'referredBy', 'referredByUid',
+              'referralRewarded', 'referralsCount', 'referralMilestones',
+              'referralLastInvitee'];
     }
 
     // -------------------------------------------------------------------------
@@ -160,6 +163,70 @@ service cloud.firestore {
       // BORRAR: nadie desde un cliente. Si hay que borrar un documento de
       // usuario, se hace a mano desde la consola de Firebase.
       allow delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    //  Colecciones de referidos (Quemia 7.3) — ver REFERRALS_FIRESTORE.md.
+    //  'referral_codes/<CÓDIGO>': {uid, createdAtMs, maxUses}. El código
+    //  ES el id del documento: crear solo si NO existe (así dos usuarios
+    //  no pueden reclamar el mismo código: al segundo le falla la
+    //  escritura y prueba con otro). Nadie actualiza ni borra un código.
+    //  'referrals/<id>': {code, inviterUid, inviteeUid, inviteeUsername,
+    //  status: pending|rewarded, inviterRewarded: bool, createdAtMs,
+    //  rewardedAtMs}. Lo crea el invitado al canjear; el invitado marca
+    //  'rewarded' al pasar el Nivel 1; el invitador marca
+    //  'inviterRewarded' al cobrar. El admin lo lee todo (gestión de
+    //  referidos) pero no lo escribe desde el cliente.
+    //  'usernames/<nombre>': {uid, createdAtMs}. Reserva del nombre
+    //  público único: crear solo si no existe; nadie lo actualiza ni
+    //  lo borra (si un usuario cambia de nombre, el viejo queda
+    //  reservado: evita que otro lo coja y se haga pasar por él).
+    // -------------------------------------------------------------------------
+    match /referral_codes/{code} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && !exists(/databases/$(database)/documents/referral_codes/$(code))
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.maxUses == 10
+        && request.resource.data.keys().hasOnly(
+            ['uid', 'createdAtMs', 'maxUses']);
+      allow update, delete: if false;
+    }
+
+    match /referrals/{referralId} {
+      allow read: if isSignedIn()
+        && (resource.data.inviterUid == request.auth.uid
+          || resource.data.inviteeUid == request.auth.uid
+          || isAdmin());
+      allow create: if isSignedIn()
+        && request.resource.data.inviteeUid == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.inviterRewarded == false
+        && request.resource.data.keys().hasOnly(['code', 'inviterUid',
+            'inviteeUid', 'inviteeUsername', 'status', 'inviterRewarded',
+            'createdAtMs']);
+      // El invitado solo puede marcar 'rewarded' (al pasar el Nivel
+      // 1); el invitador solo puede marcar 'inviterRewarded' (al
+      // cobrar). Nada más cambia en este documento.
+      allow update: if isSignedIn()
+        && ((resource.data.inviteeUid == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['status', 'rewardedAtMs'])
+          && request.resource.data.status == 'rewarded')
+          || (resource.data.inviterUid == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['inviterRewarded'])
+          && request.resource.data.inviterRewarded == true));
+      allow delete: if false;
+    }
+
+    match /usernames/{name} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && !exists(/databases/$(database)/documents/usernames/$(name))
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid', 'createdAtMs']);
+      allow update, delete: if false;
     }
 
     // -------------------------------------------------------------------------

@@ -99,7 +99,24 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   Widget build(BuildContext context) {
     final results = searchEntries(_all, _query);
-    return Scaffold(
+    // Atrás (Quemia 7.3, Kristian): la búsqueda es una ruta propia,
+    // pero el PopScope de HomeScreen (canPop: false + SystemNavigator
+    // .pop en Niveles) se llevaba la app entera al pulsar atrás con
+    // la búsqueda abierta. Este PopScope se queda con el atrás: con
+    // el teclado abierto, el primer atrás solo lo cierra (y la
+    // búsqueda sigue); el segundo cierra la búsqueda y vuelve a la
+    // pantalla de antes. Nunca sale de la app desde aquí.
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        if (FocusScope.of(context).hasFocus) {
+          FocusScope.of(context).unfocus();
+          return;
+        }
+        Navigator.of(context).pop();
+      },
+      child: Scaffold(
       appBar: AppBar(title: Text(tr('searchWord'))),
       body: Column(
         children: [
@@ -164,6 +181,7 @@ class _SearchScreenState extends State<SearchScreen> {
                       ),
           ),
         ],
+      ),
       ),
     );
   }

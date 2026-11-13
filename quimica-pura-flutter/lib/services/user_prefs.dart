@@ -15,6 +15,8 @@ class UserPrefs {
       'melli_theme_mode'; // 'claro' | 'oscuro' | 'sistema'
   static const _kLanguage =
       'melli_language'; // 'es' | 'en' | 'fr' | 'it' | 'pt' | 'ru'
+  static const _kPublicUsername =
+      'melli_public_username'; // Nombre público único (referidos 7.3)
   static const _kTrack = 'melli_track'; // 'uni' | 'bach'
   static const _kSoundOn = 'melli_sound_on';
   static const _kReminderOn = 'melli_reminder_on';
@@ -55,6 +57,13 @@ class UserPrefs {
 
   static String language = 'es';
   static String track = 'uni';
+
+  /// Nombre público ÚNICO (referidos 7.3): el que se ve en la
+  /// tabla, en Amigos y en los avisos ("Vanessa0394"). Si el
+  /// nombre del onboarding choca con otro usuario, este lleva el
+  /// sufijo numérico; vacío = aún sin reclamar. El saludo
+  /// ("Bienvenida Vanessa") sigue usando [userName], no este.
+  static String publicUsername = '';
   static bool soundOn = true; // Sonidos y vibración al contestar.
   static bool reminderOn = false; // Recordatorio diario de estudio.
   static int reminderHour = 19;
@@ -99,6 +108,7 @@ class UserPrefs {
     themeModeNotifier.value = themeMode;
     isDark = effectiveDark;
     language = prefs.getString(_kLanguage) ?? 'es';
+    publicUsername = prefs.getString(_kPublicUsername) ?? '';
     track = prefs.getString(_kTrack) ?? 'uni';
     soundOn = prefs.getBool(_kSoundOn) ?? true;
     reminderOn = prefs.getBool(_kReminderOn) ?? false;
@@ -122,6 +132,15 @@ class UserPrefs {
     await prefs.setString(_kUserName, userName);
     await prefs.setString(_kUserGender, userGender);
     await prefs.setBool(_kOnboardingDone, true);
+  }
+
+  /// Guarda el nombre público único (referidos 7.3): el que se ve
+  /// en la tabla y en los avisos. No toca el nombre del onboarding
+  /// (el saludo sigue diciendo "Bienvenida Vanessa").
+  static Future<void> savePublicUsername(String name) async {
+    final prefs = await SharedPreferences.getInstance();
+    publicUsername = name.trim();
+    await prefs.setString(_kPublicUsername, publicUsername);
   }
 
   /// El viejo interruptor claro/oscuro (el icono de la AppBar):

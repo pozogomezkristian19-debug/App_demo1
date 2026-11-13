@@ -18,9 +18,26 @@
 //   - linkWithGoogle() enlaza la cuenta de Google a la anónima: el
 //     uid NO cambia. Si esa cuenta de Google ya vive en otro uid
 //     (otro teléfono), el enlace falla con credential-already-in-use
-//     y devuelve false SIN entrar en esa cuenta y SIN tocar nada
-//     local: la sesión anónima sigue intacta. Para entrar en esa
-//     cuenta hay que usar signInWithGoogle() (teléfono nuevo).
+//     y hay FALLBACK (Quemia 7.3): se entra en esa cuenta con
+//     signInWithCredential (el uid pasa a ser el de Google) y ANTES
+//     de perder nada se MIGRA todo el progreso del anónimo al uid
+//     de Google (fusión best-of: nivel y puntos mayores, días
+//     unidos; el progreso local —vidas, cosméticos, avatar, amigos,
+//     errores, logros, grupos, estadísticas— vive en el teléfono y
+//     no depende del uid, así que sobrevive al cambio). Si la
+//     migración falla, el inicio devuelve false con el motivo en
+//     [AuthService.lastGoogleError]: mejor fallar con mensaje claro
+//     que dejar al usuario sin su progreso.
+//   - El error REAL ya no se traga (Quemia 7.3): si el selector de
+//     cuentas ni siquiera sale (fallo en initialize() o en
+//     authenticate(), p. ej. error 10 DEVELOPER_ERROR por huella
+//     SHA-1 o cliente OAuth mal configurado), el código queda en
+//     [AuthService.lastGoogleError] y en el log, no solo en un
+//     "Inténtalo de nuevo" genérico.
+//   - Una cuenta que también es de administrador (p. ej.
+//     pozogomezkristian19@gmail.com) entra y JUEGA como un jugador
+//     normal: la app principal NO tiene ningún chequeo de rol ni
+//     bloquea cuentas admin (no hay isAdmin/admin@/rol en lib/).
 //   - signInWithGoogle() es el camino del teléfono NUEVO: entra en
 //     la cuenta de Google que ya existe y el uid pasa a ser el suyo;
 //     después se restaura el progreso con
@@ -75,6 +92,13 @@ abstract class AuthProvider {
 
   /// Usuario actual, o null si no hay sesión.
   AuthUserInfo? get currentUser;
+
+  /// Código del último fallo de Google (p. ej.
+  /// 'google_sign_in:unknownError', 'firebase_auth:
+  /// credential-already-in-use', 'migration_failed'), o null si el
+  /// último intento salió bien o no hubo ninguno. La UI lo enseña
+  /// junto al mensaje genérico para diagnosticar (Quemia 7.3).
+  String? get lastGoogleError;
 }
 
 /// Implementación real con Firebase Auth + google_sign_in nativo
@@ -90,10 +114,22 @@ class FirebaseAuthProvider implements AuthProvider {
   static const _kWebClientId =
       '898001909401-o2ins4m72vvgb5hg6v5rgsl0llgu9glj.apps.googleusercontent.com';
 
+  /// Código del último fallo de Google en ESTE proveedor (estático:
+  /// AuthService crea una instancia nueva en cada acceso, así que el
+  /// estado no puede vivir en la instancia). Lo lee
+  /// [AuthService.lastGoogleError].
+  static String? _lastGoogleError;
+
+  @override
+  String? get lastGoogleError => _lastGoogleError;
+
   /// Inicialización de google_sign_in: se hace EXACTAMENTE UNA VEZ
   /// (lo exige el plugin v7) y se guarda el Future para que dos
   /// llamadas seguidas no la repitan. Si falla, se limpia para que
-  /// un reintento posterior pueda volver a intentarlo.
+  /// un reintento posterior pueda volver a intentarlo, y el motivo
+  /// queda registrado (Quemia 7.3: antes este fallo era invisible y
+  /// el selector no salía ni en la primera instalación sin que
+  /// quedara ninguna pista).
   static Future<void>? _googleSignInInit;
 
   static Future<void> _ensureGoogleSignInInitialized() {
@@ -102,8 +138,10 @@ class FirebaseAuthProvider implements AuthProvider {
       pending = GoogleSignIn.instance
           .initialize(serverClientId: _kWebClientId);
       _googleSignInInit = pending;
-      pending.catchError((_) {
+      pending.catchError((Object e) {
         _googleSignInInit = null;
+        _lastGoogleError = 'google_sign_in:init_failed';
+        debugPrint('[Google] initialize() falló: $e');
       });
     }
     return pending;
@@ -112,24 +150,33 @@ class FirebaseAuthProvider implements AuthProvider {
   /// Selector nativo de cuentas de Google → credencial de Firebase.
   /// null si el usuario cancela el selector, si no llega idToken o
   /// si falla cualquier paso (sin internet, mal configurado...).
-  /// Nunca lanza.
+  /// Nunca lanza, pero el motivo REAL queda registrado en
+  /// [_lastGoogleError] y en el log (Quemia 7.3): antes TODAS las
+  /// GoogleSignInException se tragaban devolviendo null y la UI
+  /// solo podía decir "Inténtalo de nuevo".
   static Future<OAuthCredential?> _nativeGoogleCredential() async {
     try {
       await _ensureGoogleSignInInitialized();
       final account = await GoogleSignIn.instance.authenticate();
       final idToken = account.authentication.idToken;
-      if (idToken == null) return null;
+      if (idToken == null) {
+        _lastGoogleError = 'google_sign_in:no_id_token';
+        debugPrint('[Google] authenticate() sin idToken.');
+        return null;
+      }
       // google_sign_in v7 ya no expone accessToken (eso vive en el
       // cliente de autorización); a Firebase le basta el idToken.
       return GoogleAuthProvider.credential(idToken: idToken);
     } on GoogleSignInException catch (e) {
-      // Cancelado por el usuario (o interrumpido): fallo silencioso.
-      if (e.code == GoogleSignInExceptionCode.canceled ||
-          e.code == GoogleSignInExceptionCode.interrupted) {
-        return null;
-      }
+      // Cancelado por el usuario: fallo silencioso, pero el código
+      // queda registrado para diagnosticar (no es un error).
+      _lastGoogleError = 'google_sign_in:${e.code.name}';
+      debugPrint('[Google] authenticate() falló: ${e.code.name} '
+          '${e.description ?? ''}');
       return null;
-    } catch (_) {
+    } catch (e) {
+      _lastGoogleError = 'google_sign_in:unknown';
+      debugPrint('[Google] authenticate() falló: $e');
       return null;
     }
   }
@@ -163,16 +210,43 @@ class FirebaseAuthProvider implements AuthProvider {
       if (credential == null) return false;
       try {
         await user.linkWithCredential(credential);
+        _lastGoogleError = null;
         return true;
       } on FirebaseAuthException catch (e) {
-        if (e.code == 'provider-already-linked') return true;
-        // credential-already-in-use: esa cuenta de Google ya vive en
-        // otro uid (otro teléfono). El enlace FALLA y punto: NO se
-        // entra en esa cuenta y NO se toca nada local (el uid y el
-        // progreso anónimo siguen intactos).
+        if (e.code == 'provider-already-linked') {
+          _lastGoogleError = null;
+          return true;
+        }
+        if (e.code == 'credential-already-in-use') {
+          // FALLBACK (Quemia 7.3): esa cuenta de Google ya vive en
+          // otro uid (otro teléfono). Antes el enlace fallaba y
+          // punto; ahora se ENTRA en esa cuenta con
+          // signInWithCredential (el uid pasa a ser el de Google) y
+          // la fachada [AuthService.linkWithGoogle] migra el
+          // progreso del anónimo antes de perderlo. El progreso
+          // local no se toca aquí: vive en el teléfono y no
+          // depende del uid.
+          _lastGoogleError = 'firebase_auth:credential-already-in-use';
+          debugPrint('[Google] linkWithCredential: cuenta ya en otro '
+              'uid; fallback a signInWithCredential.');
+          try {
+            final cred = await _auth.signInWithCredential(credential);
+            if (cred.user == null) return false;
+            return true;
+          } on FirebaseAuthException catch (e2) {
+            _lastGoogleError = 'firebase_auth:${e2.code}';
+            debugPrint('[Google] fallback signInWithCredential '
+                'falló: ${e2.code}');
+            return false;
+          }
+        }
+        _lastGoogleError = 'firebase_auth:${e.code}';
+        debugPrint('[Google] linkWithCredential falló: ${e.code}');
         return false;
       }
-    } catch (_) {
+    } catch (e) {
+      _lastGoogleError = 'link:unknown';
+      debugPrint('[Google] linkWithGoogle falló: $e');
       return false;
     }
   }
@@ -183,8 +257,16 @@ class FirebaseAuthProvider implements AuthProvider {
       final credential = await _nativeGoogleCredential();
       if (credential == null) return false;
       final cred = await _auth.signInWithCredential(credential);
-      return cred.user != null;
-    } catch (_) {
+      if (cred.user == null) return false;
+      _lastGoogleError = null;
+      return true;
+    } on FirebaseAuthException catch (e) {
+      _lastGoogleError = 'firebase_auth:${e.code}';
+      debugPrint('[Google] signInWithCredential falló: ${e.code}');
+      return false;
+    } catch (e) {
+      _lastGoogleError = 'sign_in:unknown';
+      debugPrint('[Google] signInWithGoogle falló: $e');
       return false;
     }
   }
@@ -244,10 +326,23 @@ class FakeAuthProvider implements AuthProvider {
   /// Si es true, linkWithGoogle falla siempre (fallo total).
   bool failLink = false;
 
+  /// Si es true, el selector de cuentas falla ANTES de dar
+  /// credencial (simula initialize()/authenticate() roto, p. ej.
+  /// error 10 DEVELOPER_ERROR): link/signIn devuelven false y el
+  /// código queda en [lastGoogleError]. El código a simular va en
+  /// [nativeErrorCode] (p. ej. 'unknownError').
+  bool failNativeCredential = false;
+  String nativeErrorCode = 'unknownError';
+
+  /// Código del último fallo de Google simulado (o null).
+  String? lastGoogleError;
+
   /// Si es true y googleUid es otro uid, linkWithGoogle simula el
-  /// fallo 'credential-already-in-use': devuelve false, el uid NO
-  /// cambia y no se entra en la cuenta de Google (7.1: el antiguo
-  /// "entra en esa cuenta y el uid cambia" está prohibido).
+  /// fallo 'credential-already-in-use' Y EL FALLBACK de la 7.3: se
+  /// entra en la cuenta de Google (el uid pasa a ser googleUid) y
+  /// devuelve true; la migración del progreso la hace la fachada
+  /// [AuthService] con el hook de turno. (7.1: el enlace fallaba y
+  /// no se entraba; la 7.3 cambia esa regla por orden de Kristian.)
   bool simulateAlreadyInUse = false;
 
   @override
@@ -261,19 +356,33 @@ class FakeAuthProvider implements AuthProvider {
 
   @override
   Future<bool> linkWithGoogle() async {
-    if (failLink) return false;
+    if (failNativeCredential) {
+      lastGoogleError = 'google_sign_in:$nativeErrorCode';
+      return false;
+    }
+    if (failLink) {
+      lastGoogleError = 'firebase_auth:unknown';
+      return false;
+    }
     if (uid == null) {
       final anon = await ensureAnonymous();
       if (anon == null) return false;
     }
     if (simulateAlreadyInUse && googleUid != null && googleUid != uid) {
       // La cuenta de Google ya vive en otro uid (fallo
-      // 'credential-already-in-use'): el enlace FALLA, el uid NO
-      // cambia y no se entra en esa cuenta ni se toca nada local.
-      return false;
+      // 'credential-already-in-use') + FALLBACK 7.3: se entra en
+      // esa cuenta (el uid pasa a ser googleUid) y se devuelve
+      // true; la fachada migra el progreso del anónimo.
+      lastGoogleError = 'firebase_auth:credential-already-in-use';
+      uid = googleUid;
+      googleLinked = true;
+      email ??= 'test@example.com';
+      displayName ??= 'Test';
+      return true;
     }
     googleUid = uid;
     googleLinked = true;
+    lastGoogleError = null;
     email ??= 'test@example.com';
     displayName ??= 'Test';
     return true;
@@ -281,6 +390,10 @@ class FakeAuthProvider implements AuthProvider {
 
   @override
   Future<bool> signInWithGoogle() async {
+    if (failNativeCredential) {
+      lastGoogleError = 'google_sign_in:$nativeErrorCode';
+      return false;
+    }
     if (googleUid != null) {
       uid = googleUid;
     } else {
@@ -288,6 +401,7 @@ class FakeAuthProvider implements AuthProvider {
       googleUid = uid;
     }
     googleLinked = true;
+    lastGoogleError = null;
     email ??= 'test@example.com';
     displayName ??= 'Test';
     return true;
@@ -371,31 +485,81 @@ class AuthService {
     }
   }
 
-  /// Enlaza Google a la sesión anónima (el uid NO cambia nunca: si
-  /// la cuenta ya vive en otro uid, el enlace falla y la sesión
-  /// anónima sigue intacta). Devuelve Future<bool> y NUNCA lanza
+  /// Código del último fallo de Google (o null si el último intento
+  /// salió bien): lo pone el proveedor ('google_sign_in:…' /
+  /// 'firebase_auth:…') o la migración ('migration_failed'). La UI
+  /// lo enseña junto al mensaje genérico para diagnosticar por qué
+  /// ni siquiera salió el selector (Quemia 7.3).
+  static String? _lastGoogleError;
+
+  static String? get lastGoogleError => _lastGoogleError;
+
+  /// Migración del progreso al cambiar de uid (Quemia 7.3): la
+  /// pone main() con [AnalyticsSync.migrateAnonymousProgress]. Se
+  /// llama con (uidAnónimo, uidGoogle) cuando el inicio de sesión
+  /// cambia el uid (fallback credential-already-in-use o teléfono
+  /// nuevo): fusiona el documento del anónimo en el de Google y
+  /// sube la foto local. Si devuelve false, el inicio se da por
+  /// fallido (con 'migration_failed'): el progreso local sigue
+  /// intacto en el teléfono, así que nada se pierde. En los tests
+  /// se inyecta un falso o se deja en null (sin migración).
+  static Future<bool> Function(String fromUid, String toUid)?
+      migrateProgressOnUidChange;
+
+  /// Enlaza Google a la sesión anónima (el uid NO cambia si el
+  /// enlace directo funciona; SI cambia con el fallback 7.3 cuando
+  /// la cuenta ya vive en otro uid: se entra en ella y se migra el
+  /// progreso del anónimo). Devuelve Future<bool> y NUNCA lanza
   /// (try/catch total): true = OK, false = falló por cualquier
   /// motivo (sin internet, cancelado, error). La UI muestra
-  /// tr('googleSignInFailed') cuando devuelve false. El selector
-  /// nativo de Google lo maneja el usuario (elige su cuenta): no
-  /// lleva timeout de 5 s; solo el inicio anónimo previo, si hace
-  /// falta, lo lleva.
+  /// tr('googleSignInFailed') + [lastGoogleError] cuando devuelve
+  /// false. El selector nativo de Google lo maneja el usuario
+  /// (elige su cuenta): no lleva timeout de 5 s; solo el inicio
+  /// anónimo previo, si hace falta, lo lleva.
   static Future<bool> linkWithGoogle() async {
-    try {
-      return await _provider.linkWithGoogle();
-    } catch (_) {
-      return false;
-    }
+    return _runGoogleAuth(() => _provider.linkWithGoogle());
   }
 
   /// Entra con Google (teléfono nuevo). Igual que linkWithGoogle:
-  /// Future<bool> que NUNCA lanza; false = falló.
+  /// Future<bool> que NUNCA lanza; false = falló. Si había progreso
+  /// anónimo en este teléfono, también se migra al uid de Google.
   static Future<bool> signInWithGoogle() async {
+    return _runGoogleAuth(() => _provider.signInWithGoogle());
+  }
+
+  /// Núcleo común de link/signIn: corre el intento, recoge el error
+  /// real del proveedor y, si el uid cambió, migra el progreso del
+  /// anónimo al uid nuevo antes de dar el inicio por bueno.
+  static Future<bool> _runGoogleAuth(
+      Future<bool> Function() attempt) async {
+    final uidBefore = currentUid;
+    bool ok;
     try {
-      return await _provider.signInWithGoogle();
+      ok = await attempt();
     } catch (_) {
+      _lastGoogleError = 'unknown';
       return false;
     }
+    _lastGoogleError = _provider.lastGoogleError;
+    if (!ok) return false;
+    final uidAfter = currentUid;
+    if (uidAfter != null &&
+        uidBefore != null &&
+        uidBefore.isNotEmpty &&
+        uidAfter != uidBefore &&
+        migrateProgressOnUidChange != null) {
+      final migrated =
+          await migrateProgressOnUidChange!(uidBefore, uidAfter);
+      if (!migrated) {
+        // La sesión ya es la de Google, pero la fusión en la nube
+        // no se pudo hacer: se da por fallido con motivo claro.
+        // El progreso LOCAL sigue intacto (no depende del uid) y
+        // la próxima subida con force lo vuelve a intentar.
+        _lastGoogleError = 'migration_failed';
+        return false;
+      }
+    }
+    return true;
   }
 
   /// Desvincula Google de la sesión actual. Tampoco lanza nunca.
@@ -417,5 +581,7 @@ class AuthService {
   @visibleForTesting
   static void resetForTests() {
     _providerOverride = null;
+    _lastGoogleError = null;
+    migrateProgressOnUidChange = null;
   }
 }

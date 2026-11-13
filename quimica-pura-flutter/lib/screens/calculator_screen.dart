@@ -36,12 +36,22 @@ class CalculatorScreen extends StatelessWidget {
   const CalculatorScreen({
     super.key,
     required this.scientific,
+    this.submitResult = false,
     this.unit,
     this.initialValue,
     this.onDraftChanged,
   });
 
   final bool scientific;
+
+  /// Quemia 7.3: el botón "Usar resultado" ya NO depende del modo
+  /// científico. Las preguntas fáciles abren el teclado SENCILLO
+  /// (scientific: false) pero siguen siendo preguntas de cálculo:
+  /// sin este flag, una pregunta numérica fácil no se podría
+  /// contestar (el teclado sencillo no entregaba ningún valor).
+  /// true = la pantalla entrega el valor al cerrarse con
+  /// "Usar resultado", sea el teclado sencillo o científico.
+  final bool submitResult;
 
   /// Unidad del campo de respuesta (solo en preguntas de cálculo).
   final String? unit;
@@ -58,6 +68,7 @@ class CalculatorScreen extends StatelessWidget {
   static Future<double?> open(
     BuildContext context, {
     required bool scientific,
+    bool submitResult = false,
     String? unit,
     double? initialValue,
     ValueChanged<double?>? onDraftChanged,
@@ -66,6 +77,7 @@ class CalculatorScreen extends StatelessWidget {
       MaterialPageRoute(
         builder: (_) => CalculatorScreen(
           scientific: scientific,
+          submitResult: submitResult,
           unit: unit,
           initialValue: initialValue,
           onDraftChanged: onDraftChanged,
@@ -96,11 +108,14 @@ class CalculatorScreen extends StatelessWidget {
             enabled: true,
             initialValue: initialValue,
             onDraftChanged: onDraftChanged,
-            // Solo en modo científico hay algo que entregar: el
-            // valor hace pop y quien abrió la pantalla responde
-            // con él. En modo normal onSubmit es null y el teclado
-            // no muestra el botón Usar resultado.
-            onSubmit: scientific
+            // Hay algo que entregar en modo científico o cuando
+            // quien abrió la pantalla pidió el resultado
+            // (submitResult: pregunta numérica fácil con teclado
+            // sencillo): el valor hace pop y quien abrió la
+            // pantalla responde con él. En modo normal sin
+            // submitResult, onSubmit es null y el teclado no
+            // muestra el botón Usar resultado (solo calcular a mano).
+            onSubmit: (scientific || submitResult)
                 ? (value) => Navigator.of(context).pop<double>(value)
                 : null,
           ),
@@ -158,6 +173,7 @@ class QuestionCalculatorButton extends StatelessWidget {
     final value = await CalculatorScreen.open(
       context,
       scientific: scientific,
+      submitResult: onResult != null,
       unit: unit,
       initialValue: initialValue,
       onDraftChanged: onDraftChanged,

@@ -28,6 +28,11 @@ import 'duels_service.dart';
 import 'localization.dart';
 import 'notification_inbox.dart';
 import 'progress.dart';
+import 'referral_rewards.dart';
+import 'remote_shop_catalog.dart';
+import 'shop_item.dart';
+
+export 'shop_item.dart';
 
 /// Los 12 usuarios de demostración (los mismos que usa el otro
 /// agente en sus previews): kristian es el usuario actual.
@@ -136,8 +141,9 @@ class FriendEntry {
 
   /// Foto de avatar premium equipada ('avatar_dorado' |
   /// 'avatar_violeta' | 'avatar_teal'), o null: el disco con la
-  /// inicial. Los marcos de la tienda no existen (ronda 2e:
-  /// el que compra no tiene avatar donde poner el marco).
+  /// inicial. Los marcos de la tienda existen desde la 7.3 (se
+  /// equipan aparte y se dibujan como anillo alrededor de la
+  /// foto), pero no viven en este campo.
   final String? avatarId;
 
   /// Ruta del asset de la foto equipada, o null sin foto.
@@ -473,48 +479,9 @@ class TournamentInfo {
       );
 }
 
-/// Un artículo de la tienda: solo cosmético, nada de pagar para ganar.
-class ShopItem {
-  const ShopItem({
-    required this.id,
-    required this.name,
-    required this.kind,
-    required this.price,
-    this.color,
-    this.badgeIcon,
-    this.asset,
-  });
-
-  final String id;
-  final String name;
-
-  /// 'theme' | 'avatar' | 'badge'.
-  final String kind;
-  final int price;
-
-  /// Color ARGB (temas: color del acento; avatares: color del
-  /// botón Comprar).
-  final int? color;
-
-  /// Insignias: 'star' | 'trophy' | 'flame'.
-  final String? badgeIcon;
-
-  /// Avatares: ruta del asset de la foto ('assets/avatar_*.png').
-  final String? asset;
-}
-
-/// Catálogo fijo de la tienda.
-const List<ShopItem> kShopCatalog = [
-  ShopItem(id: 'theme_coral', name: 'Coral', kind: 'theme', price: 300, color: 0xFFF97316),
-  ShopItem(id: 'theme_rosa', name: 'Rosa', kind: 'theme', price: 300, color: 0xFFEC4899),
-  ShopItem(id: 'theme_azul', name: 'Azul', kind: 'theme', price: 300, color: 0xFF3B82F6),
-  ShopItem(id: 'avatar_dorado', name: 'Avatar dorado', kind: 'avatar', price: 200, color: 0xFFFFD700, asset: 'assets/avatar_dorado.png'),
-  ShopItem(id: 'avatar_violeta', name: 'Avatar violeta', kind: 'avatar', price: 150, color: 0xFF8B5CF6, asset: 'assets/avatar_violeta.png'),
-  ShopItem(id: 'avatar_teal', name: 'Avatar teal', kind: 'avatar', price: 100, color: 0xFF00C2A8, asset: 'assets/avatar_teal.png'),
-  ShopItem(id: 'badge_star', name: 'Estrella', kind: 'badge', price: 150, badgeIcon: 'star'),
-  ShopItem(id: 'badge_trophy', name: 'Trofeo', kind: 'badge', price: 250, badgeIcon: 'trophy'),
-  ShopItem(id: 'badge_flame', name: 'Llama de racha', kind: 'badge', price: 200, badgeIcon: 'flame'),
-];
+/// Un artículo de la tienda y el catálogo fijo de respaldo viven
+/// en 'shop_item.dart' (el catálogo real es remoto, Firestore
+/// 'shop_items', ver RemoteShopCatalog).
 
 /// Un grupo de estudio (sin chat): nombre, código y miembros.
 class StudyGroup {
@@ -1396,7 +1363,10 @@ class SocialService {
     _equippedThemeId = null;
     _equippedAvatarId = null;
     _equippedBadgeId = null;
+    _equippedFrameId = null;
     equippedAvatarIdNotifier.value = null;
+    equippedFrameIdNotifier.value = null;
+    RemoteShopCatalog.instance.resetForTests();
   }
 
   static Future<T> _safe<T>(Future<T> Function() run, T fallback) async {
@@ -1578,11 +1548,13 @@ class SocialService {
   static const _kEquippedTheme = 'social_shop_equipped_theme';
   static const _kEquippedAvatar = 'social_shop_equipped_avatar';
   static const _kEquippedBadge = 'social_shop_equipped_badge';
+  static const _kEquippedFrame = 'social_shop_equipped_frame';
 
   static Set<String>? _owned;
   static String? _equippedThemeId;
   static String? _equippedAvatarId;
   static String? _equippedBadgeId;
+  static String? _equippedFrameId;
   static var _prefsLoaded = false;
 
   /// Carga las compras y lo equipado (llamar en main() antes de
@@ -1595,11 +1567,13 @@ class SocialService {
       _equippedThemeId = prefs.getString(_kEquippedTheme);
       _equippedAvatarId = prefs.getString(_kEquippedAvatar);
       _equippedBadgeId = prefs.getString(_kEquippedBadge);
+      _equippedFrameId = prefs.getString(_kEquippedFrame);
     } catch (_) {
       _owned ??= <String>{};
     }
     _prefsLoaded = true;
     equippedAvatarIdNotifier.value = _equippedAvatarId;
+    equippedFrameIdNotifier.value = _equippedFrameId;
   }
 
   static Future<Set<String>> ownedItemIds() async {
@@ -1618,8 +1592,28 @@ class SocialService {
       'theme' => _equippedThemeId,
       'avatar' => _equippedAvatarId,
       'badge' => _equippedBadgeId,
+      'frame' => _equippedFrameId,
       _ => null,
     };
+  }
+
+  /// Catálogo para las búsquedas síncronas (tema/avatar/marco
+  /// equipados): primero el último catálogo remoto cargado (así
+  /// un tema o avatar NUEVO, que no está en el respaldo fijo,
+  /// también se resuelve), después las recompensas de referidos
+  /// (que aún no están en el catálogo remoto) y después
+  /// `kShopCatalog`.
+  static List<ShopItem> _lookupCatalog() {
+    final seen = <String>{};
+    final out = <ShopItem>[];
+    for (final item in [
+      ...RemoteShopCatalog.lastLoaded,
+      ...kReferralRewardItems,
+      ...kShopCatalog,
+    ]) {
+      if (seen.add(item.id)) out.add(item);
+    }
+    return out;
   }
 
   /// Color del tema equipado de la tienda (síncrono, para
@@ -1627,7 +1621,7 @@ class SocialService {
   static Color? get equippedThemeColor {
     final id = _equippedThemeId;
     if (id == null) return null;
-    for (final item in kShopCatalog) {
+    for (final item in _lookupCatalog()) {
       if (item.id == id && item.color != null) {
         return Color(item.color!);
       }
@@ -1689,17 +1683,51 @@ class SocialService {
       ValueNotifier<String?>(null);
 
   /// Asset de la foto de un avatar por su id, o null si el id no
-  /// es un avatar. Busca en el catálogo de la tienda (premium) y
-  /// en los gratuitos de la galería.
+  /// es un avatar. Busca en el catálogo de la tienda (premium, el
+  /// remoto primero) y en los gratuitos de la galería. Los
+  /// avatares remotos con `imageUrl` no tienen asset: su foto se
+  /// resuelve con [equippedAvatarImageUrl] + ShopImageCache.
   static String? avatarAssetForId(String? id) {
     if (id == null) return null;
     final free = freeAvatarAssets[id];
     if (free != null) return free;
-    for (final item in kShopCatalog) {
+    for (final item in _lookupCatalog()) {
       if (item.id == id) return item.asset;
     }
     return null;
   }
+
+  /// URL remota de la foto del avatar equipado, o null si el
+  /// avatar equipado es de asset (o no hay ninguno). La foto se
+  /// muestra desde la caché en disco (ShopImageCache).
+  static String? get equippedAvatarImageUrl {
+    final id = _equippedAvatarId;
+    if (id == null) return null;
+    for (final item in _lookupCatalog()) {
+      if (item.id == id) return item.imageUrl;
+    }
+    return null;
+  }
+
+  /// Id del marco equipado (síncrono), o null.
+  static String? get equippedFrameId => _equippedFrameId;
+
+  /// El marco equipado (su artículo del catálogo), o null sin
+  /// marco. Se dibuja como anillo alrededor de la foto del avatar
+  /// del usuario (Cuenta y vista previa de la tienda).
+  static ShopItem? get equippedFrameItem {
+    final id = _equippedFrameId;
+    if (id == null) return null;
+    for (final item in _lookupCatalog()) {
+      if (item.id == id) return item;
+    }
+    return null;
+  }
+
+  /// Avisa a quien escucha (la cabecera de Cuenta) cuando cambia
+  /// el marco equipado: el círculo repinta el anillo al instante.
+  static final ValueNotifier<String?> equippedFrameIdNotifier =
+      ValueNotifier<String?>(null);
 
   /// Insignia equipada ('badge_star' | 'badge_trophy' | 'badge_flame').
   static String? get equippedBadgeId => _equippedBadgeId;
@@ -1722,6 +1750,24 @@ class SocialService {
     return true;
   }
 
+  /// Regala un artículo (recompensa de referidos, 7.3): lo añade
+  /// a la lista local de compras y lo sincroniza, SIN descontar
+  /// puntos. No es una compra: el precio no se mira (las
+  /// recompensas llevan price 0 y referralOnly). Si ya lo tiene,
+  /// no hace nada.
+  static Future<void> grantItem(ShopItem item) async {
+    await init();
+    if ((_owned ?? <String>{}).contains(item.id)) return;
+    _owned = {...?_owned, item.id};
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_kOwned, _owned!.toList());
+    } catch (_) {}
+    try {
+      await _repo.syncPurchase(item.id);
+    } catch (_) {}
+  }
+
   /// Equipa un artículo ya comprado. Los temas cambian el acento
   /// de la app (AppAccent lo lee de aquí, no de UserPrefs, porque
   /// UserPrefs solo guarda 'verde'/'violeta'). El campo en memoria
@@ -1736,6 +1782,8 @@ class SocialService {
         _equippedAvatarId = item.id;
       case 'badge':
         _equippedBadgeId = item.id;
+      case 'frame':
+        _equippedFrameId = item.id;
     }
     await init();
     // Si init() acababa de cargar las preferencias (primera
@@ -1746,6 +1794,10 @@ class SocialService {
       _equippedAvatarId = item.id;
       equippedAvatarIdNotifier.value = item.id;
     }
+    if (item.kind == 'frame') {
+      _equippedFrameId = item.id;
+      equippedFrameIdNotifier.value = item.id;
+    }
     try {
       final prefs = await SharedPreferences.getInstance();
       switch (item.kind) {
@@ -1755,11 +1807,13 @@ class SocialService {
           await prefs.setString(_kEquippedAvatar, item.id);
         case 'badge':
           await prefs.setString(_kEquippedBadge, item.id);
+        case 'frame':
+          await prefs.setString(_kEquippedFrame, item.id);
       }
     } catch (_) {}
     // Lo equipado también se sincroniza (no solo la propiedad):
-    // así el avatar/insignia/tema sobrevive a un cambio de teléfono
-    // y los amigos ven lo que llevas puesto.
+    // así el avatar/insignia/tema/marco sobrevive a un cambio de
+    // teléfono y los amigos ven lo que llevas puesto.
     await _safeVoid(() => _repo.syncEquipped(item.kind, item.id));
   }
 
@@ -1781,14 +1835,22 @@ class SocialService {
   static String? get equippedThemeName {
     final id = _equippedThemeId;
     if (id == null) return null;
-    for (final item in kShopCatalog) {
+    for (final item in _lookupCatalog()) {
       if (item.id == id) return item.name;
     }
     return null;
   }
 
+  /// El catálogo de la tienda: REMOTO (Firestore 'shop_items',
+  /// con caché local y respaldo offline). Mantiene la firma de
+  /// siempre; la UI no cambia.
   static Future<List<ShopItem>> shopItems() =>
-      _safe(() => _repo.shopItems(), <ShopItem>[]);
+      _safe(() => RemoteShopCatalog.instance.loadCatalog(), <ShopItem>[]);
+
+  /// Fuerza la relectura remota del catálogo (tras publicar un
+  /// artículo nuevo en Firestore).
+  static Future<List<ShopItem>> refreshShopItems() => _safe(
+      () => RemoteShopCatalog.instance.refreshCatalog(), <ShopItem>[]);
 
   // --- Grupos ---
 

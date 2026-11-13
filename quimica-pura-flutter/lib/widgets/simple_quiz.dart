@@ -524,7 +524,13 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
     if (_selected != null) return;
     final value = await CalculatorScreen.open(
       context,
-      scientific: true,
+      // Quemia 7.3 (Kristian): el teclado sigue la dificultad de la
+      // pregunta — sencillo si es fácil (1), científico si es media
+      // (2) o difícil (3). submitResult: true siempre aquí: son
+      // preguntas de cálculo y el valor hay que entregarlo aunque
+      // el teclado sea el sencillo.
+      scientific: _q.difficulty > 1,
+      submitResult: true,
       unit: _q.numericUnit,
       initialValue: _pendingNumeric,
       onDraftChanged: _onNumericDraft,

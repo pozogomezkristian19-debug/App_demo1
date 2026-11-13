@@ -725,7 +725,13 @@ class AnalyticsSync {
       await prefs.setInt(_kJoinedAtKey, joinedAtMs);
       final levels = await _levelsByTrack();
       return <String, dynamic>{
-        'username': UserPrefs.userName,
+        // El nombre público único (referidos 7.3) cuando ya se
+        // reclamó; si no, el nombre del onboarding. Así la tabla,
+        // Amigos y los avisos enseñan un nombre único, y el
+        // saludo ("Bienvenida Vanessa") no cambia.
+        'username': UserPrefs.publicUsername.isNotEmpty
+            ? UserPrefs.publicUsername
+            : UserPrefs.userName,
         'joinedAt': joinedAtMs,
         'lastActive': now.millisecondsSinceEpoch,
         'levelsPassed': _levelsPassed(levels),
@@ -934,13 +940,14 @@ class AnalyticsSync {
   }
 
   /// Enlaza Google a la sesión actual y, solo si el enlace cambió el
-  /// uid, restaura el progreso de la nube. Desde la 7.1 el enlace
-  /// NUNCA cambia el uid (si la cuenta ya vive en otro uid, el
-  /// enlace falla sin más): la restauración tras cambiar de uid
-  /// pasa por [signInGoogleAndRestore]. Tras un enlace normal el uid
-  /// no cambia y no hace falta restaurar. Después respalda lo
-  /// fusionado. Lo llama Cuenta tras el botón de Google. Devuelve
-  /// true si el enlace salió bien, false si falló (sin lanzar).
+  /// uid, restaura el progreso de la nube. Desde la 7.3 el enlace
+  /// SÍ puede cambiar el uid (fallback credential-already-in-use:
+  /// se entra en la cuenta de Google y [AuthService] ya migró el
+  /// progreso del anónimo con [migrateAnonymousProgress]). Tras un
+  /// enlace normal el uid no cambia y no hace falta restaurar.
+  /// Después respalda lo fusionado. Lo llama Cuenta tras el botón
+  /// de Google. Devuelve true si el enlace salió bien, false si
+  /// falló (sin lanzar).
   static Future<bool> linkGoogleAndRestore() async {
     final uidBefore = AuthService.currentUid;
     final ok = await AuthService.linkWithGoogle();
@@ -951,6 +958,96 @@ class AnalyticsSync {
     }
     await uploadProgress(force: true);
     return true;
+  }
+
+  /// Migra el progreso del usuario anónimo al uid de Google cuando
+  /// el inicio de sesión cambia el uid (Quemia 7.3, regla dura de
+  /// Kristian: si un usuario ya tiene nivel y puntos sin haber
+  /// iniciado sesión, al iniciar sesión SE GUARDA TODO SU PROGRESO,
+  /// nada se pierde). La pone main() como hook de AuthService.
+  ///
+  /// Qué se migra y cómo:
+  /// - El documento de la nube del anónimo (users/<fromUid>) se
+  ///   FUSIONA en el de Google (users/<toUid>) con [_mergeUserDocs]:
+  ///   por campo queda lo mejor/lo más reciente (nivel mayor por
+  ///   tema, puntos mayores, días de práctica unidos, joinedAt más
+  ///   antiguo). Si el uid de Google ya tiene datos, nunca se
+  ///   borran: se queda con lo mejor de cada campo.
+  /// - El progreso LOCAL del teléfono (nivel, puntos, racha) toma
+  ///   lo mejor de la fusión con [applyRecovered] (solo suma).
+  /// - Vidas, cosméticos comprados/equipados, avatar, amigos,
+  ///   errores, logros, grupos y estadísticas viven en el teléfono
+  ///   (SharedPreferences, con clave de pista, NO de uid): el
+  ///   cambio de uid no los toca, así que sobreviven tal cual; y
+  ///   [uploadProgress] sube la foto local fusionada al uid de
+  ///   Google para que la nube quede al día.
+  /// - Si algo falla (sin internet, timeout), devuelve false: la
+  ///   fachada da el inicio por fallido con 'migration_failed' y
+  ///   el progreso local sigue intacto; la próxima subida con
+  ///   force lo vuelve a intentar. Nunca se devuelve true con la
+  ///   migración a medias.
+  static Future<bool> migrateAnonymousProgress(
+      String fromUid, String toUid) async {
+    try {
+      final anonDoc = await _repository
+          .getUser(fromUid)
+          .timeout(const Duration(seconds: 5), onTimeout: () => null);
+      if (anonDoc != null && anonDoc.isNotEmpty) {
+        final googleDoc = await _repository
+            .getUser(toUid)
+            .timeout(const Duration(seconds: 5), onTimeout: () => null);
+        final merged = _mergeUserDocs(anonDoc, googleDoc ?? {});
+        await applyRecovered(merged);
+        await _repository
+            .setUser(toUid, merged)
+            .timeout(const Duration(seconds: 5));
+      }
+      await uploadProgress(force: true);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Fusión best-of de dos documentos de usuario (el del anónimo y
+  /// el de Google): nivel mayor por tema, puntos mayores, días
+  /// unidos (la racha sale de la unión), joinedAt más antiguo y
+  /// nombre del documento de Google si lo tiene (si no, el del
+  /// anónimo). Nunca borra el progreso de ninguno de los dos.
+  static Map<String, dynamic> _mergeUserDocs(
+      Map<String, dynamic> anon, Map<String, dynamic> google) {
+    final levels = _mergeLevels(anon['levels'], google['levels']);
+    final days = <String>{};
+    for (final raw in [anon['practiceDays'], google['practiceDays']]) {
+      if (raw is List) {
+        for (final d in raw) {
+          if (d is String) days.add(d);
+        }
+      }
+    }
+    final points = _asInt(anon['points']) > _asInt(google['points'])
+        ? _asInt(anon['points'])
+        : _asInt(google['points']);
+    final joinedAnon = _asInt(anon['joinedAt']);
+    final joinedGoogle = _asInt(google['joinedAt']);
+    final joinedAt = joinedAnon > 0 && joinedGoogle > 0
+        ? (joinedAnon < joinedGoogle ? joinedAnon : joinedGoogle)
+        : (joinedAnon > 0 ? joinedAnon : joinedGoogle);
+    final now = DateTime.now();
+    return <String, dynamic>{
+      'username': (google['username'] as String?)?.isNotEmpty == true
+          ? google['username']
+          : anon['username'],
+      'joinedAt': joinedAt,
+      'lastActive': now.millisecondsSinceEpoch,
+      'levelsPassed': _levelsPassed(levels),
+      'levels': levels,
+      'practiceDays': days.toList(),
+      'points': points,
+      'streak': ProgressService.currentStreak(days, now),
+      'track': google['track'] ?? anon['track'] ?? UserPrefs.track,
+      'shared': true,
+    };
   }
 
   /// Entra con Google (teléfono nuevo) y restaura el progreso de la

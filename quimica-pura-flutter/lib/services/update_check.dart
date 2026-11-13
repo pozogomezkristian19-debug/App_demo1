@@ -50,6 +50,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../widgets/brand_logo.dart';
 import '../widgets/lucide_icons.dart';
+import 'accent.dart';
 import 'localization.dart';
 import 'notification_inbox.dart';
 import 'notification_service.dart';
@@ -57,7 +58,14 @@ import 'notification_service.dart';
 /// Versión actual de la app: ÚNICA fuente de verdad en el código.
 /// Debe coincidir con `latest` de version.json en la build que se
 /// publica, para que no salga un aviso falso nada más instalar.
-const String kAppVersion = '7.2';
+const String kAppVersion = '7.3';
+
+/// Versión PÚBLICA que se enseña dentro de la app (Quemia 7.3):
+/// lo que ve Kristian es 1.0; la 7.3 es solo el número interno de
+/// las pruebas (kAppVersion + version.json). El comprobador de
+/// actualizaciones compara SIEMPRE kAppVersion (interna), nunca
+/// esta: cambiar la pública no afecta a las actualizaciones.
+const String kDisplayVersion = '1.0';
 
 /// version.json en la raíz del repo, servido en crudo por GitHub.
 const String kUpdateCheckUrl =
@@ -925,13 +933,13 @@ class UpdateCheckService {
                                 height: 48,
                                 decoration: BoxDecoration(
                                   color:
-                                      BrandColors.teal.withValues(alpha: 0.15),
+                                      AppAccent.primary.withValues(alpha: 0.15),
                                   shape: BoxShape.circle,
                                 ),
-                                child: const LucideIcon(
+                                child: LucideIcon(
                                   LucideIcons.download,
                                   size: 26,
-                                  color: BrandColors.teal,
+                                  color: AppAccent.primary,
                                 ),
                               ),
                               const SizedBox(width: 12),
@@ -949,12 +957,15 @@ class UpdateCheckService {
                           ),
                           const SizedBox(height: 12),
                           Text(
+                            // La versión que se enseña es la PÚBLICA
+                            // (1.0): la interna (info.latest, 7.3) es
+                            // solo para nosotros y el comprobador.
                             t['versionAvailable']!
-                                .replaceAll('{v}', info.latest),
-                            style: const TextStyle(
+                                .replaceAll('{v}', kDisplayVersion),
+                            style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w800,
-                              color: BrandColors.teal,
+                              color: AppAccent.primary,
                             ),
                           ),
                           if (info.notes.isNotEmpty) ...[
@@ -983,14 +994,13 @@ class UpdateCheckService {
                           SizedBox(
                             width: double.infinity,
                             child: FilledButton(
-                              // Teal fijo (no el acento elegido en Cuenta): el
-                              // diálogo de actualización es siempre teal. La
-                              // elevación le da vida 3D; el color de fondo NO
-                              // se toca (lo afirma el test de actualización).
+                              // Quemia 7.3: el diálogo sigue al acento elegido en
+                              // Cuenta (antes era teal fijo también con el
+                              // tema violeta). Con Verde se ve igual que antes.
                               style: FilledButton.styleFrom(
-                                backgroundColor: BrandColors.teal,
+                                backgroundColor: AppAccent.primary,
                                 foregroundColor: Colors.white,
-                                shadowColor: BrandColors.tealDark,
+                                shadowColor: AppAccent.primaryDark,
                                 elevation: 4,
                               ),
                               onPressed: () =>
@@ -1005,7 +1015,7 @@ class UpdateCheckService {
                               width: double.infinity,
                               child: TextButton(
                                 style: TextButton.styleFrom(
-                                  foregroundColor: BrandColors.teal,
+                                  foregroundColor: AppAccent.primary,
                                 ),
                                 onPressed: () =>
                                     Navigator.of(dialogContext).pop('later'),

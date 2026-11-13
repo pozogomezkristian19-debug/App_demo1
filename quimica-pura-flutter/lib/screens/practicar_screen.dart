@@ -1,4 +1,5 @@
 import '../widgets/duo_button.dart';
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../services/accent.dart';
@@ -14,6 +15,7 @@ import '../services/numeric_answer.dart';
 import '../services/points.dart';
 import '../services/progress.dart';
 import '../services/question_generator.dart';
+import '../services/referral_service.dart';
 import '../services/sound_service.dart';
 import '../services/user_prefs.dart';
 import '../widgets/brand_logo.dart';
@@ -150,6 +152,15 @@ class PracticarScreen extends StatefulWidget {
   /// Abre una pantalla del menú por su clave (examen con tiempo,
   /// reto…): lo resuelve HomeScreen con _openScreenKey.
   final void Function(String key)? onOpenScreen;
+
+  /// Fábrica del azar de las preguntas (solo tests): en producción
+  /// es un Random() nuevo en cada intento; los tests de goldens la
+  /// fijan con semilla para que el sorteo sea determinista y la
+  /// captura no cambie entre corridas (Quemia 7.3: con Random() sin
+  /// semilla, los goldens de resultado y camino fallaban porque los
+  /// puntos del sorteo cambiaban en cada corrida).
+  @visibleForTesting
+  static Random Function() randomFactory = Random.new;
 
   /// Avisa a HomeScreen cuando empieza/termina una sesión de juego
   /// (quiz de nivel, repaso o examen mixto en línea): mientras hay
@@ -322,21 +333,25 @@ class _PracticarScreenState extends State<PracticarScreen> {
         items.add(_QuizItem(id: f.id, question: q));
       }
     }
-    // Después, las preguntas del banco de este nivel, en orden, hasta
-    // completar 5 en total (los errores pendientes ocupan su sitio).
-    // El id se calcula con la pregunta española (índice alineado).
-    final start = (level - 1) * _levelSize;
-    if (start < bank.length && items.length < _levelSize) {
-      final end = min(start + (_levelSize - items.length), bank.length);
-      for (var i = start; i < end; i++) {
-        final id = bankId(spanishBank[i]);
-        if (used.add(id)) items.add(_QuizItem(id: id, question: bank[i]));
-      }
+    // Después, preguntas al AZAR de TODO el banco del tema (Quemia
+    // 7.3, Kristian): antes se tomaba un trozo fijo del banco —
+    // final start = (level - 1) * _levelSize — y cada intento del
+    // mismo nivel empezaba por las mismas 5 preguntas. Ahora el
+    // banco se baraja con un Random() nuevo en cada intento y se
+    // toman preguntas distintas hasta completar 5, sin repetir
+    // ninguna dentro del intento; el nivel ya no decide qué
+    // preguntas salen, solo cuántas. El id se calcula con la
+    // pregunta española (índice alineado).
+    final rng = PracticarScreen.randomFactory();
+    final order = List<int>.generate(bank.length, (i) => i)..shuffle(rng);
+    for (final i in order) {
+      if (items.length >= _levelSize) break;
+      final id = bankId(i < spanishBank.length ? spanishBank[i] : bank[i]);
+      if (used.add(id)) items.add(_QuizItem(id: id, question: bank[i]));
     }
     // Y preguntas nuevas generadas hasta completar 5 (solo si el tema
     // tiene generador; orgánica y laboratorio son solo de banco).
     if (topicGeneratorTypes.containsKey(topic)) {
-      final rng = Random();
       var guard = 0;
       while (items.length < _levelSize && guard < 60) {
         guard++;
@@ -346,7 +361,31 @@ class _PracticarScreenState extends State<PracticarScreen> {
         }
       }
     }
-    return items;
+    // Se baraja el conjunto entero (errores incluidos) y las opciones
+    // de cada pregunta, para que al repetir el nivel cambien el
+    // conjunto y el orden. (Las opciones también se barajan al
+    // mostrarse con _shuffleOptions; aquí quedan barajadas en el
+    // propio ítem, así que ningún camino las enseña en el orden del
+    // banco.)
+    items.shuffle(rng);
+    return items.map(_withShuffledOptions).toList();
+  }
+
+  /// Copia del ítem con las opciones barajadas y el índice de la
+  /// respuesta correcta remapeado. Las numéricas (sin opciones) y
+  /// las de menos de 2 opciones se devuelven tal cual.
+  static _QuizItem _withShuffledOptions(_QuizItem item) {
+    final options = item.question.options;
+    if (options.length < 2) return item;
+    final order = List<int>.generate(options.length, (i) => i)
+      ..shuffle(PracticarScreen.randomFactory());
+    return _QuizItem(
+      id: item.id,
+      question: item.question.copyWith(
+        options: [for (final i in order) options[i]],
+        answer: order.indexOf(item.question.answer),
+      ),
+    );
   }
 
   /// Repaso con VARIANTES (v6): nunca se muestra la misma pregunta
@@ -361,7 +400,7 @@ class _PracticarScreenState extends State<PracticarScreen> {
     final items = <_QuizItem>[];
     final entries = List<FailedEntry>.of(only ?? progress.failedEntries)
       ..shuffle();
-    final rng = Random();
+    final rng = PracticarScreen.randomFactory();
     for (final f in entries) {
       if (items.length >= _reviewMax) break;
       var made = 0;
@@ -420,7 +459,7 @@ class _PracticarScreenState extends State<PracticarScreen> {
     final size = ProgressService.track == ProgressService.trackBach
         ? _mixedSizeBach
         : _mixedSize;
-    final rng = Random();
+    final rng = PracticarScreen.randomFactory();
     final items = <_QuizItem>[];
     final used = <String>{};
     // 2 preguntas del banco por tema, empezando por los más débiles.
@@ -1541,7 +1580,7 @@ class _QuizRunnerState extends State<_QuizRunner> {
   }
 
   void _shuffleOptions() {
-    _order = [0, 1, 2, 3]..shuffle(Random());
+    _order = [0, 1, 2, 3]..shuffle(PracticarScreen.randomFactory());
     _selected = null;
     _pendingNumeric = null;
     _submittedNumeric = null;
@@ -1643,7 +1682,13 @@ class _QuizRunnerState extends State<_QuizRunner> {
     if (_selected != null) return;
     final value = await CalculatorScreen.open(
       context,
-      scientific: true,
+      // Quemia 7.3 (Kristian): el teclado sigue la dificultad de la
+      // pregunta — sencillo si es fácil (1), científico si es media
+      // (2) o difícil (3). submitResult: true siempre aquí: son
+      // preguntas de cálculo y el valor hay que entregarlo aunque
+      // el teclado sea el sencillo.
+      scientific: _q.difficulty > 1,
+      submitResult: true,
       unit: _q.numericUnit,
       initialValue: _pendingNumeric,
       onDraftChanged: _onNumericDraft,
@@ -1681,6 +1726,13 @@ class _QuizRunnerState extends State<_QuizRunner> {
         // Ganar el nivel completo devuelve 1 vida (hasta 5).
         _lifeRestored = progress.restoreLifeOnPass();
         progress.recordLevelPass(widget.spec.topic!, widget.spec.level);
+        // Referidos (7.3): si es el Nivel 1 y el usuario canjeó
+        // un código, aquí se le pagan sus +20 puntos y se marca
+        // su referido como 'rewarded' (el invitador cobra al
+        // abrir Invitar). Sin await: el premio no bloquea la
+        // pantalla de resultado.
+        unawaited(ReferralService.maybeRewardInviteeOnLevelPass(
+            widget.spec.level));
         // Puntuación del nivel (fix5, punto 15, CORREGIDO): el
         // PROMEDIO de todas las notas con las que se pasó, no la
         // mejor ni la primera. Un replay fallido no llama aquí:

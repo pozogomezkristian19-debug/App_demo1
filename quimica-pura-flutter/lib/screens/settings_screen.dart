@@ -114,7 +114,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final c = _SettingsColors.of(context);
-    const teal = Color(0xFF00C2A8);
+    // Quemia 7.3: los iconos teal de antes siguen al acento del tema.
+    final teal = AppAccent.primary;
     const violet = Color(0xFF8B5CF6);
     const blue = Color(0xFF3B82F6);
     const amber = Color(0xFFF59E0B);
@@ -176,7 +177,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             iconColor: teal,
             title: tr('checkUpdateTitle'),
             subtitle:
-                tr('checkUpdateSub').replaceFirst('%s', kAppVersion),
+                tr('checkUpdateSub').replaceFirst('%s', kDisplayVersion),
             onTap: _manualUpdateCheck,
           ),
           // Idioma: abre el selector de idioma.

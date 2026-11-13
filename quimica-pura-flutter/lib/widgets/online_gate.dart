@@ -12,6 +12,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../services/accent.dart';
 import '../services/analytics_sync.dart';
 import '../services/auth_service.dart';
 import '../services/localization.dart';
@@ -42,6 +43,7 @@ class _OnlineGateState extends State<OnlineGate> {
   bool? _linkedAfterTap;
   var _busy = false;
   String? _errorKey;
+  String? _errorCode;
 
   bool get _isLinked =>
       widget.isGoogleLinked ??
@@ -53,6 +55,7 @@ class _OnlineGateState extends State<OnlineGate> {
     setState(() {
       _busy = true;
       _errorKey = null;
+      _errorCode = null;
     });
     final ok =
         await (widget.onLinkGoogle?.call() ?? AuthService.linkWithGoogle());
@@ -65,6 +68,8 @@ class _OnlineGateState extends State<OnlineGate> {
         _errorKey = AnalyticsSync.firebaseReady
             ? 'googleSignInFailed'
             : 'googleNeedInternet';
+        // Quemia 7.3: el código real del fallo, para diagnosticar.
+        _errorCode = AuthService.lastGoogleError;
       }
     });
   }
@@ -96,13 +101,13 @@ class _OnlineGateState extends State<OnlineGate> {
                     height: 64,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: const Color(0xFF00C2A8).withValues(alpha: 0.14),
+                      color: AppAccent.primary.withValues(alpha: 0.14),
                     ),
                     alignment: Alignment.center,
-                    child: const LucideIcon(
+                    child: LucideIcon(
                       LucideIcons.logIn,
                       size: 30,
-                      color: Color(0xFF00C2A8),
+                      color: AppAccent.primary,
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -130,7 +135,9 @@ class _OnlineGateState extends State<OnlineGate> {
                   if (_errorKey != null) ...[
                     const SizedBox(height: 12),
                     Text(
-                      tr(_errorKey!),
+                      _errorCode == null
+                          ? tr(_errorKey!)
+                          : '${tr(_errorKey!)} [$_errorCode]',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 14,

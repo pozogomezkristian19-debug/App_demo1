@@ -92,10 +92,19 @@ class _ActivityTab extends StatelessWidget {
                 backgroundColor: i < 11
                     ? AppAccent.primary.withValues(alpha: 0.18)
                     : Colors.grey.withValues(alpha: 0.25),
+                // El texto NO puede ser onPrimary: el fondo es el
+                // acento al 18% (casi blanco en claro, casi negro
+                // en oscuro) y onPrimary es blanco en claro y
+                // oscuro en oscuro — quedaba blanco sobre menta
+                // pálido y oscuro sobre verde oscuro, ilegible.
+                // Con el acento pleno (i < 11) o onSurface (gris)
+                // el símbolo se lee en los dos temas.
                 child: Text(
                   metalActivitySeries[i].symbol,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 13),
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: i < 11 ? scheme.primary : scheme.onSurface),
                 ),
               ),
               title: Text(

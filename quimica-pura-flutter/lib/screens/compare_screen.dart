@@ -86,8 +86,17 @@ class _CompareScreenState extends State<CompareScreen> {
               Expanded(
                 child: Column(
                   children: [
+                    // Letra BLANCA explícita (foto73_all_comparar
+                    // oscuro): el CircleAvatar pinta el texto con
+                    // onPrimary y en el tema oscuro onPrimary es
+                    // oscuro, así que la "C" y la "O" salían con
+                    // letra oscura sobre teal — contra la regla
+                    // "nunca oscuro sobre teal" y distinto del
+                    // claro, donde sí eran blancas. Mismo arreglo
+                    // que en Tablas de referencia.
                     CircleAvatar(
                       radius: 30,
+                      foregroundColor: Colors.white,
                       child: Text(_a.symbol,
                           style: const TextStyle(
                               fontWeight: FontWeight.bold, fontSize: 20)),
@@ -105,6 +114,7 @@ class _CompareScreenState extends State<CompareScreen> {
                   children: [
                     CircleAvatar(
                       radius: 30,
+                      foregroundColor: Colors.white,
                       child: Text(_b.symbol,
                           style: const TextStyle(
                               fontWeight: FontWeight.bold, fontSize: 20)),

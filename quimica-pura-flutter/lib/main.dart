@@ -29,6 +29,7 @@ import 'screens/notifications_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/practicar_screen.dart';
 import 'screens/reference_tables_screen.dart';
+import 'screens/referrals_screen.dart';
 import 'screens/reminder_screen.dart';
 import 'screens/resolver_screen.dart';
 import 'screens/search_screen.dart';
@@ -96,11 +97,22 @@ Future<void> main() async {
   } catch (_) {
     // Sin Firebase: todo sigue local, como antes.
   }
+  // Migración del progreso al cambiar de uid (Quemia 7.3): si el
+  // inicio con Google cambia el uid (fallback
+  // credential-already-in-use), el progreso del anónimo se fusiona
+  // en el uid de Google antes de dar el inicio por bueno.
+  AuthService.migrateProgressOnUidChange =
+      AnalyticsSync.migrateAnonymousProgress;
   // Sesión anónima automática (ronda fix8): el uid es la identidad
   // del documento de Firestore. Si falla (sin internet), la app
   // sigue 100% offline y la analítica usa el id temporal.
   await AuthService.ensureAnonymous();
-  await AnalyticsSync.init();
+  // Límite de 3 s (Quemia 7.3): init() migra el documento heredado
+  // por red (dos llamadas con timeout de 5 s cada una) y no puede
+  // retrasar el primer frame más de 3 s; si se agota, la migración
+  // se reintenta en la próxima apertura y la app arranca igual.
+  await AnalyticsSync.init()
+      .timeout(const Duration(seconds: 3), onTimeout: () {});
   await UserPrefs.load();
   // Compras y cosméticos de la tienda (Quemia 7.0): se cargan
   // antes de arrancar para que el tema equipado tiña la app
@@ -128,11 +140,14 @@ Future<void> main() async {
   // racha, vidas y puntos). Si no hay widget, no pasa nada.
   await HomeWidgetService.update();
   // Puerta de bloqueo (ronda fix8): si el creador baneó esta cuenta,
-  // la app arranca en la pantalla de suspensión. La lectura lleva
-  // timeout: sin internet no se queda esperando. Los ajustes remotos
-  // y la primera subida corren en segundo plano y fallan en silencio.
-  final banned = await AnalyticsSync.fetchBanned()
-      .timeout(const Duration(seconds: 5), onTimeout: () => false);
+  // la app arranca en la pantalla de suspensión. La lectura es de
+  // RED y ANTES esperaba hasta 5 s ANTES del primer frame (Quemia
+  // 7.3: con la red lenta, la pantalla se quedaba en negro esos 5 s
+  // detrás del splash). Ahora NO se espera: la app arranca con
+  // banned: false y MelliQuiApp re-chequea en el primer frame
+  // (initState → _recheckBanned) y enseña la suspensión si toca.
+  // Los ajustes remotos y la primera subida corren en segundo plano
+  // y fallan en silencio.
   unawaited(AnalyticsSync.applyRemoteSettings());
   unawaited(AnalyticsSync.uploadProgress());
   // Respaldo con Google (backupToCloud es hoy un alias de
@@ -172,7 +187,10 @@ Future<void> main() async {
   } catch (_) {
     // Sin soporte online: la app sigue.
   }
-  runApp(MelliQuiApp(banned: banned));
+  // Primer frame YA: nada de red se esperó antes de aquí salvo los
+  // 3 s acotados de arriba. El baneo se re-chequea en el primer
+  // frame dentro de MelliQuiApp (ver initState).
+  runApp(const MelliQuiApp());
 }
 
 /// Transición suave para TODAS las pantallas (v6): fundido + pequeño
@@ -286,6 +304,13 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     _banned = widget.banned;
+    // Quemia 7.3: el baneo ya no se espera antes del primer frame
+    // (main() arranca con banned: false para no dejar la pantalla en
+    // negro con la red lenta): se re-chequea aquí, en el primer
+    // frame, y si la cuenta está baneada aparece la suspensión.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_recheckBanned());
+    });
     // El modo de tema vive SOLO en Cuenta (fix3, punto 13): cuando
     // cambia, este aviso reconstruye el tema en el acto, igual que
     // hacía el icono de sol/luna de la AppBar. Sin este listener, el
@@ -919,7 +944,7 @@ class _ReviewChip extends StatelessWidget {
           // Kristian): fondo #134E4A, icono + número en menta.
           // Altura fija kTopBarPillHeight: igual que vidas y campana.
           decoration: BoxDecoration(
-            color: const Color(0xFF134E4A),
+            color: AppAccent.pillDarkBackground,
             borderRadius: BorderRadius.circular(999),
           ),
           height: kTopBarPillHeight,
@@ -927,15 +952,15 @@ class _ReviewChip extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const LucideIcon(LucideIcons.rotateCcw,
-                  size: 20, color: Color(0xFF2DD4BF)),
+              LucideIcon(LucideIcons.rotateCcw,
+                  size: 20, color: AppAccent.pillDarkForeground),
               const SizedBox(width: 4),
               Text(
                 '$count',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
-                  color: Color(0xFF2DD4BF),
+                  color: AppAccent.pillDarkForeground,
                 ),
               ),
             ],
@@ -994,14 +1019,16 @@ class _NotificationBell extends StatelessWidget {
                     // ancho, la altura fija iguala el alto
                     // (corrección 2026-11-12, el alto, no el ancho).
                     decoration: BoxDecoration(
-                      color: const Color(0xFF134E4A),
+                      color: AppAccent.pillDarkBackground,
                       borderRadius: BorderRadius.circular(999),
                     ),
                     height: kTopBarPillHeight,
                     padding:
                         const EdgeInsets.symmetric(horizontal: 18, vertical: 5),
-                    child: const LucideIcon(LucideIcons.bell,
-                        size: 20, color: Color(0xFF2DD4BF), threeD: true),
+                    child: LucideIcon(LucideIcons.bell,
+                        size: 20,
+                        color: AppAccent.pillDarkForeground,
+                        threeD: true),
                   ),
                 ),
                 if (unread > 0)
@@ -1057,8 +1084,9 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   // Ronda #8 (Quemia 6.5): Niveles es el centro de la barra (índice
-  // 2 en el orden nuevo: Resolver, Aprender, Niveles, Tabla,
-  // Cuenta), así que la app arranca en Niveles, como siempre.
+  // 2 en el orden nuevo: Aprender, Resolver, Niveles, Tabla,
+  // Cuenta — 7.3: Aprender primero), así que la app arranca en
+  // Niveles, como siempre.
   int _index = 2;
 
   /// ¿Hay una sesión de juego en curso (quiz de nivel, repaso o
@@ -1196,9 +1224,11 @@ class _HomeScreenState extends State<HomeScreen> {
   // Ronda #8 (Quemia 6.5): orden nuevo de la barra inferior,
   // con Niveles en el centro (índice 2): Resolver, Aprender,
   // Niveles, Tabla, Cuenta.
+  // Quemia 7.3 (Kristian): Aprender PRIMERO y Resolver después:
+  // Aprender, Resolver, Niveles, Tabla, Cuenta.
   List<Widget> get _pages => [
-        const ResolverScreen(),
         const AprenderScreen(),
+        const ResolverScreen(),
         PracticarScreen(
             key: ValueKey(ProgressService.track),
             onOpenScreen: _openScreenKey,
@@ -1273,6 +1303,11 @@ class _HomeScreenState extends State<HomeScreen> {
         page = const ShopScreen();
       case 'groups':
         page = const GroupsScreen();
+      // Referidos (7.3): invita con tu código y canjea el de un
+      // amigo. La entrada vive en Cuenta (fila Referidos) y en el
+      // menú, junto a Amigos y Grupos.
+      case 'referrals':
+        page = const ReferralsScreen();
       // Soporte en la app (7.0, Kristian 09:52): ventanita con hilo
       // y compositor (ya no abre WhatsApp directo).
       case 'support':
@@ -1347,7 +1382,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _goToTab(2);
       case 'solver':
         Navigator.of(context).pop();
-        _goToTab(0, openSolver: entry.target);
+        _goToTab(1, openSolver: entry.target);
       case 'element':
         final z = int.tryParse(entry.target) ?? 0;
         final element =
@@ -1680,10 +1715,11 @@ class _HomeScreenState extends State<HomeScreen> {
     // pestaña con el acento verde, o violeta para todas con el
     // acento violeta.
     // Ronda #8 (Quemia 6.5): la lista va en el orden NUEVO de la
-    // barra (Resolver, Aprender, Niveles, Tabla, Cuenta), así que
-    // cada pestaña conserva SU color de antes: Resolver era la 1,
-    // Aprender la 2, Niveles la 0, Tabla la 3 y Cuenta la 4.
-    const _navOldIndex = [1, 2, 0, 3, 4];
+    // barra (Aprender, Resolver, Niveles, Tabla, Cuenta — 7.3:
+    // Aprender primero), así que cada pestaña conserva SU color
+    // de antes: Aprender era la 2, Resolver la 1, Niveles la 0,
+    // Tabla la 3 y Cuenta la 4.
+    const _navOldIndex = [2, 1, 0, 3, 4];
     final tabColors = List<Color>.generate(
       5,
       (i) => widget.isDark
@@ -1816,10 +1852,18 @@ class _HomeScreenState extends State<HomeScreen> {
                                   // app, teal sobre blanco), no la
                                   // pastilla marrón de las gemelas.
                                   // Cuadrado 56x56 con radio 14.
+                                  // (Kristian, 2026-11-13, menú
+                                  // oscuro: el icono con fondo
+                                  // blanco se veía como un cuadro
+                                  // blanco en oscuro; en oscuro va
+                                  // el anillo transparente, como en
+                                  // el splash.)
                                   ClipRRect(
                                     borderRadius: BorderRadius.circular(14),
                                     child: Image.asset(
-                                      'assets/app_icon.png',
+                                      scheme.brightness == Brightness.dark
+                                          ? 'assets/ring_logo.png'
+                                          : 'assets/app_icon.png',
                                       width: 56,
                                       height: 56,
                                       fit: BoxFit.cover,
@@ -1898,6 +1942,14 @@ class _HomeScreenState extends State<HomeScreen> {
                                 subtitle: tr('accountGroupsSub'),
                                 onTap: () => _openScreenKey('groups'),
                               ),
+                              // Referidos (7.3): junto a Amigos y
+                              // Grupos, en la misma sección social.
+                              _drawerItem(
+                                icon: LucideIcons.heart,
+                                title: tr('accountReferrals'),
+                                subtitle: tr('accountReferralsSub'),
+                                onTap: () => _openScreenKey('referrals'),
+                              ),
                               _drawerItem(
                                 icon: LucideIcons.circleHelp,
                                 title: tr('tableQuizTitle'),
@@ -1907,6 +1959,16 @@ class _HomeScreenState extends State<HomeScreen> {
                             ]),
                             _drawerSection(tr('drawerReference')),
                             _drawerCard([
+                              // Quemia 7.3 (Kristian): "Constantes y
+                              // conversiones" es la PRIMERA de
+                              // Referencia (el conversor es lo que más
+                              // se usa).
+                              _drawerItem(
+                                icon: LucideIcons.arrowLeftRight,
+                                title: tr('menuConstants'),
+                                subtitle: 'Constantes y conversor de unidades',
+                                onTap: () => _openScreenKey('constants'),
+                              ),
                               _drawerItem(
                                 icon: LucideIcons.flaskConical,
                                 title: tr('labSimTitle'),
@@ -1924,12 +1986,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                 title: tr('menuFormulas'),
                                 subtitle: 'Todas las fórmulas juntas',
                                 onTap: () => _openScreenKey('formulas'),
-                              ),
-                              _drawerItem(
-                                icon: LucideIcons.arrowLeftRight,
-                                title: tr('menuConstants'),
-                                subtitle: 'Constantes y conversor de unidades',
-                                onTap: () => _openScreenKey('constants'),
                               ),
                               _drawerItem(
                                 icon: LucideIcons.bookOpen,

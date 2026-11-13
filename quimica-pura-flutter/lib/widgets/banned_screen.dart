@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/localization.dart';
+import '../services/accent.dart';
 import 'brand_logo.dart';
 
 class BannedScreen extends StatelessWidget {
@@ -45,7 +46,7 @@ class BannedScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                    color: BrandColors.teal.withValues(alpha: 0.12),
+                    color: AppAccent.primary.withValues(alpha: 0.12),
                     blurRadius: 24,
                     offset: const Offset(0, 8),
                   ),
@@ -61,13 +62,13 @@ class BannedScreen extends StatelessWidget {
                       width: 88,
                       height: 88,
                       decoration: BoxDecoration(
-                        color: BrandColors.teal.withValues(alpha: 0.15),
+                        color: AppAccent.primary.withValues(alpha: 0.15),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.block,
                         size: 44,
-                        color: BrandColors.teal,
+                        color: AppAccent.primary,
                       ),
                     ),
                   ),
@@ -94,9 +95,9 @@ class BannedScreen extends StatelessWidget {
                   const SizedBox(height: 32),
                   FilledButton.icon(
                     style: FilledButton.styleFrom(
-                      backgroundColor: BrandColors.teal,
+                      backgroundColor: AppAccent.primary,
                       foregroundColor: Colors.white,
-                      shadowColor: BrandColors.tealDark,
+                      shadowColor: AppAccent.primaryDark,
                       // Sombra más marcada: el botón flota (antes
                       // plano sobre la tarjeta). El teal fijo se
                       // conserva: la pantalla es siempre clara.

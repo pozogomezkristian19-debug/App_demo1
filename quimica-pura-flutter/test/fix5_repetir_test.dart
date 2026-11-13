@@ -16,6 +16,7 @@ import 'package:quimica_pura/data/i18n/content_i18n.dart';
 import 'package:quimica_pura/models.dart';
 import 'package:quimica_pura/screens/practicar_screen.dart';
 import 'package:quimica_pura/services/localization.dart';
+import 'package:quimica_pura/services/points.dart';
 import 'package:quimica_pura/services/progress.dart';
 import 'package:quimica_pura/services/user_prefs.dart';
 import 'package:quimica_pura/widgets/celebration.dart';
@@ -141,24 +142,74 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
   }
 
-  /// Juega el Nivel 1 entero: las 5 bien (5/5, nota 5,0: pasa).
-  Future<void> playLevelAllCorrect(WidgetTester tester) async {
-    for (var i = 0; i < 5; i++) {
-      await answerCurrent(tester, correct: true);
-      await next(tester);
+  /// La pregunta que se ve ahora mismo (búsqueda en el banco, como
+  /// en [answerCurrent]).
+  QuizQuestion _shownQuestion(WidgetTester tester) {
+    final bank = localizedAllQuestions();
+    for (final q in bank) {
+      if (find.text(q.question).evaluate().isNotEmpty) return q;
     }
+    throw StateError('No se ve ninguna pregunta del banco');
   }
 
-  /// Juega el Nivel 1 fallando SOLO la última pregunta: 4/5,
-  /// nota 4,0 (pasa por conteo, punto 13) y +12 puntos (4 medias
-  /// a +5 y 1 mal a −8), el caso de Kristian.
-  Future<void> playLevelFourOfFive(WidgetTester tester) async {
-    for (var i = 0; i < 4; i++) {
+  /// Juega el Nivel 1 entero: las 5 bien (5/5, nota 5,0: pasa).
+  /// Devuelve las dificultades de las 5 preguntas que salieron
+  /// (Quemia 7.3: sorteo del banco).
+  Future<List<int>> playLevelAllCorrectTracked(WidgetTester tester) async {
+    final difficulties = <int>[];
+    for (var i = 0; i < 5; i++) {
+      difficulties.add(_shownQuestion(tester).difficulty);
       await answerCurrent(tester, correct: true);
       await next(tester);
     }
+    return difficulties;
+  }
+
+  /// Juega el Nivel 1 entero: las 5 bien (5/5, nota 5,0: pasa).
+  Future<void> playLevelAllCorrect(WidgetTester tester) async {
+    await playLevelAllCorrectTracked(tester);
+  }
+
+  /// Juega el Nivel 1 fallando SOLO la última pregunta: 4/5 (pasa
+  /// por conteo, punto 13). Devuelve las dificultades de las 5
+  /// preguntas que salieron (Quemia 7.3: sorteo del banco).
+  Future<List<int>> playLevelFourOfFiveTracked(WidgetTester tester) async {
+    final difficulties = <int>[];
+    for (var i = 0; i < 4; i++) {
+      difficulties.add(_shownQuestion(tester).difficulty);
+      await answerCurrent(tester, correct: true);
+      await next(tester);
+    }
+    difficulties.add(_shownQuestion(tester).difficulty);
     await answerCurrent(tester, correct: false);
     await next(tester);
+    return difficulties;
+  }
+
+  /// Juega un nivel fallando SOLO la pregunta más difícil que sale
+  /// (Quemia 7.3: las 5 preguntas son un sorteo de TODO el banco
+  /// del tema, así que la nota y los puntos exactos dependen del
+  /// sorteo). Regla secuencial: fallar la primera difícil (3); si
+  /// no sale ninguna, la primera media (2); si tampoco, la última.
+  /// Devuelve las dificultades de las 5 preguntas y el índice de la
+  /// fallada, para calcular la nota y los puntos con lo visto.
+  Future<({List<int> difficulties, int failedIndex})> playLevelFailHardest(
+      WidgetTester tester) async {
+    final difficulties = <int>[];
+    var failedIndex = -1;
+    for (var i = 0; i < 5; i++) {
+      final q = _shownQuestion(tester);
+      difficulties.add(q.difficulty);
+      final shouldFail = failedIndex < 0 &&
+          (q.difficulty == 3 ||
+              (q.difficulty == 2 && i < 4) ||
+              i == 4);
+      if (shouldFail) failedIndex = i;
+      await answerCurrent(tester, correct: !shouldFail);
+      await next(tester);
+    }
+    expect(failedIndex, greaterThanOrEqualTo(0));
+    return (difficulties: difficulties, failedIndex: failedIndex);
   }
 
   /// Juega el Nivel 1 fallando TODO: 0/5, nota 0,0 (suspende).
@@ -178,10 +229,11 @@ void main() {
       await startLevel1(tester);
 
       await playLevelAllCorrect(tester);
-      // Resultado: 5/5, +25 puntos (5 medias a +5) y confeti.
+      // Resultado: 5/5, +N puntos (N depende del sorteo, Quemia
+      // 7.3) y confeti.
       expect(find.text(tr('quizLevelPassed')), findsOneWidget);
       expect(find.text('100%'), findsOneWidget);
-      expect(find.text('+25'), findsWidgets);
+      expect(find.text('+${p.points}'), findsWidgets);
       expect(find.byType(CelebrationOverlay), findsOneWidget);
       expect(p.livesLeft, 5);
 
@@ -211,6 +263,11 @@ void main() {
       await startLevel1(tester);
       await playLevelAllCorrect(tester);
       expect(find.text('100%'), findsOneWidget);
+      // Quemia 7.3: cada intento sortea 5 preguntas distintas, así
+      // que la ganancia de cada victoria depende del sorteo (antes
+      // eran 25 puntos fijos).
+      final firstWin = p.points;
+      expect(firstWin, greaterThan(0));
 
       // Repetir y ganar OTRA vez: el segundo intento también
       // termina en resultado (el bug dejaba el primero pegado).
@@ -220,9 +277,12 @@ void main() {
       expect(find.textContaining('Pregunta 1 de 5'), findsOneWidget);
       await playLevelAllCorrect(tester);
       expect(find.text('100%'), findsOneWidget);
-      // Ganar dos veces el mismo nivel: 25 + 25 puntos.
-      expect(find.text('+25'), findsWidgets);
-      expect(p.points, 50);
+      // La segunda victoria suma sus propias 5 preguntas (sorteo
+      // distinto): el resultado muestra la ganancia de ESTE intento.
+      final secondWin = p.points - firstWin;
+      expect(secondWin, greaterThan(0));
+      expect(find.text('+$secondWin'), findsWidgets);
+      expect(p.points, firstWin + secondWin);
       // El resultado tras ganar (§3.4): botón grande PASAR DE NIVEL
       // + enlaces REPETIR y VOLVER. La nota del nivel ya es el
       // promedio de los 2 pases (5,0 + 5,0 = 5,0), pero ya no se
@@ -278,53 +338,64 @@ void main() {
 
   group('Puntuación del nivel: PROMEDIO de los pases (punto 15 '
       'CORREGIDO) + replay fallido neutro en puntos (A3)', () {
-    testWidgets('pasar 4,0, repetir y pasar 5,0: nota registrada '
-        '4,5; repetir y FALLAR: sigue 4,5, pasado y desbloqueado',
-        (tester) async {
+    testWidgets('pasar 4/5, repetir y pasar 5/5: el promedio es '
+        'la media de los pases; repetir y FALLAR: sigue igual, '
+        'pasado y desbloqueado', (tester) async {
       await pumpNiveles(tester);
       final p = ProgressService.instance;
       const testId = 'level:estequiometria:1';
       await startLevel1(tester);
 
-      // Primer pase 4/5: nota 4,0, +12 puntos. El promedio de un
-      // solo pase es 4,0 y (todavía) no se muestra la línea del
-      // promedio: en el primer pase ya está la 'Nota:' arriba.
-      await playLevelFourOfFive(tester);
+      // Primer pase 4/5: la nota y los puntos dependen del sorteo
+      // (Quemia 7.3), así que se calculan con lo visto.
+      final diffs1 = await playLevelFourOfFiveTracked(tester);
       expect(find.text('80%'), findsOneWidget);
-      expect(find.text('+12'), findsWidgets);
-      expect(p.points, 12);
-      expect(p.levelNoteAverage(testId), closeTo(4.0, 0.001));
+      const correct1 = [true, true, true, true, false];
+      final note1 = levelScore5(diffs1, correct1);
+      var delta1 = 0;
+      for (var i = 0; i < 5; i++) {
+        delta1 += correct1[i]
+            ? pointsForCorrect(diffs1[i])
+            : pointsForWrong(diffs1[i]);
+      }
+      expect(find.text('+$delta1'), findsWidgets);
+      expect(p.points, delta1);
+      expect(p.levelNoteAverage(testId), closeTo(note1, 0.001));
       expect(p.levelNotePassCount(testId), 1);
       expect(find.textContaining('Puntuación del nivel'), findsNothing);
       expect(p.unlockedLevel('estequiometria'), 2);
 
-      // Segundo pase 5/5: nota 5,0. Promedio (4,0 + 5,0) / 2 = 4,5.
+      // Segundo pase 5/5: nota 5,0. Promedio (nota1 + 5,0) / 2.
       await tester.tap(find.text(tr('quizRepeat').toUpperCase()));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.textContaining('Pregunta 1 de 5'), findsOneWidget);
-      await playLevelAllCorrect(tester);
+      final diffs2 = await playLevelAllCorrectTracked(tester);
       expect(find.text('100%'), findsOneWidget);
-      expect(find.text('+25'), findsWidgets);
-      expect(p.points, 37);
-      expect(p.levelNoteAverage(testId), closeTo(4.5, 0.001));
+      final delta2 =
+          diffs2.fold<int>(0, (sum, d) => sum + pointsForCorrect(d));
+      expect(find.text('+$delta2'), findsWidgets);
+      expect(p.points, delta1 + delta2);
+      expect(p.levelNoteAverage(testId),
+          closeTo((note1 + 5.0) / 2, 0.001));
       expect(p.levelNotePassCount(testId), 2);
 
       // Replay FALLIDO (0/5): no entra en el promedio, no quita el
       // pase ni re-bloquea el 2, y es neutro en puntos (A3: el
-      // saldo vuelve a 37, no cae a 37 − 40 = −3). El resultado
-      // muestra Puntos +0: el intento no sumó nada.
+      // saldo se queda en delta1 + delta2). El resultado muestra
+      // Puntos +0: el intento no sumó nada.
       await tester.tap(find.text(tr('quizRepeat').toUpperCase()));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       await playLevelAllWrong(tester);
       expect(find.text('0%'), findsOneWidget);
       expect(find.text('+0'), findsWidgets);
-      expect(p.levelNoteAverage(testId), closeTo(4.5, 0.001));
+      expect(p.levelNoteAverage(testId),
+          closeTo((note1 + 5.0) / 2, 0.001));
       expect(p.levelNotePassCount(testId), 2);
       expect(p.bestScore(testId), 100);
       expect(p.unlockedLevel('estequiometria'), 2);
-      expect(p.points, 37);
+      expect(p.points, delta1 + delta2);
       expect(p.livesLeft, 5);
       // La puntuación registrada sigue guardada tras el fallo
       // (ya no se muestra en la pantalla de resultado, §3.4).
@@ -384,20 +455,18 @@ void main() {
 
   group('A3: replay neutro con nota < 81 (el listón es '
       'unlockedLevel, no la nota)', () {
-    testWidgets('pasar 4/5 fallando la difícil (nota 76 %) y '
+    testWidgets('pasar 4/5 fallando la más difícil y '
         'repetir fallando 0/5: el saldo queda intacto', (tester) async {
       await pumpNiveles(tester);
       final p = ProgressService.instance;
       await startLevel1(tester);
-      // Nivel 1 5/5: +25 y desbloquea el Nivel 2.
+      // Nivel 1 5/5: desbloquea el Nivel 2 (los puntos exactos
+      // dependen del sorteo, Quemia 7.3).
       await playLevelAllCorrect(tester);
       expect(find.text('100%'), findsOneWidget);
-      expect(p.points, 25);
       expect(p.unlockedLevel('estequiometria'), 2);
 
-      // Volver al camino y entrar al Nivel 2 (su 5.ª pregunta es
-      // la difícil: fallarla da 4/5 con nota 3,8 -> 76 % < 81,
-      // el agujero de la vieja condición por nota).
+      // Volver al camino y entrar al Nivel 2.
       await tester.tap(find.text(tr('quizBack').toUpperCase()));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
@@ -409,31 +478,75 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
       expect(find.textContaining('Pregunta 1 de 5'), findsOneWidget);
 
-      // 4/5 fallando la difícil (última): 3 medias y 1 fácil bien
-      // (+5+5+5+3) y la difícil mal (−12) = +6; nota 3,8 (76 %).
-      await playLevelFourOfFive(tester);
-      expect(find.text('80%'), findsOneWidget);
-      expect(find.text('+6'), findsWidgets);
-      expect(p.points, 31);
-      expect(p.bestScore('level:estequiometria:2'), 76);
-      expect(p.levelNoteAverage('level:estequiometria:2'),
-          closeTo(3.8, 0.001));
-      expect(p.levelNotePassCount('level:estequiometria:2'), 1);
+      // 4/5 fallando la pregunta más difícil que sale: la nota y
+      // los puntos dependen del sorteo, así que se calculan con lo
+      // visto (levelScore5 y puntos por dificultad). La nota tiene
+      // que quedar por debajo del 81 % (4,05): si el sorteo da una
+      // nota mayor, se repite el nivel con un sorteo nuevo.
+      const testId = 'level:estequiometria:2';
+      final attemptNotes = <double>[];
+      late List<int> difficulties;
+      late int failedIndex;
+      for (var attempt = 0; attempt < 3; attempt++) {
+        final res = await playLevelFailHardest(tester);
+        difficulties = res.difficulties;
+        failedIndex = res.failedIndex;
+        final correct = [
+          for (var i = 0; i < 5; i++) i != failedIndex
+        ];
+        final attemptNote = levelScore5(difficulties, correct);
+        attemptNotes.add(attemptNote);
+        expect(find.text('80%'), findsOneWidget);
+        if (attemptNote < 4.05) break;
+        await tester.tap(find.text(tr('quizRepeat').toUpperCase()));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.textContaining('Pregunta 1 de 5'), findsOneWidget);
+      }
+      final correct = [
+        for (var i = 0; i < 5; i++) i != failedIndex
+      ];
+      final note = levelScore5(difficulties, correct);
+      expect(note, lessThan(4.05));
+      // Ganancia del ÚLTIMO intento (el resultado muestra la de
+      // este intento): aciertos según su dificultad, fallo según
+      // la suya.
+      var delta = 0;
+      for (var i = 0; i < 5; i++) {
+        delta += correct[i]
+            ? pointsForCorrect(difficulties[i])
+            : pointsForWrong(difficulties[i]);
+      }
+      expect(find.text('+$delta'), findsWidgets);
+      // El nivel pasó (el listón es unlockedLevel, no la nota) y
+      // la nota quedó registrada: promedio de los pases, mejor % y
+      // contador según los intentos que hicieron falta.
       expect(p.unlockedLevel('estequiometria'), 3);
+      final meanNote =
+          attemptNotes.reduce((a, b) => a + b) / attemptNotes.length;
+      expect(p.levelNoteAverage(testId), closeTo(meanNote, 0.001));
+      expect(p.levelNotePassCount(testId), attemptNotes.length);
+      final bestNote = attemptNotes.reduce((a, b) => a > b ? a : b);
+      expect(p.bestScore(testId), (bestNote * 20).round());
 
-      // Repetir y fallar 0/5 (−41 sin protección): el saldo queda
-      // en 31, intacto; el promedio, el pase y el desbloqueo, igual.
+      // Instantánea ANTES del replay fallido.
+      final snapshotPoints = p.points;
+      final snapshotAvg = p.levelNoteAverage(testId);
+      final snapshotCount = p.levelNotePassCount(testId);
+      final snapshotBest = p.bestScore(testId);
+
+      // Repetir y fallar 0/5: el intento es neutro — el saldo, el
+      // promedio, el pase y el desbloqueo quedan intactos.
       await tester.tap(find.text(tr('quizRepeat').toUpperCase()));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       await playLevelAllWrong(tester);
       expect(find.text('0%'), findsOneWidget);
       expect(find.text('+0'), findsWidgets);
-      expect(p.points, 31);
-      expect(p.levelNoteAverage('level:estequiometria:2'),
-          closeTo(3.8, 0.001));
-      expect(p.levelNotePassCount('level:estequiometria:2'), 1);
-      expect(p.bestScore('level:estequiometria:2'), 76);
+      expect(p.points, snapshotPoints);
+      expect(p.levelNoteAverage(testId), closeTo(snapshotAvg ?? 0, 0.001));
+      expect(p.levelNotePassCount(testId), snapshotCount);
+      expect(p.bestScore(testId), snapshotBest);
       expect(p.unlockedLevel('estequiometria'), 3);
       expect(p.livesLeft, 5);
       expect(tester.takeException(), isNull);

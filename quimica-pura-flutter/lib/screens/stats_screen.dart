@@ -415,7 +415,10 @@ class _StatsScreenState extends State<StatsScreen> {
                       Text('${tr('livesTitle')}: ',
                           style: TextStyle(color: c.ink, height: 1.5)),
                       LivesChip(
-                          lives: p.livesLeft, showMax: true, pulse: false),
+                          lives: p.livesLeft,
+                          showMax: true,
+                          pulse: false,
+                          compact: true),
                     ],
                   ),
                   Text(

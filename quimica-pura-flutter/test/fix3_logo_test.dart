@@ -181,12 +181,26 @@ void main() {
         const MaterialApp(home: ConstantsScreen()),
       );
       await tester.pump();
-      // El conversor está debajo del pliegue (la lista de
-      // constantes ocupa la primera pantalla): se desplaza hasta
-      // el campo Valor para que se construya.
+      // El campo Valor está debajo del pliegue (el conversor es
+      // largo: título, selector de magnitud, campo, resultado):
+      // se desplaza hasta el icono para que se construya. El
+      // scrollable se pasa explícito: sin él, scrollUntilVisible
+      // no sabe cuál usar (el TextField del Valor trae su propio
+      // Scrollable interno y el finder ambiguo rompe con
+      // "Too many elements"). scrollUntilVisible exige un
+      // Scrollable, no un ListView (pasar el ListView rompe con
+      // "ListView is not a subtype of Scrollable"): se busca el
+      // Scrollable VERTICAL dentro del ListView de la página
+      // (los internos de los TextField son horizontales).
       final login = find.byWidgetPredicate((w) =>
           w is LucideIcon && w.icon == LucideIcons.logIn);
-      await tester.scrollUntilVisible(login, 300);
+      await tester.scrollUntilVisible(login, 300,
+          scrollable: find.descendant(
+            of: find.byType(ListView).first,
+            matching: find.byWidgetPredicate((w) =>
+                w is Scrollable &&
+                w.axisDirection == AxisDirection.down),
+          ));
       await tester.pump();
       expect(login, findsOneWidget);
       // Se mide el GLIFO (el CustomPaint), no la caja exterior:

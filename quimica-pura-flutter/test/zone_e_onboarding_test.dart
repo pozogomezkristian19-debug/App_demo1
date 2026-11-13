@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quimica_pura/screens/onboarding_notifications_page.dart';
 import 'package:quimica_pura/screens/onboarding_screen.dart';
+import 'package:quimica_pura/services/accent.dart';
 import 'package:quimica_pura/services/localization.dart';
 import 'package:quimica_pura/widgets/brand_logo.dart';
 
@@ -256,13 +257,13 @@ void main() {
       final bg = zoneELightTheme().scaffoldBackgroundColor;
       expect(find.byType(BrandLogo), findsOneWidget);
       expectReadable(tester, tr('obWelcome'), bg);
-      // "Químic@" es teal de marca fijo: a 30 pt en negrita se lee
-      // bien sobre blanco (2,49:1, acento de pantalla, no texto de
-      // cuerpo) y sobre oscuro pasa el 4,5 (6,6:1). No se oscurece:
-      // es el color de marca y Kristian nunca se quejó de él.
+      // "Químic@" sigue al acento elegido (Quemia 7.3, P12): en
+      // claro va el tono oscuro del acento (3,24:1 en verde, se lee
+      // bien a 30 pt en negrita) y en oscuro el acento. Antes era
+      // menta fija #14B8A6 y se quedaba verde con el tema violeta.
       expect(effectiveColor(tester, tr('obChemist')),
-          const Color(0xFF14B8A6));
-      expect(contrast(const Color(0xFF14B8A6), bg),
+          AppAccent.primaryDark);
+      expect(contrast(AppAccent.primaryDark, bg),
           greaterThanOrEqualTo(2.4));
       expectReadable(tester, tr('obWelcomeBody'), bg);
       // Sin scroll ni desborde (la página es un Column centrado:
@@ -277,8 +278,8 @@ void main() {
       expect(find.byType(BrandLogo), findsOneWidget);
       expectReadable(tester, tr('obWelcome'), bg);
       expect(effectiveColor(tester, tr('obChemist')),
-          const Color(0xFF14B8A6));
-      expect(contrast(const Color(0xFF14B8A6), bg),
+          AppAccent.primary);
+      expect(contrast(AppAccent.primary, bg),
           greaterThanOrEqualTo(4.5));
       expectReadable(tester, tr('obWelcomeBody'), bg);
       expect(tester.takeException(), isNull);

@@ -15,6 +15,7 @@
 // unlockedLevel. En el resultado tras pasar, botón "Pasar de nivel"
 // que arranca el N+1 ahí mismo.
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -172,14 +173,28 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
   }
 
+  /// La pregunta que se ve ahora mismo (búsqueda en el banco, como
+  /// en [answerCurrent]).
+  QuizQuestion _shownQuestion(WidgetTester tester) {
+    final bank = localizedAllQuestions();
+    for (final q in bank) {
+      if (find.text(q.question).evaluate().isNotEmpty) return q;
+    }
+    throw StateError('No se ve ninguna pregunta del banco');
+  }
+
   /// Juega el Nivel 1 entero con el patrón de aciertos dado
-  /// (5 valores: true = acierta, false = falla).
-  Future<void> playLevel1(
+  /// (5 valores: true = acierta, false = falla). Devuelve las
+  /// dificultades de las 5 preguntas que salieron (Quemia 7.3:
+  /// sorteo del banco).
+  Future<List<int>> playLevel1(
     WidgetTester tester,
     List<bool> results,
   ) async {
     assert(results.length == 5);
+    final difficulties = <int>[];
     for (final r in results) {
+      difficulties.add(_shownQuestion(tester).difficulty);
       await answerCurrent(tester, correct: r);
       await next(tester);
     }
@@ -188,6 +203,7 @@ void main() {
     // con el temporizador pendiente y falla ("A Timer is still
     // pending even after the widget tree was disposed").
     await tester.pump(const Duration(seconds: 1));
+    return difficulties;
   }
 
   group('La regla nueva: 4 de 5 pasa siempre (por conteo)', () {
@@ -217,26 +233,36 @@ void main() {
   });
 
   group('El caso de Kristian: 4/5 en el Nivel 1 desbloquea el 2', () {
-    testWidgets('4/5 (5 medias, +12 puntos, nota 4,0): pasa, '
-        'desbloquea el 2 y el botón "Pasar de nivel" está',
-        (tester) async {
+    testWidgets('4/5: pasa, desbloquea el 2 y el botón '
+        '"Pasar de nivel" está', (tester) async {
       await pumpNiveles(tester);
       final p = ProgressService.instance;
       expect(p.unlockedLevel('estequiometria'), 1);
       await startLevel1(tester);
 
       // 4 aciertos y 1 fallo: el caso exacto que reportó Kristian.
-      await playLevel1(tester, [true, true, true, true, false]);
+      // Quemia 7.3: las 5 preguntas son un sorteo del banco, así
+      // que los puntos y la nota se calculan con lo visto.
+      final diffs = await playLevel1(tester, [true, true, true, true, false]);
+      const correct = [true, true, true, true, false];
+      final note = levelScore5(diffs, correct);
+      var delta = 0;
+      for (var i = 0; i < 5; i++) {
+        delta += correct[i]
+            ? pointsForCorrect(diffs[i])
+            : pointsForWrong(diffs[i]);
+      }
 
-      // Resultado (§3.4): título amarillo, XP grande "+12" (arriba
+      // Resultado (§3.4): título amarillo, XP grande "+N" (arriba
       // y en la tarjeta PUNTOS) y tarjeta PRECISIÓN "80 %".
       expect(find.text(tr('quizLevelPassed')), findsOneWidget);
-      expect(find.text('+12'), findsWidgets);
+      expect(find.text('+$delta'), findsWidgets);
       expect(find.text('80%'), findsOneWidget);
       expect(find.byType(CelebrationOverlay), findsOneWidget);
-      // La nota guardada es 80, no 81: con la vieja deducción por
-      // nota el nodo se habría visto como no pasado.
-      expect(p.bestScore('level:estequiometria:1'), 80);
+      // La nota guardada es la del sorteo: el desbloqueo no
+      // depende de ella (con la vieja deducción por nota, un 4/5
+      // con nota baja se habría visto como no pasado).
+      expect(p.bestScore('level:estequiometria:1'), (note * 20).round());
       // Pero el desbloqueo es real: el nivel 2 está abierto.
       expect(p.unlockedLevel('estequiometria'), 2);
       // Y el botón para saltar ahí mismo está en pantalla.
@@ -324,6 +350,20 @@ void main() {
   });
 
   group('Previews fix5 punto 13', () {
+    // Quemia 7.3: el sorteo de preguntas es aleatorio por diseño,
+    // así que los puntos del resultado (+10/+12...) cambiaban en
+    // cada corrida y los goldens fallaban por unos pocos píxeles.
+    // Aquí se fija la semilla: el sorteo es el mismo en cada
+    // corrida y la captura es estable; fuera de aquí el azar sigue
+    // siendo azar.
+    setUp(() {
+      final seeded = Random(20261113);
+      PracticarScreen.randomFactory = () => seeded;
+    });
+    tearDown(() {
+      PracticarScreen.randomFactory = Random.new;
+    });
+
     testWidgets('fix5_resultado_pasar_nivel: resultado 4/5 con el '
         'botón PASAR DE NIVEL y las 3 tarjetas (§3.4)',
         (tester) async {

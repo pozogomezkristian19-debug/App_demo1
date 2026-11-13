@@ -46,7 +46,7 @@ class StatsCard extends StatelessWidget {
     final trophyColor =
         isDark ? scheme.primary : const Color(0xFF8B5CF6);
     final goalColor =
-        isDark ? scheme.primary : const Color(0xFF00C2A8);
+        scheme.primary;
     Widget cell(Widget icon, Widget value, String label) {
       return Expanded(
         child: Column(

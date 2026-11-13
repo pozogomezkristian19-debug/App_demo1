@@ -49,6 +49,33 @@ class AppAccent {
     return isViolet ? const Color(0xFFEDE9FE) : const Color(0xFFCCFBF1);
   }
 
+  /// Versión clara y viva del acento, para iconos que se ven
+  /// oscuros con el acento normal (Kristian, 2026-11-13, Tema:
+  /// la luna de "Oscuro" se veía un poquito oscura en claro y
+  /// el sol de "Claro" pedía ser más claro en oscuro). Verde:
+  /// menta claro; Violeta: violeta claro.
+  static Color get primaryLight {
+    final shop = SocialService.equippedThemeColor;
+    if (shop != null) {
+      return Color.lerp(shop, Colors.white, 0.25)!;
+    }
+    return isViolet ? BrandColors.violetLight : BrandColors.mintLight;
+  }
+
+  /// Versión aún más clara del acento, para el botón "Claro"
+  /// (Kristian, 2026-11-13: "pon el claro, más claro" — tiene
+  /// que verse más claro que el botón de oscuro). Verde: teal
+  /// claro; Violeta: violeta pálido.
+  static Color get primaryLightest {
+    final shop = SocialService.equippedThemeColor;
+    if (shop != null) {
+      return Color.lerp(shop, Colors.white, 0.5)!;
+    }
+    return isViolet
+        ? const Color(0xFFC4B5FD)
+        : const Color(0xFF5EEAD4);
+  }
+
   /// Fondo oscuro de las pantallas que pintan su propio fondo en modo
   /// oscuro (Estadísticas, Cuenta, Tema): verde para Verde, violeta
   /// para Violeta. Mismos valores que _darkTheme en main.dart.
@@ -73,7 +100,26 @@ class AppAccent {
   static Color get darkBorder =>
       isViolet ? const Color(0xFF2E2350) : const Color(0xFF1E4D42);
 
-  /// Color del icono de cada pestaña cuando está seleccionada: UN
+  /// Fondo oscuro de las píldoras de la barra superior (repaso y
+  /// campana, Quemia 7.3): sigue al acento elegido, como todo lo
+  /// demás. Con Verde es el teal oscuro aprobado por Kristian
+  /// (#134E4A); con Violeta, violeta oscuro; con un tema de la
+  /// tienda, una versión oscura de ese color.
+  static Color get pillDarkBackground {
+    final shop = SocialService.equippedThemeColor;
+    if (shop != null) return Color.lerp(shop, Colors.black, 0.78)!;
+    return isViolet ? const Color(0xFF2A1B52) : const Color(0xFF134E4A);
+  }
+
+  /// Color claro de dentro de esas píldoras (icono + número):
+  /// menta #2DD4BF con Verde, violeta claro con Violeta.
+  static Color get pillDarkForeground {
+    final shop = SocialService.equippedThemeColor;
+    if (shop != null) return Color.lerp(shop, Colors.white, 0.55)!;
+    return isViolet ? const Color(0xFFC4B5FD) : const Color(0xFF2DD4BF);
+  }
+
+  /// Color de la pestaña seleccionada: UN
   /// SOLO color de acción (regla 9): el acento elegido (teal con
   /// Verde, violeta con Violeta), en claro y en oscuro lo pasa
   /// main.dart según el brillo. La lista de colores por pestaña de

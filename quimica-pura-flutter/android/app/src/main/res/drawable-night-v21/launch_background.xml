@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Splash nativo en frío, modo oscuro, API 21+ (Quemia 7.3): ANTES
+     vivía en res/values-night/drawable/, que NO es un directorio de
+     recursos válido (aapt2 no lo procesa), así que casi seguro NO
+     estaba en el APK. Ahora vive en res/drawable-night-v21/, la ruta
+     válida que Android elige en modo oscuro. Mismo anillo órbita
+     centrado sobre #131F24 (scaffoldBackground del tema oscuro). -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="#131F24" />
+
+    <item>
+        <bitmap
+            android:gravity="center"
+            android:src="@drawable/splash_logo" />
+    </item>
+</layer-list>

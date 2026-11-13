@@ -23,6 +23,8 @@
 // Se mantiene la misma API pública (username, size, avatarAsset,
 // badgeId, rank, uniformTeal) para no romper a las demás zonas.
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import '../services/accent.dart';
 
@@ -34,6 +36,7 @@ class SocialAvatar extends StatelessWidget {
     required this.username,
     this.size = 36,
     this.avatarAsset,
+    this.avatarImageFile,
     this.badgeId,
     this.rank,
     this.uniformTeal = false,
@@ -46,7 +49,14 @@ class SocialAvatar extends StatelessWidget {
   /// o null: la cara por defecto `assets/avatar_default.png`.
   final String? avatarAsset;
 
-  /// 'badge_star' | 'badge_trophy' | 'badge_flame', o null sin insignia.
+  /// Foto de avatar REMOTA equipada (ya descargada en la caché en
+  /// disco, ShopImageCache): manda sobre [avatarAsset] cuando no
+  /// es null. Los avatares nuevos de la tienda (7.3) no tienen
+  /// asset empaquetado, solo `imageUrl`.
+  final File? avatarImageFile;
+
+  /// 'badge_star' | 'badge_trophy' | 'badge_flame' | 'badge_adn' |
+  /// 'badge_atomo' | 'badge_cohete', o null sin insignia.
   final String? badgeId;
 
   /// Puesto en la tabla (1 = oro...): null o > 10 = sin marco de rango.
@@ -76,6 +86,9 @@ class SocialAvatar extends StatelessWidget {
         'badge_star' => LucideIcons.star,
         'badge_trophy' => LucideIcons.trophy,
         'badge_flame' => LucideIcons.flame,
+        'badge_adn' => LucideIcons.dna,
+        'badge_atomo' => LucideIcons.atom,
+        'badge_cohete' => LucideIcons.rocket,
         _ => null,
       };
 
@@ -84,17 +97,27 @@ class SocialAvatar extends StatelessWidget {
     final badge = _badgeIconData;
     final rankColor = _rankColor;
     final rankBadgeIcon = _rankBadgeIcon;
-    // El disco: la foto premium si la hay; si no, la cara por
-    // defecto. NUNCA una inicial.
+    // El disco: la foto premium si la hay (remota cacheada antes
+    // que el asset); si no, la cara por defecto. NUNCA una inicial.
+    final file = avatarImageFile;
     Widget avatar = ClipOval(
-      child: Image.asset(
-        avatarAsset ?? 'assets/avatar_default.png',
-        key: ValueKey('social-avatar-$username'),
-        width: size,
-        height: size,
-        fit: BoxFit.cover,
-        filterQuality: FilterQuality.medium,
-      ),
+      child: file != null
+          ? Image.file(
+              file,
+              key: ValueKey('social-avatar-$username'),
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+              filterQuality: FilterQuality.medium,
+            )
+          : Image.asset(
+              avatarAsset ?? 'assets/avatar_default.png',
+              key: ValueKey('social-avatar-$username'),
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+              filterQuality: FilterQuality.medium,
+            ),
     );
     // Marco de rango: anillo PLANO de 3 px con el color sólido
     // del rango. Sin degradado, sin sombra borrosa.

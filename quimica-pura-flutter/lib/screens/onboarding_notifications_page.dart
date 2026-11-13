@@ -24,6 +24,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../services/accent.dart';
 import '../services/localization.dart';
 import '../services/notification_service.dart';
 import '../widgets/duo_button.dart';
@@ -123,7 +124,9 @@ class _OnboardingNotificationsPageState
 
   @override
   Widget build(BuildContext context) {
-    const teal = Color(0xFF14B8A6);
+    // Quemia 7.3 (P12): la campana era menta fija; ahora sigue al
+    // acento elegido, como el resto de la app.
+    final accent = AppAccent.primary;
     // Contraste (zona E): título y cuerpo con el on-surface del
     // tema (#4B4B4B en claro, casi blanco en oscuro); el #4B4B4B y
     // el #777777 fijos eran ilegibles sobre el fondo oscuro.
@@ -142,9 +145,9 @@ class _OnboardingNotificationsPageState
           Center(
             child: CircleAvatar(
               radius: 44,
-              backgroundColor: teal.withValues(alpha: 0.18),
+              backgroundColor: accent.withValues(alpha: 0.18),
               child:
-                  const LucideIcon(LucideIcons.bellRing, size: 46, color: teal),
+                  LucideIcon(LucideIcons.bellRing, size: 46, color: accent),
             ),
           ),
           const SizedBox(height: 28),
