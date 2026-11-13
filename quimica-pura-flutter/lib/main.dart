@@ -68,6 +68,7 @@ import 'services/duels_service.dart';
 import 'services/firestore_social_repository.dart';
 import 'services/friends_groups_service.dart';
 import 'services/remote_content_service.dart';
+import 'services/referral_service.dart';
 import 'services/reports_service.dart';
 import 'services/shop_service.dart';
 import 'services/support_service.dart';
@@ -116,6 +117,12 @@ Future<void> main() async {
             const Duration(seconds: 3),
             onTimeout: () {},
           )));
+  // Código de referido del onboarding (Quemia 7.6, Kristian): si
+  // el usuario escribió un código en la pantalla de género, se
+  // canjea solo cuando hay conexión; sin internet se deja guardado
+  // y se reintenta en la próxima apertura. No retrasa el arranque.
+  unawaited(AuthService.ensureAnonymous()
+      .then((_) => ReferralService.redeemOnboardingCode()));
   // Límite de 3 s (Quemia 7.3): init() migra el documento heredado
   // por red (dos llamadas con timeout de 5 s cada una) y no puede
   // retrasar el primer frame más de 3 s; si se agota, la migración

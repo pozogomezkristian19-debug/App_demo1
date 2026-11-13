@@ -134,7 +134,12 @@ void main() {
         'campo blanco en AMBOS temas', (tester) async {
       for (final theme in [zoneELightTheme(), zoneEDarkTheme()]) {
         await goToProfilePage(tester, theme: theme);
-        final field = tester.widget<TextField>(find.byType(TextField));
+        // Quemia 7.6: hay DOS campos (nombre + código de referido);
+        // el hint que se comprueba es el del NOMBRE (por su hint).
+        final field = tester.widget<TextField>(find.byWidgetPredicate(
+            (w) =>
+                w is TextField &&
+                w.decoration?.hintText == tr('obNameHint')));
         expect(field.decoration!.fillColor, Colors.white);
         // #757575 sobre blanco: contraste ~4,6:1, legible. Antes
         // era onSurface al 45%: en oscuro casi blanco sobre blanco.
@@ -151,9 +156,13 @@ void main() {
     void expectNoScrollAndGoogleVisible(
         WidgetTester tester, double width, double height) {
       // El contenido cabe en el viewport: el scroll no tiene
-      // recorrido (maxScrollExtent 0).
-      final position =
-          Scrollable.of(tester.element(find.byType(TextField))).position;
+      // recorrido (maxScrollExtent 0). Quemia 7.6: hay DOS campos
+      // (nombre + código de referido); se toma el del nombre.
+      final position = Scrollable.of(tester.element(find.byWidgetPredicate(
+              (w) =>
+                  w is TextField &&
+                  w.decoration?.hintText == tr('obNameHint'))))
+          .position;
       expect(position.maxScrollExtent, 0.0);
       // El botón de Google está entero dentro de la pantalla.
       // Quemia 7.4 (Kristian): el botón dice solo "Google" (antes

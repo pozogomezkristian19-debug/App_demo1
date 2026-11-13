@@ -169,6 +169,13 @@ class ReferralService {
   static const _kPendingRedeem = 'referral_pending_redeem';
   static const _kPendingReward = 'referral_pending_reward';
 
+  /// Código de referido escrito en el onboarding (pantalla de
+  /// género, Quemia 7.6, Kristian): se guarda en local aunque no
+  /// haya internet ni Google, y se canjea solo cuando hay
+  /// conexión ([redeemOnboardingCode]). No es la cola de
+  /// [OnlineCommon] ([_kPendingCode] es para el código propio).
+  static const _kOnboardingCode = 'referral_onboarding_code';
+
   static AnalyticsRepository get _repo => AnalyticsSync.repository;
   static String get _me => AuthService.currentUid ?? '';
   static bool get _allowed => OnlineCommon.allowed && _me.isNotEmpty;
@@ -291,13 +298,75 @@ class ReferralService {
     }
   }
 
+  // ---- Código escrito en el onboarding ----
+
+  /// Guarda el código de referido escrito en el onboarding
+  /// (pantalla de género, Quemia 7.6, Kristian): en local, sin
+  /// pedir internet ni Google. Vacío o con formato inválido lo
+  /// borra. El canje real se hace solo en [redeemOnboardingCode]
+  /// cuando hay conexión. Nunca lanza.
+  static Future<void> saveOnboardingCode(String rawCode) async {
+    try {
+      final prefs = await _prefs;
+      final code = rawCode.trim().toUpperCase();
+      if (code.length == kReferralCodeLength &&
+          RegExp(r'^[A-Z0-9]{6}$').hasMatch(code)) {
+        await prefs.setString(_kOnboardingCode, code);
+      } else {
+        await prefs.remove(_kOnboardingCode);
+      }
+    } catch (_) {
+      // Sin código guardado: se puede poner luego en Referidos.
+    }
+  }
+
+  /// Canjea el código guardado en el onboarding, si lo hay. Se
+  /// llama al arrancar la app y al abrir Referidos: con internet
+  /// lo canjea y lo borra; sin internet lo deja para reintentarlo
+  /// luego. Si el código no sirve (inválido, no existe, propio,
+  /// agotado o ya canjeado) también lo borra para no reintentarlo
+  /// siempre. Devuelve null si no había código guardado. Nunca
+  /// lanza.
+  static Future<RedeemResult?> redeemOnboardingCode() async {
+    try {
+      final prefs = await _prefs;
+      final code = prefs.getString(_kOnboardingCode) ?? '';
+      if (code.isEmpty || _me.isEmpty) return null;
+      final result = await redeemCode(code);
+      switch (result) {
+        case RedeemResult.ok:
+        case RedeemResult.invalid:
+        case RedeemResult.notFound:
+        case RedeemResult.ownCode:
+        case RedeemResult.alreadyRedeemed:
+        case RedeemResult.exhausted:
+        case RedeemResult.needsGoogle:
+          await prefs.remove(_kOnboardingCode);
+        case RedeemResult.offline:
+        case RedeemResult.error:
+          // Se deja guardado para reintentarlo luego.
+          break;
+      }
+      return result;
+    } catch (_) {
+      return null;
+    }
+  }
+
   // ---- Canjear ----
 
   /// Canjea el código de un amigo. El premio (+20) NO se paga
   /// aquí: se paga cuando el invitado pasa el Nivel 1
   /// ([maybeRewardInviteeOnLevelPass]).
+  ///
+  /// Quemia 7.6 (Kristian): canjear NO exige Google vinculada.
+  /// Basta con estar autenticado (anónimo incluido): las reglas
+  /// de Firestore ya lo permiten (isSignedIn + inviteeUid propio)
+  /// y el nombre del invitado sale del perfil local. Tener código
+  /// propio para invitar sí sigue exigiendo Google
+  /// ([ensureMyCode]).
   static Future<RedeemResult> redeemCode(String rawCode) async {
-    if (!OnlineCommon.allowed || _me.isEmpty) {
+    if (_me.isEmpty) {
       return RedeemResult.needsGoogle;
     }
     final code = rawCode.trim().toUpperCase();
@@ -604,6 +673,10 @@ class ReferralService {
   /// lo llama aparte: el doble cobro en paralelo podía pagar dos
   /// veces el mismo referido).
   static Future<ReferralState> loadState() async {
+    // Código del onboarding (Quemia 7.6): se reintenta aquí
+    // también, antes de la puerta de Google, porque canjear ya no
+    // exige Google vinculada.
+    await redeemOnboardingCode();
     if (!OnlineCommon.allowed || _me.isEmpty) {
       return const ReferralState(needsGoogle: true);
     }

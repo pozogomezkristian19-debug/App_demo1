@@ -14,6 +14,7 @@ import '../services/accent.dart';
 import '../services/analytics_sync.dart';
 import '../services/auth_service.dart';
 import '../services/localization.dart';
+import '../services/referral_service.dart';
 import '../widgets/brand_logo.dart';
 import '../services/user_prefs.dart';
 import 'onboarding_notifications_page.dart';
@@ -29,6 +30,10 @@ class OnboardingScreen extends StatefulWidget {
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final _pageController = PageController();
   final _nameController = TextEditingController();
+  // Código de referido (Quemia 7.6, Kristian): va en la pantalla
+  // de género, con y sin Google, y se guarda en local aunque no
+  // haya internet (se canjea solo cuando hay conexión).
+  final _referralController = TextEditingController();
   int _page = 0;
   String? _gender;
 
@@ -59,6 +64,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       );
       return;
     }
+    // Código de referido (Quemia 7.6): se guarda en local y se
+    // canjea solo en segundo plano cuando hay conexión.
+    await ReferralService.saveOnboardingCode(_referralController.text);
+    unawaited(ReferralService.redeemOnboardingCode());
     await UserPrefs.saveProfile(name, _gender!);
     widget.onFinished();
   }
@@ -145,6 +154,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   void dispose() {
     _pageController.dispose();
     _nameController.dispose();
+    _referralController.dispose();
     super.dispose();
   }
 
@@ -186,7 +196,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 controller: _pageController,
                 onPageChanged: (i) => setState(() => _page = i),
                 children: [
-                  const _WelcomePage(),
+                  // Bienvenida (Quemia 7.6, Kristian): también
+                  // tiene "Continuar con Google"; al iniciar sesión
+                  // salta automáticamente al flujo de Google.
+                  _WelcomePage(
+                    onGoogleSignIn: _linkGoogle,
+                    googleBusy: _googleBusy,
+                    googleError: _googleError,
+                  ),
                   _ExplainPage(
                     icon: LucideIcons.calculator,
                     title: tr('obSolveTitle'),
@@ -213,6 +230,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     nameController: _nameController,
                     gender: _gender,
                     onGenderChanged: (g) => setState(() => _gender = g),
+                    referralController: _referralController,
                     onGoogleSignIn: _linkGoogle,
                     googleBusy: _googleBusy,
                     googleError: _googleError,
@@ -279,15 +297,36 @@ class _GoogleOnboardingFlowState extends State<_GoogleOnboardingFlow> {
   var _step = 0;
   String? _gender;
 
+  /// Código de referido (Quemia 7.6, Kristian): va en el paso del
+  /// género, igual que en el onboarding normal.
+  final _referralController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
     _gender = widget.initialGender;
+    // "Ya has iniciado sesión" avanza SOLO (Quemia 7.6, Kristian:
+    // al iniciar sesión con Google, salta automáticamente): a los
+    // ~1,5 s pasa al género sin tocar nada. Si el usuario ya
+    // avanzó (no debería), no se toca.
+    Future.delayed(const Duration(milliseconds: 1500), () {
+      if (mounted && _step == 0) setState(() => _step = 1);
+    });
+  }
+
+  @override
+  void dispose() {
+    _referralController.dispose();
+    super.dispose();
   }
 
   Future<void> _finish() async {
     final gender = _gender;
     if (gender == null) return;
+    // Código de referido (Quemia 7.6): se guarda en local y se
+    // canjea solo en segundo plano cuando hay conexión.
+    await ReferralService.saveOnboardingCode(_referralController.text);
+    unawaited(ReferralService.redeemOnboardingCode());
     await widget.onFinish(widget.name, gender);
   }
 
@@ -387,6 +426,68 @@ class _GoogleOnboardingFlowState extends State<_GoogleOnboardingFlow> {
                           ),
                         ),
                         const SizedBox(height: 24),
+                        // Código de referido (Quemia 7.6, Kristian):
+                        // VA ARRIBA del género, porque al tocar un
+                        // género se avanza enseguida. Opcional, con
+                        // y sin Google, y sin internet (se guarda en
+                        // local y se canjea solo cuando hay conexión).
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            tr('obReferralLabel'),
+                            style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: ink),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        SizedBox(
+                          height: 56,
+                          child: TextField(
+                            controller: _referralController,
+                            textCapitalization: TextCapitalization.characters,
+                            textAlign: TextAlign.center,
+                            maxLength: 6,
+                            buildCounter: (context,
+                                    {required currentLength,
+                                    required isFocused,
+                                    maxLength}) =>
+                                null,
+                            style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF4B4B4B)),
+                            decoration: InputDecoration(
+                              hintText: tr('obReferralHint'),
+                              hintStyle: const TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.normal,
+                                color: Color(0xFF9CA3AF),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  vertical: 14, horizontal: 16),
+                              filled: true,
+                              fillColor: Colors.white,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(16),
+                                borderSide: const BorderSide(
+                                    color: Color(0xFFE5E5E5), width: 2),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(16),
+                                borderSide: const BorderSide(
+                                    color: Color(0xFFE5E5E5), width: 2),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(16),
+                                borderSide: const BorderSide(
+                                    color: Color(0xFF5EEAD4), width: 2),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
                         _GenderTile(
                           label: tr('obFemale'),
                           selected: _gender == 'Femenino',
@@ -464,7 +565,19 @@ class _ProgressBar extends StatelessWidget {
 }
 
 class _WelcomePage extends StatelessWidget {
-  const _WelcomePage();
+  const _WelcomePage({
+    this.onGoogleSignIn,
+    this.googleBusy = false,
+    this.googleError,
+  });
+
+  /// "Continuar con Google" en la bienvenida (Quemia 7.6,
+  /// Kristian): al iniciar sesión salta automáticamente al flujo
+  /// de Google (sin pasar por las pantallas de explicación).
+  final Future<void> Function()? onGoogleSignIn;
+  final bool googleBusy;
+  final String? googleError;
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -509,6 +622,53 @@ class _WelcomePage extends StatelessWidget {
             textAlign: TextAlign.center,
             style: const TextStyle(fontSize: 17, height: 1.5),
           ),
+          const SizedBox(height: 28),
+          // Botón Google (mismo estilo que en el perfil: blanco +
+          // borde 2 pt #E5E5E5 + labio + texto #4B4B4B 17 pt +
+          // logo G real). Quemia 7.6: también en la bienvenida.
+          SizedBox(
+            width: double.infinity,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                SizedBox(
+                  width: double.infinity,
+                  child: DuoButton.secondary(
+                    label: 'Google',
+                    onPressed: googleBusy || onGoogleSignIn == null
+                        ? null
+                        : () => onGoogleSignIn!(),
+                    textColor: const Color(0xFF4B4B4B),
+                    edgeColor: const Color(0xFFE5E5E5),
+                    fontSize: 17,
+                  ),
+                ),
+                Positioned(
+                  left: 20,
+                  child: IgnorePointer(
+                    child: googleBusy
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(strokeWidth: 2.5),
+                          )
+                        : const GoogleGIcon(size: 24),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (googleError != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              googleError!,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 15,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -607,7 +767,7 @@ class _GenderTile extends StatelessWidget {
         onTap: onTap,
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             color: selected ? tint : Colors.white,
@@ -636,6 +796,7 @@ class _ProfilePage extends StatelessWidget {
     required this.nameController,
     required this.gender,
     required this.onGenderChanged,
+    this.referralController,
     this.onGoogleSignIn,
     this.googleBusy = false,
     this.googleError,
@@ -643,6 +804,11 @@ class _ProfilePage extends StatelessWidget {
   final TextEditingController nameController;
   final String? gender;
   final ValueChanged<String> onGenderChanged;
+
+  /// Código de referido (Quemia 7.6, Kristian): va en esta
+  /// pantalla, después del género, con y sin Google, y funciona
+  /// sin internet (se guarda en local y se canjea solo).
+  final TextEditingController? referralController;
 
   /// "Continuar con Google" (opcional): enlaza con Google y
   /// prellena el nombre. Inyectable para probar la página.
@@ -686,37 +852,39 @@ class _ProfilePage extends StatelessWidget {
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(
         32,
-        12,
+        8,
         32,
-        12 + MediaQuery.of(context).viewInsets.bottom,
+        8 + MediaQuery.of(context).viewInsets.bottom,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Brenda + Britany ilustradas juntas (~90 dp), en vez del
-          // emblema circular con degradado y el icono genérico.
+          // Brenda + Britany ilustradas juntas (Quemia 7.6: 56 dp
+          // en vez de 90, para que la página con el campo de
+          // código de referido siga cabiendo sin desplazar en
+          // 360x800).
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Image.asset('assets/brenda.png', height: 90),
-              Image.asset('assets/britany.png', height: 90),
+              Image.asset('assets/brenda.png', height: 48),
+              Image.asset('assets/britany.png', height: 48),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Text(
             tr('obProfileTitle'),
             textAlign: TextAlign.center,
             style: TextStyle(
-                fontSize: 24, fontWeight: FontWeight.w800, color: ink),
+                fontSize: 20, fontWeight: FontWeight.w800, color: ink),
           ),
           const SizedBox(height: 8),
           Text(
             tr('obProfileBody'),
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 16, height: 1.5, color: subtitleColor),
+            style: TextStyle(fontSize: 16, height: 1.4, color: subtitleColor),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerLeft,
             child: Text(
@@ -730,7 +898,7 @@ class _ProfilePage extends StatelessWidget {
           // #E5E5E5, 56 pt de alto, al enfocar borde #5EEAD4;
           // sin sombra teal.
           SizedBox(
-            height: 56,
+            height: 48,
             child: TextField(
               controller: nameController,
               textCapitalization: TextCapitalization.words,
@@ -768,7 +936,7 @@ class _ProfilePage extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerLeft,
             child: Text(tr('obGender'),
@@ -794,13 +962,72 @@ class _ProfilePage extends StatelessWidget {
             borderColor: blue,
             onTap: () => onGenderChanged('Masculino'),
           ),
+          // Código de referido (Quemia 7.6, Kristian): opcional,
+          // después del género. Funciona con y sin Google y sin
+          // internet: se guarda en local y se canjea solo cuando
+          // hay conexión. Mismo campo que el nombre (radio 16,
+          // borde 2 pt #E5E5E5, 56 pt de alto, blanco en ambos
+          // temas), texto centrado en mayúsculas.
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              tr('obReferralLabel'),
+              style: TextStyle(
+                  fontSize: 14, fontWeight: FontWeight.w700, color: ink),
+            ),
+          ),
+          const SizedBox(height: 6),
+          SizedBox(
+            height: 48,
+            child: TextField(
+              controller: referralController,
+              textCapitalization: TextCapitalization.characters,
+              textAlign: TextAlign.center,
+              maxLength: 6,
+              buildCounter: (context,
+                      {required currentLength,
+                      required isFocused,
+                      maxLength}) =>
+                  null,
+              style: const TextStyle(
+                  fontSize: 20, fontWeight: FontWeight.w700, color: fieldInk),
+              decoration: InputDecoration(
+                hintText: tr('obReferralHint'),
+                hintStyle: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.normal,
+                  color: hintColor,
+                ),
+                contentPadding:
+                    const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                filled: true,
+                fillColor: Colors.white,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide:
+                      const BorderSide(color: Color(0xFFE5E5E5), width: 2),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide:
+                      const BorderSide(color: Color(0xFFE5E5E5), width: 2),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide:
+                      const BorderSide(color: Color(0xFF5EEAD4), width: 2),
+                ),
+              ),
+            ),
+          ),
           // Ronda #8 (cambio 09:08): "Continuar con Google" DEBAJO
           // del nombre y el género. Opcional: enlaza la sesión con
           // Google y prellena el nombre con el de la cuenta.
           // Quemia 7.4: el hueco aquí es 12 (antes 16) para que la
           // página siga cabiendo sin desplazar en 360x800 con barra
           // de estado (el botón "Google" dejaba 2 px de más).
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Row(
             children: [
               const Expanded(child: Divider()),
@@ -811,7 +1038,7 @@ class _ProfilePage extends StatelessWidget {
               const Expanded(child: Divider()),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           // Botón Google secundario Duolingo: blanco + borde 2 pt
           // #E5E5E5 + labio 4 pt #E5E5E5 + texto #4B4B4B 17 pt +
           // logo G real (assets/google_g.png). La G va superpuesta

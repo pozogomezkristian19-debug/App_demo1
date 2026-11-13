@@ -563,9 +563,9 @@ void main() {
         (tester) async {
       await goToProfilePage(tester);
       expect(find.text(tr('obProfileTitle')), findsOneWidget);
-      await tester.ensureVisible(find.text(tr('googleContinue').toUpperCase()));
+      await tester.ensureVisible(find.text('Google'));
       await tester.pumpAndSettle();
-      expect(find.text(tr('googleContinue').toUpperCase()), findsOneWidget);
+      expect(find.text('Google'), findsOneWidget);
       // La G de Google es el icono en colores, no un texto 'G'.
       expect(find.byType(GoogleGIcon), findsOneWidget);
       // Es opcional: el "Siguiente" sigue ahí.
@@ -577,13 +577,23 @@ void main() {
       fakeAuth.displayName = 'Kristian';
       fakeAuth.email = 'kristian@example.com';
       await goToProfilePage(tester);
-      await tester.ensureVisible(find.text(tr('googleContinue').toUpperCase()));
+      await tester.ensureVisible(find.text('Google'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text(tr('googleContinue').toUpperCase()));
-      await tester.pumpAndSettle();
+      await tester.tap(find.text('Google'));
+      // El enlace completa (fakeAuth rápido) sin dejar que dispare
+      // el avance automático de 1,5 s del flujo de Google: estos
+      // pumps no avanzan el reloj hasta 1,5 s.
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
       expect(AuthService.isGoogleLinked, isTrue);
-      final field = tester.widget<TextField>(find.byType(TextField));
-      expect(field.controller?.text, 'Kristian');
+      // Flujo de Google, paso 0 ("Ya has iniciado sesión"): el
+      // nombre de Google se muestra como texto (ya no en el campo
+      // del perfil, que queda atrás).
+      expect(find.text('Kristian'), findsOneWidget);
+      // Avance automático al género: se adelanta el reloj 1,6 s
+      // (el temporizador es de 1,5 s).
+      await tester.pump(const Duration(milliseconds: 1600));
+      expect(find.text(tr('obGoogleChooseGender')), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
@@ -591,14 +601,18 @@ void main() {
         (tester) async {
       fakeAuth.displayName = 'Kristian';
       await goToProfilePage(tester);
-      await tester.enterText(find.byType(TextField), 'MiNombre');
+      await tester.enterText(find.byWidgetPredicate((w) => w is TextField && w.decoration?.hintText == tr('obNameHint')), 'MiNombre');
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text(tr('googleContinue').toUpperCase()));
+      await tester.ensureVisible(find.text('Google'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text(tr('googleContinue').toUpperCase()));
-      await tester.pumpAndSettle();
-      final field = tester.widget<TextField>(find.byType(TextField));
-      expect(field.controller?.text, 'MiNombre');
+      await tester.tap(find.text('Google'));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+      // Paso 0: se muestra el nombre ESCRITO, no el de Google.
+      expect(find.text('MiNombre'), findsOneWidget);
+      expect(find.text('Kristian'), findsNothing);
+      await tester.pump(const Duration(milliseconds: 1600));
+      expect(find.text(tr('obGoogleChooseGender')), findsOneWidget);
     });
   });
 
@@ -707,22 +721,22 @@ void main() {
         (tester) async {
       fakeAuth.failAnonymous = true;
       await goToProfilePage(tester);
-      await tester.ensureVisible(find.text(tr('googleContinue').toUpperCase()));
+      await tester.ensureVisible(find.text('Google'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text(tr('googleContinue').toUpperCase()));
+      await tester.tap(find.text('Google'));
       await tester.pumpAndSettle();
       expect(find.text(tr('googleNeedInternet')), findsOneWidget);
       expect(find.byType(AlertDialog), findsNothing);
-      final field = tester.widget<TextField>(find.byType(TextField));
+      final field = tester.widget<TextField>(find.byWidgetPredicate((w) => w is TextField && w.decoration?.hintText == tr('obNameHint')));
       expect(field.controller?.text, '');
       // El botón sigue habilitado: se puede reintentar.
       final button = tester
           .widget<DuoButton>(find.byWidgetPredicate((w) =>
               w is DuoButton &&
-              w.label == tr('googleContinue').toUpperCase()));
+              w.label == 'Google'));
       expect(button.onPressed, isNotNull);
       // Reintento: sigue sin colgarse ni duplicar el error.
-      await tester.tap(find.text(tr('googleContinue').toUpperCase()));
+      await tester.tap(find.text('Google'));
       await tester.pumpAndSettle();
       expect(find.text(tr('googleNeedInternet')), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -733,9 +747,9 @@ void main() {
       fakeAuth.failAnonymous = true;
       AnalyticsSync.markFirebaseReady();
       await goToProfilePage(tester);
-      await tester.ensureVisible(find.text(tr('googleContinue').toUpperCase()));
+      await tester.ensureVisible(find.text('Google'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text(tr('googleContinue').toUpperCase()));
+      await tester.tap(find.text('Google'));
       await tester.pumpAndSettle();
       expect(find.text(tr('googleSignInFailed')), findsOneWidget);
       expect(find.text(tr('googleNeedInternet')), findsNothing);
@@ -747,34 +761,30 @@ void main() {
       final slow = _SlowFakeAuth();
       AuthService.setProviderForTests(slow);
       await goToProfilePage(tester);
-      await tester.ensureVisible(find.text(tr('googleContinue').toUpperCase()));
+      await tester.ensureVisible(find.text('Google'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text(tr('googleContinue').toUpperCase()));
+      await tester.tap(find.text('Google'));
       await tester.pump();
       // En carga: deshabilitado y con spinner; sin error.
       var button = tester
           .widget<DuoButton>(find.byWidgetPredicate((w) =>
               w is DuoButton &&
-              w.label == tr('googleContinue').toUpperCase()));
+              w.label == 'Google'));
       expect(button.onPressed, isNull);
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
       expect(find.text(tr('googleNeedInternet')), findsNothing);
       // Segundo toque ignorado: solo una llamada al servicio.
-      await tester.tap(find.text(tr('googleContinue').toUpperCase()),
+      await tester.tap(find.text('Google'),
           warnIfMissed: false);
       expect(slow.linkCalls, 1);
-      // Completa con éxito: prellena y vuelve a habilitarse.
+      // Completa con éxito: entra al flujo de Google y avanza solo
+      // al género (el paso 0 "Ya has iniciado sesión" dura 1,5 s).
       slow.googleLinked = true;
       slow.linkCompleter.complete(true);
-      await tester.pumpAndSettle();
-      button = tester
-          .widget<DuoButton>(find.byWidgetPredicate((w) =>
-              w is DuoButton &&
-              w.label == tr('googleContinue').toUpperCase()));
-      expect(button.onPressed, isNotNull);
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 1600));
+      expect(find.text(tr('obGoogleChooseGender')), findsOneWidget);
       expect(find.byType(CircularProgressIndicator), findsNothing);
-      final field = tester.widget<TextField>(find.byType(TextField));
-      expect(field.controller?.text, 'Lento');
       expect(tester.takeException(), isNull);
     });
 
