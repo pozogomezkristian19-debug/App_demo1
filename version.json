@@ -1,6 +1,6 @@
 {
   "apk_url": "https://github.com/pozogomezkristian19-debug/App_demo1/releases/download/melli-qui-v2/melli-qui-release.apk",
   "force": false,
-  "latest": "7.6",
-  "notes": "Grupos ya funcionan, soporte sin Google, arranque rápido, código de referido en su propia pantalla, Canjear código en Cuenta"
+  "latest": "7.7",
+  "notes": "Registro por correo con OTP, Invitado, exámenes por tema con trofeos, tienda y referidos, fila de Cuenta en una línea"
 }
