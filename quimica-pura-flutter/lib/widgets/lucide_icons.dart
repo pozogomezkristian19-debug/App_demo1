@@ -57,8 +57,7 @@ class _SvgCircle extends LucideElement {
 
   @override
   Path toPath() {
-    return Path()
-      ..addOval(Rect.fromCircle(center: Offset(cx, cy), radius: r));
+    return Path()..addOval(Rect.fromCircle(center: Offset(cx, cy), radius: r));
   }
 }
 
@@ -148,9 +147,8 @@ class LucideIcon extends StatelessWidget {
   /// luminosidad (HSL) para la parte superior.
   static LinearGradient threeDGradient(Color accent) {
     final hsl = HSLColor.fromColor(accent);
-    final light = hsl
-        .withLightness((hsl.lightness + 0.12).clamp(0.0, 0.95))
-        .toColor();
+    final light =
+        hsl.withLightness((hsl.lightness + 0.12).clamp(0.0, 0.95)).toColor();
     return LinearGradient(
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
@@ -338,11 +336,7 @@ class _SvgLexer {
   void _skipSeparators() {
     while (_pos < _input.length) {
       final c = _input[_pos];
-      if (c == ' ' ||
-          c == ',' ||
-          c == '\n' ||
-          c == '\t' ||
-          c == '\r') {
+      if (c == ' ' || c == ',' || c == '\n' || c == '\t' || c == '\r') {
         _pos++;
       } else {
         break;
@@ -399,8 +393,7 @@ class _SvgLexer {
     return c == '1';
   }
 
-  static final _numberRe =
-      RegExp(r'[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?');
+  static final _numberRe = RegExp(r'[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?');
 }
 
 Path _parseSvgPath(String d) {
@@ -488,10 +481,16 @@ Path _parseSvgPath(String d) {
         break;
       case 'S':
         while (lex.nextIsNumber) {
-          final x1 = prevCommand == 'C' || prevCommand == 'c' || prevCommand == 'S' || prevCommand == 's'
+          final x1 = prevCommand == 'C' ||
+                  prevCommand == 'c' ||
+                  prevCommand == 'S' ||
+                  prevCommand == 's'
               ? 2 * cx - prevCubicX
               : cx;
-          final y1 = prevCommand == 'C' || prevCommand == 'c' || prevCommand == 'S' || prevCommand == 's'
+          final y1 = prevCommand == 'C' ||
+                  prevCommand == 'c' ||
+                  prevCommand == 'S' ||
+                  prevCommand == 's'
               ? 2 * cy - prevCubicY
               : cy;
           final x2 = lex.nextNumber() + (relative ? cx : 0);
@@ -526,10 +525,16 @@ Path _parseSvgPath(String d) {
         break;
       case 'T':
         while (lex.nextIsNumber) {
-          final x1 = prevCommand == 'Q' || prevCommand == 'q' || prevCommand == 'T' || prevCommand == 't'
+          final x1 = prevCommand == 'Q' ||
+                  prevCommand == 'q' ||
+                  prevCommand == 'T' ||
+                  prevCommand == 't'
               ? 2 * cx - prevQuadX
               : cx;
-          final y1 = prevCommand == 'Q' || prevCommand == 'q' || prevCommand == 'T' || prevCommand == 't'
+          final y1 = prevCommand == 'Q' ||
+                  prevCommand == 'q' ||
+                  prevCommand == 'T' ||
+                  prevCommand == 't'
               ? 2 * cy - prevQuadY
               : cy;
           final x = lex.nextNumber() + (relative ? cx : 0);
@@ -717,17 +722,21 @@ class LucideIcons {
 
   static const LucideIconData atom = LucideIconData([
     _SvgCircle(12, 12, 1),
-    _SvgPath('M20.2 20.2c2.04-2.03.02-7.36-4.5-11.9-4.54-4.52-9.87-6.54-11.9-4.5-2.04 2.03-.02 7.36 4.5 11.9 4.54 4.52 9.87 6.54 11.9 4.5Z'),
-    _SvgPath('M15.7 15.7c4.52-4.54 6.54-9.87 4.5-11.9-2.03-2.04-7.36-.02-11.9 4.5-4.52 4.54-6.54 9.87-4.5 11.9 2.03 2.04 7.36.02 11.9-4.5Z'),
+    _SvgPath(
+        'M20.2 20.2c2.04-2.03.02-7.36-4.5-11.9-4.54-4.52-9.87-6.54-11.9-4.5-2.04 2.03-.02 7.36 4.5 11.9 4.54 4.52 9.87 6.54 11.9 4.5Z'),
+    _SvgPath(
+        'M15.7 15.7c4.52-4.54 6.54-9.87 4.5-11.9-2.03-2.04-7.36-.02-11.9 4.5-4.52 4.54-6.54 9.87-4.5 11.9 2.03 2.04 7.36.02 11.9-4.5Z'),
   ]);
 
   static const LucideIconData award = LucideIconData([
-    _SvgPath('m15.477 12.89 1.515 8.526a.5.5 0 0 1-.81.47l-3.58-2.687a1 1 0 0 0-1.197 0l-3.586 2.686a.5.5 0 0 1-.81-.469l1.514-8.526'),
+    _SvgPath(
+        'm15.477 12.89 1.515 8.526a.5.5 0 0 1-.81.47l-3.58-2.687a1 1 0 0 0-1.197 0l-3.586 2.686a.5.5 0 0 1-.81-.469l1.514-8.526'),
     _SvgCircle(12, 8, 6),
   ]);
 
   static const LucideIconData badgeCheck = LucideIconData([
-    _SvgPath('M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z'),
+    _SvgPath(
+        'M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z'),
     _SvgPath('m16 9-5.5 5.5L8 12'),
   ]);
 
@@ -752,26 +761,31 @@ class LucideIcons {
   static const LucideIconData bellRing = LucideIconData([
     _SvgPath('M10.268 21a2 2 0 0 0 3.464 0'),
     _SvgPath('M22 8c0-2.3-.8-4.3-2-6'),
-    _SvgPath('M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326'),
+    _SvgPath(
+        'M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326'),
     _SvgPath('M4 2C2.8 3.7 2 5.7 2 8'),
   ]);
 
   static const LucideIconData bell = LucideIconData([
     _SvgPath('M10.268 21a2 2 0 0 0 3.464 0'),
-    _SvgPath('M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326'),
+    _SvgPath(
+        'M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326'),
   ]);
 
   static const LucideIconData bookOpen = LucideIconData([
     _SvgPath('M12 5v16'),
-    _SvgPath('M20.001 19A2 2 0 0022 17V5a2 2 0 00-1.999-2L16 3.002A5 5 0 0012 5a5 5 0 00-4-2H4a2 2 0 00-2 2v12a2 2 0 001.999 2H8a5 5 0 014 2 5 5 0 014-2z'),
+    _SvgPath(
+        'M20.001 19A2 2 0 0022 17V5a2 2 0 00-1.999-2L16 3.002A5 5 0 0012 5a5 5 0 00-4-2H4a2 2 0 00-2 2v12a2 2 0 001.999 2H8a5 5 0 014 2 5 5 0 014-2z'),
   ]);
 
   static const LucideIconData book = LucideIconData([
-    _SvgPath('M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20'),
+    _SvgPath(
+        'M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20'),
   ]);
 
   static const LucideIconData bookmark = LucideIconData([
-    _SvgPath('M17 3a2 2 0 0 1 2 2v15a1 1 0 0 1-1.496.868l-4.512-2.578a2 2 0 0 0-1.984 0l-4.512 2.578A1 1 0 0 1 5 20V5a2 2 0 0 1 2-2z'),
+    _SvgPath(
+        'M17 3a2 2 0 0 1 2 2v15a1 1 0 0 1-1.496.868l-4.512-2.578a2 2 0 0 0-1.984 0l-4.512 2.578A1 1 0 0 1 5 20V5a2 2 0 0 1 2-2z'),
   ]);
 
   static const LucideIconData brain = LucideIconData([
@@ -859,7 +873,8 @@ class LucideIcons {
 
   static const LucideIconData clipboardList = LucideIconData([
     _SvgRect(8, 2, 8, 4, 1, 1),
-    _SvgPath('M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2'),
+    _SvgPath(
+        'M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2'),
     _SvgPath('M12 11h4'),
     _SvgPath('M12 16h4'),
     _SvgPath('M8 11h.01'),
@@ -877,7 +892,8 @@ class LucideIcons {
 
   static const LucideIconData compass = LucideIconData([
     _SvgCircle(12, 12, 10),
-    _SvgPath('m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z'),
+    _SvgPath(
+        'm16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z'),
   ]);
 
   static const LucideIconData copy = LucideIconData([
@@ -914,31 +930,38 @@ class LucideIcons {
   ]);
 
   static const LucideIconData droplet = LucideIconData([
-    _SvgPath('M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z'),
+    _SvgPath(
+        'M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z'),
   ]);
 
   static const LucideIconData eyeOff = LucideIconData([
-    _SvgPath('M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49'),
+    _SvgPath(
+        'M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49'),
     _SvgPath('M14.084 14.158a3 3 0 0 1-4.242-4.242'),
-    _SvgPath('M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143'),
+    _SvgPath(
+        'M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143'),
     _SvgPath('m2 2 20 20'),
   ]);
 
   static const LucideIconData eye = LucideIconData([
-    _SvgPath('M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0'),
+    _SvgPath(
+        'M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0'),
     _SvgCircle(12, 12, 3),
   ]);
 
   static const LucideIconData flag = LucideIconData([
-    _SvgPath('M4 22V4a1 1 0 0 1 .4-.8A6 6 0 0 1 8 2c3 0 5 2 7.333 2q2 0 3.067-.8A1 1 0 0 1 20 4v10a1 1 0 0 1-.4.8A6 6 0 0 1 16 16c-3 0-5-2-8-2a6 6 0 0 0-4 1.528'),
+    _SvgPath(
+        'M4 22V4a1 1 0 0 1 .4-.8A6 6 0 0 1 8 2c3 0 5 2 7.333 2q2 0 3.067-.8A1 1 0 0 1 20 4v10a1 1 0 0 1-.4.8A6 6 0 0 1 16 16c-3 0-5-2-8-2a6 6 0 0 0-4 1.528'),
   ]);
 
   static const LucideIconData flame = LucideIconData([
-    _SvgPath('M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4'),
+    _SvgPath(
+        'M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4'),
   ]);
 
   static const LucideIconData flaskConical = LucideIconData([
-    _SvgPath('M14 2v6a2 2 0 0 0 .245.96l5.51 10.08A2 2 0 0 1 18 22H6a2 2 0 0 1-1.755-2.96l5.51-10.08A2 2 0 0 0 10 8V2'),
+    _SvgPath(
+        'M14 2v6a2 2 0 0 0 .245.96l5.51 10.08A2 2 0 0 1 18 22H6a2 2 0 0 1-1.755-2.96l5.51-10.08A2 2 0 0 0 10 8V2'),
     _SvgPath('M6.453 15h11.094'),
     _SvgPath('M8.5 2h7'),
   ]);
@@ -948,13 +971,15 @@ class LucideIcons {
     _SvgLine(8, 9, 8, 13),
     _SvgLine(15, 12, 15.01, 12),
     _SvgLine(18, 10, 18.01, 10),
-    _SvgPath('M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.545-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0 0 17.32 5z'),
+    _SvgPath(
+        'M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.545-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0 0 17.32 5z'),
   ]);
 
   static const LucideIconData gift = LucideIconData([
     _SvgPath('M12 7v14'),
     _SvgPath('M20 11v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8'),
-    _SvgPath('M7.5 7a1 1 0 0 1 0-5A4.8 8 0 0 1 12 7a4.8 8 0 0 1 4.5-5 1 1 0 0 1 0 5'),
+    _SvgPath(
+        'M7.5 7a1 1 0 0 1 0-5A4.8 8 0 0 1 12 7a4.8 8 0 0 1 4.5-5 1 1 0 0 1 0 5'),
     _SvgRect(3, 7, 18, 4, 1, 0),
   ]);
 
@@ -971,22 +996,26 @@ class LucideIcons {
   ]);
 
   static const LucideIconData graduationCap = LucideIconData([
-    _SvgPath('M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z'),
+    _SvgPath(
+        'M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z'),
     _SvgPath('M22 10v6'),
     _SvgPath('M6 12.5V16a6 3 0 0 0 12 0v-3.5'),
   ]);
 
   static const LucideIconData heartPulse = LucideIconData([
-    _SvgPath('M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5'),
+    _SvgPath(
+        'M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5'),
     _SvgPath('M3.22 13H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27'),
   ]);
 
   static const LucideIconData heart = LucideIconData([
-    _SvgPath('M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5'),
+    _SvgPath(
+        'M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5'),
   ]);
 
   static const LucideIconData hexagon = LucideIconData([
-    _SvgPath('M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z'),
+    _SvgPath(
+        'M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z'),
   ]);
 
   static const LucideIconData history = LucideIconData([
@@ -997,14 +1026,17 @@ class LucideIcons {
 
   static const LucideIconData home = LucideIconData([
     _SvgPath('M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8'),
-    _SvgPath('M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'),
+    _SvgPath(
+        'M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'),
   ]);
 
   static const LucideIconData hourglass = LucideIconData([
     _SvgPath('M5 22h14'),
     _SvgPath('M5 2h14'),
-    _SvgPath('M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22'),
-    _SvgPath('M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2'),
+    _SvgPath(
+        'M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22'),
+    _SvgPath(
+        'M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2'),
   ]);
 
   static const LucideIconData image = LucideIconData([
@@ -1034,7 +1066,8 @@ class LucideIcons {
 
   static const LucideIconData landmark = LucideIconData([
     _SvgPath('M10 18v-7'),
-    _SvgPath('M11.119 2.205a2 2 0 0 1 1.762 0l7.84 3.846A.5.5 0 0 1 20.5 7h-17a.5.5 0 0 1-.22-.949z'),
+    _SvgPath(
+        'M11.119 2.205a2 2 0 0 1 1.762 0l7.84 3.846A.5.5 0 0 1 20.5 7h-17a.5.5 0 0 1-.22-.949z'),
     _SvgPath('M14 18v-7'),
     _SvgPath('M18 18v-7'),
     _SvgPath('M3 22h18'),
@@ -1051,14 +1084,19 @@ class LucideIcons {
   ]);
 
   static const LucideIconData layers2 = LucideIconData([
-    _SvgPath('M13 13.74a2 2 0 0 1-2 0L2.5 8.87a1 1 0 0 1 0-1.74L11 2.26a2 2 0 0 1 2 0l8.5 4.87a1 1 0 0 1 0 1.74z'),
-    _SvgPath('m20 14.285 1.5.845a1 1 0 0 1 0 1.74L13 21.74a2 2 0 0 1-2 0l-8.5-4.87a1 1 0 0 1 0-1.74l1.5-.845'),
+    _SvgPath(
+        'M13 13.74a2 2 0 0 1-2 0L2.5 8.87a1 1 0 0 1 0-1.74L11 2.26a2 2 0 0 1 2 0l8.5 4.87a1 1 0 0 1 0 1.74z'),
+    _SvgPath(
+        'm20 14.285 1.5.845a1 1 0 0 1 0 1.74L13 21.74a2 2 0 0 1-2 0l-8.5-4.87a1 1 0 0 1 0-1.74l1.5-.845'),
   ]);
 
   static const LucideIconData layers = LucideIconData([
-    _SvgPath('M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z'),
-    _SvgPath('M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12'),
-    _SvgPath('M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17'),
+    _SvgPath(
+        'M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z'),
+    _SvgPath(
+        'M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12'),
+    _SvgPath(
+        'M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17'),
   ]);
 
   static const LucideIconData layoutGrid = LucideIconData([
@@ -1069,7 +1107,8 @@ class LucideIcons {
   ]);
 
   static const LucideIconData lightbulb = LucideIconData([
-    _SvgPath('M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5'),
+    _SvgPath(
+        'M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5'),
     _SvgPath('M9 18h6'),
     _SvgPath('M10 22h4'),
   ]);
@@ -1100,6 +1139,15 @@ class LucideIcons {
     _SvgPath('M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4'),
   ]);
 
+  // Sobre (correo): SVG oficial de Lucide (lucide-static 1.71.0,
+  // misma versión que el resto del archivo), añadido a mano para
+  // el botón "Continuar con correo electrónico" del registro
+  // (Quemia 7.7, Kristian 2026-11-13): no estaba en el set.
+  static const LucideIconData mail = LucideIconData([
+    _SvgRect(2, 4, 20, 16, 2, 2),
+    _SvgPath('m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7'),
+  ]);
+
   static const LucideIconData menu = LucideIconData([
     _SvgPath('M4 5h16'),
     _SvgPath('M4 12h16'),
@@ -1107,7 +1155,8 @@ class LucideIcons {
   ]);
 
   static const LucideIconData messageCircle = LucideIconData([
-    _SvgPath('M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719'),
+    _SvgPath(
+        'M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719'),
   ]);
 
   static const LucideIconData microscope = LucideIconData([
@@ -1122,7 +1171,8 @@ class LucideIcons {
   static const LucideIconData milestone = LucideIconData([
     _SvgPath('M12 13v8'),
     _SvgPath('M12 3v3'),
-    _SvgPath('M18.172 6a2 2 0 0 1 1.414.586l2.06 2.06a1.207 1.207 0 0 1 0 1.708l-2.06 2.06a2 2 0 0 1-1.414.586H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1z'),
+    _SvgPath(
+        'M18.172 6a2 2 0 0 1 1.414.586l2.06 2.06a1.207 1.207 0 0 1 0 1.708l-2.06 2.06a2 2 0 0 1-1.414.586H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1z'),
   ]);
 
   static const LucideIconData minus = LucideIconData([
@@ -1130,7 +1180,8 @@ class LucideIcons {
   ]);
 
   static const LucideIconData moon = LucideIconData([
-    _SvgPath('M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401'),
+    _SvgPath(
+        'M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401'),
   ]);
 
   static const LucideIconData network = LucideIconData([
@@ -1147,7 +1198,8 @@ class LucideIcons {
     _SvgPath('M2 10h4'),
     _SvgPath('M2 14h4'),
     _SvgPath('M2 18h4'),
-    _SvgPath('M21.378 5.626a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z'),
+    _SvgPath(
+        'M21.378 5.626a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z'),
   ]);
 
   static const LucideIconData notebook = LucideIconData([
@@ -1160,22 +1212,27 @@ class LucideIcons {
   ]);
 
   static const LucideIconData pencil = LucideIconData([
-    _SvgPath('M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z'),
+    _SvgPath(
+        'M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z'),
     _SvgPath('m15 5 4 4'),
   ]);
 
   static const LucideIconData phone = LucideIconData([
-    _SvgPath('M13.832 16.568a1 1 0 0 0 1.213-.303l.355-.465A2 2 0 0 1 17 15h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2A18 18 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-.8 1.6l-.468.351a1 1 0 0 0-.292 1.233 14 14 0 0 0 6.392 6.384'),
+    _SvgPath(
+        'M13.832 16.568a1 1 0 0 0 1.213-.303l.355-.465A2 2 0 0 1 17 15h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2A18 18 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-.8 1.6l-.468.351a1 1 0 0 0-.292 1.233 14 14 0 0 0 6.392 6.384'),
   ]);
 
   static const LucideIconData pipette = LucideIconData([
-    _SvgPath('m12 9-8.414 8.414A2 2 0 0 0 3 18.828v1.344a2 2 0 0 1-.586 1.414A2 2 0 0 1 3.828 21h1.344a2 2 0 0 0 1.414-.586L15 12'),
-    _SvgPath('m18 9 .4.4a1 1 0 1 1-3 3l-3.8-3.8a1 1 0 1 1 3-3l.4.4 3.4-3.4a1 1 0 1 1 3 3z'),
+    _SvgPath(
+        'm12 9-8.414 8.414A2 2 0 0 0 3 18.828v1.344a2 2 0 0 1-.586 1.414A2 2 0 0 1 3.828 21h1.344a2 2 0 0 0 1.414-.586L15 12'),
+    _SvgPath(
+        'm18 9 .4.4a1 1 0 1 1-3 3l-3.8-3.8a1 1 0 1 1 3-3l.4.4 3.4-3.4a1 1 0 1 1 3 3z'),
     _SvgPath('m2 22 .414-.414'),
   ]);
 
   static const LucideIconData play = LucideIconData([
-    _SvgPath('M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z'),
+    _SvgPath(
+        'M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z'),
   ]);
 
   static const LucideIconData plus = LucideIconData([
@@ -1184,7 +1241,8 @@ class LucideIcons {
   ]);
 
   static const LucideIconData puzzle = LucideIconData([
-    _SvgPath('M15.39 4.39a1 1 0 0 0 1.68-.474 2.5 2.5 0 1 1 3.014 3.015 1 1 0 0 0-.474 1.68l1.683 1.682a2.414 2.414 0 0 1 0 3.414L19.61 15.39a1 1 0 0 1-1.68-.474 2.5 2.5 0 1 0-3.014 3.015 1 1 0 0 1 .474 1.68l-1.683 1.682a2.414 2.414 0 0 1-3.414 0L8.61 19.61a1 1 0 0 0-1.68.474 2.5 2.5 0 1 1-3.014-3.015 1 1 0 0 0 .474-1.68l-1.683-1.682a2.414 2.414 0 0 1 0-3.414L4.39 8.61a1 1 0 0 1 1.68.474 2.5 2.5 0 1 0 3.014-3.015 1 1 0 0 1-.474-1.68l1.683-1.682a2.414 2.414 0 0 1 3.414 0z'),
+    _SvgPath(
+        'M15.39 4.39a1 1 0 0 0 1.68-.474 2.5 2.5 0 1 1 3.014 3.015 1 1 0 0 0-.474 1.68l1.683 1.682a2.414 2.414 0 0 1 0 3.414L19.61 15.39a1 1 0 0 1-1.68-.474 2.5 2.5 0 1 0-3.014 3.015 1 1 0 0 1 .474 1.68l-1.683 1.682a2.414 2.414 0 0 1-3.414 0L8.61 19.61a1 1 0 0 0-1.68.474 2.5 2.5 0 1 1-3.014-3.015 1 1 0 0 0 .474-1.68l-1.683-1.682a2.414 2.414 0 0 1 0-3.414L4.39 8.61a1 1 0 0 1 1.68.474 2.5 2.5 0 1 0 3.014-3.015 1 1 0 0 1-.474-1.68l1.683-1.682a2.414 2.414 0 0 1 3.414 0z'),
   ]);
 
   static const LucideIconData refreshCw = LucideIconData([
@@ -1196,8 +1254,10 @@ class LucideIcons {
 
   static const LucideIconData rocket = LucideIconData([
     _SvgPath('M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5'),
-    _SvgPath('M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09'),
-    _SvgPath('M9 12a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.4 22.4 0 0 1-4 2z'),
+    _SvgPath(
+        'M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09'),
+    _SvgPath(
+        'M9 12a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.4 22.4 0 0 1-4 2z'),
     _SvgPath('M9 12H4s.55-3.03 2-4c1.62-1.08 5 .05 5 .05'),
   ]);
 
@@ -1213,7 +1273,8 @@ class LucideIcons {
   ]);
 
   static const LucideIconData save = LucideIconData([
-    _SvgPath('M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z'),
+    _SvgPath(
+        'M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z'),
     _SvgPath('M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7'),
     _SvgPath('M7 3v4a1 1 0 0 0 1 1h7'),
   ]);
@@ -1232,7 +1293,8 @@ class LucideIcons {
   ]);
 
   static const LucideIconData settings = LucideIconData([
-    _SvgPath('M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915'),
+    _SvgPath(
+        'M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915'),
     _SvgCircle(12, 12, 3),
   ]);
 
@@ -1253,7 +1315,8 @@ class LucideIcons {
   ]);
 
   static const LucideIconData sigma = LucideIconData([
-    _SvgPath('M18 7V5a1 1 0 0 0-1-1H6.5a.5.5 0 0 0-.4.8l4.5 6a2 2 0 0 1 0 2.4l-4.5 6a.5.5 0 0 0 .4.8H17a1 1 0 0 0 1-1v-2'),
+    _SvgPath(
+        'M18 7V5a1 1 0 0 0-1-1H6.5a.5.5 0 0 0-.4.8l4.5 6a2 2 0 0 1 0 2.4l-4.5 6a.5.5 0 0 0 .4.8H17a1 1 0 0 0 1-1v-2'),
   ]);
 
   static const LucideIconData smile = LucideIconData([
@@ -1264,18 +1327,21 @@ class LucideIcons {
   ]);
 
   static const LucideIconData sparkle = LucideIconData([
-    _SvgPath('M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z'),
+    _SvgPath(
+        'M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z'),
   ]);
 
   static const LucideIconData sparkles = LucideIconData([
-    _SvgPath('M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z'),
+    _SvgPath(
+        'M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z'),
     _SvgPath('M20 2v4'),
     _SvgPath('M22 4h-4'),
     _SvgCircle(4, 20, 2),
   ]);
 
   static const LucideIconData star = LucideIconData([
-    _SvgPath('M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z'),
+    _SvgPath(
+        'M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z'),
   ]);
 
   static const LucideIconData sun = LucideIconData([
@@ -1327,7 +1393,8 @@ class LucideIcons {
   ]);
 
   static const LucideIconData triangleAlert = LucideIconData([
-    _SvgPath('m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3'),
+    _SvgPath(
+        'm21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3'),
     _SvgPath('M12 9v4'),
     _SvgPath('M12 17h.01'),
   ]);
@@ -1347,13 +1414,15 @@ class LucideIcons {
   ]);
 
   static const LucideIconData volume2 = LucideIconData([
-    _SvgPath('M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z'),
+    _SvgPath(
+        'M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z'),
     _SvgPath('M16 9a5 5 0 0 1 0 6'),
     _SvgPath('M19.364 18.364a9 9 0 0 0 0-12.728'),
   ]);
 
   static const LucideIconData wandSparkles = LucideIconData([
-    _SvgPath('m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72'),
+    _SvgPath(
+        'm21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72'),
     _SvgPath('m14 7 3 3'),
     _SvgPath('M5 6v4'),
     _SvgPath('M19 14v4'),
@@ -1375,7 +1444,7 @@ class LucideIcons {
   ]);
 
   static const LucideIconData zap = LucideIconData([
-    _SvgPath('M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z'),
+    _SvgPath(
+        'M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z'),
   ]);
-
 }

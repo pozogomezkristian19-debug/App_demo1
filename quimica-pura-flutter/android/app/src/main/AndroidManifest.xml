@@ -108,6 +108,15 @@
         <meta-data
             android:name="com.melliqui.quimica_pura.NOTIFICATION_ICON"
             android:resource="@drawable/ic_notif_bell" />
+        <!-- Canal por defecto de FCM: sin esto, cuando llega un push
+             con `notification` y la app está en segundo plano, el sistema
+             lo muestra en un canal genérico (o no lo muestra en algunos
+             teléfonos). Con esto usa siempre 'quemia_push', el canal propio
+             de los avisos. (2026-11-13: las pruebas push 1 y 2 no llegaron
+             al Redmi; la causa era MIUI, pero faltaba también esto.) -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="quemia_push" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

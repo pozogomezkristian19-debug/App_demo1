@@ -49,6 +49,7 @@ class Tournament {
     required this.endAtMs,
     required this.questionIds,
     required this.prizePoints,
+    this.entryFee = 0,
   });
 
   final String id;
@@ -61,6 +62,11 @@ class Tournament {
   /// Premio en puntos para el 1º (los premios 2º/3º son las
   /// constantes [TournamentsService.prizeSecond]/[prizeThird]).
   final int prizePoints;
+
+  /// Entrada en puntos para participar (7.7, Kristian: varios
+  /// torneos cuestan puntos; 0 = gratis). La entrada se paga al
+  /// unirse y NO se devuelve si se sale del torneo.
+  final int entryFee;
 
   bool get isActive {
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -103,6 +109,7 @@ class Tournament {
       questionIds: ids,
       prizePoints: (raw['prizePoints'] as num?)?.toInt() ??
           TournamentsService.prizeFirst,
+      entryFee: (raw['entryFee'] as num?)?.toInt() ?? 0,
     );
   }
 }

@@ -16,8 +16,9 @@
 //   con separación (organización 6.3), con el icono en un chip
 //   tintado — no filas planas con divisores. Orden 7.1 (Zona H):
 //   Vincular con Google (prominente, primera fila), Estadísticas,
-//   Mis errores, Amigos, Tabla de posiciones, Torneo, Grupos de
-//   estudio, Tienda, Acerca de, Compartir, Soporte y Ajustes.
+//   Amigos, Tabla de posiciones, Torneo, Tienda, Acerca de,
+//   Compartir y Ajustes. (7.7: sin Grupos de estudio, sin Soporte
+//   y sin Mis errores — la fila de errores la quitó Kristian.)
 //   Todo lo demás (Tema, Recordatorios, Notificaciones, Cómo se
 //   juega, Buscar actualización, Idioma, Cambiar versión,
 //   Favoritos, Compartir progreso) vive en la pantalla Ajustes
@@ -48,6 +49,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../widgets/icon_animations.dart';
 import '../widgets/avatar_frame_ring.dart';
 import '../widgets/lucide_icons.dart';
 
@@ -68,6 +70,7 @@ import '../widgets/main_bottom_nav.dart';
 import '../widgets/social_avatar.dart';
 import '../widgets/stats_card.dart';
 import '../widgets/twin_avatars.dart';
+import 'onboarding_screen.dart';
 
 /// Tokens claros (rediseño Duolingo 7.0): texto #4B4B4B,
 /// terciario #777777, líneas #E5E5E5; teal #00C2A8 como color
@@ -198,12 +201,35 @@ class _AccountScreenState extends State<AccountScreen> {
   /// (sin internet, o fallo al iniciar sesión), sin diálogo de
   /// error y sin quedarse en carga. Si devuelve true, se trae el
   /// respaldo y la fila muestra el correo.
+  ///
+  /// Sin perfil local (el usuario entró "sin conexión" y no tiene
+  /// nombre ni género guardados): NO se enlaza directo. Se abre el
+  /// MISMO flujo de inicio (Quemia 7.7, Kristian 2026-11-13: "como
+  /// si fuera la pantalla desde el principio") — elección crear
+  /// perfil / entrar con Google — y al terminar se vuelve a Cuenta
+  /// ya con la cuenta puesta. Con perfil local, se enlaza directo
+  /// como antes (vincular Google a la cuenta que ya tiene).
   var _googleBusy = false;
 
   Future<void> _onGoogleRowTap() async {
     if (_googleBusy) return;
     if (_googleLinked) {
       await _showUnlinkDialog();
+      return;
+    }
+    if (UserPrefs.userName.isEmpty) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => OnboardingScreen(
+            fromAccount: true,
+            onFinished: () {
+              Navigator.of(context).pop();
+              _loadGoogleState();
+            },
+            onCancel: () => Navigator.of(context).pop(),
+          ),
+        ),
+      );
       return;
     }
     setState(() => _googleBusy = true);
@@ -283,6 +309,10 @@ class _AccountScreenState extends State<AccountScreen> {
     final unlockedCount = allAchievements
         .where((a) => achievementUnlocked(a.id, p, widget.trackTopics))
         .length;
+    // Trofeos ganados de la pista actual (Kristian, 2026-11-14):
+    // en la cabecera va un trofeíto con "ganados/total", sin
+    // tarjeta ni texto "Mis trofeos".
+    final trophyWon = p.trophyCount(widget.trackTopics);
     // Saludo "Bienvenido/a [primer nombre]" (Kristian).
     // Sin nombre guardado, greeting devuelve "Hola".
     final greetingLine = UserPrefs.greeting;
@@ -306,115 +336,147 @@ class _AccountScreenState extends State<AccountScreen> {
           Container(
             decoration: BoxDecoration(
               color: c.card,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(20),
               border: Border.all(color: c.border),
             ),
             padding: const EdgeInsets.all(16),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Avatar del usuario (alcance 9): el círculo se
-                // repinta solo al elegir otro en la galería
-                // (SocialService avisa con el notifier). Con marco
-                // equipado (7.3), el anillo del marco rodea la foto.
-                _UserAvatarSection(
-                  onTap: () => widget.onOpenScreen('avatar'),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        tr('accountTitle'),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                          color: c.ink,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        greetingLine,
-                        maxLines: 2,
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: c.inkSoft,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Row(
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Avatar del usuario (alcance 9): el círculo se
+                    // repinta solo al elegir otro en la galería
+                    // (SocialService avisa con el notifier). Con marco
+                    // equipado (7.3), el anillo del marco rodea la foto.
+                    _UserAvatarSection(
+                      onTap: () => widget.onOpenScreen('avatar'),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          CompanionAvatar(
-                            companion: companion,
-                            size: 22,
-                            ring: false,
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              tr(companionOfDayKey(companion)),
-                              // 2 líneas: "Hoy te acompaña Britany" no
-                              // cabe en una (7 letras más que Brenda);
-                              // con 1 se cortaba a "Br…" los días de
-                              // Britany. La tarjeta crece un poco.
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                                color: accent,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      // Mi nombre de usuario (Quemia 7.3, Kristian):
-                      // en la misma tarjeta del saludo: "Usuario:
-                      // [nombre]" + un botoncito pequeño de copiar
-                      // al lado. Solo si ya existe (con Google y
-                      // reclamado).
-                      if (_myUsername.isNotEmpty) ...[
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                '${tr('myUsernameShort')}: $_myUsername',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: c.inkSoft,
+                          // Título "Cuenta" + trofeíto con el contador
+                          // de trofeos de la pista (Kristian, 2026-11-14:
+                          // "pequeñito allí un trofeo y al lado uno de
+                          // diez que no diga mis trofeos").
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  tr('accountTitle'),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w800,
+                                    color: c.ink,
+                                  ),
                                 ),
                               ),
-                            ),
-                            // Botoncito de copiar: GestureDetector (no
-                            // InkWell — la tarjeta es un Container sin
-                            // Material y el InkWell exige uno; el icono
-                            // es pequeño y no necesita la onda de tinta).
-                            GestureDetector(
-                              onTap: _copyUsername,
-                              child: Padding(
-                                padding: const EdgeInsets.all(4),
-                                child: LucideIcon(
-                                  LucideIcons.copy,
-                                  size: 16,
-                                  color: accent,
+                              const SizedBox(width: 8),
+                              const LucideIcon(
+                                LucideIcons.trophy,
+                                size: 18,
+                                color: BrandColors.amber,
+                                threeD: true,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '$trophyWon/${widget.trackTopics.length}',
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w800,
+                                  color: BrandColors.amber,
                                 ),
                               ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            greetingLine,
+                            maxLines: 2,
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: c.inkSoft,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              CompanionAvatar(
+                                companion: companion,
+                                size: 22,
+                                ring: false,
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  tr(companionOfDayKey(companion)),
+                                  // 2 líneas: "Hoy te acompaña Britany" no
+                                  // cabe en una (7 letras más que Brenda);
+                                  // con 1 se cortaba a "Br…" los días de
+                                  // Britany. La tarjeta crece un poco.
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                    color: accent,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          // Mi nombre de usuario (Quemia 7.3, Kristian):
+                          // en la misma tarjeta del saludo: "Usuario:
+                          // [nombre]" + un botoncito pequeño de copiar
+                          // al lado. Solo si ya existe (con Google y
+                          // reclamado).
+                          if (_myUsername.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    '${tr('myUsernameShort')}: $_myUsername',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: c.inkSoft,
+                                    ),
+                                  ),
+                                ),
+                                // Botoncito de copiar: GestureDetector (no
+                                // InkWell — la tarjeta es un Container sin
+                                // Material y el InkWell exige uno; el icono
+                                // es pequeño y no necesita la onda de tinta).
+                                GestureDetector(
+                                  onTap: _copyUsername,
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(4),
+                                    child: LucideIcon(
+                                      LucideIcons.copy,
+                                      size: 16,
+                                      color: accent,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
-                        ),
-                      ],
-                    ],
-                  ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
+                const SizedBox(height: 12),
               ],
             ),
           ),
@@ -431,9 +493,9 @@ class _AccountScreenState extends State<AccountScreen> {
           // tarjeta de estadísticas NO cambian; debajo van, en este
           // orden exacto, Vincular con Google (prominente, primera
           // fila: es la puerta a todo lo online), Estadísticas,
-          // Mis errores, Amigos, Tabla de posiciones, Torneo,
-          // Grupos de estudio, Tienda, Acerca de, Compartir,
-          // Soporte y Ajustes. Todo lo demás (Tema, Recordatorios,
+          // Amigos, Tabla de posiciones, Torneo, Tienda, Acerca de,
+          // Compartir y Ajustes. (7.7: sin Grupos, sin Soporte y
+          // sin Mis errores.) Todo lo demás (Tema, Recordatorios,
           // Notificaciones, Cómo se juega, Buscar actualización,
           // Idioma, Cambiar versión, Favoritos, Compartir
           // progreso) vive en la pantalla Ajustes.
@@ -441,130 +503,150 @@ class _AccountScreenState extends State<AccountScreen> {
           // con la cuenta de Google (el mismo uid recupera el
           // progreso en otro teléfono). Si está vinculada, la fila
           // muestra el correo y al tocar ofrece desvincular.
-          _Row(
-            icon: LucideIcons.link,
-            iconColor: _blue,
-            title: tr('accountLinkGoogle'),
-            subtitle: _googleBusy
-                ? tr('googleLinking')
-                : _googleLinked && _googleEmail != null
-                    ? _googleEmail!
-                    : tr('accountLinkGoogleSub'),
-            onTap: _onGoogleRowTap,
+          // Entrada escalonada (pulido 7.7).
+          FadeSlideIn(
+            delay: Duration(milliseconds: 0),
+            child: _Row(
+              icon: LucideIcons.link,
+              iconColor: _blue,
+              title: tr('accountLinkGoogle'),
+              subtitle: _googleBusy
+                  ? tr('googleLinking')
+                  : _googleLinked && _googleEmail != null
+                      ? _googleEmail!
+                      : tr('accountLinkGoogleSub'),
+              onTap: _onGoogleRowTap,
+            ),
           ),
-          _Row(
-            icon: LucideIcons.chartColumn,
-            iconColor: _violet,
-            title: tr('accountStats'),
-            subtitle: tr('accountStatsSub'),
-            onTap: () => widget.onOpenScreen('stats'),
+          // Entrada escalonada (pulido 7.7).
+          FadeSlideIn(
+            delay: Duration(milliseconds: 40),
+            child: _Row(
+              icon: LucideIcons.chartColumn,
+              iconColor: _violet,
+              title: tr('accountStats'),
+              subtitle: tr('accountStatsSub'),
+              onTap: () => widget.onOpenScreen('stats'),
+            ),
           ),
-          _Row(
-            icon: LucideIcons.rotateCcw,
-            iconColor: AppAccent.primary,
-            title: tr('accountReview'),
-            subtitle: '${p.failedCount} ${tr('reviewTitle')}',
-            onTap: () => widget.onOpenScreen('review'),
-          ),
+          // Quemia 7.7 (Kristian): la fila "Mis errores" QUITADA
+          // de Cuenta — el repaso sigue existiendo desde las
+          // notificaciones y la búsqueda, pero ya no es una
+          // opción de Cuenta.
           // Quemia 7.0: social (amigos, torneos, tienda, grupos).
-          _Row(
-            icon: LucideIcons.userRound,
-            iconColor: AppAccent.primary,
-            title: tr('accountFriends'),
-            subtitle: tr('accountFriendsSub'),
-            onTap: () => widget.onOpenScreen('friends'),
+          // Entrada escalonada (pulido 7.7).
+          FadeSlideIn(
+            delay: Duration(milliseconds: 80),
+            child: _Row(
+              icon: LucideIcons.userRound,
+              iconColor: AppAccent.primary,
+              title: tr('accountFriends'),
+              subtitle: tr('accountFriendsSub'),
+              onTap: () => widget.onOpenScreen('friends'),
+            ),
           ),
           // Ronda #8 (Quemia 6.5): tabla de posiciones.
           // (Diseño 7.0: la fila "Compartir mi progreso" se quitó
           // de aquí: compartir es automático con Google vinculada,
           // sin preguntar nada; la fila vive ahora en Ajustes y
           // abre Mis estadísticas.)
-          _Row(
-            icon: LucideIcons.trophy,
-            iconColor: _amber,
-            title: tr('accountLeaderboard'),
-            subtitle: tr('accountLeaderboardSub'),
-            onTap: () => widget.onOpenScreen('leaderboard'),
+          // Entrada escalonada (pulido 7.7).
+          FadeSlideIn(
+            delay: Duration(milliseconds: 120),
+            child: _Row(
+              icon: LucideIcons.trophy,
+              iconColor: _amber,
+              title: tr('accountLeaderboard'),
+              subtitle: tr('accountLeaderboardSub'),
+              onTap: () => widget.onOpenScreen('leaderboard'),
+            ),
           ),
-          _Row(
-            icon: LucideIcons.award,
-            iconColor: _amber,
-            title: tr('accountTournaments'),
-            subtitle: tr('accountTournamentsSub'),
-            onTap: () => widget.onOpenScreen('tournaments'),
+          // Entrada escalonada (pulido 7.7).
+          FadeSlideIn(
+            delay: Duration(milliseconds: 160),
+            child: _Row(
+              icon: LucideIcons.award,
+              iconColor: _amber,
+              title: tr('accountTournaments'),
+              subtitle: tr('accountTournamentsSub'),
+              onTap: () => widget.onOpenScreen('tournaments'),
+            ),
           ),
-          _Row(
-            icon: LucideIcons.network,
-            iconColor: _blue,
-            title: tr('accountGroups'),
-            subtitle: tr('accountGroupsSub'),
-            onTap: () => widget.onOpenScreen('groups'),
-          ),
-          _Row(
-            icon: LucideIcons.gift,
-            iconColor: _violet,
-            title: tr('accountShop'),
-            subtitle: tr('accountShopSub'),
-            onTap: () => widget.onOpenScreen('shop'),
+          // Entrada escalonada (pulido 7.7).
+          FadeSlideIn(
+            delay: Duration(milliseconds: 200),
+            child: _Row(
+              icon: LucideIcons.gift,
+              iconColor: _violet,
+              title: tr('accountShop'),
+              subtitle: tr('accountShopSub'),
+              onTap: () => widget.onOpenScreen('shop'),
+            ),
           ),
           // Referidos (7.3): invita con tu código y los dos ganan
           // puntos. Va justo después de la Tienda: los premios de
           // los hitos son artículos de la tienda.
-          _Row(
-            icon: LucideIcons.heart,
-            iconColor: AppAccent.primary,
-            title: tr('accountReferrals'),
-            subtitle: tr('accountReferralsSub'),
-            onTap: () => widget.onOpenScreen('referrals'),
+          // Entrada escalonada (pulido 7.7).
+          FadeSlideIn(
+            delay: Duration(milliseconds: 240),
+            child: _Row(
+              icon: LucideIcons.heart,
+              iconColor: AppAccent.primary,
+              title: tr('accountReferrals'),
+              subtitle: tr('accountReferralsSub'),
+              onTap: () => widget.onOpenScreen('referrals'),
+            ),
           ),
           // Canjear código (7.6, Kristian): apartado SEPARADO en
           // Cuenta, como en la app de Muse (fila "Canjea el código
           // de recomendación"). Abre directo las 6 casillas.
-          _Row(
-            icon: LucideIcons.gift,
-            iconColor: AppAccent.primary,
-            title: tr('accountRedeem'),
-            subtitle: tr('accountRedeemSub'),
-            onTap: () => widget.onOpenScreen('redeem'),
+          // Entrada escalonada (pulido 7.7).
+          FadeSlideIn(
+            delay: Duration(milliseconds: 280),
+            child: _Row(
+              icon: LucideIcons.gift,
+              iconColor: AppAccent.primary,
+              title: tr('accountRedeem'),
+              subtitle: tr('accountRedeemSub'),
+              onTap: () => widget.onOpenScreen('redeem'),
+            ),
           ),
-          _Row(
-            icon: LucideIcons.info,
-            iconColor: _violet,
-            title: tr('accountAbout'),
-            subtitle: tr('appSubtitle'),
-            onTap: widget.onShowAbout,
+          // Entrada escalonada (pulido 7.7).
+          FadeSlideIn(
+            delay: Duration(milliseconds: 320),
+            child: _Row(
+              icon: LucideIcons.info,
+              iconColor: _violet,
+              title: tr('accountAbout'),
+              subtitle: tr('appSubtitle'),
+              onTap: widget.onShowAbout,
+            ),
           ),
-          _Row(
-            icon: LucideIcons.share2,
-            iconColor: _blue,
-            title: tr('accountShareApp'),
-            subtitle: tr('menuShare'),
-            onTap: widget.onShowShareApp,
-          ),
-          // Soporte (7.0, Kristian 09:52): ya NO abre WhatsApp
-          // directo — abre la ventanita dentro de la app (hilo +
-          // compositor); la opción de WhatsApp vive DENTRO de la
-          // ventanita y solo si el interruptor remoto está
-          // encendido. La fila sigue siendo una opción más, igual
-          // que las demás: fila plana, icono de mensaje teal,
-          // título "Soporte", chevron.
-          _Row(
-            icon: LucideIcons.messageCircle,
-            iconColor: AppAccent.primary,
-            title: tr('supportWord'),
-            subtitle: tr('supportSub'),
-            onTap: () => widget.onOpenScreen('support'),
+          // Entrada escalonada (pulido 7.7).
+          FadeSlideIn(
+            delay: Duration(milliseconds: 360),
+            child: _Row(
+              icon: LucideIcons.share2,
+              iconColor: _blue,
+              title: tr('accountShareApp'),
+              subtitle: tr('menuShare'),
+              onTap: widget.onShowShareApp,
+            ),
           ),
           // Ajustes (7.1): última fila; abre su propia pantalla
           // con Tema, Recordatorios, Notificaciones, Cómo se
           // juega, Buscar actualización, Idioma, Cambiar versión,
           // Favoritos y Compartir progreso.
-          _Row(
-            icon: LucideIcons.settings,
-            iconColor: _violet,
-            title: tr('settingsTitle'),
-            subtitle: tr('settingsSub'),
-            onTap: () => widget.onOpenScreen('settings'),
+          // Entrada escalonada (pulido 7.7).
+          FadeSlideIn(
+            delay: Duration(milliseconds: 400),
+            child: _Row(
+              icon: LucideIcons.settings,
+              iconColor: _violet,
+              title: tr('settingsTitle'),
+              subtitle: tr('settingsSub'),
+              onTap: () => widget.onOpenScreen('settings'),
+            ),
           ),
           const SizedBox(height: 16),
           Center(
@@ -725,6 +807,25 @@ class _UserAvatarCircle extends StatelessWidget {
   }
 }
 
+
+/// Cambio rápido claro/oscuro (Quemia 7.7, Kristian 2026-11-14:
+/// la Lottie "toogle" de LottieFiles en la tarjeta de Cuenta):
+/// al tocar, cambia entre claro y oscuro SIN tocar el sistema
+/// de temas de Ajustes (allí siguen "sistema", "claro" y
+/// "oscuro"). La animación es un paisaje día/noche (590x320,
+/// 60 fps, 200 fotogramas) con marcadores: "Day Idle" 0-20,
+/// "Day to Night" 20-80, "Night Idle" 81-119, "Night to Day"
+/// 120-200. El paquete lottie no entiende la máquina de estados
+/// del .lottie, así que la transición se hace a mano con un
+/// controlador: día en reposo = fotograma 10 (0.05), noche en
+/// reposo = fotograma 100 (0.5). Claro→oscuro anima de 0.05 a
+/// 0.5 (pasa por "Day to Night"); oscuro→claro anima de 0.5 a
+/// 1.0 (pasa por "Night to Day") y al terminar salta a 0.05,
+/// que es el mismo día en reposo. Si el tema cambia en otro
+/// sitio (Ajustes), el notifier pone el interruptor en el
+/// estado que toca. En pruebas queda fijo en el estado actual,
+/// sin animar.
+
 /// Una fila de Cuenta como TARJETA redondeada (organización
 /// 6.3): cada fila en su propia tarjeta con separación, icono
 /// en un chip tintado, título 17 pt peso 700, subtítulo 15 pt
@@ -763,13 +864,13 @@ class _Row extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: c.card,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: c.border),
       ),
       child: Material(
         type: MaterialType.transparency,
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
           onTap: () {
             SoundService.tap();
             onTap();
@@ -783,7 +884,7 @@ class _Row extends StatelessWidget {
                   height: 48,
                   decoration: BoxDecoration(
                     color: iconColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(16),
                   ),
                   alignment: Alignment.center,
                   child: LucideIcon(icon, color: iconColor, size: 24),

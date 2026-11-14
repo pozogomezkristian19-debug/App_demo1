@@ -493,8 +493,13 @@ void main() {
 
   group('Onboarding: pedir directo y re-chequear al volver', () {
     /// Lleva el onboarding hasta la pantalla de permiso de
-    /// notificaciones (después del nombre, antes del idioma).
-    Future<void> goToNotificationsPage(WidgetTester tester) async {
+    /// notificaciones (la ÚLTIMA página en la 7.7: Bienvenida ->
+    /// Elección -> la gemela -> Perfil -> Referido -> Notificaciones;
+    /// sin pantalla de idioma).
+    Future<void> goToNotificationsPage(
+      WidgetTester tester, {
+      VoidCallback? onFinished,
+    }) async {
       // Superficie de teléfono (393x852, como el Redmi de Kristian):
       // a 800x600 la página del perfil no cabe en vertical y la
       // píldora "Masculino" queda bajo el área visible, fuera del
@@ -506,31 +511,49 @@ void main() {
         tester.view.resetDevicePixelRatio();
       });
       await tester.pumpWidget(
-        MaterialApp(home: OnboardingScreen(onFinished: () {})),
+        MaterialApp(
+            home: OnboardingScreen(onFinished: onFinished ?? () {})),
       );
       await tester.pumpAndSettle();
-      for (var i = 0; i < 4; i++) {
-        await tester.tap(find.text('SIGUIENTE'));
-        await tester.pumpAndSettle();
-      }
-      await tester.enterText(find.byType(TextField), 'Kristian');
-      await tester.tap(find.text('Masculino'));
+      // Bienvenida -> Elección -> la gemela -> cómo supo -> cuánta
+      // química sabe -> meta diaria -> Notificaciones (rediseño 7.7:
+      // Continuar, Crear mi perfil, Vamos, elegir, Continuar,
+      // elegir, Continuar, elegir, Guardar mi meta; sin pantalla de
+      // idioma). El perfil y el referido van DESPUÉS de
+      // Notificaciones, así que aquí no se rellenan.
+      await tester.tap(find.text(tr('obContinue').toUpperCase()));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('SIGUIENTE'));
+      await tester.tap(find.text(tr('obCreateProfile').toUpperCase()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(tr('obVamos').toUpperCase()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(tr('obSourceInstagram')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(tr('obContinue').toUpperCase()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(tr('obLevel1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(tr('obContinue').toUpperCase()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(tr('obGoal10')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(tr('obGoalSave').toUpperCase()));
       await tester.pumpAndSettle();
     }
 
     testWidgets('con el permiso concedido, "Activar recordatorios" '
-        'dispara la confirmación y avanza al idioma', (tester) async {
-      await goToNotificationsPage(tester);
+        'dispara la confirmación y avanza a la racha', (tester) async {
+      var finished = false;
+      await goToNotificationsPage(tester, onFinished: () => finished = true);
       expect(find.text('ACTIVAR RECORDATORIOS'), findsOneWidget);
       await tester.tap(find.text('ACTIVAR RECORDATORIOS'));
       await tester.pump(const Duration(seconds: 4));
       await tester.pumpAndSettle();
-      // Diseño 7.0: tras notificaciones viene directamente el idioma
-      // (la página de permiso de analítica se quitó: compartir es
-      // automático).
-      expect(find.text('Finalizar'), findsOneWidget);
+      // Notificaciones ya NO es la última página en la 7.7 (después
+      // van la racha, el perfil y el referido): al activar, se
+      // avanza a la racha, no se termina el flujo.
+      expect(finished, isFalse);
+      expect(find.text(tr('obStreakTitle')), findsOneWidget);
       expect(UserPrefs.reminderOn, isTrue);
       expect(fake.exactAlarmsRequested, isFalse);
       expect(
@@ -543,7 +566,8 @@ void main() {
     testWidgets('con el permiso denegado, sale "Ir a Ajustes" y al '
         'volver con el permiso dado se activa solo', (tester) async {
       fake.permissionGranted = false;
-      await goToNotificationsPage(tester);
+      var finished = false;
+      await goToNotificationsPage(tester, onFinished: () => finished = true);
       await tester.tap(find.text('ACTIVAR RECORDATORIOS'));
       await tester.pumpAndSettle();
       expect(find.text('Ir a Ajustes'), findsOneWidget);
@@ -553,7 +577,7 @@ void main() {
       // Todavía NO se avanzó: si se avanzara, el PageView destruye
       // esta página y el re-chequeo al volver no podría dispararse.
       expect(find.text('ACTIVAR RECORDATORIOS'), findsOneWidget);
-      expect(find.text('Finalizar'), findsNothing);
+      expect(finished, isFalse);
       // El usuario concede en Ajustes y vuelve a la app.
       fake.permissionGranted = true;
       tester.binding.handleAppLifecycleStateChanged(
@@ -561,10 +585,11 @@ void main() {
       await tester.pump(const Duration(seconds: 4));
       await tester.pumpAndSettle();
       expect(UserPrefs.reminderOn, isTrue);
-      // Diseño 7.0: tras notificaciones viene directamente el idioma
-      // (la página de permiso de analítica se quitó: compartir es
-      // automático).
-      expect(find.text('Finalizar'), findsOneWidget);
+      // Al volver con el permiso dado se activa solo y se avanza a
+      // la racha (Quemia 7.7: Notificaciones ya NO es la última
+      // página).
+      expect(finished, isFalse);
+      expect(find.text(tr('obStreakTitle')), findsOneWidget);
       expect(
           fake.shown
               .where((s) => s.body == tr('notifEnabledConfirm')),
@@ -573,18 +598,19 @@ void main() {
     });
 
     testWidgets('con el permiso denegado y "Cerrar" en el diálogo, '
-        'se avanza igual al idioma sin activar nada', (tester) async {
+        'se avanza a la racha sin activar nada', (tester) async {
       fake.permissionGranted = false;
-      await goToNotificationsPage(tester);
+      var finished = false;
+      await goToNotificationsPage(tester, onFinished: () => finished = true);
       await tester.tap(find.text('ACTIVAR RECORDATORIOS'));
       await tester.pumpAndSettle();
       expect(find.text('Ir a Ajustes'), findsOneWidget);
       await tester.tap(find.text(tr('notifSettingsClose')));
       await tester.pumpAndSettle();
-      // Diseño 7.0: tras notificaciones viene directamente el idioma
-      // (la página de permiso de analítica se quitó: compartir es
-      // automático).
-      expect(find.text('Finalizar'), findsOneWidget);
+      // Al cerrar, se avanza a la racha (Quemia 7.7: Notificaciones
+      // ya NO es la última página), sin activar nada.
+      expect(finished, isFalse);
+      expect(find.text(tr('obStreakTitle')), findsOneWidget);
       expect(UserPrefs.reminderOn, isFalse);
       expect(fake.settingsOpened, isFalse);
       expect(fake.shown, isEmpty);

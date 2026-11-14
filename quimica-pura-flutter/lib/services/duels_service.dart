@@ -43,6 +43,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'analytics_sync.dart';
 import 'auth_service.dart';
 import 'online_common.dart';
+import 'presence_service.dart';
 import 'progress.dart';
 import 'question_generator.dart';
 import 'user_prefs.dart';
@@ -302,10 +303,27 @@ class DuelService {
     'enlace',
   ];
 
+  /// ¿Está en línea el rival? Lee su doc de 'users' y mira el
+  /// último latido (lastSeenMs, ver PresenceService). Devuelve true
+  /// si el rival es un BOT (isBot == true): un bot siempre está
+  /// disponible porque es simulado y su jugada la pone un proceso
+  /// del servidor; nunca tiene latido. Sin doc o sin latido reciente
+  /// = no está en línea. Null si falla la red (no se sabe).
+  static Future<bool?> isRivalOnline(String rivalUid) async {
+    if (rivalUid.isEmpty) return false;
+    final doc = await OnlineCommon.call(
+        () => _repo.getDoc('users', rivalUid));
+    if (doc == null) return false;
+    if (doc['isBot'] == true) return true;
+    final lastSeen = (doc['lastSeenMs'] as num?)?.toInt();
+    return PresenceService.isOnline(lastSeen);
+  }
+
   /// Crea un duelo contra [rivalUid]. Las 5 preguntas se generan con
   /// el generador/banco (mezcla de temas) y se guardan por id, así
   /// los dos juegan exactamente lo mismo. Devuelve null sin Google,
-  /// sin rival o si falla la red.
+  /// sin rival, si el rival REAL no está en línea (un bot siempre
+  /// está disponible) o si falla la red.
   static Future<Duel?> createDuel({
     required String rivalUid,
     required String rivalName,
@@ -313,6 +331,23 @@ class DuelService {
   }) async {
     if (!OnlineCommon.allowed || _me.isEmpty) return null;
     if (rivalUid.isEmpty || rivalUid == _me) return null;
+    // Retar exige rival en línea (corrección de Kristian
+    // 2026-11-13): si no está en línea, no se crea el duelo. Los
+    // bots quedan exentos: siempre disponibles.
+    final online = await isRivalOnline(rivalUid);
+    if (online != true) return null;
+    return _createDuelInternal(
+        rivalUid: rivalUid, rivalName: rivalName, topics: topics);
+  }
+
+  /// La creación en sí, sin comprobar presencia (la usa el duelo al
+  /// azar, que ya comprobó que el rival está en línea al sacarlo de
+  /// la cola).
+  static Future<Duel?> _createDuelInternal({
+    required String rivalUid,
+    required String rivalName,
+    List<String>? topics,
+  }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     final seed = Random().nextInt(1 << 30);
     final ids = _generateQuestionIds(seed: seed, topics: topics);
@@ -336,31 +371,96 @@ class DuelService {
     return Duel.fromMap(<String, dynamic>{'id': id, ...data});
   }
 
-  /// Crea un duelo contra un usuario al azar entre los que dieron
-  /// permiso de compartir (shared == true) y no están baneados.
-  /// Devuelve null sin Google, si no hay nadie más (estado vacío,
-  /// no error) o si falla la red.
+  /// Cola de matchmaking del duelo al azar ('duel_queue', un doc por
+  /// usuario buscando, id = uid). Solo usuarios REALES: los bots
+  /// nunca entran en la cola.
+  static const String _duelQueueCollection = 'duel_queue';
+
+  /// Entro en la cola de duelo al azar.
+  static Future<void> joinDuelQueue() async {
+    if (!OnlineCommon.allowed || _me.isEmpty) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await OnlineCommon.write(() => _repo.setDoc(
+          _duelQueueCollection,
+          _me,
+          <String, dynamic>{
+            'uid': _me,
+            'username': _myName,
+            'createdAtMs': now,
+          },
+        ));
+  }
+
+  /// Salgo de la cola (al cancelar la búsqueda, al cerrarla o cuando
+  /// ya hubo match). Solo borra MI entrada: las reglas solo permiten
+  /// borrar la propia. El rival borra la suya cuando su pantalla
+  /// detecta el duelo.
+  static Future<void> leaveDuelQueue() async {
+    if (!OnlineCommon.allowed || _me.isEmpty) return;
+    await OnlineCommon.write(
+        () => _repo.deleteDoc(_duelQueueCollection, _me));
+  }
+
+  /// Crea un duelo al azar con MATCH MUTUO: solo ocurre cuando la
+  /// otra persona también está buscando duelo (está en la cola) Y
+  /// está en línea (latido reciente).
+  ///
+  /// Flujo: entro en la cola → busco a otro en la cola (el más
+  /// antiguo primero) → si hay alguien en línea, creo el duelo
+  /// contra él y salgo de la cola. Si no hay nadie, devuelvo null
+  /// (la pantalla queda en "buscando rival" y sigo en la cola; el
+  /// otro me encontrará a mí cuando entre).
+  ///
+  /// Los BOTS nunca entran en la cola y nunca se les hace match
+  /// aleatorio (aunque su doc esté en la cola por error, se saltan).
+  /// Las entradas fantasma (app cerrada sin salir de la cola) no
+  /// hacen match: se comprueba el latido antes de crear el duelo.
+  ///
+  /// LIMITACIÓN (carrera): si los dos nos vemos en la cola al mismo
+  /// tiempo, los dos podemos crear un duelo (dos duelos distintos).
+  /// La pantalla, al detectar un duelo en myOpenDuels, abre el más
+  /// reciente y sale de la cola; el otro duelo queda huérfano (el
+  /// rival lo ve en "Mis duelos" y puede jugarlo o cancelarlo).
+  /// Devuelve null sin Google, si no hay nadie o si falla la red.
   static Future<Duel?> createRandomDuel({List<String>? topics}) async {
     if (!OnlineCommon.allowed || _me.isEmpty) return null;
-    final users = await OnlineCommon.call(() => _repo.queryDocs(
-          'users',
-          whereField: 'shared',
-          isEqualTo: true,
-          limit: 50,
+    await joinDuelQueue();
+    final queue = await OnlineCommon.call(() => _repo.queryDocs(
+          _duelQueueCollection,
+          orderByField: 'createdAtMs',
+          limit: 10,
         ));
-    if (users == null) return null;
-    final candidates = users.where((u) {
-      final uid = u['id']?.toString() ?? u['deviceId']?.toString() ?? '';
-      if (uid.isEmpty || uid == _me) return false;
-      if (u['banned'] == true) return false;
-      return true;
-    }).toList();
-    if (candidates.isEmpty) return null;
-    final pick = candidates[Random().nextInt(candidates.length)];
-    final rivalUid =
-        pick['id']?.toString() ?? pick['deviceId']?.toString() ?? '';
-    final rivalName = pick['username']?.toString() ?? '';
-    return createDuel(rivalUid: rivalUid, rivalName: rivalName, topics: topics);
+    if (queue == null) return null;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    for (final entry in queue) {
+      final rivalUid =
+          entry['uid']?.toString() ?? entry['id']?.toString() ?? '';
+      if (rivalUid.isEmpty || rivalUid == _me) continue;
+      // Entrada fantasma: más de 5 min en la cola sin que su dueño
+      // la renueve (la app cerrada no sale de la cola).
+      final queuedAt = (entry['createdAtMs'] as num?)?.toInt() ?? 0;
+      if (queuedAt > 0 &&
+          now - queuedAt > const Duration(minutes: 5).inMilliseconds) {
+        continue;
+      }
+      // El rival tiene que seguir en línea (y no ser un bot: los
+      // bots nunca van en la cola, pero si hay uno se salta).
+      final rivalDoc = await OnlineCommon.call(
+          () => _repo.getDoc('users', rivalUid));
+      if (rivalDoc == null) continue;
+      if (rivalDoc['isBot'] == true) continue;
+      final lastSeen = (rivalDoc['lastSeenMs'] as num?)?.toInt();
+      if (!PresenceService.isOnline(lastSeen, nowMs: now)) continue;
+      final rivalName = entry['username']?.toString() ??
+          rivalDoc['username']?.toString() ??
+          '';
+      final duel = await _createDuelInternal(
+          rivalUid: rivalUid, rivalName: rivalName, topics: topics);
+      if (duel == null) return null;
+      await leaveDuelQueue();
+      return duel;
+    }
+    return null;
   }
 
   /// Mis duelos abiertos (soy jugador A o B y siguen activos),

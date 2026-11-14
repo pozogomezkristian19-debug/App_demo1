@@ -9,7 +9,7 @@
 // REGLA GENERAL DEL USUARIO: cada error se corrige en TODA la
 // pantalla, no solo en la de la captura. Por eso este archivo no
 // cubre solo la página de nombre/género: el grupo "TODO el flujo"
-// recorre bienvenida, explicativas, nombre/género, notificaciones
+// recorre bienvenida, nombre/género, notificaciones
 // e idioma en AMBOS temas y verifica en cada paso contraste
 // legible y ajuste sin scroll.
 import 'package:flutter/material.dart';
@@ -18,7 +18,9 @@ import 'package:quimica_pura/screens/onboarding_notifications_page.dart';
 import 'package:quimica_pura/screens/onboarding_screen.dart';
 import 'package:quimica_pura/services/accent.dart';
 import 'package:quimica_pura/services/localization.dart';
+import 'package:quimica_pura/services/user_prefs.dart';
 import 'package:quimica_pura/widgets/brand_logo.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 ThemeData zoneELightTheme() => ThemeData(
       useMaterial3: true,
@@ -51,6 +53,16 @@ ThemeData zoneEDarkTheme() => ThemeData(
     );
 
 void main() {
+  // SharedPreferences mockeado (Quemia 7.7): el flujo de crear
+  // cuenta guarda cada respuesta al confirmar (cómo supo, cuánto
+  // sabe, meta diaria) y sin mock getInstance() falla y el flujo
+  // no avanza. Idioma español, como en el resto de tests.
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    await UserPrefs.load();
+    AppLang.code = 'es';
+  });
+
   Future<void> setPhone(
     WidgetTester tester, {
     required double width,
@@ -69,7 +81,7 @@ void main() {
     });
   }
 
-  Future<void> goToProfilePage(
+  Future<void> goToRegisterPage(
     WidgetTester tester, {
     required ThemeData theme,
     double width = 360,
@@ -86,101 +98,142 @@ void main() {
       MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: theme,
-        home: OnboardingScreen(onFinished: () {}),
+        // UniqueKey: sin ella, Flutter REUSA el State al volver a
+        // hacer pumpWidget del mismo OnboardingScreen en el mismo
+        // test (el test del hint lo hace 2 veces, claro y oscuro) y
+        // la segunda vuelta empieza a mitad de flujo (_page
+        // heredado), no en la Bienvenida.
+        home: OnboardingScreen(key: UniqueKey(), onFinished: () {}),
       ),
     );
     await tester.pumpAndSettle();
-    for (var i = 0; i < 4; i++) {
-      await tester.tap(find.text(tr('obNext').toUpperCase()));
-      await tester.pumpAndSettle();
-    }
-    expect(find.text(tr('obProfileTitle')), findsOneWidget);
+    // Quemia 7.7 (rediseño 2026-11-13): sin pantalla de idioma y sin
+    // barra de progreso; el inicio es Bienvenida -> Elección ->
+    // la gemela -> cómo supo -> cuánta química sabe -> meta diaria
+    // -> Notificaciones -> la racha -> aviso "¡No pierdas tu
+    // progreso!" -> Registro. En Notificaciones el permiso está
+    // negado en pruebas: sale "Ir a Ajustes" y al cerrarlo se
+    // avanza a la racha.
+    await tester.tap(find.text(tr('obContinue').toUpperCase()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(tr('obCreateProfile').toUpperCase()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(tr('obVamos').toUpperCase()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(tr('obSourceInstagram')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(tr('obContinue').toUpperCase()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(tr('obLevel1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(tr('obContinue').toUpperCase()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(tr('obGoal10')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(tr('obGoalSave').toUpperCase()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(tr('obNotifEnable').toUpperCase()));
+    await tester.pumpAndSettle();
+    expect(find.text('Ir a Ajustes'), findsOneWidget);
+    await tester.tap(find.text('Cerrar'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(tr('obStreakStart').toUpperCase()));
+    await tester.pumpAndSettle();
+    expect(find.text(tr('obNudgeTitle')), findsOneWidget);
+    await tester.tap(find.text(tr('obContinue').toUpperCase()));
+    await tester.pumpAndSettle();
+    expect(find.text(tr('obRegisterTitle')), findsOneWidget);
   }
 
   TextStyle textStyleOf(WidgetTester tester, String text) =>
       tester.widget<Text>(find.text(text)).style!;
 
   group('Zona E — contraste del onboarding', () {
-    testWidgets('tema oscuro: título, subtítulo y etiquetas casi '
-        'blancos (on-surface), no gris tenue', (tester) async {
-      await goToProfilePage(tester, theme: zoneEDarkTheme());
+    testWidgets(
+        'tema oscuro: título y términos casi blancos '
+        '(on-surface), no gris tenue', (tester) async {
+      await goToRegisterPage(tester, theme: zoneEDarkTheme());
       const onSurface = Color(0xFFE6F4EE);
-      expect(textStyleOf(tester, tr('obProfileTitle')).color, onSurface);
-      expect(textStyleOf(tester, tr('obNameLabel')).color, onSurface);
-      expect(textStyleOf(tester, tr('obGender')).color, onSurface);
-      // Subtítulo: on-surface al 75% — gris claro legible sobre
+      expect(textStyleOf(tester, tr('obRegisterTitle')).color, onSurface);
+      // Términos: on-surface al 75% — gris claro legible sobre
       // oscuro, nunca el #777777 fijo de antes.
-      expect(textStyleOf(tester, tr('obProfileBody')).color,
+      expect(textStyleOf(tester, tr('obRegisterTerms')).color,
           onSurface.withValues(alpha: 0.75));
       // Y no es un gris tenue: su luminancia es alta.
-      final bodyColor = textStyleOf(tester, tr('obProfileBody')).color!;
-      expect(bodyColor.computeLuminance(), greaterThan(0.5));
+      final termsColor = textStyleOf(tester, tr('obRegisterTerms')).color!;
+      expect(termsColor.computeLuminance(), greaterThan(0.5));
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('tema claro: título y etiquetas siguen en #4B4B4B',
+    testWidgets('tema claro: título sigue en #4B4B4B', (tester) async {
+      await goToRegisterPage(tester, theme: zoneELightTheme());
+      expect(textStyleOf(tester, tr('obRegisterTitle')).color,
+          const Color(0xFF4B4B4B));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+        'el hint del correo es legible sobre el campo en AMBOS '
+        'temas (blanco en claro, oscuro en oscuro como Duolingo)',
         (tester) async {
-      await goToProfilePage(tester, theme: zoneELightTheme());
-      expect(textStyleOf(tester, tr('obProfileTitle')).color,
-          const Color(0xFF4B4B4B));
-      expect(textStyleOf(tester, tr('obNameLabel')).color,
-          const Color(0xFF4B4B4B));
-      expect(textStyleOf(tester, tr('obGender')).color,
-          const Color(0xFF4B4B4B));
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('el hint del nombre es gris oscuro legible sobre el '
-        'campo blanco en AMBOS temas', (tester) async {
       for (final theme in [zoneELightTheme(), zoneEDarkTheme()]) {
-        await goToProfilePage(tester, theme: theme);
-        // Quemia 7.6: hay DOS campos (nombre + código de referido);
-        // el hint que se comprueba es el del NOMBRE (por su hint).
-        final field = tester.widget<TextField>(find.byWidgetPredicate(
-            (w) =>
-                w is TextField &&
-                w.decoration?.hintText == tr('obNameHint')));
-        expect(field.decoration!.fillColor, Colors.white);
-        // #757575 sobre blanco: contraste ~4,6:1, legible. Antes
-        // era onSurface al 45%: en oscuro casi blanco sobre blanco.
-        expect(field.decoration!.hintStyle!.color,
-            const Color(0xFF757575));
-        expect(field.decoration!.hintStyle!.color!.computeLuminance(),
-            lessThan(0.3));
+        await goToRegisterPage(tester, theme: theme);
+        // El campo de correo sale al tocar "Continuar con correo
+        // electrónico": es el primer paso del flujo (hint "Correo").
+        await tester.tap(find.text(tr('obRegisterEmail').toUpperCase()));
+        await tester.pumpAndSettle();
+        final field = tester.widget<TextField>(find.byWidgetPredicate((w) =>
+            w is TextField &&
+            w.decoration?.hintText == tr('obEmailFieldHint')));
+        if (theme.brightness == Brightness.dark) {
+          // Oscuro como Duolingo (Kristian 2026-11-13): la casilla
+          // NO es blanca — fondo oscuro de la app + hint gris
+          // claro legible sobre oscuro.
+          expect(field.decoration!.fillColor, AppAccent.darkCard);
+          expect(field.decoration!.hintStyle!.color,
+              const Color(0xFFAFAFAF));
+          expect(field.decoration!.hintStyle!.color!.computeLuminance(),
+              greaterThan(0.3));
+          expect(field.style!.color, Colors.white);
+        } else {
+          expect(field.decoration!.fillColor, Colors.white);
+          // #757575 sobre blanco: contraste ~4,6:1, legible.
+          expect(field.decoration!.hintStyle!.color, const Color(0xFF757575));
+          expect(field.decoration!.hintStyle!.color!.computeLuminance(),
+              lessThan(0.3));
+          expect(field.style!.color, const Color(0xFF4B4B4B));
+        }
       }
       expect(tester.takeException(), isNull);
     });
   });
 
-  group('Zona E — pantalla fija sin scroll (página nombre/género)', () {
+  group('Zona E — pantalla fija sin scroll (página de registro)', () {
     void expectNoScrollAndGoogleVisible(
         WidgetTester tester, double width, double height) {
       // El contenido cabe en el viewport: el scroll no tiene
-      // recorrido (maxScrollExtent 0). Quemia 7.6: hay DOS campos
-      // (nombre + código de referido); se toma el del nombre.
-      final position = Scrollable.of(tester.element(find.byWidgetPredicate(
-              (w) =>
-                  w is TextField &&
-                  w.decoration?.hintText == tr('obNameHint'))))
-          .position;
+      // recorrido (maxScrollExtent 0).
+      final position =
+          Scrollable.of(tester.element(find.text(tr('obRegisterTitle'))))
+              .position;
       expect(position.maxScrollExtent, 0.0);
       // El botón de Google está entero dentro de la pantalla.
-      // Quemia 7.4 (Kristian): el botón dice solo "Google" (antes
-      // "CONTINUAR CON GOOGLE", que se metía con el logo).
-      final rect = tester.getRect(find.text('Google'));
+      final rect =
+          tester.getRect(find.text(tr('obRegisterGoogle').toUpperCase()));
       expect(rect.top, greaterThanOrEqualTo(0.0));
       expect(rect.bottom, lessThanOrEqualTo(height));
       expect(rect.left, greaterThanOrEqualTo(0.0));
       expect(rect.right, lessThanOrEqualTo(width));
-      // Y el SIGUIENTE también sigue visible.
-      final nextRect = tester.getRect(find.text(tr('obNext').toUpperCase()));
-      expect(nextRect.bottom, lessThanOrEqualTo(height));
+      // Y los términos también siguen visibles.
+      final termsRect = tester.getRect(find.text(tr('obRegisterTerms')));
+      expect(termsRect.bottom, lessThanOrEqualTo(height));
       expect(tester.takeException(), isNull);
     }
 
-    testWidgets('360x800 con barra de estado: todo visible sin '
+    testWidgets(
+        '360x800 con barra de estado: todo visible sin '
         'desplazar', (tester) async {
-      await goToProfilePage(tester,
+      await goToRegisterPage(tester,
           theme: zoneEDarkTheme(),
           width: 360,
           height: 800,
@@ -191,13 +244,13 @@ void main() {
 
     testWidgets('360x800 en tema claro: todo visible sin desplazar',
         (tester) async {
-      await goToProfilePage(tester, theme: zoneELightTheme());
+      await goToRegisterPage(tester, theme: zoneELightTheme());
       expectNoScrollAndGoogleVisible(tester, 360, 800);
     });
 
     testWidgets('412x915 en tema oscuro: todo visible sin desplazar',
         (tester) async {
-      await goToProfilePage(tester,
+      await goToRegisterPage(tester,
           theme: zoneEDarkTheme(), width: 412, height: 915);
       expectNoScrollAndGoogleVisible(tester, 412, 915);
     });
@@ -216,12 +269,9 @@ void main() {
     // Color EFECTIVO de un Text: primero su propio estilo y, si no
     // trae color, el del DefaultTextStyle (el on-surface del tema).
     Color effectiveColor(WidgetTester tester, String text) {
-      final widget =
-          tester.widget<Text>(find.text(text));
+      final widget = tester.widget<Text>(find.text(text));
       return widget.style?.color ??
-          DefaultTextStyle.of(tester.element(find.text(text)))
-              .style
-              .color!;
+          DefaultTextStyle.of(tester.element(find.text(text))).style.color!;
     }
 
     void expectReadable(
@@ -255,83 +305,45 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-    }
-
-    Future<void> tapNext(WidgetTester tester) async {
-      await tester.tap(find.text(tr('obNext').toUpperCase()));
-      await tester.pumpAndSettle();
+      // Quemia 7.7: la Bienvenida es la PRIMERA pantalla (sin
+      // idioma antes y sin barra de progreso), así que no hay que
+      // tocar nada para estar en ella.
     }
 
     testWidgets('bienvenida 360x800 claro: se lee y cabe', (tester) async {
       await pumpFlow(tester, theme: zoneELightTheme());
       final bg = zoneELightTheme().scaffoldBackgroundColor;
-      expect(find.byType(BrandLogo), findsOneWidget);
+      // Bienvenidos SIN logo (Kristian 2026-11-13): el loguito de
+      // las mellizas ya no sale en la primera pantalla.
+      expect(find.byType(BrandLogo), findsNothing);
       expectReadable(tester, tr('obWelcome'), bg);
       // "Químic@" sigue al acento elegido (Quemia 7.3, P12): en
       // claro va el tono oscuro del acento (3,24:1 en verde, se lee
       // bien a 30 pt en negrita) y en oscuro el acento. Antes era
       // menta fija #14B8A6 y se quedaba verde con el tema violeta.
-      expect(effectiveColor(tester, tr('obChemist')),
-          AppAccent.primaryDark);
-      expect(contrast(AppAccent.primaryDark, bg),
-          greaterThanOrEqualTo(2.4));
+      expect(effectiveColor(tester, tr('obChemist')), AppAccent.primaryDark);
+      expect(contrast(AppAccent.primaryDark, bg), greaterThanOrEqualTo(2.4));
       expectReadable(tester, tr('obWelcomeBody'), bg);
       // Sin scroll ni desborde (la página es un Column centrado:
       // si no cabe, salta un overflow y takeException lo caza).
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('bienvenida 360x800 oscuro: se lee y cabe',
-        (tester) async {
+    testWidgets('bienvenida 360x800 oscuro: se lee y cabe', (tester) async {
       await pumpFlow(tester, theme: zoneEDarkTheme());
       final bg = zoneEDarkTheme().scaffoldBackgroundColor;
-      expect(find.byType(BrandLogo), findsOneWidget);
+      // Bienvenidos SIN logo (Kristian 2026-11-13): el loguito de
+      // las mellizas ya no sale en la primera pantalla.
+      expect(find.byType(BrandLogo), findsNothing);
       expectReadable(tester, tr('obWelcome'), bg);
-      expect(effectiveColor(tester, tr('obChemist')),
-          AppAccent.primary);
-      expect(contrast(AppAccent.primary, bg),
-          greaterThanOrEqualTo(4.5));
+      expect(effectiveColor(tester, tr('obChemist')), AppAccent.primary);
+      expect(contrast(AppAccent.primary, bg), greaterThanOrEqualTo(4.5));
       expectReadable(tester, tr('obWelcomeBody'), bg);
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('explicativas 1-3, 360x800 claro: se leen y caben',
-        (tester) async {
-      await pumpFlow(tester, theme: zoneELightTheme());
-      final bg = zoneELightTheme().scaffoldBackgroundColor;
-      const pages = [
-        ('obSolveTitle', 'obSolveBody', 'obSolveP1'),
-        ('obStudyTitle', 'obStudyBody', 'obStudyP1'),
-        ('obPracticeTitle', 'obPracticeBody', 'obPracticeP1'),
-      ];
-      for (final (title, body, point) in pages) {
-        await tapNext(tester);
-        expectReadable(tester, tr(title), bg);
-        expectReadable(tester, tr(body), bg);
-        expectReadable(tester, tr(point), bg);
-        expect(tester.takeException(), isNull);
-      }
-    });
-
-    testWidgets('explicativas 1-3, 360x800 oscuro: se leen y caben',
-        (tester) async {
-      await pumpFlow(tester, theme: zoneEDarkTheme());
-      final bg = zoneEDarkTheme().scaffoldBackgroundColor;
-      const pages = [
-        ('obSolveTitle', 'obSolveBody', 'obSolveP1'),
-        ('obStudyTitle', 'obStudyBody', 'obStudyP1'),
-        ('obPracticeTitle', 'obPracticeBody', 'obPracticeP1'),
-      ];
-      for (final (title, body, point) in pages) {
-        await tapNext(tester);
-        expectReadable(tester, tr(title), bg);
-        expectReadable(tester, tr(body), bg);
-        expectReadable(tester, tr(point), bg);
-        expect(tester.takeException(), isNull);
-      }
-    });
-
-    testWidgets('notificaciones 360x800 claro: título/cuerpo legibles '
+    testWidgets(
+        'notificaciones 360x800 claro: título/cuerpo legibles '
         'y sin scroll', (tester) async {
       await setPhone(tester, width: 360, height: 800);
       await tester.pumpWidget(
@@ -344,26 +356,22 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(
-          tester
-              .widget<Text>(find.text(tr('obNotifTitle')))
-              .style!
-              .color,
+      expect(tester.widget<Text>(find.text(tr('obNotifTitle'))).style!.color,
           zoneELightTheme().colorScheme.onSurface);
       // Cuerpo #777777 (gris terciario aprobado): 4,48:1 sobre
       // blanco, prácticamente el 4,5 de WCAG AA.
-      expectReadable(tester, tr('obNotifBody'),
-          zoneELightTheme().scaffoldBackgroundColor,
+      expectReadable(
+          tester, tr('obNotifBody'), zoneELightTheme().scaffoldBackgroundColor,
           minContrast: 4.4);
       final position =
-          Scrollable.of(tester.element(find.text(tr('obNotifTitle'))))
-              .position;
+          Scrollable.of(tester.element(find.text(tr('obNotifTitle')))).position;
       expect(position.maxScrollExtent, 0.0);
       expect(find.text(tr('obNotifEnable').toUpperCase()), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('notificaciones 360x800 oscuro: título/cuerpo legibles '
+    testWidgets(
+        'notificaciones 360x800 oscuro: título/cuerpo legibles '
         'y sin scroll', (tester) async {
       await setPhone(tester, width: 360, height: 800);
       await tester.pumpWidget(
@@ -376,115 +384,18 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(
-          tester
-              .widget<Text>(find.text(tr('obNotifTitle')))
-              .style!
-              .color,
+      expect(tester.widget<Text>(find.text(tr('obNotifTitle'))).style!.color,
           zoneEDarkTheme().colorScheme.onSurface);
-      expectReadable(tester, tr('obNotifBody'),
-          zoneEDarkTheme().scaffoldBackgroundColor,
+      expectReadable(
+          tester, tr('obNotifBody'), zoneEDarkTheme().scaffoldBackgroundColor,
           minContrast: 4.4);
       final position =
-          Scrollable.of(tester.element(find.text(tr('obNotifTitle'))))
-              .position;
+          Scrollable.of(tester.element(find.text(tr('obNotifTitle')))).position;
       expect(position.maxScrollExtent, 0.0);
       expect(find.text(tr('obNotifEnable').toUpperCase()), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('idioma 360x800 claro: cabe sin scroll y se lee',
-        (tester) async {
-      await _driveToLanguagePage(tester, theme: zoneELightTheme());
-      final bg = zoneELightTheme().scaffoldBackgroundColor;
-      expectReadable(tester, tr('obLangTitle'), bg);
-      expectReadable(tester, tr('obLangBody'), bg);
-      // Los chips son blancos en ambos temas, con texto #4B4B4B.
-      final chip =
-          tester.widget<ChoiceChip>(find.byType(ChoiceChip).first);
-      expect(chip.backgroundColor, Colors.white);
-      final chipLabel = tester
-          .widget<Text>(find.descendant(
-              of: find.byType(ChoiceChip).first, matching: find.byType(Text)))
-          .style!;
-      expect(chipLabel.color, const Color(0xFF4B4B4B));
-      // Sin scroll: todo cabe (título, cuerpo, chips, Finalizar).
-      final position =
-          Scrollable.of(tester.element(find.text(tr('obLangTitle'))))
-              .position;
-      expect(position.maxScrollExtent, 0.0);
-      final finishRect = tester.getRect(find.text(tr('obFinish')));
-      expect(finishRect.bottom, lessThanOrEqualTo(800));
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('idioma 360x800 oscuro: cabe sin scroll y se lee',
-        (tester) async {
-      await _driveToLanguagePage(tester, theme: zoneEDarkTheme());
-      final bg = zoneEDarkTheme().scaffoldBackgroundColor;
-      expectReadable(tester, tr('obLangTitle'), bg);
-      expectReadable(tester, tr('obLangBody'), bg);
-      final chip =
-          tester.widget<ChoiceChip>(find.byType(ChoiceChip).first);
-      expect(chip.backgroundColor, Colors.white);
-      final chipLabel = tester
-          .widget<Text>(find.descendant(
-              of: find.byType(ChoiceChip).first, matching: find.byType(Text)))
-          .style!;
-      expect(chipLabel.color, const Color(0xFF4B4B4B));
-      final position =
-          Scrollable.of(tester.element(find.text(tr('obLangTitle'))))
-              .position;
-      expect(position.maxScrollExtent, 0.0);
-      final finishRect = tester.getRect(find.text(tr('obFinish')));
-      expect(finishRect.bottom, lessThanOrEqualTo(800));
       expect(tester.takeException(), isNull);
     });
   });
 }
 
 void _noop() {}
-
-/// Llega a la página del idioma (7) por el flujo real: 4 taps hasta
-/// el perfil y luego tres deslizamientos del PageView (perfil →
-/// código de referido → notificaciones → idioma). El deslizamiento
-/// evita los requisitos que no se verifican aquí: el botón Siguiente
-/// de la página 4 exige nombre+género y el de la 6 llama al servicio
-/// de notificaciones. Lo que se verifica es el contraste y el ajuste
-/// de la página 7, no esos botones.
-Future<void> _driveToLanguagePage(
-  WidgetTester tester, {
-  required ThemeData theme,
-}) async {
-  tester.view.physicalSize = const Size(720, 1600);
-  tester.view.devicePixelRatio = 2.0;
-  addTearDown(() {
-    tester.view.resetPhysicalSize();
-    tester.view.resetDevicePixelRatio();
-  });
-  await tester.pumpWidget(
-    MaterialApp(
-      debugShowCheckedModeBanner: false,
-      theme: theme,
-      home: OnboardingScreen(onFinished: () {}),
-    ),
-  );
-  await tester.pumpAndSettle();
-  for (var i = 0; i < 4; i++) {
-    await tester.tap(find.text(tr('obNext').toUpperCase()));
-    await tester.pumpAndSettle();
-  }
-  expect(find.text(tr('obProfileTitle')), findsOneWidget);
-  await tester.drag(
-      find.text(tr('obProfileTitle')), const Offset(-360, 0));
-  await tester.pumpAndSettle();
-  expect(find.text(tr('obReferralTitle')), findsOneWidget);
-  await tester.drag(
-      find.text(tr('obReferralTitle')), const Offset(-360, 0));
-  await tester.pumpAndSettle();
-  expect(find.text(tr('obNotifTitle')), findsOneWidget);
-  await tester.drag(find.text(tr('obNotifTitle')), const Offset(-360, 0));
-  await tester.pumpAndSettle();
-  expect(find.text(tr('obLangTitle')), findsOneWidget);
-}
-

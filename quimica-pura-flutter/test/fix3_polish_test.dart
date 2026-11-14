@@ -1,8 +1,8 @@
 // Pruebas de la ronda fix3, pulido del coordinador (puntos 1, 4, 9, 10):
 // "¿Cómo se juega?" en filas con iconos, botón principal del examen
 // con tiempo como pastilla teal rellena sin título duplicado, botones
-// del elemento del día en una fila limpia, y "Pendiente" sin dominar
-// sobre los números de la tarjeta de estadísticas.
+// del elemento del día en una fila limpia, y "Pendiente" al mismo
+// tamaño que los números de la tarjeta de estadísticas.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quimica_pura/main.dart';
@@ -199,14 +199,17 @@ void main() {
       expect(find.textContaining('Respuestas totales'), findsNothing);
       expect(find.textContaining('(hoy)'), findsNothing);
       // Lo que queda en el detalle es solo información nueva.
-      expect(find.textContaining('Niveles pasados'), findsNWidgets(2));
+      // Quemia 7.7: una sola vez (antes 2, una por pista: uni y
+      // bach; Bachillerato se eliminó y la pista es siempre 'uni').
+      expect(find.textContaining('Niveles pasados'), findsOneWidget);
       expect(find.textContaining('Examen mixto'), findsOneWidget);
       expect(find.textContaining('Días practicando'), findsOneWidget);
     });
   });
 
   group('fix3 pulido: punto 10 (stats: Pendiente)', () {
-    testWidgets('la palabra de la meta va en tamaño menor que los números',
+    testWidgets(
+        'la palabra de la meta va al mismo tamaño que los números',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -216,9 +219,15 @@ void main() {
       );
       await tester.pump();
       // Sin niveles pasados hoy, la meta está pendiente.
+      // Kristian 2026-11-14 ~14:57 ("El cinco, el cero, el cero,
+      // el pendiente y cero de diez también todo en una fila"):
+      // el "Pendiente" es uno más de la fila — va a 16 como los
+      // números, no a 13. La regla vieja de fix3 punto 10
+      // ("Pendiente" menor para que no dominara) queda sustituida
+      // por esta orden: al ir icono+número juntos en una línea,
+      // la celda mide lo que ocupa y ya nada la aplasta.
       final pending = tester.widget<Text>(find.text(tr('pendingWord')));
-      expect(pending.style?.fontSize, 13);
-      // Los números siguen a 16: la palabra ya no domina la fila.
+      expect(pending.style?.fontSize, 16);
       final lives = tester.widget<AnimatedNumber>(
           find.byType(AnimatedNumber).first);
       expect(lives.style?.fontSize, 16);

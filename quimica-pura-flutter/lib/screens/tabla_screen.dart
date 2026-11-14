@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/icon_animations.dart';
 import '../widgets/lucide_icons.dart';
 import '../data/i18n/content_i18n.dart';
 import '../data/periodic_table.dart';
@@ -419,8 +420,7 @@ class _TablaScreenState extends State<TablaScreen>
                         fontWeight: FontWeight.w700)),
                 selected: _filterCategory == null,
                 onSelected: (_) => setState(() => _filterCategory = null),
-                labelPadding:
-                    const EdgeInsets.symmetric(horizontal: 8),
+                labelPadding: const EdgeInsets.symmetric(horizontal: 8),
                 // Píldora 3D (ronda de diseño 7.0): color del acento
                 // + texto blanco + sombra tintada al seleccionar;
                 // blanco con sombra suave y borde gris claro sin
@@ -451,8 +451,7 @@ class _TablaScreenState extends State<TablaScreen>
                 // mal); el borde gris solo va en las blancas.
                 elevation: 3,
                 shadowColor: Colors.black.withValues(alpha: 0.12),
-                selectedShadowColor:
-                    AppAccent.primary.withValues(alpha: 0.45),
+                selectedShadowColor: AppAccent.primary.withValues(alpha: 0.45),
                 checkmarkColor: Colors.white,
                 side: BorderSide(
                     width: 0.5,
@@ -478,8 +477,7 @@ class _TablaScreenState extends State<TablaScreen>
                     selected: _filterCategory == i,
                     onSelected: (_) => setState(() =>
                         _filterCategory = _filterCategory == i ? null : i),
-                    labelPadding:
-                        const EdgeInsets.symmetric(horizontal: 8),
+                    labelPadding: const EdgeInsets.symmetric(horizontal: 8),
                     selectedColor: AppAccent.primary,
                     backgroundColor: chipBg,
                     elevation: 3,
@@ -578,31 +576,39 @@ class _TablaScreenState extends State<TablaScreen>
     ScrollPhysics? physics,
     double childAspectRatio = 0.85,
   }) {
-    return SizedBox(
-      width: width,
-      child: GridView.builder(
-        shrinkWrap: shrinkWrap,
-        physics: physics,
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 18,
-          childAspectRatio: childAspectRatio,
+    // RepaintBoundary (pulido 7.7): la rejilla de 118 celdas es
+    // UNA capa al hacer scroll, no 118 repintados. FadeSlideIn:
+    // la tabla entera entra con fundido + subida suave, una sola
+    // vez (no un controlador por celda).
+    return FadeSlideIn(
+      child: SizedBox(
+        width: width,
+        child: RepaintBoundary(
+          child: GridView.builder(
+            shrinkWrap: shrinkWrap,
+            physics: physics,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 18,
+              childAspectRatio: childAspectRatio,
+            ),
+            itemCount: grid.length,
+            itemBuilder: (context, i) {
+              // Lantano (La, 57) y Actinio (Ac, 89) en la rejilla
+              // principal: celdas de elemento REALES, buscadas por
+              // número atómico en allElements (sin copiar los datos),
+              // con el mismo estilo y la misma hoja de detalle que
+              // cualquier elemento. Las filas 9 y 10 de abajo (bloques
+              // f) las dibuja _cell desde la rejilla y no se tocan.
+              if (i == (6 - 1) * 18 + (3 - 1)) {
+                return _cell(context, _elementByAtomicNumber(57));
+              }
+              if (i == (7 - 1) * 18 + (3 - 1)) {
+                return _cell(context, _elementByAtomicNumber(89));
+              }
+              return _cell(context, grid[i]);
+            },
+          ),
         ),
-        itemCount: grid.length,
-        itemBuilder: (context, i) {
-          // Lantano (La, 57) y Actinio (Ac, 89) en la rejilla
-          // principal: celdas de elemento REALES, buscadas por
-          // número atómico en allElements (sin copiar los datos),
-          // con el mismo estilo y la misma hoja de detalle que
-          // cualquier elemento. Las filas 9 y 10 de abajo (bloques
-          // f) las dibuja _cell desde la rejilla y no se tocan.
-          if (i == (6 - 1) * 18 + (3 - 1)) {
-            return _cell(context, _elementByAtomicNumber(57));
-          }
-          if (i == (7 - 1) * 18 + (3 - 1)) {
-            return _cell(context, _elementByAtomicNumber(89));
-          }
-          return _cell(context, grid[i]);
-        },
       ),
     );
   }
@@ -798,7 +804,7 @@ class _TablaScreenState extends State<TablaScreen>
           decoration: BoxDecoration(
             color:
                 Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(20),
             border: Border.all(
                 color: Theme.of(context).brightness == Brightness.dark
                     ? const Color(0xFF37464F)
@@ -897,7 +903,7 @@ class _TablaScreenState extends State<TablaScreen>
                               horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
                             color: cellColor(v),
-                            borderRadius: BorderRadius.circular(6),
+                            borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(v,
                               style:

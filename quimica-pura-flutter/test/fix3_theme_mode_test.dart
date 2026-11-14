@@ -12,6 +12,7 @@ import 'package:quimica_pura/main.dart';
 import 'package:quimica_pura/screens/account_screen.dart';
 import 'package:quimica_pura/screens/settings_screen.dart';
 import 'package:quimica_pura/screens/theme_screen.dart';
+import 'package:quimica_pura/services/accent.dart';
 import 'package:quimica_pura/services/localization.dart';
 import 'package:quimica_pura/services/progress.dart';
 import 'package:quimica_pura/services/user_prefs.dart';
@@ -177,11 +178,19 @@ void main() {
   });
 
   group('Ajustes: fila "Tema" + pantalla dedicada', () {
-    testWidgets('Cuenta ya NO muestra Tema; muestra la fila Ajustes',
-        (tester) async {
+    testWidgets('El interruptor rápido Tema ya NO está en Cuenta (vive '
+        'en el menú lateral); la fila Ajustes sigue siendo la puerta '
+        'al sistema de temas', (tester) async {
       // 7.1 (ítem 9): Tema, Recordatorios, Notificaciones, Cómo se
       // juega y Buscar actualización viven en Ajustes; Cuenta solo
-      // guarda la puerta (última fila).
+      // guarda la puerta (última fila). 7.7 (Kristian 2026-11-14):
+      // el interruptor rápido "Tema" (Lottie día/noche) YA NO está
+      // en la tarjeta de Cuenta: vive al pie del MENÚ LATERAL, en
+      // su sección "TEMA" ("el botón de cambiar modo claro y
+      // oscuro, me gusta, pero no ahí" — "En el menú lateral").
+      // En Cuenta no queda ningún "Tema"; el sistema de temas
+      // sigue viviendo en Ajustes.
+      await UserPrefs.saveThemeMode('claro');
       final opened = <String>[];
       await tester.pumpWidget(
         MaterialApp(
@@ -198,6 +207,9 @@ void main() {
       );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
+      // En Cuenta NO hay ningún interruptor rápido de tema: el
+      // único "Tema" de la app vive en el menú lateral y en
+      // Ajustes (fila + pantalla dedicada).
       expect(find.text(tr('themeTitle')), findsNothing);
       // La fila Ajustes es la ÚLTIMA de la lista: hay que bajar
       // hasta verla (ListView perezoso, no se monta fuera de vista).
@@ -331,8 +343,11 @@ void main() {
       }
       expect(filled, 2);
       // Los anillos tienen el color propio de cada opción (8
-      // opciones, 7 colores distintos: el azul del tema de tienda
-      // y el de Sistema son el mismo 0xFF3B82F6).
+      // opciones, 8 colores distintos). Quemia 7.7 (por foto):
+      // Claro y Oscuro ya NO son ámbar/pizarra fijos — son
+      // colores derivados del acento (primaryLightest y un
+      // primaryDark oscurecido); Sistema sigue en pizarra y el
+      // azul de la tienda Azul es el mismo 0xFF3B82F6 de antes.
       expect(
         ringColors,
         {
@@ -340,9 +355,11 @@ void main() {
           const Color(0xFF8B5CF6), // violeta
           const Color(0xFFF97316), // coral (tienda)
           const Color(0xFFEC4899), // rosa (tienda)
-          const Color(0xFFF59E0B), // ámbar (Claro)
-          const Color(0xFF64748B), // pizarra (Oscuro)
-          const Color(0xFF3B82F6), // azul (tienda Azul y Sistema)
+          AppAccent.primaryLightest, // Claro (derivado del acento)
+          Color.lerp(AppAccent.primaryDark, Colors.black, 0.25)!,
+          // Oscuro (primaryDark oscurecido)
+          const Color(0xFF64748B), // pizarra (Sistema)
+          const Color(0xFF3B82F6), // azul (tienda Azul)
         },
       );
     });

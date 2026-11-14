@@ -20,6 +20,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:quimica_pura/main.dart';
 import 'package:quimica_pura/screens/account_screen.dart';
 import 'package:quimica_pura/screens/leaderboard_screen.dart';
+import 'package:quimica_pura/screens/loading_screen.dart';
 import 'package:quimica_pura/screens/onboarding_screen.dart';
 import 'package:quimica_pura/screens/practicar_screen.dart';
 import 'package:quimica_pura/screens/resolver_screen.dart';
@@ -27,6 +28,7 @@ import 'package:quimica_pura/screens/tabla_screen.dart';
 import 'package:quimica_pura/services/analytics_sync.dart';
 import 'package:quimica_pura/services/auth_service.dart';
 import 'package:quimica_pura/services/localization.dart';
+import 'package:quimica_pura/services/otp_service.dart';
 import 'package:quimica_pura/services/progress.dart';
 import 'package:quimica_pura/services/user_prefs.dart';
 import 'package:quimica_pura/widgets/duo_button.dart';
@@ -201,7 +203,7 @@ void main() {
     await tester.pump(const Duration(seconds: 2));
   }
 
-  Future<void> goToProfilePage(WidgetTester tester) async {
+  Future<void> goToRegisterPage(WidgetTester tester) async {
     tester.view.physicalSize = const Size(393 * 2, 852 * 2);
     tester.view.devicePixelRatio = 2.0;
     addTearDown(() {
@@ -212,10 +214,42 @@ void main() {
       MaterialApp(home: OnboardingScreen(onFinished: () {})),
     );
     await tester.pumpAndSettle();
-    for (var i = 0; i < 4; i++) {
-      await tester.tap(find.text(tr('obNext').toUpperCase()));
-      await tester.pumpAndSettle();
-    }
+    // Quemia 7.7 (rediseño 2026-11-13): sin pantalla de idioma (la
+    // app coge el idioma del sistema) y sin barra de progreso; el
+    // inicio es Bienvenida -> Elección -> la gemela -> cómo supo ->
+    // cuánta química sabe -> meta diaria -> Notificaciones -> la
+    // racha -> aviso "¡No pierdas tu progreso!" -> Registro. En
+    // Notificaciones el permiso está negado en pruebas: sale "Ir a
+    // Ajustes" y al cerrarlo se avanza a la racha.
+    await tester.tap(find.text(tr('obContinue').toUpperCase()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(tr('obCreateProfile').toUpperCase()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(tr('obVamos').toUpperCase()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(tr('obSourceInstagram')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(tr('obContinue').toUpperCase()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(tr('obLevel1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(tr('obContinue').toUpperCase()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(tr('obGoal10')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(tr('obGoalSave').toUpperCase()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(tr('obNotifEnable').toUpperCase()));
+    await tester.pumpAndSettle();
+    expect(find.text('Ir a Ajustes'), findsOneWidget);
+    await tester.tap(find.text('Cerrar'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(tr('obStreakStart').toUpperCase()));
+    await tester.pumpAndSettle();
+    // Aviso "¡No pierdas tu progreso!" (Duolingo) antes del registro.
+    expect(find.text(tr('obNudgeTitle')), findsOneWidget);
+    await tester.tap(find.text(tr('obContinue').toUpperCase()));
+    await tester.pumpAndSettle();
   }
 
   group('localización (ronda #8)', () {
@@ -261,6 +295,31 @@ void main() {
         expect(e.value.containsKey('accountRecover'), isFalse, reason: e.key);
       }
     });
+
+    testWidgets(
+        'idioma del sistema: sin idioma guardado coge el del teléfono; '
+        'si no está soportado, español', (tester) async {
+      // Quemia 7.7 (Kristian 2026-11-13): la app ya no pide el idioma
+      // al instalar; lo coge del sistema. El idioma guardado manda
+      // siempre (eso se prueba en AppLang.load, no aquí).
+      final binding = tester.binding;
+      binding.platformDispatcher.localeTestValue = const Locale('en', 'US');
+      addTearDown(binding.platformDispatcher.clearLocaleTestValue);
+      expect(AppLang.systemLanguage(), 'en');
+      binding.platformDispatcher.localeTestValue = const Locale('fr', 'FR');
+      expect(AppLang.systemLanguage(), 'fr');
+      binding.platformDispatcher.localeTestValue = const Locale('de', 'DE');
+      expect(AppLang.systemLanguage(), 'es');
+      binding.platformDispatcher.localeTestValue = const Locale('pt', 'BR');
+      expect(AppLang.systemLanguage(), 'pt');
+      // load() con idioma guardado usa el guardado, no el sistema.
+      AppLang.code = 'es';
+      UserPrefs.languageSet = true;
+      UserPrefs.language = 'es';
+      await AppLang.load();
+      expect(AppLang.code, 'es');
+      UserPrefs.languageSet = false;
+    });
   });
 
   group('tabla de posiciones', () {
@@ -269,10 +328,8 @@ void main() {
       await pumpLeaderboard(tester,
           stream: Stream.value(sampleEntries()), currentDeviceId: 'd-me');
       // Orden: brenda (320), kristian (280), britany (210), carlos (150).
-      final yBrenda =
-          tester.getCenter(find.text('brenda')).dy;
-      final yKristian =
-          tester.getCenter(find.text('kristian (tú)')).dy;
+      final yBrenda = tester.getCenter(find.text('brenda')).dy;
+      final yKristian = tester.getCenter(find.text('kristian (tú)')).dy;
       final yBritany = tester.getCenter(find.text('britany')).dy;
       final yCarlos = tester.getCenter(find.text('carlos')).dy;
       expect(yBrenda, lessThan(yKristian));
@@ -280,20 +337,16 @@ void main() {
       expect(yBritany, lessThan(yCarlos));
       // Laureles oro/plata/bronce en los puestos 1-3 (solo el
       // laurel, sin avatar ni corona), nada en el 4.
-      expect(find.byKey(const ValueKey('leaderboard-laurel-1')),
-          findsOneWidget);
-      expect(find.byKey(const ValueKey('leaderboard-laurel-2')),
-          findsOneWidget);
-      expect(find.byKey(const ValueKey('leaderboard-laurel-3')),
-          findsOneWidget);
-      expect(find.byKey(const ValueKey('leaderboard-medal-1')),
-          findsNothing);
-      expect(find.byKey(const ValueKey('leaderboard-medal-2')),
-          findsNothing);
-      expect(find.byKey(const ValueKey('leaderboard-medal-3')),
-          findsNothing);
-      expect(find.byKey(const ValueKey('leaderboard-medal-4')),
-          findsNothing);
+      expect(
+          find.byKey(const ValueKey('leaderboard-laurel-1')), findsOneWidget);
+      expect(
+          find.byKey(const ValueKey('leaderboard-laurel-2')), findsOneWidget);
+      expect(
+          find.byKey(const ValueKey('leaderboard-laurel-3')), findsOneWidget);
+      expect(find.byKey(const ValueKey('leaderboard-medal-1')), findsNothing);
+      expect(find.byKey(const ValueKey('leaderboard-medal-2')), findsNothing);
+      expect(find.byKey(const ValueKey('leaderboard-medal-3')), findsNothing);
+      expect(find.byKey(const ValueKey('leaderboard-medal-4')), findsNothing);
       // Sin cabecera de columnas (rediseño Duolingo 7.0): ni
       // "Puesto" ni "Niveles" ni "Puntos" ni "Racha" como texto.
       expect(find.text(tr('lbRank')), findsNothing);
@@ -313,8 +366,7 @@ void main() {
       expect(find.text('brenda (tú)'), findsNothing);
     });
 
-    testWidgets('vacía: "Sé el primero..." y pull-to-refresh',
-        (tester) async {
+    testWidgets('vacía: "Sé el primero..." y pull-to-refresh', (tester) async {
       await pumpLeaderboard(tester,
           stream: Stream.value(const <LeaderboardEntry>[]),
           currentDeviceId: 'd-me');
@@ -331,8 +383,7 @@ void main() {
       controller.add(sampleEntries());
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      expect(
-          tester.getCenter(find.text('brenda')).dy,
+      expect(tester.getCenter(find.text('brenda')).dy,
           lessThan(tester.getCenter(find.text('kristian (tú)')).dy));
       controller.add([
         ...sampleEntries(),
@@ -345,8 +396,7 @@ void main() {
       ]);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      expect(
-          tester.getCenter(find.text('nuevo')).dy,
+      expect(tester.getCenter(find.text('nuevo')).dy,
           lessThan(tester.getCenter(find.text('brenda')).dy));
     });
   });
@@ -406,13 +456,11 @@ void main() {
     testWidgets('círculo central de 60 dp teal sólido con labio',
         (tester) async {
       await pumpNav(tester, selected: 2, tapped: []);
-      expect(find.byKey(const ValueKey('nav-center-levels')),
-          findsOneWidget);
+      expect(find.byKey(const ValueKey('nav-center-levels')), findsOneWidget);
       final circle = find.byWidgetPredicate((w) =>
           w is Container &&
           w.decoration is BoxDecoration &&
-          (w.decoration as BoxDecoration).color ==
-              const Color(0xFF00C2A8) &&
+          (w.decoration as BoxDecoration).color == const Color(0xFF00C2A8) &&
           (w.decoration as BoxDecoration).gradient == null);
       expect(circle, findsOneWidget);
       expect(tester.getSize(circle).width, 60);
@@ -435,8 +483,7 @@ void main() {
     testWidgets('la pestaña seleccionada va resaltada', (tester) async {
       // Centro seleccionado: círculo teal + etiqueta en teal y negrita.
       await pumpNav(tester, selected: 2, tapped: []);
-      expect(find.byKey(const ValueKey('nav-center-levels')),
-          findsOneWidget);
+      expect(find.byKey(const ValueKey('nav-center-levels')), findsOneWidget);
       final levelsText = tester.widget<Text>(find.text(tr('tabLevels')));
       expect(levelsText.style?.color, const Color(0xFF00C2A8));
       expect(levelsText.style?.fontWeight, FontWeight.bold);
@@ -462,8 +509,7 @@ void main() {
       expect(find.text('Recuperar mi progreso'), findsNothing);
       // Orden 7.1: Amigos va antes que la tabla, y la tabla antes
       // que Torneo. Idioma ya no está en Cuenta: vive en Ajustes.
-      final yFriends =
-          tester.getCenter(find.text(tr('accountFriends'))).dy;
+      final yFriends = tester.getCenter(find.text(tr('accountFriends'))).dy;
       final yLeaderboard =
           tester.getCenter(find.text(tr('accountLeaderboard'))).dy;
       final yTournaments =
@@ -481,8 +527,7 @@ void main() {
       expect(opened, ['leaderboard']);
     });
 
-    testWidgets(
-        '"Vincular con Google" sin vincular enlaza y muestra el correo',
+    testWidgets('"Vincular con Google" sin vincular enlaza y muestra el correo',
         (tester) async {
       fakeAuth.email = 'kristian@example.com';
       fakeAuth.displayName = 'Kristian';
@@ -496,8 +541,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets(
-        'vinculada: la fila muestra el correo y ofrece desvincular',
+    testWidgets('vinculada: la fila muestra el correo y ofrece desvincular',
         (tester) async {
       fakeAuth.googleLinked = true;
       // Sin uid no hay sesión (currentUser == null) y la fila no
@@ -559,27 +603,33 @@ void main() {
   });
 
   group('onboarding: "Continuar con Google"', () {
-    testWidgets('el botón está debajo del nombre y el género',
+    testWidgets('el registro es Google y correo, sin nombre ni género',
         (tester) async {
-      await goToProfilePage(tester);
-      expect(find.text(tr('obProfileTitle')), findsOneWidget);
-      await tester.ensureVisible(find.text('Google'));
+      await goToRegisterPage(tester);
+      expect(find.text(tr('obRegisterTitle')), findsOneWidget);
+      await tester
+          .ensureVisible(find.text(tr('obRegisterGoogle').toUpperCase()));
       await tester.pumpAndSettle();
-      expect(find.text('Google'), findsOneWidget);
+      expect(find.text(tr('obRegisterGoogle').toUpperCase()), findsOneWidget);
+      expect(find.text(tr('obRegisterEmail').toUpperCase()), findsOneWidget);
       // La G de Google es el icono en colores, no un texto 'G'.
       expect(find.byType(GoogleGIcon), findsOneWidget);
-      // Es opcional: el "Siguiente" sigue ahí.
-      expect(find.text(tr('obNext').toUpperCase()), findsOneWidget);
+      // Nada de campo de nombre ni de género (Kristian 2026-11-13).
+      expect(find.byType(TextField), findsNothing);
+      expect(find.text(tr('obFemale')), findsNothing);
+      expect(find.text(tr('obMale')), findsNothing);
+      expect(tester.takeException(), isNull);
     });
 
-    testWidgets('al tocarlo, prellena el nombre con el de Google',
+    testWidgets('al tocar Google, el usuario viene del correo sin preguntar',
         (tester) async {
       fakeAuth.displayName = 'Kristian';
       fakeAuth.email = 'kristian@example.com';
-      await goToProfilePage(tester);
-      await tester.ensureVisible(find.text('Google'));
+      await goToRegisterPage(tester);
+      await tester
+          .ensureVisible(find.text(tr('obRegisterGoogle').toUpperCase()));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Google'));
+      await tester.tap(find.text(tr('obRegisterGoogle').toUpperCase()));
       // El enlace completa (fakeAuth rápido) sin dejar que dispare
       // el avance automático de 1,5 s del flujo de Google: estos
       // pumps no avanzan el reloj hasta 1,5 s.
@@ -587,32 +637,540 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
       expect(AuthService.isGoogleLinked, isTrue);
       // Flujo de Google, paso 0 ("Ya has iniciado sesión"): el
-      // nombre de Google se muestra como texto (ya no en el campo
-      // del perfil, que queda atrás).
+      // nombre de Google se muestra como texto.
       expect(find.text('Kristian'), findsOneWidget);
-      // Avance automático al género: se adelanta el reloj 1,6 s
-      // (el temporizador es de 1,5 s).
+      // Avance automático al código de referido (paso 1, 7.7): se
+      // adelanta el reloj 1,6 s (el temporizador es de 1,5 s). Ni
+      // nombre de usuario ni género se preguntan: el usuario se
+      // coge del correo (Kristian 2026-11-13).
       await tester.pump(const Duration(milliseconds: 1600));
-      expect(find.text(tr('obGoogleChooseGender')), findsOneWidget);
+      expect(find.text(tr('obReferralTitle')), findsOneWidget);
+      expect(find.text(tr('obUsernameTitle')), findsNothing);
+      expect(find.text(tr('obGoogleChooseGender')), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('onboarding: registro por correo + OTP + inicio de sesión', () {
+    late FakeOtpTransport fakeOtp;
+
+    setUp(() {
+      fakeOtp = FakeOtpTransport();
+      OtpService.setTransportForTests(fakeOtp);
+    });
+
+    tearDown(() {
+      OtpService.resetForTests();
+    });
+
+    Future<void> enterHint(
+        WidgetTester tester, String hint, String text) async {
+      await tester.enterText(
+        find.byWidgetPredicate(
+            (w) => w is TextField && w.decoration?.hintText == hint),
+        text,
+      );
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> enterOtp(WidgetTester tester, String code) async {
+      final boxes = find.byType(TextField);
+      expect(boxes, findsNWidgets(6));
+      for (var i = 0; i < 6; i++) {
+        await tester.enterText(boxes.at(i), code[i]);
+      }
+      await tester.pumpAndSettle();
+    }
+
+    /// Camina el flujo del correo hasta la pantalla del OTP
+    /// (correo -> contraseña -> nombre -> CREA TU PERFIL).
+    Future<void> goToOtpStep(WidgetTester tester) async {
+      await goToRegisterPage(tester);
+      await tester.tap(find.text(tr('obRegisterEmail').toUpperCase()));
+      await tester.pumpAndSettle();
+      expect(find.text(tr('obEmailTitle')), findsOneWidget);
+      await enterHint(tester, tr('obEmailFieldHint'), 'jorge@example.com');
+      await tester.tap(find.text(tr('obContinue').toUpperCase()));
+      await tester.pumpAndSettle();
+      expect(find.text(tr('obPasswordTitle')), findsOneWidget);
+      await enterHint(tester, tr('obPasswordHint'), 'Secreto123!');
+      await tester.tap(find.text(tr('obContinue').toUpperCase()));
+      await tester.pumpAndSettle();
+      expect(find.text(tr('obNameTitle')), findsOneWidget);
+      await enterHint(tester, tr('obFirstNameHint'), 'Jorge');
+      await enterHint(tester, tr('obLastNameHint'), 'Pozo');
+      await tester.tap(find.text(tr('obCreateProfile').toUpperCase()));
+      await tester.pumpAndSettle();
+      expect(find.text(tr('obOtpTitle')), findsOneWidget);
+    }
+
+    testWidgets('correo -> contraseña -> nombre -> OTP -> referido',
+        (tester) async {
+      await goToOtpStep(tester);
+      // El falso manda '123456' al correo.
+      expect(
+          fakeOtp.lastCode('jorge@example.com', OtpPurpose.register), '123456');
+      await enterOtp(tester, '123456');
+      await tester.tap(find.text(tr('obContinue').toUpperCase()));
+      await tester.pumpAndSettle();
+      // La cuenta quedó enlazada y se avanza al referido.
+      expect(AuthService.isEmailLinked, isTrue);
+      expect(find.text(tr('obReferralTitle')), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('si el nombre ya está escrito, Google no lo pisa',
+    testWidgets('OTP incorrecto: error y no se avanza', (tester) async {
+      await goToOtpStep(tester);
+      await enterOtp(tester, '000000');
+      await tester.tap(find.text(tr('obContinue').toUpperCase()));
+      await tester.pumpAndSettle();
+      expect(find.text(tr('obOtpInvalid')), findsOneWidget);
+      expect(find.text(tr('obOtpTitle')), findsOneWidget);
+      expect(AuthService.isEmailLinked, isFalse);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('si el código no se manda: error claro, sin colgarse',
+        (tester) async {
+      fakeOtp.failSend = true;
+      await goToRegisterPage(tester);
+      await tester.tap(find.text(tr('obRegisterEmail').toUpperCase()));
+      await tester.pumpAndSettle();
+      await enterHint(tester, tr('obEmailFieldHint'), 'jorge@example.com');
+      await tester.tap(find.text(tr('obContinue').toUpperCase()));
+      await tester.pumpAndSettle();
+      await enterHint(tester, tr('obPasswordHint'), 'Secreto123!');
+      await tester.tap(find.text(tr('obContinue').toUpperCase()));
+      await tester.pumpAndSettle();
+      await enterHint(tester, tr('obFirstNameHint'), 'Jorge');
+      await tester.tap(find.text(tr('obCreateProfile').toUpperCase()));
+      await tester.pumpAndSettle();
+      // Sigue en el nombre, con el error (la función OTP no está
+      // desplegada todavía: el falso simula ese fallo).
+      expect(find.text(tr('obOtpNotSent')), findsOneWidget);
+      expect(find.text(tr('obNameTitle')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('la contraseña débil no deja continuar: se ven las 5 reglas',
+        (tester) async {
+      await goToRegisterPage(tester);
+      await tester.tap(find.text(tr('obRegisterEmail').toUpperCase()));
+      await tester.pumpAndSettle();
+      await enterHint(tester, tr('obEmailFieldHint'), 'jorge@example.com');
+      await tester.tap(find.text(tr('obContinue').toUpperCase()));
+      await tester.pumpAndSettle();
+      expect(find.text(tr('obPasswordTitle')), findsOneWidget);
+      // Débil: minúsculas y números, sin mayúscula ni especial
+      // (Kristian 2026-11-13: nada de contraseñas fáciles).
+      await enterHint(tester, tr('obPasswordHint'), 'secreto123');
+      expect(find.text(tr('obPasswordReqLength')), findsOneWidget);
+      expect(find.text(tr('obPasswordReqUpper')), findsOneWidget);
+      expect(find.text(tr('obPasswordReqLower')), findsOneWidget);
+      expect(find.text(tr('obPasswordReqNumber')), findsOneWidget);
+      expect(find.text(tr('obPasswordReqSpecial')), findsOneWidget);
+      // CONTINUAR no avanza: se sigue en la contraseña.
+      await tester.tap(find.text(tr('obContinue').toUpperCase()));
+      await tester.pumpAndSettle();
+      expect(find.text(tr('obPasswordTitle')), findsOneWidget);
+      expect(find.text(tr('obNameTitle')), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('la contraseña fuerte sí deja continuar', (tester) async {
+      await goToRegisterPage(tester);
+      await tester.tap(find.text(tr('obRegisterEmail').toUpperCase()));
+      await tester.pumpAndSettle();
+      await enterHint(tester, tr('obEmailFieldHint'), 'jorge@example.com');
+      await tester.tap(find.text(tr('obContinue').toUpperCase()));
+      await tester.pumpAndSettle();
+      await enterHint(tester, tr('obPasswordHint'), 'Secreto123!');
+      await tester.tap(find.text(tr('obContinue').toUpperCase()));
+      await tester.pumpAndSettle();
+      expect(find.text(tr('obNameTitle')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('inicio de sesión con correo pregunta lo mismo que el registro',
+        (tester) async {
+      fakeAuth.emailAccounts['jorge@example.com'] = 'Secreto123!';
+      var finished = false;
+      await tester.pumpWidget(
+        MaterialApp(home: OnboardingScreen(onFinished: () => finished = true)),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(tr('obContinue').toUpperCase()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(tr('obEnterAccount')));
+      await tester.pumpAndSettle();
+      expect(find.text(tr('obSignInTitle')), findsOneWidget);
+      await enterHint(tester, tr('obEmailHint'), 'jorge@example.com');
+      await enterHint(tester, tr('obPasswordHint'), 'Secreto123!');
+      await tester.tap(find.text(tr('obSignInButton').toUpperCase()));
+      await tester.pumpAndSettle();
+      // Tras entrar NO se va directo a la principal (Kristian
+      // 2026-11-13): pregunta lo mismo que al registrarse.
+      expect(finished, isFalse);
+      expect(find.text(tr('obSourceTitle')), findsOneWidget);
+      await tester.tap(find.text(tr('obSourceInstagram')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(tr('obContinue').toUpperCase()));
+      await tester.pumpAndSettle();
+      expect(find.text(tr('obLevelTitle')), findsOneWidget);
+      await tester.tap(find.text(tr('obLevel1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(tr('obContinue').toUpperCase()));
+      await tester.pumpAndSettle();
+      expect(find.text(tr('obGoalTitle')), findsOneWidget);
+      await tester.tap(find.text(tr('obGoal10')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(tr('obGoalSave').toUpperCase()));
+      await tester.pumpAndSettle();
+      expect(find.text(tr('obNotifTitle')), findsOneWidget);
+      await tester.tap(find.text(tr('obNotifEnable').toUpperCase()));
+      await tester.pumpAndSettle();
+      expect(find.text('Ir a Ajustes'), findsOneWidget);
+      await tester.tap(find.text('Cerrar'));
+      await tester.pumpAndSettle();
+      // Sin racha ni aviso: tras las notificaciones, a la principal.
+      expect(find.text(tr('obStreakTitle')), findsNothing);
+      expect(finished, isTrue);
+      expect(UserPrefs.userName, 'Jorge');
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('inicio de sesión con Google también pregunta lo mismo',
         (tester) async {
       fakeAuth.displayName = 'Kristian';
-      await goToProfilePage(tester);
-      await tester.enterText(find.byWidgetPredicate((w) => w is TextField && w.decoration?.hintText == tr('obNameHint')), 'MiNombre');
+      fakeAuth.email = 'kristian@example.com';
+      var finished = false;
+      await tester.pumpWidget(
+        MaterialApp(home: OnboardingScreen(onFinished: () => finished = true)),
+      );
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Google'));
+      await tester.tap(find.text(tr('obContinue').toUpperCase()));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Google'));
+      await tester.tap(find.text(tr('obEnterAccount')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(tr('obSignInWithGoogle').toUpperCase()));
+      // El enlace completa (fakeAuth rápido) sin dejar que dispare
+      // el avance automático de 1,5 s: estos pumps no avanzan el
+      // reloj hasta 1,5 s.
       await tester.pump(const Duration(milliseconds: 100));
       await tester.pump(const Duration(milliseconds: 100));
-      // Paso 0: se muestra el nombre ESCRITO, no el de Google.
-      expect(find.text('MiNombre'), findsOneWidget);
-      expect(find.text('Kristian'), findsNothing);
+      expect(AuthService.isGoogleLinked, isTrue);
+      // "Ya has iniciado sesión" con el nombre de Google.
+      expect(find.text('Kristian'), findsOneWidget);
+      // Avance automático (1,5 s): desde entrar NO pide referido
+      // — va directo a las preguntas (fuente primero).
       await tester.pump(const Duration(milliseconds: 1600));
-      expect(find.text(tr('obGoogleChooseGender')), findsOneWidget);
+      await tester.pumpAndSettle();
+      expect(finished, isFalse);
+      expect(find.text(tr('obReferralTitle')), findsNothing);
+      expect(find.text(tr('obSourceTitle')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('inicio de sesión con contraseña mala: error, sin entrar',
+        (tester) async {
+      fakeAuth.emailAccounts['jorge@example.com'] = 'Secreto123!';
+      var finished = false;
+      await tester.pumpWidget(
+        MaterialApp(home: OnboardingScreen(onFinished: () => finished = true)),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(tr('obContinue').toUpperCase()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(tr('obEnterAccount')));
+      await tester.pumpAndSettle();
+      await enterHint(tester, tr('obEmailHint'), 'jorge@example.com');
+      await enterHint(tester, tr('obPasswordHint'), 'otra123');
+      await tester.tap(find.text(tr('obSignInButton').toUpperCase()));
+      await tester.pumpAndSettle();
+      expect(find.text(tr('obSignInFailed')), findsOneWidget);
+      expect(finished, isFalse);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('olvidó la contraseña: correo -> enlace de Firebase',
+        (tester) async {
+      var finished = false;
+      await tester.pumpWidget(
+        MaterialApp(home: OnboardingScreen(onFinished: () => finished = true)),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(tr('obContinue').toUpperCase()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(tr('obEnterAccount')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(tr('obForgotPassword').toUpperCase()));
+      await tester.pumpAndSettle();
+      expect(find.text(tr('obResetTitle')), findsOneWidget);
+      await enterHint(tester, tr('obEmailFieldHint'), 'jorge@example.com');
+      await tester.tap(find.text(tr('obContinue').toUpperCase()));
+      await tester.pumpAndSettle();
+      // Confirmación del enlace + el falso registró el envío.
+      expect(find.text(tr('obResetLinkSent')), findsOneWidget);
+      expect(find.text('jorge@example.com'), findsOneWidget);
+      expect(fakeAuth.resetEmailsSent, contains('jorge@example.com'));
+      await tester.tap(find.text(tr('obContinue').toUpperCase()));
+      await tester.pumpAndSettle();
+      // Vuelve al inicio de sesión con el mensaje de éxito.
+      expect(find.text(tr('obSignInTitle')), findsOneWidget);
+      expect(find.text(tr('obResetLinkSent')), findsOneWidget);
+      expect(finished, isFalse);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('onboarding: inicio rediseñado (bienvenida -> elección)', () {
+    Future<void> goToChoicePage(WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(home: OnboardingScreen(onFinished: () {})),
+      );
+      await tester.pumpAndSettle();
+      // La primera pantalla es la Bienvenida (sin barra de progreso
+      // y sin pantalla de idioma): su botón es "Continuar".
+      expect(find.text(tr('obWelcome')), findsOneWidget);
+      await tester.tap(find.text(tr('obContinue').toUpperCase()));
+      await tester.pumpAndSettle();
+      expect(find.text(tr('obChoiceTitle')), findsOneWidget);
+    }
+
+    testWidgets('la elección ofrece los 3 caminos', (tester) async {
+      await goToChoicePage(tester);
+      expect(find.text(tr('obCreateProfile').toUpperCase()), findsOneWidget);
+      expect(find.text(tr('obEnterAccount')), findsOneWidget);
+      expect(find.text(tr('obOffline').toUpperCase()), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('crear perfil -> la gemela se presenta -> Vamos -> preguntas',
+        (tester) async {
+      await goToChoicePage(tester);
+      await tester.tap(find.text(tr('obCreateProfile').toUpperCase()));
+      await tester.pumpAndSettle();
+      // Brenda se presenta en su bocadillo (no el búho de Duolingo).
+      expect(find.text(tr('obBrendaHello')), findsOneWidget);
+      expect(find.text(tr('obVamos').toUpperCase()), findsOneWidget);
+      await tester.tap(find.text(tr('obVamos').toUpperCase()));
+      await tester.pumpAndSettle();
+      // "Vamos" lleva a las preguntas de crear cuenta (no al
+      // Perfil directo): primero "¿Cómo supiste de Quemia?".
+      expect(find.text(tr('obSourceTitle')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('la flecha de la gemela vuelve a la elección', (tester) async {
+      await goToChoicePage(tester);
+      await tester.tap(find.text(tr('obCreateProfile').toUpperCase()));
+      await tester.pumpAndSettle();
+      expect(find.text(tr('obBrendaHello')), findsOneWidget);
+      await tester.tap(find.byType(IconButton));
+      await tester.pumpAndSettle();
+      expect(find.text(tr('obChoiceTitle')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('invitado: nombre + meta diaria -> principal',
+        (tester) async {
+      var finished = false;
+      await tester.pumpWidget(
+        MaterialApp(home: OnboardingScreen(onFinished: () => finished = true)),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(tr('obContinue').toUpperCase()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(tr('obOffline').toUpperCase()));
+      await tester.pumpAndSettle();
+      // Paso 1: solo el nombre (un campo, sin apellido ni correo).
+      expect(find.text(tr('obNameTitle')), findsOneWidget);
+      expect(finished, isFalse);
+      await tester.enterText(
+        find.byWidgetPredicate((w) =>
+            w is TextField && w.decoration?.hintText == tr('obFirstNameHint')),
+        'Jorge',
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(tr('obContinue').toUpperCase()));
+      await tester.pumpAndSettle();
+      // Paso 2: la meta diaria (10 min ya elegido por defecto).
+      expect(find.text(tr('obGoalTitle')), findsOneWidget);
+      await tester.tap(find.text(tr('obOfflineStart').toUpperCase()));
+      await tester.pumpAndSettle();
+      expect(finished, isTrue);
+      expect(UserPrefs.onboardingDone, isTrue);
+      expect(UserPrefs.userName, 'Jorge');
+      expect(UserPrefs.dailyGoalMinutes, 10);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('onboarding: pantalla de carga tras el inicio', () {
+    testWidgets('muestra la animación y "Cargando…"', (tester) async {
+      // Quemia 7.7 (Kristian 2026-11-14): después de pasar
+      // cualquiera de las 3 formas de empezar se muestra la
+      // animación de carga y al terminar se carga Niveles.
+      tester.view.physicalSize = const Size(393 * 2, 852 * 2);
+      tester.view.devicePixelRatio = 2.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+      await tester.pumpWidget(
+        const MaterialApp(home: LoadingScreen()),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 2));
+      expect(find.text(tr('loading')), findsOneWidget);
+      expect(find.byType(LoadingScreen), findsOneWidget);
+    });
+  });
+
+  group(
+      'onboarding: crear cuenta (cómo supo -> cuánto sabe -> meta -> '
+      'notificaciones -> racha -> perfil)', () {
+    Future<void> goToMascotPage(WidgetTester tester) async {
+      // Superficie de teléfono (393x852, como el Redmi de Kristian):
+      // a 800x600 las 5 opciones del nivel no caben y la última no
+      // se construye (ListView perezoso).
+      tester.view.physicalSize = const Size(393 * 2, 852 * 2);
+      tester.view.devicePixelRatio = 2.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+      await tester.pumpWidget(
+        MaterialApp(home: OnboardingScreen(onFinished: () {})),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(tr('obContinue').toUpperCase()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(tr('obCreateProfile').toUpperCase()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(tr('obVamos').toUpperCase()));
+      await tester.pumpAndSettle();
+      expect(find.text(tr('obSourceTitle')), findsOneWidget);
+    }
+
+    testWidgets('las 3 preguntas se guardan y el flujo llega al perfil',
+        (tester) async {
+      await goToMascotPage(tester);
+      // 1) "¿Cómo supiste de Quemia?": sin elegir, el botón está
+      // deshabilitado y no se avanza (el toque no llega a nada).
+      await tester.tap(find.text(tr('obContinue').toUpperCase()),
+          warnIfMissed: false);
+      await tester.pumpAndSettle();
+      expect(find.text(tr('obSourceTitle')), findsOneWidget);
+      await tester.tap(find.text(tr('obSourceInstagram')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(tr('obContinue').toUpperCase()));
+      await tester.pumpAndSettle();
+      expect(UserPrefs.heardFrom, 'instagram');
+      // 2) "¿Cuánta química sabes?": 5 niveles con barritas.
+      expect(find.text(tr('obLevelTitle')), findsOneWidget);
+      expect(find.text(tr('obLevel0')), findsOneWidget);
+      expect(find.text(tr('obLevel4')), findsOneWidget);
+      await tester.tap(find.text(tr('obLevel2')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(tr('obContinue').toUpperCase()));
+      await tester.pumpAndSettle();
+      expect(UserPrefs.chemLevel, 2);
+      // 3) Meta diaria: 4 opciones (3/10/15/30); por defecto 10.
+      expect(find.text(tr('obGoalTitle')), findsOneWidget);
+      expect(find.text(tr('obGoal3')), findsOneWidget);
+      expect(find.text(tr('obGoal30')), findsOneWidget);
+      await tester.tap(find.text(tr('obGoal15')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(tr('obGoalSave').toUpperCase()));
+      await tester.pumpAndSettle();
+      expect(UserPrefs.dailyGoalMinutes, 15);
+      // 4) Notificaciones (la misma página de siempre): el permiso
+      // está negado en pruebas, sale "Ir a Ajustes" y al cerrarlo
+      // se avanza a la racha (ya NO termina el flujo aquí).
+      expect(find.text(tr('obNotifEnable').toUpperCase()), findsOneWidget);
+      await tester.tap(find.text(tr('obNotifEnable').toUpperCase()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cerrar'));
+      await tester.pumpAndSettle();
+      // 5) "¡Una nueva racha!": número gigante + "día de racha",
+      // la semana con hoy marcado (naranja con ✓).
+      expect(find.text(tr('obStreakTitle')), findsOneWidget);
+      expect(find.text('1'), findsOneWidget);
+      expect(find.text(tr('obStreakDayLabel')), findsOneWidget);
+      final todayLetter = tr([
+        'obDayMon',
+        'obDayTue',
+        'obDayWed',
+        'obDayThu',
+        'obDayFri',
+        'obDaySat',
+        'obDaySun',
+      ][DateTime.now().weekday - 1]);
+      expect(find.text(todayLetter), findsWidgets);
+      await tester.tap(find.text(tr('obStreakStart').toUpperCase()));
+      await tester.pumpAndSettle();
+      // 6) Aviso "¡No pierdas tu progreso!" y 7) Registro (Google
+      // y correo, como Duolingo; sin nombre ni género y sin edad).
+      expect(find.text(tr('obNudgeTitle')), findsOneWidget);
+      await tester.tap(find.text(tr('obContinue').toUpperCase()));
+      await tester.pumpAndSettle();
+      expect(find.text(tr('obRegisterTitle')), findsOneWidget);
+      expect(find.text(tr('obRegisterGoogle').toUpperCase()), findsOneWidget);
+      expect(find.text(tr('obRegisterEmail').toUpperCase()), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+        'la elección "ya tengo una cuenta" abre el inicio de sesión: '
+        'sin campos en la elección, sin Facebook', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(home: OnboardingScreen(onFinished: () {})),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(tr('obContinue').toUpperCase()));
+      await tester.pumpAndSettle();
+      // Solo el botón "Entrar con mi cuenta": ningún campo de
+      // correo / contraseña ni botón de Facebook en la elección.
+      expect(find.text(tr('obEnterAccount')), findsOneWidget);
+      expect(find.byType(TextField), findsNothing);
+      expect(find.textContaining('Facebook'), findsNothing);
+      expect(find.textContaining('contraseña'), findsNothing);
+      // Al tocarlo se abre "Ingresa tus datos" (Duolingo): correo
+      // + contraseña, "¿Has olvidado tu contraseña?" y Google.
+      await tester.tap(find.text(tr('obEnterAccount')));
+      await tester.pumpAndSettle();
+      expect(find.text(tr('obSignInTitle')), findsOneWidget);
+      expect(find.text(tr('obForgotPassword').toUpperCase()), findsOneWidget);
+      expect(find.text(tr('obSignInWithGoogle').toUpperCase()), findsOneWidget);
+      expect(find.textContaining('Facebook'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+        'desde Cuenta: empieza en la elección, sin "sin '
+        'conexión", con "Volver" que cancela', (tester) async {
+      var cancelled = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: OnboardingScreen(
+            fromAccount: true,
+            onFinished: () {},
+            onCancel: () => cancelled = true,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      // Empieza directo en la elección (sin Bienvenida).
+      expect(find.text(tr('obChoiceTitle')), findsOneWidget);
+      expect(find.text(tr('obWelcome')), findsNothing);
+      // "Sin conexión" no sale (ya está sin conexión): sale Volver.
+      expect(find.text(tr('obOffline').toUpperCase()), findsNothing);
+      expect(find.text(tr('obBack').toUpperCase()), findsOneWidget);
+      await tester.tap(find.text(tr('obBack').toUpperCase()));
+      await tester.pumpAndSettle();
+      expect(cancelled, isTrue);
+      expect(tester.takeException(), isNull);
     });
   });
 
@@ -639,8 +1197,7 @@ void main() {
     testWidgets('el stream con error también muestra el estado tranquilo',
         (tester) async {
       await pumpLeaderboard(tester,
-          stream: Stream<List<LeaderboardEntry>>.error(
-              StateError('sin red')),
+          stream: Stream<List<LeaderboardEntry>>.error(StateError('sin red')),
           currentDeviceId: 'd-me');
       expect(find.text(tr('lbOffline')), findsOneWidget);
       expect(find.text(tr('lbEmpty')), findsNothing);
@@ -656,21 +1213,19 @@ void main() {
       // 210, carlos 150): los 3 primeros llevan SOLO su laurel
       // (ronda 2b) — sin avatar con inicial y sin corona — y el 4º
       // su avatar teal con su inicial.
-      expect(find.byKey(const ValueKey('leaderboard-laurel-1')),
-          findsOneWidget);
-      expect(find.byKey(const ValueKey('leaderboard-laurel-2')),
-          findsOneWidget);
-      expect(find.byKey(const ValueKey('leaderboard-laurel-3')),
-          findsOneWidget);
-      expect(find.byKey(const ValueKey('social-avatar-brenda')),
-          findsNothing);
-      expect(find.byKey(const ValueKey('social-avatar-kristian')),
-          findsNothing);
-      expect(find.byKey(const ValueKey('social-avatar-britany')),
-          findsNothing);
+      expect(
+          find.byKey(const ValueKey('leaderboard-laurel-1')), findsOneWidget);
+      expect(
+          find.byKey(const ValueKey('leaderboard-laurel-2')), findsOneWidget);
+      expect(
+          find.byKey(const ValueKey('leaderboard-laurel-3')), findsOneWidget);
+      expect(find.byKey(const ValueKey('social-avatar-brenda')), findsNothing);
+      expect(
+          find.byKey(const ValueKey('social-avatar-kristian')), findsNothing);
+      expect(find.byKey(const ValueKey('social-avatar-britany')), findsNothing);
       // El 4º sí lleva su avatar de inicial con su marco de rango.
-      expect(find.byKey(const ValueKey('social-avatar-carlos')),
-          findsOneWidget);
+      expect(
+          find.byKey(const ValueKey('social-avatar-carlos')), findsOneWidget);
       int rankOf(String username) => tester
           .widget<SocialAvatar>(find.ancestor(
               of: find.byKey(ValueKey('social-avatar-$username')),
@@ -720,23 +1275,22 @@ void main() {
     testWidgets('onboarding sin internet: línea bajo el botón, sin colgarse',
         (tester) async {
       fakeAuth.failAnonymous = true;
-      await goToProfilePage(tester);
-      await tester.ensureVisible(find.text('Google'));
+      await goToRegisterPage(tester);
+      await tester
+          .ensureVisible(find.text(tr('obRegisterGoogle').toUpperCase()));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Google'));
+      await tester.tap(find.text(tr('obRegisterGoogle').toUpperCase()));
       await tester.pumpAndSettle();
       expect(find.text(tr('googleNeedInternet')), findsOneWidget);
       expect(find.byType(AlertDialog), findsNothing);
-      final field = tester.widget<TextField>(find.byWidgetPredicate((w) => w is TextField && w.decoration?.hintText == tr('obNameHint')));
-      expect(field.controller?.text, '');
-      // El botón sigue habilitado: se puede reintentar.
-      final button = tester
-          .widget<DuoButton>(find.byWidgetPredicate((w) =>
-              w is DuoButton &&
-              w.label == 'Google'));
+      // El botón de Google sigue habilitado: se puede reintentar
+      // (hay DOS DuoButton con etiqueta vacía — Google y correo —;
+      // el de Google es el primero).
+      final button = tester.widget<DuoButton>(
+          find.byWidgetPredicate((w) => w is DuoButton && w.label == '').first);
       expect(button.onPressed, isNotNull);
       // Reintento: sigue sin colgarse ni duplicar el error.
-      await tester.tap(find.text('Google'));
+      await tester.tap(find.text(tr('obRegisterGoogle').toUpperCase()));
       await tester.pumpAndSettle();
       expect(find.text(tr('googleNeedInternet')), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -746,10 +1300,11 @@ void main() {
         (tester) async {
       fakeAuth.failAnonymous = true;
       AnalyticsSync.markFirebaseReady();
-      await goToProfilePage(tester);
-      await tester.ensureVisible(find.text('Google'));
+      await goToRegisterPage(tester);
+      await tester
+          .ensureVisible(find.text(tr('obRegisterGoogle').toUpperCase()));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Google'));
+      await tester.tap(find.text(tr('obRegisterGoogle').toUpperCase()));
       await tester.pumpAndSettle();
       expect(find.text(tr('googleSignInFailed')), findsOneWidget);
       expect(find.text(tr('googleNeedInternet')), findsNothing);
@@ -760,30 +1315,36 @@ void main() {
         (tester) async {
       final slow = _SlowFakeAuth();
       AuthService.setProviderForTests(slow);
-      await goToProfilePage(tester);
-      await tester.ensureVisible(find.text('Google'));
+      await goToRegisterPage(tester);
+      await tester
+          .ensureVisible(find.text(tr('obRegisterGoogle').toUpperCase()));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Google'));
+      await tester.tap(find.text(tr('obRegisterGoogle').toUpperCase()));
       await tester.pump();
-      // En carga: deshabilitado y con spinner; sin error.
-      var button = tester
-          .widget<DuoButton>(find.byWidgetPredicate((w) =>
-              w is DuoButton &&
-              w.label == 'Google'));
+      // En carga: deshabilitado y con spinner; sin error (el botón
+      // de Google es el primero de los dos DuoButton con etiqueta
+      // vacía — Google y correo).
+      var button = tester.widget<DuoButton>(
+          find.byWidgetPredicate((w) => w is DuoButton && w.label == '').first);
       expect(button.onPressed, isNull);
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
       expect(find.text(tr('googleNeedInternet')), findsNothing);
       // Segundo toque ignorado: solo una llamada al servicio.
-      await tester.tap(find.text('Google'),
+      await tester.tap(find.text(tr('obRegisterGoogle').toUpperCase()),
           warnIfMissed: false);
       expect(slow.linkCalls, 1);
       // Completa con éxito: entra al flujo de Google y avanza solo
-      // al género (el paso 0 "Ya has iniciado sesión" dura 1,5 s).
+      // al código de referido (el paso 0 "Ya has iniciado sesión"
+      // dura 1,5 s); de ahí a notificaciones con Continuar (7.7:
+      // ni usuario ni género se preguntan).
       slow.googleLinked = true;
       slow.linkCompleter.complete(true);
       await tester.pump(const Duration(milliseconds: 100));
       await tester.pump(const Duration(milliseconds: 1600));
-      expect(find.text(tr('obGoogleChooseGender')), findsOneWidget);
+      expect(find.text(tr('obReferralTitle')), findsOneWidget);
+      await tester.tap(find.text(tr('obNext').toUpperCase()));
+      await tester.pumpAndSettle();
+      expect(find.text(tr('obNotifEnable').toUpperCase()), findsOneWidget);
       expect(find.byType(CircularProgressIndicator), findsNothing);
       expect(tester.takeException(), isNull);
     });
@@ -796,8 +1357,7 @@ void main() {
       await tester.tap(find.text(tr('accountLinkGoogle')));
       await tester.pump();
       expect(find.text(tr('googleLinking')), findsOneWidget);
-      await tester.tap(find.text(tr('accountLinkGoogle')),
-          warnIfMissed: false);
+      await tester.tap(find.text(tr('accountLinkGoogle')), warnIfMissed: false);
       expect(slow.linkCalls, 1);
       slow.googleLinked = true;
       slow.linkCompleter.complete(true);
@@ -805,6 +1365,36 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('lento@example.com'), findsOneWidget);
       expect(find.text(tr('googleLinking')), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+        'Cuenta sin perfil: la fila de Google abre el mismo '
+        'flujo de inicio (elección, sin "sin conexión")', (tester) async {
+      // Sin perfil local (entró "sin conexión"): el setUp de fix8
+      // pone userName='kristian', así que se limpia aquí para
+      // simular que no hay perfil guardado.
+      UserPrefs.userName = '';
+      UserPrefs.publicUsername = '';
+      await pumpAccount(tester);
+      await tester.tap(find.text(tr('accountLinkGoogle')));
+      await tester.pumpAndSettle();
+      // Empieza en la elección (crear perfil / entrar con Google).
+      expect(find.text(tr('obChoiceTitle')), findsOneWidget);
+      expect(find.text(tr('obCreateProfile').toUpperCase()), findsOneWidget);
+      expect(find.text(tr('obEnterAccount')), findsOneWidget);
+      // "Sin conexión" no sale (ya está sin conexión): sale Volver.
+      expect(find.text(tr('obOffline').toUpperCase()), findsNothing);
+      expect(find.text(tr('obBack').toUpperCase()), findsOneWidget);
+      // Volver cierra el flujo y vuelve a Cuenta. Pumps explícitos
+      // (no pumpAndSettle): tras el pop de ruta, pumpAndSettle no
+      // termina en este árbol (como en el resto de tests de Cuenta,
+      // que usan pump con duración).
+      await tester.tap(find.text(tr('obBack').toUpperCase()));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text(tr('obChoiceTitle')), findsNothing);
+      expect(find.text(tr('accountLinkGoogle')), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   });
@@ -858,6 +1448,9 @@ class _SlowFakeAuth implements AuthProvider {
   String? get lastGoogleError => null;
 
   @override
+  String? get lastEmailError => null;
+
+  @override
   Future<String?> ensureAnonymous() async => uid;
 
   @override
@@ -868,6 +1461,15 @@ class _SlowFakeAuth implements AuthProvider {
 
   @override
   Future<bool> signInWithGoogle() async => false;
+
+  @override
+  Future<bool> linkWithEmail(String email, String password) async => false;
+
+  @override
+  Future<bool> signInWithEmail(String email, String password) async => false;
+
+  @override
+  Future<bool> sendPasswordResetEmail(String email) async => false;
 
   @override
   Future<bool> unlinkGoogle() async {
@@ -887,4 +1489,3 @@ class _SlowFakeAuth implements AuthProvider {
           googleLinked: googleLinked,
         );
 }
-

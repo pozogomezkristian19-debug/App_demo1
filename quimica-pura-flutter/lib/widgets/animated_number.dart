@@ -2,6 +2,8 @@
 // hasta el nuevo, en vez de saltar de golpe. Para los puntos, la
 // racha y cualquier cifra que cambie al contestar.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 class AnimatedNumber extends StatelessWidget {
@@ -54,13 +56,23 @@ class FadeIn extends StatefulWidget {
 
 class _FadeInState extends State<FadeIn> {
   var _visible = false;
+  // Timer cancelable (pulido 7.7): igual que FadeSlideIn, con
+  // Future.delayed quedaba un temporizador pendiente si la
+  // pantalla se cerraba antes del retardo.
+  Timer? _delayTimer;
 
   @override
   void initState() {
     super.initState();
-    Future.delayed(widget.delay, () {
+    _delayTimer = Timer(widget.delay, () {
       if (mounted) setState(() => _visible = true);
     });
+  }
+
+  @override
+  void dispose() {
+    _delayTimer?.cancel();
+    super.dispose();
   }
 
   @override

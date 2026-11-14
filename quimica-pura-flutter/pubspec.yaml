@@ -22,6 +22,8 @@ dependencies:
   flutter_timezone: ^5.1.1
   google_sign_in: ^7.2.0
   home_widget: ^0.10.0
+  http: ^1.6.0
+  lottie: ^3.8.2
   path_provider: ^2.1.6
   share_plus: ^13.3.1
   shared_preferences: ^2.5.6
@@ -55,6 +57,123 @@ flutter:
     - assets/messenger.png
     - assets/avatar_default.png
     - assets/google_g.png
+    # Logos REALES de las apps (Fuente, Quemia 7.7, Kristian
+    # 2026-11-13: "busca las imágenes y cualquier tipo de logo, no
+    # inventes los logos"): Instagram (Wikimedia Commons, File:
+    # Instagram logo 2022.svg), Facebook (Wikimedia Commons, File:
+    # Facebook f logo (2019).svg), TikTok (UCLA Component Library,
+    # nota a color; la blanca es la variante oficial para oscuro).
+    - assets/instagram_logo.png
+    - assets/facebook_logo.png
+    - assets/tiktok_logo.png
+    - assets/tiktok_logo_white.png
+    - assets/flags/es.png
+    - assets/flags/us.png
+    - assets/flags/fr.png
+    - assets/flags/it.png
+    - assets/flags/pt.png
+    - assets/flags/ru.png
+    # Llama AZUL de la racha (Lottie, enlace original de Kristian
+    # 2026-11-13: "streak-fire" de LottieFiles, la llama azul con
+    # carita blanca): JSON descargado de
+    # https://lottiefiles.com/free-animation/streak-fire-HFF0UsWTLW
+    # (canvas 1600x1200, 120 fotogramas a 60 fps = 2 s en bucle,
+    # 3 capas vectoriales). Vive SOLO en la página de racha del
+    # inicio ("¡Una nueva racha!"); la naranja va en Cuenta.
+    - assets/streak_fire.json
+    # Llama NARANJA de la racha como IMAGEN FIJA (Kristian
+    # 2026-11-14 ~12:51: las animaciones Lottie dejaban la fila
+    # desbalanceada por el fondo invisible del lienzo, y se veían
+    # pequeñas; "que no sean animaciones, que sean imagenes"):
+    # fotograma 60 (el más grande) de la animación "fireeeeee" de
+    # LottieFiles (enlace mandado por él), renderizado y recortado
+    # al arte (sin fondo, sin brasas sueltas). Vive SOLO en la
+    # celda Racha de la tarjeta de Cuenta.
+    - assets/streak_fire_orange.png
+    # (2026-11-14 ~13:45, Kristian: "Puntos, vidas ponlo como la
+    # app preterminada": los JSON rewards.json y beating_heart.json
+    # se quitaron del proyecto — Puntos vuelve a la estrella de
+    # Lucide y Vidas al corazón dibujado con degradado y brillo.)
+    # Candado de contraseña de la Elección (Lottie, Kristian
+    # 2026-11-14: la animación "pin-code-password-protection" de
+    # LottieFiles): JSON descargado de
+    # https://lottiefiles.com/free-animation/pin-code-password-protection-secure-login-animation-ErwbAUAGdH
+    # (canvas 1200x1200, 60 fps, 4 s en bucle, sin imágenes).
+    - assets/pin_code.json
+    # Chica saludando de la presentación de Brenda (Lottie,
+    # Kristian 2026-11-14: la animación "girl-hi-or-wave" de
+    # LottieFiles): JSON descargado de
+    # https://lottiefiles.com/free-animation/girl-hi-or-wave-JuOHgleVwe
+    # (canvas 1080x1080, 25 fps, 8 s en bucle, sin imágenes).
+    # DECISIÓN de Kristian 2026-11-14 ~01:51: "Se queda así con la
+    # chica saludando" — la animación se queda aunque no sea Brenda.
+    - assets/girl_wave.json
+    # Matraces de ciencia de la Bienvenida (Lottie, Kristian
+    # 2026-11-14: la animación "science" de LottieFiles): JSON
+    # descargado de
+    # https://lottiefiles.com/free-animation/science-KeD5BMyUUJ
+    # (canvas 512x512, 30 fps, 5 s en bucle, vectores puros: dos
+    # matraces con líquido azul y amarillo + burbujas rojas).
+    - assets/science.json
+    # Campana de notificaciones de la pantalla de activar
+    # notificaciones (Lottie, Kristian 2026-11-14: la animación
+    # "notifications" de LottieFiles): JSON descargado de
+    # https://lottiefiles.com/free-animation/notifications-xSgjC5SuYB
+    # (canvas 72x72, 30 fps, 3 s en bucle, vectores puros: campana
+    # violeta sobre círculo lila + anillo que se expande).
+    # SUSTITUIDA 2026-11-14 por la campana "bell-notification-icon"
+    # de LottieFiles (enlace mandado por Kristian):
+    # https://lottiefiles.com/free-animation/bell-notification-icon-EtMfYfAaZY
+    # (canvas 700x700, 65 fotogramas a 30 fps = 2,2 s; la campana
+    # es una IMAGEN: assets/bell_image_0.png, 339x385).
+    - assets/notifications.json
+    - assets/bell_image_0.png
+    # Icono de cuenta (hombre) de la pantalla de crear perfil y
+    # del aviso (Lottie, Kristian 2026-11-14: la animación
+    # "man-account-icon" de LottieFiles): JSON descargado de
+    # https://lottiefiles.com/free-animation/man-account-icon-dmnh3wl3Hq
+    # (canvas 1080x1080, 30 fps, ~4,7 s en bucle). USA IMÁGENES: las
+    # 7 PNG del .lottie van en assets/ junto al JSON (el paquete
+    # lottie las carga desde la misma carpeta) con su gemelo .b64.
+    - assets/account.json
+    # Cambio rápido claro/oscuro de la tarjeta de Cuenta (Lottie,
+    # Kristian 2026-11-14: la animación "toogle" de LottieFiles):
+    # JSON "Main Scene" del .lottie v2 (dentro de a/; el .lottie
+    # trae además una máquina de estados que el paquete lottie NO
+    # entiende — la transición se hace a mano con un controlador):
+    # https://lottiefiles.com/free-animation/toogle-E7UafdXhQK
+    # (canvas 590x320, 60 fps, 200 fotogramas; marcadores "Day
+    # Idle" 0-20, "Day to Night" 20-80, "Night Idle" 81-119,
+    # "Night to Day" 120-200; paisaje día/noche, vectores puros).
+    - assets/theme_toggle.json
+    # Pantalla de carga tras el inicio (Lottie, Kristian
+    # 2026-11-14: la animación "loading" de LottieFiles):
+    # https://lottiefiles.com/free-animation/loading-dZoQS8NSiM
+    # (canvas 400x400, 24 fps, 72 fotogramas = 3 s por vuelta,
+    # círculo teal, vectores puros).
+    - assets/loading.json
+    # Trofeo final del camino en Niveles (Lottie, Kristian
+    # 2026-11-14: la animación "trophy" de LottieFiles, enlace
+    # mandado por él): JSON descargado de
+    # https://lottiefiles.com/free-animation/trophy-yEGPe40FVr
+    # (canvas 500x500, 71 fotogramas, vectores puros: 3 precomps,
+    # sin imágenes).
+    - assets/trophy.json
+    # Confeti de todas las celebraciones (Lottie, Kristian
+    # 2026-11-14: la animación "confetti" de LottieFiles, enlace
+    # mandado por él — reemplaza el confeti dibujado por código en
+    # la racha y en el resultado de nivel/duelo/torneo):
+    # https://lottiefiles.com/free-animation/confetti-3ofTs67sBx
+    # (canvas 1920x1080, 126 fotogramas a 25 fps = 5 s por pasada,
+    # vectores puros: 5 precomps, sin imágenes).
+    - assets/confetti.json
+    - assets/image_0.png
+    - assets/image_1.png
+    - assets/image_2.png
+    - assets/image_3.png
+    - assets/image_4.png
+    - assets/image_5.png
+    - assets/image_6.png
     - assets/sounds/correct.wav
     - assets/sounds/wrong.wav
     - assets/sounds/levelup.wav

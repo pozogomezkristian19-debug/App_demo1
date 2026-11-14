@@ -189,8 +189,13 @@ void main() {
   });
 
   /// Lleva el onboarding hasta la pantalla de permiso de
-  /// notificaciones (después del nombre, antes del idioma).
-  Future<void> goToNotificationsPage(WidgetTester tester) async {
+  /// notificaciones (la ÚLTIMA página en la 7.7: Bienvenida
+  /// -> Perfil -> Referido -> Notificaciones; sin pantalla de idioma).
+  /// [onFinished] se llama cuando el flujo termina.
+  Future<void> goToNotificationsPage(
+    WidgetTester tester, {
+    VoidCallback? onFinished,
+  }) async {
     // Superficie de teléfono (393x852, como el Redmi de Kristian):
     // a 800x600 la página del perfil no cabe en vertical y la
     // píldora "Masculino" queda bajo el área visible, fuera del
@@ -202,26 +207,41 @@ void main() {
       tester.view.resetDevicePixelRatio();
     });
     await tester.pumpWidget(
-      MaterialApp(home: OnboardingScreen(onFinished: () {})),
+      MaterialApp(
+          home: OnboardingScreen(onFinished: onFinished ?? () {})),
     );
     await tester.pumpAndSettle();
-    // 4 pantallas: bienvenida, resolver, estudiar, practicar.
-    for (var i = 0; i < 4; i++) {
-      await tester.tap(find.text('SIGUIENTE'));
-      await tester.pumpAndSettle();
-    }
-    // Pantalla del perfil: nombre + género para poder avanzar.
-    await tester.enterText(find.byType(TextField), 'Kristian');
-    await tester.tap(find.text('Masculino'));
+    // Bienvenida -> Elección -> la gemela -> cómo supo -> cuánta
+    // química sabe -> meta diaria -> Notificaciones (rediseño 7.7:
+    // Continuar, Crear mi perfil, Vamos, elegir, Continuar,
+    // elegir, Continuar, elegir, Guardar mi meta; sin pantalla de
+    // idioma). El perfil y el referido van DESPUÉS de
+    // Notificaciones, así que aquí no se rellenan.
+    await tester.tap(find.text('CONTINUAR'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('SIGUIENTE'));
+    await tester.tap(find.text('CREAR MI PERFIL'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('VAMOS'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Instagram'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('CONTINUAR'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Conozco lo básico'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('CONTINUAR'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('10 min al día'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('GUARDAR MI META'));
     await tester.pumpAndSettle();
   }
 
   testWidgets(
       'el onboarding tiene la pantalla de permiso con solo "Activar recordatorios"',
       (tester) async {
-    await goToNotificationsPage(tester);
+    var finished = false;
+    await goToNotificationsPage(tester, onFinished: () => finished = true);
     expect(find.text('No pierdas la racha'), findsOneWidget);
     expect(find.text('ACTIVAR RECORDATORIOS'), findsOneWidget);
     // El botón "Ahora no" se quitó (2026-11-10 20:43): queda un
@@ -233,17 +253,16 @@ void main() {
     // Con el permiso negado (en pruebas enable() devuelve false),
     // "Activar recordatorios" muestra el diálogo con "Ir a
     // Ajustes" (fix4, punto 3, en lugar del aviso de antes) y, al
-    // cerrarlo, se avanza igual al idioma, donde está "Finalizar".
+    // cerrarlo, se avanza a la pantalla de la racha (Quemia 7.7:
+    // Notificaciones ya NO es la última página: después van la
+    // racha, el perfil y el referido).
     await tester.tap(find.text('ACTIVAR RECORDATORIOS'));
     await tester.pumpAndSettle();
     expect(find.text('Ir a Ajustes'), findsOneWidget);
-    expect(find.text('Finalizar'), findsNothing);
     await tester.tap(find.text('Cerrar'));
     await tester.pumpAndSettle();
-    // Compartir es automático (ronda de diseño 7.0): tras
-    // notificaciones viene el idioma directamente, donde está
-    // "Finalizar" (ya no hay página de permiso de analítica).
-    expect(find.text('Finalizar'), findsOneWidget);
+    expect(finished, isFalse);
+    expect(find.text('¡Una nueva racha!'), findsOneWidget);
   });
 
   testWidgets(
@@ -252,7 +271,8 @@ void main() {
     // Esta vez el permiso SÍ se concede.
     FlutterLocalNotificationsPlatform.instance =
         _FakeAndroidNotifications(permissionGranted: true);
-    await goToNotificationsPage(tester);
+    var finished = false;
+    await goToNotificationsPage(tester, onFinished: () => finished = true);
     await tester.tap(find.text('ACTIVAR RECORDATORIOS'));
     // Al conceder, enable() programa la tanda: la copia del icono
     // grande tiene un tope de 3 s (tiempo falso) y en pruebas la E/S
@@ -260,18 +280,19 @@ void main() {
     // tope dispare y el flujo siga sin icono.
     await tester.pump(const Duration(seconds: 4));
     await tester.pumpAndSettle();
-    // Sin aviso de permiso y se avanza igual: al idioma
-    // directamente (compartir es automático, ronda de diseño 7.0:
-    // ya no hay página de permiso de analítica).
+    // Sin aviso de permiso y se avanza a la racha (Quemia 7.7:
+    // Notificaciones ya NO es la última página).
     expect(find.byType(SnackBar), findsNothing);
-    expect(find.text('Finalizar'), findsOneWidget);
+    expect(finished, isFalse);
+    expect(find.text('¡Una nueva racha!'), findsOneWidget);
     expect(UserPrefs.reminderOn, isTrue);
   });
 
   testWidgets(
       'activar recordatorios en el onboarding no rompe nada si se niega el permiso',
       (tester) async {
-    await goToNotificationsPage(tester);
+    var finished = false;
+    await goToNotificationsPage(tester, onFinished: () => finished = true);
     // En pruebas el permiso está simulado como NEGADO
     // (requestNotificationsPermission devuelve false): sale el
     // diálogo con "Ir a Ajustes" (fix4, punto 3, en lugar del aviso
@@ -284,10 +305,11 @@ void main() {
     expect(find.byType(SnackBar), findsNothing);
     await tester.tap(find.text('Cerrar'));
     await tester.pumpAndSettle();
-    // Tras notificaciones viene el idioma directamente (compartir
-    // es automático, ronda de diseño 7.0: ya no hay página de
-    // permiso de analítica).
-    expect(find.text('Finalizar'), findsOneWidget);
+    // Tras notificaciones se avanza a la racha (Quemia 7.7: ya NO
+    // es la última página). Los recordatorios quedan apagados y se
+    // pueden activar luego desde Cuenta › Recordatorios.
+    expect(finished, isFalse);
+    expect(find.text('¡Una nueva racha!'), findsOneWidget);
     expect(UserPrefs.reminderOn, isFalse);
   });
 

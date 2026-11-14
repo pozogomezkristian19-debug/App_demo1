@@ -15,6 +15,7 @@ import 'package:quimica_pura/services/auth_service.dart';
 import 'package:quimica_pura/services/duels_service.dart';
 import 'package:quimica_pura/services/firestore_social_repository.dart';
 import 'package:quimica_pura/services/friends_groups_service.dart';
+import 'package:quimica_pura/services/presence_service.dart';
 import 'package:quimica_pura/services/progress.dart';
 import 'package:quimica_pura/services/remote_content_service.dart';
 import 'package:quimica_pura/services/reports_service.dart';
@@ -46,6 +47,18 @@ void useAnonymousOnly(String uid) {
 }
 
 void seedFixture() => FakeUsers.seed(fake);
+
+/// Siembra un usuario rival EN LÍNEA (latido de ahora) en el
+/// repositorio falso. Los duelos directos (DuelService.createDuel)
+/// exigen rival en línea (7.7): sin este doc, el rival no existe y
+/// el reto devuelve null.
+Future<void> seedOnlineUser(String uid, String username) async {
+  await fake.setDoc('users', uid, <String, dynamic>{
+    'username': username,
+    'shared': true,
+    'lastSeenMs': DateTime.now().millisecondsSinceEpoch,
+  });
+}
 
 int get myPoints => ProgressService.instance.points;
 int get myLives => ProgressService.instance.livesLeft;
@@ -168,6 +181,12 @@ void main() {
   });
 
   group('duelos online: flujo completo con dos teléfonos', () {
+    setUp(() async {
+      // El rival de estos tests ('uid-b') tiene que estar en línea:
+      // retar exige rival en línea (7.7).
+      await seedOnlineUser('uid-b', 'miguel');
+    });
+
     test('retar → mismo set de 5 → ambos responden → ganador +10',
         () async {
       usePhone('uid-a', 'kristian');
@@ -283,16 +302,17 @@ void main() {
       expect(current.finishedResults['uid-b']!.correct, 2);
     });
 
-    test('rival al azar: si nadie comparte, null (estado vacío)', () async {
+    // 7.7: el duelo al azar ya no elige a cualquiera que comparta:
+    // solo hay match si el otro también está buscando (en la cola)
+    // y en línea. Aunque los 12 compartan, nadie busca: sin match.
+    test('rival al azar: si nadie busca duelo, null (aunque compartan)',
+        () async {
       usePhone('uid-a', 'kristian');
       // Solo yo en el repo.
       expect(await DuelService.createRandomDuel(), isNull);
       seedFixture();
-      final duel = await DuelService.createRandomDuel();
-      expect(duel, isNotNull);
-      expect(duel!.playerA, 'uid-a');
-      expect(duel.playerB, isNot('uid-a'));
-      expect(duel.questionIds, hasLength(5));
+      expect(await DuelService.createRandomDuel(), isNull);
+      expect(await DuelService.myOpenDuels(), isEmpty);
     });
 
     test('myOpenDuels lista mis duelos activos y se vacía al terminar',
@@ -325,6 +345,10 @@ void main() {
   });
 
   group('duelos: desconexión del rival (09:17)', () {
+    setUp(() async {
+      await seedOnlineUser('uid-b', 'miguel');
+    });
+
     test('rival en silencio 60 s → se ve desconectado → gano por abandono',
         () async {
       usePhone('uid-a', 'kristian');
@@ -438,6 +462,160 @@ void main() {
       expect(current!.status, 'finished');
       expect(current.finishedResults['uid-b']!.correct, 3);
       expect(current.winnerUid, 'uid-a');
+    });
+  });
+
+  group('duelos: match mutuo y presencia (7.7)', () {
+    int nowMs() => DateTime.now().millisecondsSinceEpoch;
+
+    Future<Map<String, dynamic>?> queueEntry(String uid) =>
+        fake.getDoc('duel_queue', uid);
+
+    test('PresenceService.isOnline: null/viejo = no, reciente = sí',
+        () {
+      expect(PresenceService.isOnline(null), isFalse);
+      expect(PresenceService.isOnline(0), isFalse);
+      expect(PresenceService.isOnline(nowMs()), isTrue);
+      expect(PresenceService.isOnline(nowMs() - 89000), isTrue);
+      expect(PresenceService.isOnline(nowMs() - 91000), isFalse);
+      expect(PresenceService.isOnline(nowMs() - 3600000), isFalse);
+    });
+
+    test('(a) cola vacía: devuelve null y mi entrada queda en la cola',
+        () async {
+      usePhone('uid-a', 'kristian');
+      expect(await DuelService.createRandomDuel(), isNull);
+      final mine = await queueEntry('uid-a');
+      expect(mine, isNotNull);
+      expect(mine!['uid'], 'uid-a');
+      expect(mine['username'], 'kristian');
+      // No se creó ningún duelo.
+      expect(await DuelService.myOpenDuels(), isEmpty);
+    });
+
+    test('(b) otro en la cola y en línea: crea el duelo y vacía la cola',
+        () async {
+      // B busca primero: entra en la cola y no hay nadie.
+      usePhone('uid-b', 'miguel');
+      await seedOnlineUser('uid-b', 'miguel');
+      expect(await DuelService.createRandomDuel(), isNull);
+      expect(await queueEntry('uid-b'), isNotNull);
+      // A busca: encuentra a B en línea, crea el duelo y sale de
+      // la cola (su entrada desaparece).
+      usePhone('uid-a', 'kristian');
+      await seedOnlineUser('uid-a', 'kristian');
+      final duel = await DuelService.createRandomDuel();
+      expect(duel, isNotNull);
+      expect(duel!.playerA, 'uid-a');
+      expect(duel.playerB, 'uid-b');
+      expect(duel.questionIds, hasLength(5));
+      expect(await queueEntry('uid-a'), isNull);
+      // La entrada de B la borra B cuando su pantalla detecta el
+      // duelo (cada lado borra solo la suya): lo simulo aquí y la
+      // cola queda vacía del todo.
+      usePhone('uid-b', 'miguel');
+      final open = await DuelService.myOpenDuels();
+      expect(open, hasLength(1));
+      expect(open.first.id, duel.id);
+      await DuelService.leaveDuelQueue();
+      expect(await queueEntry('uid-b'), isNull);
+    });
+
+    test('(b2) otro en la cola pero SIN latido: no hay match',
+        () async {
+      // B está en la cola pero su doc no tiene latido (fantasma).
+      usePhone('uid-b', 'miguel');
+      await fake.setDoc('users', 'uid-b', <String, dynamic>{
+        'username': 'miguel',
+        'shared': true,
+      });
+      expect(await DuelService.createRandomDuel(), isNull);
+      // A busca: B está en la cola pero offline, así que no hay
+      // match y A queda esperando en la cola.
+      usePhone('uid-a', 'kristian');
+      await seedOnlineUser('uid-a', 'kristian');
+      expect(await DuelService.createRandomDuel(), isNull);
+      expect(await DuelService.myOpenDuels(), isEmpty);
+      expect(await queueEntry('uid-a'), isNotNull);
+      expect(await queueEntry('uid-b'), isNotNull);
+    });
+
+    test('(c) retar a un rival offline: no crea duelo y avisa',
+        () async {
+      seedFixture();
+      // Laura sin latido (hace 1 h): offline.
+      fake.users['fake-laura']!['lastSeenMs'] =
+          nowMs() - const Duration(hours: 1).inMilliseconds;
+      usePhone('uid-a', 'kristian');
+      final state =
+          await bridge.createDuel(opponentUsername: 'laura');
+      expect(state.matchId, isEmpty);
+      expect(state.phase, DuelPhase.searching);
+      expect(state.offlineOpponent, 'laura');
+      expect(await DuelService.myOpenDuels(), isEmpty);
+    });
+
+    test('(d) retar a un rival en línea: crea el duelo', () async {
+      seedFixture();
+      usePhone('uid-a', 'kristian');
+      final state =
+          await bridge.createDuel(opponentUsername: 'laura');
+      expect(state.matchId, isNotEmpty);
+      expect(state.phase, DuelPhase.intro);
+      expect(state.opponentName, 'laura');
+      expect(state.offlineOpponent, isNull);
+      final duel = await DuelService.getDuel(state.matchId);
+      expect(duel, isNotNull);
+      expect(duel!.playerB, 'fake-laura');
+    });
+
+    test('(e) BOT exento: retar a un bot sin latido crea el duelo',
+        () async {
+      // Bot sin lastSeenMs: nunca late, pero siempre disponible.
+      await fake.setDoc('users', 'bot-1', <String, dynamic>{
+        'username': 'botquim',
+        'shared': true,
+        'isBot': true,
+      });
+      usePhone('uid-a', 'kristian');
+      final state =
+          await bridge.createDuel(opponentUsername: 'botquim');
+      expect(state.matchId, isNotEmpty);
+      expect(state.phase, DuelPhase.intro);
+      expect(state.offlineOpponent, isNull);
+      // Y directo por DuelService también pasa.
+      final direct = await DuelService.createDuel(
+          rivalUid: 'bot-1', rivalName: 'botquim');
+      expect(direct, isNotNull);
+    });
+
+    test('(f) un bot en la cola nunca recibe match aleatorio',
+        () async {
+      // Entrada de bot en la cola (defensivo: los bots no entran,
+      // pero si hay una, se salta).
+      await fake.setDoc('users', 'bot-1', <String, dynamic>{
+        'username': 'botquim',
+        'shared': true,
+        'isBot': true,
+      });
+      await fake.setDoc('duel_queue', 'bot-1', <String, dynamic>{
+        'uid': 'bot-1',
+        'username': 'botquim',
+        'createdAtMs': nowMs(),
+      });
+      usePhone('uid-a', 'kristian');
+      await seedOnlineUser('uid-a', 'kristian');
+      expect(await DuelService.createRandomDuel(), isNull);
+      expect(await DuelService.myOpenDuels(), isEmpty);
+      expect(await queueEntry('uid-a'), isNotNull);
+    });
+
+    test('cancelar la búsqueda sale de la cola', () async {
+      usePhone('uid-a', 'kristian');
+      expect(await DuelService.createRandomDuel(), isNull);
+      expect(await queueEntry('uid-a'), isNotNull);
+      await DuelService.leaveDuelQueue();
+      expect(await queueEntry('uid-a'), isNull);
     });
   });
 

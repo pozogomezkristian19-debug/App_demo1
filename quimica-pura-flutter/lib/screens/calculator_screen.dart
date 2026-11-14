@@ -40,6 +40,8 @@ class CalculatorScreen extends StatelessWidget {
     this.unit,
     this.initialValue,
     this.onDraftChanged,
+    this.initialExpression,
+    this.onExpressionChanged,
   });
 
   final bool scientific;
@@ -63,6 +65,13 @@ class CalculatorScreen extends StatelessWidget {
   /// Borrador actual en cada cambio (ronda 7.2); null = no se guarda.
   final ValueChanged<double?>? onDraftChanged;
 
+  /// Expresión tal cual se dejó ("2+5", "2+"), para sembrarla al
+  /// reabrir (corrección de Kristian 2026-11-13).
+  final String? initialExpression;
+
+  /// La expresión en cada cambio; null = no se guarda.
+  final ValueChanged<String?>? onExpressionChanged;
+
   /// Abre la pantalla y devuelve el valor con el que responder, o
   /// null si se cierra sin más (X, atrás o gesto).
   static Future<double?> open(
@@ -72,6 +81,8 @@ class CalculatorScreen extends StatelessWidget {
     String? unit,
     double? initialValue,
     ValueChanged<double?>? onDraftChanged,
+    String? initialExpression,
+    ValueChanged<String?>? onExpressionChanged,
   }) {
     return Navigator.of(context).push<double>(
       MaterialPageRoute(
@@ -81,6 +92,8 @@ class CalculatorScreen extends StatelessWidget {
           unit: unit,
           initialValue: initialValue,
           onDraftChanged: onDraftChanged,
+          initialExpression: initialExpression,
+          onExpressionChanged: onExpressionChanged,
         ),
       ),
     );
@@ -108,6 +121,8 @@ class CalculatorScreen extends StatelessWidget {
             enabled: true,
             initialValue: initialValue,
             onDraftChanged: onDraftChanged,
+            initialExpression: initialExpression,
+            onExpressionChanged: onExpressionChanged,
             // Hay algo que entregar en modo científico o cuando
             // quien abrió la pantalla pidió el resultado
             // (submitResult: pregunta numérica fácil con teclado

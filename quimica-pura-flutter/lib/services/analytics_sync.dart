@@ -135,11 +135,12 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
+import '../data/topics.dart';
+import 'app_version.dart';
 import 'auth_service.dart';
 import 'progress.dart';
 import 'remote_tuning.dart';
 import 'social_service.dart';
-import 'update_check.dart';
 import 'user_prefs.dart';
 
 /// Una fila del ranking.
@@ -183,11 +184,11 @@ abstract class AnalyticsRepository {
   /// [queryDocs] filtra por igualdad en un campo, ordena y limita.
   /// [watchDoc] emite el documento (o null) y luego cada cambio.
   Future<Map<String, dynamic>?> getDoc(String collection, String docId);
-  Future<void> setDoc(String collection, String docId,
-      Map<String, dynamic> data,
+  Future<void> setDoc(
+      String collection, String docId, Map<String, dynamic> data,
       {bool merge = true});
-  Future<String> createDoc(
-      String collection, Map<String, dynamic> data);
+  Future<String> createDoc(String collection, Map<String, dynamic> data);
+  Future<void> deleteDoc(String collection, String docId);
   Future<List<Map<String, dynamic>>> queryDocs(
     String collection, {
     String? whereField,
@@ -252,16 +253,15 @@ class FirestoreAnalyticsRepository implements AnalyticsRepository {
   }
 
   @override
-  Future<Map<String, dynamic>?> getDoc(
-      String collection, String docId) async {
+  Future<Map<String, dynamic>?> getDoc(String collection, String docId) async {
     final snap = await _db.collection(collection).doc(docId).get();
     final data = snap.data();
     return data == null ? null : <String, dynamic>{'id': snap.id, ...data};
   }
 
   @override
-  Future<void> setDoc(String collection, String docId,
-      Map<String, dynamic> data,
+  Future<void> setDoc(
+      String collection, String docId, Map<String, dynamic> data,
       {bool merge = true}) async {
     final ref = _db.collection(collection).doc(docId);
     if (merge) {
@@ -272,10 +272,14 @@ class FirestoreAnalyticsRepository implements AnalyticsRepository {
   }
 
   @override
-  Future<String> createDoc(
-      String collection, Map<String, dynamic> data) async {
+  Future<String> createDoc(String collection, Map<String, dynamic> data) async {
     final ref = await _db.collection(collection).add(data);
     return ref.id;
+  }
+
+  @override
+  Future<void> deleteDoc(String collection, String docId) async {
+    await _db.collection(collection).doc(docId).delete();
   }
 
   @override
@@ -302,8 +306,7 @@ class FirestoreAnalyticsRepository implements AnalyticsRepository {
   }
 
   @override
-  Stream<Map<String, dynamic>?> watchDoc(
-      String collection, String docId) {
+  Stream<Map<String, dynamic>?> watchDoc(String collection, String docId) {
     return _db.collection(collection).doc(docId).snapshots().map((snap) {
       final data = snap.data();
       return data == null ? null : <String, dynamic>{'id': snap.id, ...data};
@@ -314,7 +317,9 @@ class FirestoreAnalyticsRepository implements AnalyticsRepository {
   Future<void> addToArray(
       String collection, String docId, String field, Object value) async {
     await _db.collection(collection).doc(docId).set(
-      {field: FieldValue.arrayUnion([value])},
+      {
+        field: FieldValue.arrayUnion([value])
+      },
       SetOptions(merge: true),
     );
   }
@@ -323,7 +328,9 @@ class FirestoreAnalyticsRepository implements AnalyticsRepository {
   Future<void> removeFromArray(
       String collection, String docId, String field, Object value) async {
     await _db.collection(collection).doc(docId).set(
-      {field: FieldValue.arrayRemove([value])},
+      {
+        field: FieldValue.arrayRemove([value])
+      },
       SetOptions(merge: true),
     );
   }
@@ -386,8 +393,7 @@ class InMemoryAnalyticsRepository implements AnalyticsRepository {
 
   int _createCounter = 0;
 
-  final Map<String, StreamController<Map<String, dynamic>?>> _watchers =
-      {};
+  final Map<String, StreamController<Map<String, dynamic>?>> _watchers = {};
 
   Map<String, Map<String, dynamic>> _collection(String collection) {
     if (collection == 'users') return users;
@@ -398,9 +404,7 @@ class InMemoryAnalyticsRepository implements AnalyticsRepository {
     final c = _watchers['$collection/$docId'];
     if (c != null && !c.isClosed) {
       final cur = _collection(collection)[docId];
-      c.add(cur == null
-          ? null
-          : <String, dynamic>{'id': docId, ...cur});
+      c.add(cur == null ? null : <String, dynamic>{'id': docId, ...cur});
     }
   }
 
@@ -439,18 +443,15 @@ class InMemoryAnalyticsRepository implements AnalyticsRepository {
   }
 
   @override
-  Future<Map<String, dynamic>?> getDoc(
-      String collection, String docId) async {
+  Future<Map<String, dynamic>?> getDoc(String collection, String docId) async {
     if (failAll) throw StateError('fake offline');
     final doc = _collection(collection)[docId];
-    return doc == null
-        ? null
-        : <String, dynamic>{'id': docId, ...doc};
+    return doc == null ? null : <String, dynamic>{'id': docId, ...doc};
   }
 
   @override
-  Future<void> setDoc(String collection, String docId,
-      Map<String, dynamic> data,
+  Future<void> setDoc(
+      String collection, String docId, Map<String, dynamic> data,
       {bool merge = true}) async {
     if (failAll) throw StateError('fake offline');
     if (hangWrites) await Completer<void>().future;
@@ -465,14 +466,21 @@ class InMemoryAnalyticsRepository implements AnalyticsRepository {
   }
 
   @override
-  Future<String> createDoc(
-      String collection, Map<String, dynamic> data) async {
+  Future<String> createDoc(String collection, Map<String, dynamic> data) async {
     if (failAll) throw StateError('fake offline');
     if (hangWrites) await Completer<void>().future;
     final id = 'fake-${++_createCounter}';
     _collection(collection)[id] = Map<String, dynamic>.from(data);
     _notify(collection, id);
     return id;
+  }
+
+  @override
+  Future<void> deleteDoc(String collection, String docId) async {
+    if (failAll) throw StateError('fake offline');
+    if (hangWrites) await Completer<void>().future;
+    _collection(collection).remove(docId);
+    _notify(collection, docId);
   }
 
   @override
@@ -508,8 +516,7 @@ class InMemoryAnalyticsRepository implements AnalyticsRepository {
   }
 
   @override
-  Stream<Map<String, dynamic>?> watchDoc(
-      String collection, String docId) {
+  Stream<Map<String, dynamic>?> watchDoc(String collection, String docId) {
     final key = '$collection/$docId';
     var c = _watchers[key];
     if (c == null) {
@@ -517,9 +524,7 @@ class InMemoryAnalyticsRepository implements AnalyticsRepository {
       ctrl = StreamController<Map<String, dynamic>?>.broadcast(
         onListen: () {
           final cur = _collection(collection)[docId];
-          ctrl.add(cur == null
-              ? null
-              : <String, dynamic>{'id': docId, ...cur});
+          ctrl.add(cur == null ? null : <String, dynamic>{'id': docId, ...cur});
         },
       );
       _watchers[key] = ctrl;
@@ -736,6 +741,7 @@ class AnalyticsSync {
         'lastActive': now.millisecondsSinceEpoch,
         'levelsPassed': _levelsPassed(levels),
         'levels': levels,
+        'trophies': await _trophiesByTrack(),
         'practiceDays': ProgressService.instance.practiceDays.toList(),
         'points': ProgressService.instance.points,
         'streak': ProgressService.instance.streakNow,
@@ -787,10 +793,14 @@ class AnalyticsSync {
         data['practiceDays'] = mergedDays.toList();
         data['streak'] =
             ProgressService.currentStreak(mergedDays, DateTime.now());
-        final mergedLevels =
-            _mergeLevels(data['levels'], existing['levels']);
+        final mergedLevels = _mergeLevels(data['levels'], existing['levels']);
         data['levels'] = mergedLevels;
         data['levelsPassed'] = _levelsPassed(mergedLevels);
+        // Trofeos (examen por tema, Kristian 2026-11-14): unión por
+        // pista, como los días de práctica — un trofeo ganado nunca
+        // se pierde porque el otro teléfono aún no lo tenga.
+        data['trophies'] =
+            _mergeTrophies(data['trophies'], existing['trophies']);
       }
     } catch (_) {
       // Sin lectura previa: se escribe la foto local tal cual.
@@ -799,9 +809,7 @@ class AnalyticsSync {
     // encolada en el SDK, pero este intento se da por fallido y
     // queda pendiente de reintento. Si la escritura llega, se
     // limpia el flag (merge: escribir dos veces es inofensivo).
-    await _repository
-        .setUser(id, data)
-        .timeout(const Duration(seconds: 5));
+    await _repository.setUser(id, data).timeout(const Duration(seconds: 5));
     await _markPending(false);
   }
 
@@ -885,17 +893,53 @@ class AnalyticsSync {
     return out;
   }
 
+  /// Trofeos ganados por tema y por pista, desde lo guardado (sin
+  /// cambiar la pista actual). Solo los temas con el examen aprobado
+  /// (>= 80 %): la lista es lo que ven los demás jugadores.
+  static Future<Map<String, List<String>>> _trophiesByTrack() async {
+    final out = <String, List<String>>{};
+    for (final t in [ProgressService.trackBach, ProgressService.trackUni]) {
+      final snap = await ProgressService.trackSnapshot(t);
+      final topics = t == ProgressService.trackBach ? bachTopics : uniTopics;
+      out[t] = [
+        for (final topic in topics)
+          if ((snap.best[ProgressService.topicExamTestId(topic)] ?? 0) >=
+              ProgressService.topicExamPassPercent)
+            topic,
+      ];
+    }
+    return out;
+  }
+
+  /// Unión de trofeos por pista (dos fotos de progreso): por pista
+  /// se juntan los temas ganados de ambas, sin duplicados.
+  static Map<String, List<String>> _mergeTrophies(
+      Object? a, Object? b) {
+    final out = <String, List<String>>{};
+    for (final t in [ProgressService.trackBach, ProgressService.trackUni]) {
+      final set = <String>{};
+      for (final raw in [a, b]) {
+        if (raw is Map && raw[t] is List) {
+          for (final v in raw[t] as List) {
+            if (v is String) set.add(v);
+          }
+        }
+      }
+      out[t] = set.toList();
+    }
+    return out;
+  }
+
   /// Niveles pasados por pista: por tema, (nivel desbloqueado − 1)
   /// con tope en los niveles que tiene el tema. Un tema nunca jugado
   /// (sin entrada) suma 0.
-  static Map<String, int> _levelsPassed(
-      Map<String, Map<String, int>> levels) {
+  static Map<String, int> _levelsPassed(Map<String, Map<String, int>> levels) {
     final out = <String, int>{};
     levels.forEach((track, byTopic) {
       var total = 0;
       byTopic.forEach((topic, unlocked) {
-        final passed = (unlocked - 1)
-            .clamp(0, ProgressService.levelCountForTopic(topic));
+        final passed =
+            (unlocked - 1).clamp(0, ProgressService.levelCountForTopic(topic));
         total += passed;
       });
       out[track] = total;
@@ -1042,6 +1086,7 @@ class AnalyticsSync {
       'lastActive': now.millisecondsSinceEpoch,
       'levelsPassed': _levelsPassed(levels),
       'levels': levels,
+      'trophies': _mergeTrophies(anon['trophies'], google['trophies']),
       'practiceDays': days.toList(),
       'points': points,
       'streak': ProgressService.currentStreak(days, now),
@@ -1088,8 +1133,21 @@ class AnalyticsSync {
           if (d is String) days.add(d);
         }
       }
+      final trophiesByTrack = <String, List<String>>{};
+      final rawTrophies = data['trophies'];
+      if (rawTrophies is Map) {
+        rawTrophies.forEach((track, topics) {
+          if (topics is List) {
+            trophiesByTrack[track.toString()] = [
+              for (final t in topics)
+                if (t is String) t,
+            ];
+          }
+        });
+      }
       await ProgressService.applyRecoveredData(
         levelsByTrack: levelsByTrack,
+        trophiesByTrack: trophiesByTrack,
         points: points,
         practiceDays: days,
       );

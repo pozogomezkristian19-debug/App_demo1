@@ -69,16 +69,14 @@ enum PushDestination {
   /// FriendsScreen, no hay pantalla de duelos separada).
   friends,
 
-  /// Soporte (hilo con el admin).
-  support,
-
   /// La bandeja de Notificaciones (la campana).
   inbox,
 }
 
 /// Destino de cada `data.type` de functions/payloads.js. Un tipo
 /// desconocido va a la bandeja: el aviso se ve aunque no se sepa
-/// abrir su pantalla.
+/// abrir su pantalla. (El Soporte se eliminó en la 7.7: un
+/// 'support_reply' viejo va a la bandeja.)
 PushDestination destinationForPushType(String? type) {
   switch (type) {
     case 'friend_request':
@@ -86,8 +84,6 @@ PushDestination destinationForPushType(String? type) {
     case 'duel_challenge':
     case 'duel_result':
       return PushDestination.friends;
-    case 'support_reply':
-      return PushDestination.support;
     case 'announcement':
     default:
       return PushDestination.inbox;
@@ -99,8 +95,6 @@ String screenKeyForDestination(PushDestination destination) {
   switch (destination) {
     case PushDestination.friends:
       return 'friends';
-    case PushDestination.support:
-      return 'support';
     case PushDestination.inbox:
       return 'notifications';
   }

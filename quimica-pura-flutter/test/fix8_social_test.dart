@@ -12,7 +12,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quimica_pura/screens/duel_screen.dart';
 import 'package:quimica_pura/screens/friends_screen.dart';
-import 'package:quimica_pura/screens/groups_screen.dart';
 import 'package:quimica_pura/screens/leaderboard_screen.dart';
 import 'package:quimica_pura/screens/shop_screen.dart';
 import 'package:quimica_pura/screens/tournaments_screen.dart';
@@ -120,14 +119,12 @@ void main() {
       expect(find.text(tr('lbRank')), findsNothing);
     });
 
-    testWidgets('sin Google: torneos, tienda y grupos también con puerta',
+    testWidgets('sin Google: torneos y tienda también con puerta',
         (tester) async {
       await pumpScreen(
           tester, const TournamentsScreen(isGoogleLinked: false));
       expect(find.text(tr('onlineNeedGoogle')), findsOneWidget);
       await pumpScreen(tester, const ShopScreen(isGoogleLinked: false));
-      expect(find.text(tr('onlineNeedGoogle')), findsOneWidget);
-      await pumpScreen(tester, const GroupsScreen(isGoogleLinked: false));
       expect(find.text(tr('onlineNeedGoogle')), findsOneWidget);
     });
 
@@ -462,19 +459,39 @@ void main() {
       expect(find.text(tr('tournEmpty')), findsOneWidget);
     });
 
-    testWidgets('entrar gratis: el botón pasa a Jugar', (tester) async {
+    testWidgets('entrar pagando: el botón pasa a Jugar', (tester) async {
+      // 7.7: t2 cuesta 25 puntos y t3 cuesta 50; ya no hay "Entrar
+      // gratis" en la lista (t1, gratis, ya está unido).
+      ProgressService.instance.addPoints(100);
       await pumpScreen(
           tester, const TournamentsScreen(isGoogleLinked: true),
           size: const Size(360, 1000));
-      // Antes: t2 (activo, sin unir) y t3 (próximo) traen
-      // "Entrar gratis"; t1, ya unido y activo, trae "Jugar".
-      expect(find.text(tr('tournJoin').toUpperCase()), findsNWidgets(2));
-      await tester.tap(find.text(tr('tournJoin').toUpperCase()).first);
+      // Antes: t2 (activo, sin unir) trae "Entrar · 25 pts" y t3
+      // (próximo) "Entrar · 50 pts"; t1, ya unido y activo, "Jugar".
+      expect(find.text(tr('tournJoin').toUpperCase()), findsNothing);
+      expect(
+          find.text(
+              tr('tournJoinPaid').replaceFirst('%s', '25').toUpperCase()),
+          findsOneWidget);
+      expect(
+          find.text(
+              tr('tournJoinPaid').replaceFirst('%s', '50').toUpperCase()),
+          findsOneWidget);
+      await tester.tap(find
+          .text(tr('tournJoinPaid').replaceFirst('%s', '25').toUpperCase()));
       await _settle(tester);
-      // Tras unirse a t2 (activo), su botón pasa a "Jugar" y solo
-      // queda un "Entrar gratis" (el de t3, próximo).
-      expect(find.text(tr('tournJoin').toUpperCase()), findsOneWidget);
+      // Tras unirse a t2 (activo, 25 puntos), su botón pasa a
+      // "Jugar" y solo queda el de t3 (próximo, 50 puntos).
+      expect(
+          find.text(
+              tr('tournJoinPaid').replaceFirst('%s', '25').toUpperCase()),
+          findsNothing);
+      expect(
+          find.text(
+              tr('tournJoinPaid').replaceFirst('%s', '50').toUpperCase()),
+          findsOneWidget);
       expect(find.text(tr('tournPlay').toUpperCase()), findsNWidgets(2));
+      expect(ProgressService.instance.points, 75);
     });
 
     testWidgets('jugar actualiza mi mejor puntaje y la clasificación',
@@ -530,12 +547,15 @@ void main() {
 
     testWidgets('jugar en la pantalla registra un tiempo real (> 0)',
         (tester) async {
+      // 7.7: t2 cuesta 25 puntos: hay que tenerlos para entrar.
+      ProgressService.instance.addPoints(100);
       await pumpScreen(
           tester,
           const TournamentDetailScreen(
               tournamentId: 't2', isGoogleLinked: true),
           size: const Size(360, 1000));
-      await tester.tap(find.text(tr('tournJoin').toUpperCase()));
+      await tester.tap(find.text(
+          tr('tournJoinPaid').replaceFirst('%s', '25').toUpperCase()));
       await _settle(tester);
       await tester.tap(find.text(tr('tournPlay').toUpperCase()));
       await _settle(tester);
@@ -596,14 +616,16 @@ void main() {
           const Color(0xFFF97316));
     });
 
-    testWidgets('sin puntos suficientes: chip "Te faltan", sin compra',
+    testWidgets('sin puntos suficientes: solo el precio, sin compra',
         (tester) async {
-      // Saldo 0 (prefs vacías): nada se puede comprar.
+      // Saldo 0 (prefs vacías): nada se puede comprar. Quemia 7.7:
+      // ya no dice "Te faltan X puntos", solo muestra el precio.
       expect(ProgressService.instance.points, 0);
       await pumpScreen(tester, const ShopScreen(isGoogleLinked: true),
           size: const Size(360, 1200));
-      expect(find.textContaining(tr('shopNeedMore').split('%s').first),
-          findsWidgets);
+      // Coral cuesta 300: su precio aparece como chip, sin botón
+      // de compra ni texto de "faltan".
+      expect(find.text('300'), findsWidgets);
       expect(find.textContaining(tr('shopBuy').toUpperCase()), findsNothing);
       expect(ProgressService.instance.points, 0);
     });
@@ -635,61 +657,6 @@ void main() {
       // sincroniza que ya no hay tema equipado.
       await SocialService.clearEquippedTheme();
       expect(repo.syncedEquipped['theme'], isNull);
-    });
-  });
-
-  group('grupos de estudio', () {
-    testWidgets('el grupo semilla trae sus miembros y su código',
-        (tester) async {
-      await pumpScreen(tester, const GroupsScreen(isGoogleLinked: true),
-          size: const Size(360, 1000));
-      expect(find.text('Químicos nocturnos'), findsOneWidget);
-      expect(find.textContaining('QUIM-4821'), findsOneWidget);
-    });
-
-    testWidgets('crear grupo muestra su código de invitación',
-        (tester) async {
-      await pumpScreen(tester, const GroupsScreen(isGoogleLinked: true),
-          size: const Size(360, 1000));
-      await tester.enterText(
-          find.widgetWithText(TextField, tr('groupsCreateHint')),
-          'Estudio nocturno');
-      await tester.tap(find.text(tr('groupsCreate').toUpperCase()));
-      await _settle(tester);
-      expect(find.textContaining('QUIM-'), findsWidgets);
-      expect(find.text('Estudio nocturno'), findsOneWidget);
-    });
-
-    testWidgets('unirse con código abre el detalle con los miembros',
-        (tester) async {
-      await pumpScreen(tester, const GroupsScreen(isGoogleLinked: true),
-          size: const Size(360, 1000));
-      await tester.enterText(
-          find.widgetWithText(TextField, tr('groupsJoinHint')), 'QUIM-4821');
-      await tester.tap(find.text(tr('groupsJoin').toUpperCase()));
-      await _settle(tester);
-      expect(find.text('Químicos nocturnos'), findsWidgets);
-      expect(find.text('laura'), findsOneWidget);
-      expect(find.text('sofia'), findsOneWidget);
-    });
-
-    testWidgets('código malo: aviso tranquilo, sin error', (tester) async {
-      await pumpScreen(tester, const GroupsScreen(isGoogleLinked: true),
-          size: const Size(360, 1000));
-      await tester.enterText(
-          find.widgetWithText(TextField, tr('groupsJoinHint')), 'XXXX-0000');
-      await tester.tap(find.text(tr('groupsJoin').toUpperCase()));
-      await _settle(tester);
-      expect(find.text(tr('groupsJoinNotFound')), findsOneWidget);
-      expect(find.byType(AlertDialog), findsNothing);
-    });
-
-    testWidgets('sin grupos: estado vacío bonito', (tester) async {
-      SocialService.setRepositoryForTests(
-          InMemorySocialRepository(seedDemo: false));
-      await pumpScreen(tester, const GroupsScreen(isGoogleLinked: true),
-          size: const Size(360, 1000));
-      expect(find.text(tr('groupsEmpty')), findsOneWidget);
     });
   });
 

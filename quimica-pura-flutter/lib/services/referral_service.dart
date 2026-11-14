@@ -196,6 +196,101 @@ class ReferralService {
     return capped[0].toUpperCase() + capped.substring(1);
   }
 
+  /// Base del nombre de usuario desde la cuenta de Google (Quemia
+  /// 7.7, Kristian): la app coge el nombre del correo. Primero el
+  /// primer nombre de la cuenta; si no lo hay, el prefijo del correo
+  /// (antes de la @). Limpio, primera en mayúscula, máximo 20.
+  static String usernameBaseFromGoogle(String? name, String? email) {
+    String raw = '';
+    if (name != null && name.trim().isNotEmpty) {
+      raw = name.trim().split(' ').first;
+    } else if (email != null && email.contains('@')) {
+      raw = email.split('@').first;
+    }
+    final clean = raw.replaceAll(RegExp(r'[^A-Za-zÀ-ÿ0-9]'), '');
+    if (clean.isEmpty) return 'Quimico';
+    final capped = clean.length > 20 ? clean.substring(0, 20) : clean;
+    return capped[0].toUpperCase() + capped.substring(1);
+  }
+
+  /// ¿Está cogido este nombre de usuario por OTRO usuario? false si
+  /// está libre, si es mío, o si no se pudo comprobar (sin internet:
+  /// se resuelve después con [ensureUniqueUsername]).
+  static Future<bool> isUsernameTaken(String candidate) async {
+    if (!_allowed) return false;
+    final lower = candidate.toLowerCase();
+    final existing = await OnlineCommon.call(
+        () => _repo.getDoc('usernames', lower));
+    if (existing == null) return false;
+    return existing['uid'] != _me;
+  }
+
+  /// Sugerencias de nombre de usuario (Quemia 7.7, Kristian): si la
+  /// base está libre, solo ella; si está ocupada, hasta 3
+  /// alternativas con sufijo de 4 dígitos (como
+  /// [ensureUniqueUsername]). Sin internet devuelve solo la base.
+  static Future<List<String>> suggestUsernames(String base) async {
+    if (base.isEmpty) return const [];
+    if (!_allowed) return [base];
+    final random = Random.secure();
+    final out = <String>[];
+    // La base primero.
+    if (!await isUsernameTaken(base)) {
+      out.add(base);
+      return out;
+    }
+    // Ocupada: probar con sufijos hasta tener 3 libres.
+    for (var attempt = 0; attempt < 12 && out.length < 3; attempt++) {
+      final candidate = '$base${1000 + random.nextInt(9000)}';
+      if (out.contains(candidate)) continue;
+      if (!await isUsernameTaken(candidate)) out.add(candidate);
+    }
+    return out;
+  }
+
+  /// Reclama un nombre de usuario ELEGIDO (Quemia 7.7): el usuario
+  /// lo escribió o tocó una sugerencia en el onboarding de Google.
+  /// Si está libre se guarda y se escribe en Firestore; si está
+  /// cogido por otro, se cae a [ensureUniqueUsername] (base del
+  /// nombre). Sin internet se guarda en local y se reclama después.
+  static Future<String> claimUsername(String candidate) async {
+    final clean = candidate.replaceAll(RegExp(r'[^A-Za-zÀ-ÿ0-9]'), '');
+    final name = clean.isEmpty ? _usernameBase() : clean;
+    if (!_allowed) {
+      await UserPrefs.savePublicUsername(name);
+      return name;
+    }
+    final existing = UserPrefs.publicUsername;
+    if (existing.isNotEmpty) return existing;
+    final lower = name.toLowerCase();
+    final doc = await OnlineCommon.call(
+        () => _repo.getDoc('usernames', lower));
+    if (doc != null) {
+      if (doc['uid'] == _me) {
+        await UserPrefs.savePublicUsername(name);
+        return name;
+      }
+      return ensureUniqueUsername();
+    }
+    final ok = await OnlineCommon.write(() => _repo.setDoc(
+          'usernames',
+          lower,
+          <String, dynamic>{
+            'uid': _me,
+            'createdAtMs': DateTime.now().millisecondsSinceEpoch,
+          },
+          merge: false,
+        ));
+    if (!ok) {
+      await UserPrefs.savePublicUsername(name);
+      return name;
+    }
+    await UserPrefs.savePublicUsername(name);
+    await OnlineCommon.write(
+        () => _repo.setDoc('users', _me, {'username': name}));
+    return name;
+  }
+
   /// Reclama un nombre público único para este usuario (o devuelve
   /// el que ya tiene). Si el nombre base está cogido, se prueba con
   /// un sufijo de 4 dígitos (Vanessa0394) hasta 12 intentos. El

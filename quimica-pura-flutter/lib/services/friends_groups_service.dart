@@ -38,6 +38,8 @@ class FriendProgress {
     required this.points,
     required this.levelsPassedTotal,
     required this.streak,
+    this.lastSeenMs,
+    this.isBot = false,
   });
 
   final String uid;
@@ -45,6 +47,14 @@ class FriendProgress {
   final int points;
   final int levelsPassedTotal;
   final int streak;
+
+  /// Último latido de presencia (ms desde epoch, null = nunca):
+  /// para saber si está en línea antes de retarlo a un duelo.
+  final int? lastSeenMs;
+
+  /// true si es un BOT (usuario simulado): los bots quedan exentos
+  /// del control de en línea (siempre disponibles para retar).
+  final bool isBot;
 
   static FriendProgress? fromUserDoc(Map<String, dynamic>? raw) {
     if (raw == null) return null;
@@ -67,6 +77,8 @@ class FriendProgress {
       points: (raw['points'] as num?)?.toInt() ?? 0,
       levelsPassedTotal: total,
       streak: (raw['streak'] as num?)?.toInt() ?? 0,
+      lastSeenMs: (raw['lastSeenMs'] as num?)?.toInt(),
+      isBot: raw['isBot'] == true,
     );
   }
 }
@@ -261,22 +273,45 @@ class FriendsGroupsService {
     if (name.toLowerCase() == _myName.toLowerCase()) {
       return FriendRequestResult.self;
     }
-    final docs = await OnlineCommon.call(() => _repo.queryDocs(
-          'users',
-          whereField: 'username',
-          isEqualTo: name,
-          limit: 5,
-        ));
-    if (docs == null) {
-      // Sin red (o sin permiso): se encola y se envía sola.
-      await _enqueueRequest(name);
-      return FriendRequestResult.queued;
-    }
+    // Búsqueda sin distinción de mayúsculas (Quemia 7.7, Kristian:
+    // "busco y no sale"): el nombre se guarda con su capitalización
+    // ("Kristian") pero se busca en minúscula. La colección
+    // 'usernames' tiene la clave en minúscula y da el uid; con él se
+    // lee el documento del usuario y se comprueba 'shared'.
     Map<String, dynamic>? target;
-    for (final d in docs) {
-      if (d['shared'] == true && d['banned'] != true) {
-        target = d;
-        break;
+    final nameDoc = await OnlineCommon.call(
+        () => _repo.getDoc('usernames', name.toLowerCase()));
+    if (nameDoc != null) {
+      final foundUid = nameDoc['uid']?.toString() ?? '';
+      if (foundUid.isNotEmpty) {
+        final userDoc = await OnlineCommon.call(
+            () => _repo.getDoc('users', foundUid));
+        if (userDoc != null &&
+            userDoc['shared'] == true &&
+            userDoc['banned'] != true) {
+          target = userDoc;
+        }
+      }
+    }
+    if (target == null) {
+      // Respaldo: si la colección 'usernames' no lo tiene (usuario
+      // viejo sin reclamar), la búsqueda exacta de antes.
+      final docs = await OnlineCommon.call(() => _repo.queryDocs(
+            'users',
+            whereField: 'username',
+            isEqualTo: name,
+            limit: 5,
+          ));
+      if (docs == null) {
+        // Sin red (o sin permiso): se encola y se envía sola.
+        await _enqueueRequest(name);
+        return FriendRequestResult.queued;
+      }
+      for (final d in docs) {
+        if (d['shared'] == true && d['banned'] != true) {
+          target = d;
+          break;
+        }
       }
     }
     if (target == null) return FriendRequestResult.notFound;

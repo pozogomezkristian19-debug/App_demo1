@@ -13,7 +13,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
-import '../widgets/brand_logo.dart';
 import '../widgets/lives_chip.dart';
 import '../widgets/lucide_icons.dart';
 import 'package:share_plus/share_plus.dart';
@@ -65,8 +64,13 @@ class _StatsColors {
     if (Theme.of(context).brightness == Brightness.dark) {
       // Superficies y tintes según el acento (fix4, punto 2): con
       // Violeta el oscuro es violeta, no verde (los valores son los
-      // mismos que _darkTheme en main.dart).
+      // mismos que _darkTheme en main.dart). El acento SÍ respeta
+      // el tema de la tienda (auditoría 7.7: antes en oscuro el
+      // acento era siempre menta/violeta aunque hubiera un tema
+      // comprado equipado).
       final violet = AppAccent.isViolet;
+      final accent = AppAccent.primaryLight;
+      final accentDark = AppAccent.primary;
       return _StatsColors(
         bg: AppAccent.darkBackground,
         card: AppAccent.darkCard,
@@ -75,13 +79,13 @@ class _StatsColors {
         inkSoft: AppAccent.darkInkSoft,
         border: AppAccent.darkBorder,
         edgeGray: AppAccent.darkBorder,
-        accent: violet ? BrandColors.violetLight : BrandColors.mintLight,
-        accentDark: violet ? BrandColors.violet : BrandColors.mint,
+        accent: accent,
+        accentDark: accentDark,
         // Logro desbloqueado: tinte del acento, nunca ámbar en oscuro.
-        unlockedBg: violet ? const Color(0x268B5CF6) : const Color(0x2614B8A6),
-        unlockedIcon: violet ? BrandColors.violetLight : BrandColors.mintLight,
-        flameBg: violet ? const Color(0x268B5CF6) : const Color(0x2614B8A6),
-        flameIcon: violet ? BrandColors.violetLight : BrandColors.mintLight,
+        unlockedBg: accentDark.withValues(alpha: 0.15),
+        unlockedIcon: accent,
+        flameBg: accentDark.withValues(alpha: 0.15),
+        flameIcon: accent,
       );
     }
     return _StatsColors(
@@ -126,10 +130,6 @@ class StatsScreen extends StatefulWidget {
 }
 
 class _StatsScreenState extends State<StatsScreen> {
-  /// Niveles desbloqueados de la otra pista (para su contador de
-  /// pasados): el contador usa el desbloqueo, no la nota (A2).
-  Map<String, int>? _otherLevels;
-
   /// La tarjeta de resumen que se convierte en imagen al compartir.
   final _shareKey = GlobalKey();
 
@@ -221,18 +221,6 @@ class _StatsScreenState extends State<StatsScreen> {
   @override
   void initState() {
     super.initState();
-    _loadOtherTrack();
-  }
-
-  Future<void> _loadOtherTrack() async {
-    final other = ProgressService.track == ProgressService.trackUni
-        ? ProgressService.trackBach
-        : ProgressService.trackUni;
-    final snap = await ProgressService.trackSnapshot(other);
-    if (!mounted) return;
-    setState(() {
-      _otherLevels = snap.levels;
-    });
   }
 
   /// Niveles pasados de una pista (auditoría A2, fix5 ronda #5):
@@ -298,6 +286,10 @@ class _StatsScreenState extends State<StatsScreen> {
     }
     if (key == 'mixto') return tr('mixedTitle');
     if (key == 'timed') return tr('timedTitle');
+    if (parts.length == 2 && parts[0] == 'examen') {
+      return tr('topicExamTitle')
+          .replaceFirst('%s', localizedTopicTitle(parts[1]));
+    }
     return humanizeTopicId(key);
   }
 
@@ -305,21 +297,10 @@ class _StatsScreenState extends State<StatsScreen> {
     final p = ProgressService.instance;
     final data = <String, dynamic>{
       'app': 'Quemia',
-      'version': ProgressService.track == ProgressService.trackBach
-          ? tr('trackBach')
-          : tr('trackUni'),
       'racha_actual': p.streakNow,
       'racha_mejor': p.streakBest,
-      'niveles_pasados_uni': _passedLevels(
-          ProgressService.track == ProgressService.trackUni
-              ? p.unlockedLevels
-              : (_otherLevels ?? {}),
-          _topicsOf(ProgressService.trackUni)),
-      'niveles_pasados_bach': _passedLevels(
-          ProgressService.track == ProgressService.trackBach
-              ? p.unlockedLevels
-              : (_otherLevels ?? {}),
-          _topicsOf(ProgressService.trackBach)),
+      'niveles_pasados': _passedLevels(
+          p.unlockedLevels, _topicsOf(ProgressService.trackUni)),
       'mejores_puntuaciones': {
         for (final e in p.bestScores.entries) _prettyScoreKey(e.key): e.value,
       },
@@ -356,14 +337,6 @@ class _StatsScreenState extends State<StatsScreen> {
     final passed = _passedLevels(p.unlockedLevels, topics);
     final total = _totalLevels(topics);
     final weakest = p.weakestTopics(topics).take(3).toList();
-    final otherTrack = ProgressService.track == ProgressService.trackUni
-        ? ProgressService.trackBach
-        : ProgressService.trackUni;
-    final otherTopics = _topicsOf(otherTrack);
-    final otherPassed = _otherLevels == null
-        ? null
-        : _passedLevels(_otherLevels!, otherTopics);
-    final otherTotal = _totalLevels(otherTopics);
     return Scaffold(
       backgroundColor: c.bg,
       appBar: AppBar(
@@ -509,13 +482,7 @@ class _StatsScreenState extends State<StatsScreen> {
             child: Column(
               children: [
                 _statRow(
-                    'Niveles pasados (${ProgressService.track == ProgressService.trackUni ? tr('trackUni') : tr('trackBach')})',
-                    '$passed / $total',
-                    c.ink),
-                _statRow(
-                    'Niveles pasados (${otherTrack == ProgressService.trackUni ? tr('trackUni') : tr('trackBach')})',
-                    otherPassed == null ? '…' : '$otherPassed / $otherTotal',
-                    c.ink),
+                    'Niveles pasados', '$passed / $total', c.ink),
                 _statRow(
                     'Examen mixto (mejor)', '${p.bestScore('mixto')}%', c.ink),
                 _statRow('Días practicando', '${p.practiceDays.length}', c.ink),

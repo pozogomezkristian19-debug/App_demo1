@@ -5,6 +5,8 @@
 // patrón que ya usaba el nodo actual del camino
 // (_LevelNodeRowState): repetir con reverse y parar al salir.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 /// Un hijo que respira: escala suave de 1.0 a [maxScale] y vuelta,
@@ -113,6 +115,55 @@ class _FlickerWidgetState extends State<FlickerWidget>
   }
 }
 
+/// Feedback táctil al pulsar (pulido 7.7): el hijo se encoge un
+/// poco (0.97) al bajar el dedo y vuelve suave al soltar, como una
+/// tecla. Para tarjetas, píldoras, iconos y filas que hoy solo
+/// tienen ripple (o nada) y se sienten secas. NO es un botón: no
+/// dibuja nada, solo escala; el onTap sigue siendo del hijo (o se
+/// pasa aquí). Curva suave, 120 ms, sin rebotes.
+class PressScale extends StatefulWidget {
+  const PressScale({
+    super.key,
+    required this.child,
+    this.onTap,
+    this.scale = 0.97,
+    this.duration = const Duration(milliseconds: 120),
+  });
+
+  final Widget child;
+  final VoidCallback? onTap;
+  final double scale;
+  final Duration duration;
+
+  @override
+  State<PressScale> createState() => _PressScaleState();
+}
+
+class _PressScaleState extends State<PressScale> {
+  var _pressed = false;
+
+  void _setPressed(bool value) {
+    if (_pressed != value) setState(() => _pressed = value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: widget.onTap,
+      onTapDown: (_) => _setPressed(true),
+      onTapUp: (_) => _setPressed(false),
+      onTapCancel: () => _setPressed(false),
+      child: AnimatedScale(
+        scale: _pressed ? widget.scale : 1.0,
+        duration: widget.duration,
+        curve: Curves.easeOutCubic,
+        child: widget.child,
+      ),
+    );
+  }
+}
+
 /// Entrada de una tarjeta al abrir la pantalla: fundido + subida
 /// suave de 10 px, una sola vez (no se repite al reconstruir, porque
 /// el estado vive en el widget y solo avanza en initState).
@@ -137,6 +188,12 @@ class _FadeSlideInState extends State<FadeSlideIn>
   late final AnimationController _ctrl;
   late final Animation<double> _opacity;
   late final Animation<Offset> _offset;
+  // El retardo es un Timer cancelable (pulido 7.7): con
+  // Future.delayed, si la pantalla se cerraba antes de que el
+  // retardo terminara, quedaba un temporizador pendiente y los
+  // tests fallaban ("A Timer is still pending"). Al salir, el
+  // temporizador se cancela y no queda nada pendiente.
+  Timer? _delayTimer;
 
   @override
   void initState() {
@@ -151,13 +208,18 @@ class _FadeSlideInState extends State<FadeSlideIn>
     ).animate(
       CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic),
     );
-    Future.delayed(widget.delay, () {
-      if (mounted) _ctrl.forward();
-    });
+    if (widget.delay == Duration.zero) {
+      _ctrl.forward();
+    } else {
+      _delayTimer = Timer(widget.delay, () {
+        if (mounted) _ctrl.forward();
+      });
+    }
   }
 
   @override
   void dispose() {
+    _delayTimer?.cancel();
     _ctrl.dispose();
     super.dispose();
   }

@@ -78,27 +78,45 @@ class AppAccent {
 
   /// Fondo oscuro de las pantallas que pintan su propio fondo en modo
   /// oscuro (Estadísticas, Cuenta, Tema): verde para Verde, violeta
-  /// para Violeta. Mismos valores que _darkTheme en main.dart.
-  static Color get darkBackground =>
-      isViolet ? const Color(0xFF17112A) : const Color(0xFF0A1F1A);
+  /// para Violeta. Mismos valores que _darkTheme en main.dart. Con
+  /// un tema de la tienda, un tinte muy oscuro de ese color
+  /// (auditoría 7.7: antes el fondo oscuro era siempre verde aunque
+  /// el acento fuera Coral/Rosa/Azul).
+  static Color get darkBackground {
+    final shop = SocialService.equippedThemeColor;
+    if (shop != null) return Color.lerp(shop, Colors.black, 0.92)!;
+    return isViolet ? const Color(0xFF17112A) : const Color(0xFF0A1F1A);
+  }
 
   /// Superficie oscura de las tarjetas que pintan su propio color en
   /// modo oscuro (Niveles, Tabla, Laboratorio, Estadísticas, Cuenta,
   /// Tema): verde para Verde, violeta para Violeta. Mismos valores
-  /// que _darkTheme en main.dart.
-  static Color get darkCard =>
-      isViolet ? const Color(0xFF241B3D) : const Color(0xFF122B24);
+  /// que _darkTheme en main.dart. Con tema de tienda, tinte oscuro
+  /// de ese color (un poco más claro que el fondo).
+  static Color get darkCard {
+    final shop = SocialService.equippedThemeColor;
+    if (shop != null) return Color.lerp(shop, Colors.black, 0.88)!;
+    return isViolet ? const Color(0xFF241B3D) : const Color(0xFF122B24);
+  }
 
   /// Texto suave en modo oscuro (el de las fábricas de colores de
   /// Estadísticas, Cuenta y Tema): gris verdoso para Verde, gris
-  /// violáceo para Violeta.
-  static Color get darkInkSoft =>
-      isViolet ? const Color(0xFF9B8FC4) : const Color(0xFFB8CFC8);
+  /// violáceo para Violeta. Con tema de tienda, tinte claro de ese
+  /// color.
+  static Color get darkInkSoft {
+    final shop = SocialService.equippedThemeColor;
+    if (shop != null) return Color.lerp(shop, Colors.white, 0.6)!;
+    return isViolet ? const Color(0xFF9B8FC4) : const Color(0xFFB8CFC8);
+  }
 
   /// Borde sutil en modo oscuro: verde oscuro para Verde, violeta
-  /// oscuro para Violeta.
-  static Color get darkBorder =>
-      isViolet ? const Color(0xFF2E2350) : const Color(0xFF1E4D42);
+  /// oscuro para Violeta. Con tema de tienda, versión oscura de ese
+  /// color.
+  static Color get darkBorder {
+    final shop = SocialService.equippedThemeColor;
+    if (shop != null) return Color.lerp(shop, Colors.black, 0.75)!;
+    return isViolet ? const Color(0xFF2E2350) : const Color(0xFF1E4D42);
+  }
 
   /// Fondo oscuro de las píldoras de la barra superior (repaso y
   /// campana, Quemia 7.3): sigue al acento elegido, como todo lo

@@ -159,7 +159,14 @@ void main() {
         question: 'Pregunta de prueba',
         level: 1,
       ));
+      // El número cambia con AnimatedSwitcher (pulido 7.7, 200 ms):
+      // durante la transición hay DOS Text en el árbol (el '0' que
+      // sale y el '1' que entra), así que hay que dejar que termine
+      // antes de leer el número con .single. El primer pump
+      // reconstruye con el conteo nuevo y ARRANCA la transición; el
+      // segundo avanza el reloj 300 ms y la completa.
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
       // La fila del chip (ancestro Row más cercano al icono) tiene
       // un solo Text: el número de errores.
       final chipRow = find
@@ -293,7 +300,16 @@ void main() {
           home: OnboardingScreen(onFinished: () {}),
         ),
       );
-      await tester.pump();
+      await tester.pumpAndSettle();
+      // Quemia 7.7 (rediseño 2026-11-13): ya no hay pantalla de
+      // idioma al instalar (la app coge el idioma del sistema) ni
+      // barra de progreso; la primera pantalla ES la Bienvenida,
+      // sin la imagen de las gemelas. "Continuar" lleva a la
+      // elección; "Crear mi perfil" a la gemela; "Vamos" a las
+      // preguntas (cómo supo -> cuánta sabe -> meta -> Notificaciones
+      // -> racha -> Perfil). En Notificaciones el permiso está
+      // negado en pruebas: sale "Ir a Ajustes" y al cerrarlo se
+      // avanza a la racha.
       final twinsImage = find.byWidgetPredicate(
         (w) =>
             w is Image &&
@@ -303,6 +319,47 @@ void main() {
       expect(twinsImage, findsNothing);
       expect(find.byType(BrandLogo), findsOneWidget);
       expect(find.text(tr('obWelcome')), findsOneWidget);
+      await tester.tap(find.text(tr('obContinue').toUpperCase()));
+      await tester.pumpAndSettle();
+      expect(twinsImage, findsNothing);
+      expect(find.text(tr('obChoiceTitle')), findsOneWidget);
+      await tester.tap(find.text(tr('obCreateProfile').toUpperCase()));
+      await tester.pumpAndSettle();
+      expect(twinsImage, findsNothing);
+      expect(find.text(tr('obBrendaHello')), findsOneWidget);
+      await tester.tap(find.text(tr('obVamos').toUpperCase()));
+      await tester.pumpAndSettle();
+      expect(twinsImage, findsNothing);
+      expect(find.text(tr('obSourceTitle')), findsOneWidget);
+      await tester.tap(find.text(tr('obSourceInstagram')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(tr('obContinue').toUpperCase()));
+      await tester.pumpAndSettle();
+      expect(twinsImage, findsNothing);
+      expect(find.text(tr('obLevelTitle')), findsOneWidget);
+      await tester.tap(find.text(tr('obLevel1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(tr('obContinue').toUpperCase()));
+      await tester.pumpAndSettle();
+      expect(twinsImage, findsNothing);
+      expect(find.text(tr('obGoalTitle')), findsOneWidget);
+      await tester.tap(find.text(tr('obGoal10')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(tr('obGoalSave').toUpperCase()));
+      await tester.pumpAndSettle();
+      expect(twinsImage, findsNothing);
+      expect(find.text(tr('obNotifEnable').toUpperCase()),
+          findsOneWidget);
+      await tester.tap(find.text(tr('obNotifEnable').toUpperCase()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cerrar'));
+      await tester.pumpAndSettle();
+      expect(twinsImage, findsNothing);
+      expect(find.text(tr('obStreakTitle')), findsOneWidget);
+      await tester.tap(find.text(tr('obStreakStart').toUpperCase()));
+      await tester.pumpAndSettle();
+      expect(twinsImage, findsNothing);
+      expect(find.text(tr('obProfileTitle')), findsOneWidget);
     });
   });
 

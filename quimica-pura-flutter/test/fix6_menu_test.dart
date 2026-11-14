@@ -10,6 +10,7 @@ import 'package:quimica_pura/main.dart';
 import 'package:quimica_pura/services/localization.dart';
 import 'package:quimica_pura/services/progress.dart';
 import 'package:quimica_pura/services/user_prefs.dart';
+import 'package:quimica_pura/widgets/theme_toggle.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'test_helpers.dart';
@@ -205,17 +206,46 @@ void main() {
     testWidgets('en oscuro: mismos ítems, sin "Mi cuaderno"',
         (tester) async {
       await openDrawer(tester, isDark: true);
+      // La cabecera se comprueba ANTES de deslizar: el ListView
+      // del menú es perezoso y al bajar hasta el pie desmonta la
+      // cabecera (desde que el interruptor Tema vive al pie, el
+      // contenido ya no cabe en la ventana de 1700 px).
+      expect(find.text('Quemia'), findsOneWidget);
       for (final key in expectedTitles) {
         await reveal(tester, tr(key));
         expect(find.text(tr(key)), findsOneWidget);
       }
       expect(find.text(tr('notesTitle')), findsNothing);
-      expect(find.text('Quemia'), findsOneWidget);
       await reveal(tester, 'Mezcla, mira el pH y el color');
       final widget =
           tester.widget<Text>(find.text('Mezcla, mira el pH y el color'));
       expect(widget.overflow, isNot(TextOverflow.ellipsis));
       expect(widget.maxLines, isNull);
+    });
+
+    testWidgets('el interruptor Tema del menú cambia claro/oscuro',
+        (tester) async {
+      // 7.7 (Kristian 2026-11-14: el botón claro/oscuro va "En el
+      // menú lateral"): el mismo interruptor Lottie que vivía en
+      // la tarjeta de Cuenta vive ahora al pie del menú, en su
+      // sección "TEMA", y cambia el tema en el acto sin abrir nada.
+      await UserPrefs.saveThemeMode('claro');
+      await openDrawer(tester);
+      // Pie FIJO del menú (Kristian 2026-11-14): el interruptor
+      // se ve nada más abrir el menú, sin bajar hasta el fondo.
+      // Se comprueba que está visible SIN deslizar: si fallara,
+      // es que volvió a quedar dentro del ListView.
+      expect(find.byType(ThemeToggle), findsOneWidget);
+      expect(find.text(tr('themeTitle')), findsOneWidget);
+      // Se toca la etiqueta "Tema" del propio interruptor (la
+      // sección de arriba dice "TEMA" en mayúsculas, así que no
+      // hay ambigüedad): tocar el centro de la fila fallaba en el
+      // test porque cae en el Spacer entre la etiqueta y la
+      // animación. Es el mismo gesto que antes en Cuenta.
+      await tester.tap(find.text(tr('themeTitle')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(UserPrefs.themeMode, 'oscuro');
     });
   });
 }

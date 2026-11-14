@@ -11,6 +11,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:quimica_pura/main.dart';
+import 'package:quimica_pura/screens/notifications_screen.dart';
 import 'package:quimica_pura/services/achievements.dart';
 import 'package:quimica_pura/services/localization.dart';
 import 'package:quimica_pura/services/notification_inbox.dart';
@@ -281,6 +282,85 @@ void main() {
               .where((e) => e.kind == InboxKind.update),
           isEmpty);
       expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('Progreso de descarga en la bandeja (2026-11-14)', () {
+    const info = {
+      'latest': '7.8',
+      'apk_url': 'https://example.com/app.apk',
+      'notes': 'Novedades de la versión',
+      'force': false,
+    };
+
+    test('crea la entrada con el progreso y la actualiza en su sitio',
+        () async {
+      await NotificationInbox.setDownloadProgress(
+        infoJson: info,
+        progress: 0.42,
+        title: tr('inboxDownloadingTitle'),
+        body: 'Versión 7.8 · 42%',
+      );
+      expect(NotificationInbox.entries.length, 1);
+      var entry = NotificationInbox.entries.first;
+      expect(entry.id, 'update-7.8');
+      expect(entry.data['downloadProgress'], 0.42);
+      expect(entry.read, isFalse);
+
+      await NotificationInbox.setDownloadProgress(
+        infoJson: info,
+        progress: 0.9,
+        title: tr('inboxDownloadingTitle'),
+        body: 'Versión 7.8 · 90%',
+      );
+      expect(NotificationInbox.entries.length, 1);
+      entry = NotificationInbox.entries.first;
+      expect(entry.data['downloadProgress'], 0.9);
+      expect(entry.body, 'Versión 7.8 · 90%');
+    });
+
+    test('completada pasa a lista para instalar; al restaurar vuelve '
+        'al aviso normal', () async {
+      await NotificationInbox.setDownloadProgress(
+        infoJson: info,
+        progress: 1.0,
+        downloaded: true,
+        title: tr('inboxDownloadReadyTitle'),
+        body: 'Toca para instalar la versión 7.8',
+      );
+      var entry = NotificationInbox.entries.first;
+      expect(entry.data['downloaded'], isTrue);
+      expect(entry.data['downloadProgress'], 1.0);
+
+      await NotificationInbox.setDownloadProgress(
+        infoJson: info,
+        title: tr('inboxUpdateTitle'),
+        body: 'Versión 7.8\nNovedades de la versión',
+      );
+      entry = NotificationInbox.entries.first;
+      expect(entry.data.containsKey('downloadProgress'), isFalse);
+      expect(entry.data.containsKey('downloaded'), isFalse);
+      expect(entry.title, tr('inboxUpdateTitle'));
+    });
+
+    testWidgets('la bandeja enseña la barra con el progreso',
+        (tester) async {
+      await NotificationInbox.setDownloadProgress(
+        infoJson: info,
+        progress: 0.42,
+        title: tr('inboxDownloadingTitle'),
+        body: 'Versión 7.8 · 42%',
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: NotificationsScreen(onOpenScreen: (_) {}),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(find.text(tr('inboxDownloadingTitle')), findsOneWidget);
     });
   });
 

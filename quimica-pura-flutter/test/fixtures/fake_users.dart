@@ -108,6 +108,9 @@ class FakeUsers {
             .subtract(const Duration(days: 60))
             .millisecondsSinceEpoch,
         'lastActive': anchor.millisecondsSinceEpoch,
+        // En línea (latido de ahora): los tests de duelos retan a
+        // estos usuarios y el reto exige rival en línea (7.7).
+        'lastSeenMs': anchor.millisecondsSinceEpoch,
         'appVersion': '7.0',
       });
     }

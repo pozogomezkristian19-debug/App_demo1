@@ -1,11 +1,15 @@
+import '../widgets/icon_animations.dart';
 import '../widgets/duo_button.dart';
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:lottie/lottie.dart';
 import '../services/accent.dart';
+import '../services/platform_check.dart';
 import '../widgets/lucide_icons.dart';
 import '../data/i18n/content_i18n.dart';
 import '../data/questions.dart';
+import '../data/topics.dart';
 import '../models.dart';
 import '../services/home_widget_service.dart';
 
@@ -71,28 +75,6 @@ const int _mixedSize = 24; // examen mixto de Universidad
 const int _mixedSizeBach = 16; // examen mixto de Bachillerato
 const int _reviewMax = 20;
 
-/// Temas de la pista Universidad, en orden.
-const List<String> uniTopics = [
-  'estequiometria',
-  'gases',
-  'disoluciones',
-  'acido-base',
-  'equilibrio',
-  'termo-cinetica',
-  'tabla',
-  'enlace',
-  'organica',
-  'laboratorio',
-];
-
-/// Temas de la pista Bachillerato, en orden.
-const List<String> bachTopics = [
-  'bach-estequiometria',
-  'bach-disoluciones',
-  'bach-gases',
-  'bach-acido-base',
-];
-
 // ---- Camino de niveles (estilo Duolingo / Candy Crush) ----
 
 // Alturas fijas del camino: las filas usan las mismas, así el
@@ -111,8 +93,6 @@ const double _nodeCenterY = 50.0; // centro del nodo dentro de su fila
 // Desplazamiento horizontal de cada nodo (px desde el centro): el camino
 // serpentea izquierda-centro-derecha, como en Duolingo.
 const List<double> _pathOffsets = [0, -52, -78, -52, 0, 52, 78, 52];
-
-
 
 // Rediseño claro estilo Duolingo (color propio, teal de Melli-Qui):
 // el camino, sus nodos y las cabeceras de tema usan todos el mismo
@@ -137,7 +117,7 @@ class _QuizItem {
 class _QuizSpec {
   const _QuizSpec(
       {required this.kind, this.topic, this.level = 0, this.reviewOnly});
-  final String kind; // 'level', 'review' o 'mixto'
+  final String kind; // 'level', 'review', 'topicExam' o 'mixto'
   final String? topic;
   final int level;
 
@@ -192,8 +172,29 @@ class _PracticarScreenState extends State<PracticarScreen> {
   var _scrolledToCurrent = false;
   var _backRegistered = false;
 
+  /// Control del camino: la flechita para subir (Niveles con vida,
+  /// 2026-11-14) aparece al bajar y vuelve arriba con animación.
+  final _scrollController = ScrollController();
+  var _showTopButton = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    final show = _scrollController.hasClients &&
+        _scrollController.offset > 600;
+    if (show != _showTopButton) {
+      setState(() => _showTopButton = show);
+    }
+  }
+
   @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
     if (_backRegistered) BackNav.unregister(_closeQuiz);
     super.dispose();
   }
@@ -497,9 +498,41 @@ class _PracticarScreenState extends State<PracticarScreen> {
         return _buildLevelQuestions(spec.topic!, spec.level);
       case 'review':
         return _buildReviewQuestions(spec.reviewOnly);
+      case 'topicExam':
+        return _buildTopicExamQuestions(spec.topic!);
       default:
         return _buildMixedQuestions();
     }
+  }
+
+  /// Examen de un tema (Kristian, 2026-11-14): 10 preguntas del tema.
+  /// Primero el banco (barajado, con id español estable); si el banco
+  /// es corto (Bachillerato: 8 por tema) se completa con preguntas
+  /// generadas del mismo tema, como el examen mixto. Sin generador
+  /// (orgánica, laboratorio) el banco sobra para las 10.
+  List<_QuizItem> _buildTopicExamQuestions(String topic) {
+    final rng = PracticarScreen.randomFactory();
+    final items = <_QuizItem>[];
+    final used = <String>{};
+    final pool = List<QuizQuestion>.of(_byTopic[topic] ?? <QuizQuestion>[]);
+    final spanishPool = _spanishByTopic[topic] ?? <QuizQuestion>[];
+    final order = List<int>.generate(pool.length, (i) => i)..shuffle(rng);
+    for (final i in order) {
+      if (items.length >= ProgressService.topicExamSize) break;
+      final id = bankId(spanishPool[i]);
+      if (used.add(id)) items.add(_QuizItem(id: id, question: pool[i]));
+    }
+    var guard = 0;
+    while (items.length < ProgressService.topicExamSize && guard < 100) {
+      guard++;
+      if (!topicGeneratorTypes.containsKey(topic)) break;
+      final g = generateForTopic(topic, rng);
+      if (used.add(g.id)) {
+        items.add(_QuizItem(id: g.id, question: g.question));
+      }
+    }
+    items.shuffle(rng);
+    return items;
   }
 
   String _titleFor(_QuizSpec spec) {
@@ -510,6 +543,9 @@ class _PracticarScreenState extends State<PracticarScreen> {
         return spec.reviewOnly != null
             ? tr('smartReviewTitle')
             : tr('reviewTitle');
+      case 'topicExam':
+        return tr('topicExamTitle')
+            .replaceFirst('%s', localizedTopicName(spec.topic!));
       default:
         return tr('mixedTitle');
     }
@@ -550,7 +586,9 @@ class _PracticarScreenState extends State<PracticarScreen> {
       _quiz = _QuizState(
         testId: spec.kind == 'level'
             ? 'level:${spec.topic}:${spec.level}'
-            : spec.kind,
+            : spec.kind == 'topicExam'
+                ? ProgressService.topicExamTestId(spec.topic!)
+                : spec.kind,
         title: _titleFor(spec),
         items: questions,
         replayOfPassed: replayOfPassed,
@@ -646,10 +684,10 @@ class _PracticarScreenState extends State<PracticarScreen> {
         // "Pasar de nivel" (fix5, punto 13): solo en niveles y solo
         // si hay uno después; en el último nivel del tema no hay
         // botón (el resultado solo ofrece Repetir y Volver).
-        onNextLevel: _spec!.kind == 'level' &&
-                _spec!.level < _levelCount(_spec!.topic!)
-            ? _nextLevel
-            : null,
+        onNextLevel:
+            _spec!.kind == 'level' && _spec!.level < _levelCount(_spec!.topic!)
+                ? _nextLevel
+                : null,
       );
     }
     final progress = ProgressService.instance;
@@ -702,9 +740,37 @@ class _PracticarScreenState extends State<PracticarScreen> {
       );
     }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-      child: Column(
+    // Examen del tema (Kristian, 2026-11-14): al final de cada tema,
+    // con su trofeo. Desbloqueado al completar todos sus niveles.
+    Widget topicExamSection(int i) {
+      final topic = topics[i];
+      final unlocked = ProgressService.instance.isTopicComplete(topic);
+      final done =
+          ProgressService.instance.unlockedLevel(topic) - 1;
+      final count = _levelCount(topic);
+      return _TopicExamSection(
+        topic: topic,
+        unlocked: unlocked,
+        levelsDone: done.clamp(0, count),
+        levelCount: count,
+        onTap: () {
+          if (unlocked) {
+            _start(_QuizSpec(kind: 'topicExam', topic: topic));
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(tr('topicExamLocked'))),
+            );
+          }
+        },
+      );
+    }
+
+    return Stack(
+      children: [
+        SingleChildScrollView(
+          controller: _scrollController,
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+          child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // Cabecera compacta (fix2, item 3): solo el título, sin
@@ -730,6 +796,7 @@ class _PracticarScreenState extends State<PracticarScreen> {
           // eliminó por completo de la app y "Practicar de otra
           // forma" ya no está aquí.)
           topicSection(0),
+          topicExamSection(0),
           const SizedBox(height: 20),
           // Repaso inteligente: errores de días anteriores que resurgen.
           // Tarjeta 3D (ronda de diseño 7.0): sombra suave tintada y
@@ -737,12 +804,10 @@ class _PracticarScreenState extends State<PracticarScreen> {
           if (progress.dueFailed().isNotEmpty)
             Card(
               elevation: 3,
-              shadowColor: Theme.of(context)
-                  .colorScheme
-                  .primary
-                  .withValues(alpha: 0.20),
+              shadowColor:
+                  Theme.of(context).colorScheme.primary.withValues(alpha: 0.20),
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16)),
+                  borderRadius: BorderRadius.circular(20)),
               child: ListTile(
                 // Icono 3D (fix3, punto 6): ámbar con degradado +
                 // brillito, como el corazón de las vidas.
@@ -767,8 +832,11 @@ class _PracticarScreenState extends State<PracticarScreen> {
           // "Pregunta del día" se eliminó por completo de la app;
           // "Practicar de otra forma" (Examen con tiempo)
           // sigue existiendo y se abre desde la búsqueda.
-          // El resto de temas del camino.
-          for (var i = 1; i < topics.length; i++) topicSection(i),
+          // El resto de temas del camino, cada uno con su examen.
+          for (var i = 1; i < topics.length; i++) ...[
+            topicSection(i),
+            topicExamSection(i),
+          ],
           // Examen mixto: trofeo final del camino, bloqueado hasta pasar
           // el Nivel 1 de todos los temas de la pista.
           _FinalExamSection(
@@ -805,6 +873,42 @@ class _PracticarScreenState extends State<PracticarScreen> {
           ),
         ],
       ),
+    ),
+        // Flechita para subir (Niveles con vida, 2026-11-14): solo
+        // aparece al bajar más de 600 dp; toca y el camino vuelve
+        // arriba con animación suave. Círculo teal sólido + labio
+        // 4 px, flecha blanca (icono, no Lottie: es un botón).
+        if (_showTopButton)
+          Positioned(
+            right: 16,
+            bottom: 16,
+            child: GestureDetector(
+              onTap: () {
+                SoundService.tap();
+                _scrollController.animateTo(0,
+                    duration: const Duration(milliseconds: 500),
+                    curve: Curves.easeOut);
+              },
+              child: Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppAccent.primary,
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppAccent.primaryDark,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                alignment: Alignment.center,
+                child: const Icon(Icons.arrow_upward,
+                    color: Colors.white, size: 28),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -828,6 +932,7 @@ class _TopicPathSection extends StatelessWidget {
   });
 
   final String topic;
+
   final int bankCount;
   final int levelCount;
 
@@ -859,137 +964,136 @@ class _TopicPathSection extends StatelessWidget {
       height: _headerH + _pathTopGap + levelCount * _rowH,
       child: Column(
         children: [
-              SizedBox(
-                height: _headerH,
-                child: Container(
-                  // Banner de unidad Duolingo (§3.2.4): teal SÓLIDO
-                  // (sin degradado, sin brillo, sin sombra), 140 pt
-                  // de alto, radio 16. Título en MAYÚSCULAS 20 pt
-                  // peso 800 blanco (decisión de Kristian, ronda 3:
-                  // los nombres de tema del camino van en mayúsculas,
-                  // y el subtítulo también); subtítulo 15 pt peso 500
-                  // blanco al 85 %. A la derecha, la mascota ilustrada
-                  // (Brenda/Britany, sin aro) en lugar del círculo
-                  // blanco con el símbolo del tema.
-                  decoration: BoxDecoration(
-                    // Bloqueado en oscuro (auditoría 7.2): gris
-                    // oscuro del tema, no #E5E5E5 claro; el texto
-                    // bloqueado también se aclara (ver abajo).
-                    color: locked
-                        ? (isDark
-                            ? scheme.surfaceContainerHighest
-                            : const Color(0xFFE5E5E5))
-                        : AppAccent.primary,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Cabecera del camino (fix3): el título
-                            // COMPLETO del tema (topics.dart), nunca
-                            // el id interno: 'bach-disoluciones' se
-                            // ve como 'Disoluciones y concentración',
-                            // también en la tarjeta bloqueada.
-                            // Título auto-escalado (alcance 8,
-                            // 2026-11-12): el título NUNCA parte una
-                            // palabra ni se corta ("ESTEQUIOMETRÍ /
-                            // A Y EL MOL" en la captura). Base 20 pt
-                            // en MAYÚSCULAS; si no cabe en 2 líneas,
-                            // el FittedBox lo reduce hasta que quepa.
-                            // Las palabras solo se parten entre
-                            // ellas: el salto se decide al tamaño
-                            // base, donde la palabra más larga
-                            // ("ESTEQUIOMETRÍA") cabe en la línea.
-                            // La caja fija de 54 pt (= 2 líneas a
-                            // 20 pt) es lo que hace que el FittedBox
-                            // escale: sin altura acotada no hay nada
-                            // contra lo que escalar. Sin maxLines ni
-                            // ellipsis: nada se corta. Vale para
-                            // los 14 temas del camino (10 Uni + 4
-                            // Bach) en sus dos versiones
-                            // (bloqueado/desbloqueado) y los dos
-                            // temas (claro/oscuro).
-                            LayoutBuilder(
-                              builder: (context, constraints) => SizedBox(
-                                height: 54,
-                                child: FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  alignment: Alignment.centerLeft,
-                                  child: SizedBox(
-                                    width: constraints.maxWidth,
-                                    child: Text(
-                                        localizedTopicTitle(topic)
-                                            .toUpperCase(),
-                                        style: TextStyle(
-                                            fontSize: 20,
-                                            fontWeight: FontWeight.w800,
-                                            color: locked
-                                                ? (isDark
-                                                    ? scheme.onSurface
-                                                        .withValues(
-                                                            alpha: 0.6)
-                                                    : BrandColors.ink
-                                                        .withValues(
-                                                            alpha: 0.6))
-                                                : Colors.white)),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              locked
-                                  ? tr('lockedWord').toUpperCase()
-                                  : '${tr('levelWord')} ${unlocked > levelCount ? levelCount : unlocked} ${tr('quizOf')} $levelCount · ${tr('bestWord')}: $best%'
-                                      .toUpperCase(),
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w500,
-                                color: locked
-                                    ? (isDark
-                                        ? scheme.onSurface
-                                            .withValues(alpha: 0.6)
-                                        : BrandColors.ink
-                                            .withValues(alpha: 0.6))
-                                    : Colors.white.withValues(alpha: 0.85),
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      // Mascota ilustrada a la derecha (sin aro, sin
-                      // círculo blanco): Brenda los días pares y
-                      // Britany los impares.
-                      ClipOval(
-                        child: Image.asset(
-                          companionAsset(DateTime.now().day.isEven
-                              ? Companion.brenda
-                              : Companion.britany),
-                          width: 104,
-                          height: 104,
-                          fit: BoxFit.cover,
-                          filterQuality: FilterQuality.medium,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+          SizedBox(
+            height: _headerH,
+            child: Container(
+              // Banner de unidad Duolingo (§3.2.4): teal SÓLIDO
+              // (sin degradado, sin brillo, sin sombra), 140 pt
+              // de alto, radio 16. Título en MAYÚSCULAS 20 pt
+              // peso 800 blanco (decisión de Kristian, ronda 3:
+              // los nombres de tema del camino van en mayúsculas,
+              // y el subtítulo también); subtítulo 15 pt peso 500
+              // blanco al 85 %. A la derecha, la mascota ilustrada
+              // (Brenda/Britany, sin aro) en lugar del círculo
+              // blanco con el símbolo del tema.
+              decoration: BoxDecoration(
+                // Bloqueado en oscuro (auditoría 7.2): gris
+                // oscuro del tema, no #E5E5E5 claro; el texto
+                // bloqueado también se aclara (ver abajo).
+                color: locked
+                    ? (isDark
+                        ? scheme.surfaceContainerHighest
+                        : const Color(0xFFE5E5E5))
+                    : AppAccent.primary,
+                borderRadius: BorderRadius.circular(20),
               ),
-              // Aire entre el cartel y el primer nodo (fix4, punto 13
-              // REVISADO): sin esto la bolita del nivel 1 tocaba el
-              // cartel. El pintor usa el mismo hueco (_pathTopGap).
-              const SizedBox(height: _pathTopGap),
-              for (var level = 1; level <= levelCount; level++)
-                _LevelNodeRow(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Cabecera del camino (fix3): el título
+                        // COMPLETO del tema (topics.dart), nunca
+                        // el id interno: 'bach-disoluciones' se
+                        // ve como 'Disoluciones y concentración',
+                        // también en la tarjeta bloqueada.
+                        // Título auto-escalado (alcance 8,
+                        // 2026-11-12): el título NUNCA parte una
+                        // palabra ni se corta ("ESTEQUIOMETRÍ /
+                        // A Y EL MOL" en la captura). Base 20 pt
+                        // en MAYÚSCULAS; si no cabe en 2 líneas,
+                        // el FittedBox lo reduce hasta que quepa.
+                        // Las palabras solo se parten entre
+                        // ellas: el salto se decide al tamaño
+                        // base, donde la palabra más larga
+                        // ("ESTEQUIOMETRÍA") cabe en la línea.
+                        // La caja fija de 54 pt (= 2 líneas a
+                        // 20 pt) es lo que hace que el FittedBox
+                        // escale: sin altura acotada no hay nada
+                        // contra lo que escalar. Sin maxLines ni
+                        // ellipsis: nada se corta. Vale para
+                        // los 14 temas del camino (10 Uni + 4
+                        // Bach) en sus dos versiones
+                        // (bloqueado/desbloqueado) y los dos
+                        // temas (claro/oscuro).
+                        LayoutBuilder(
+                          builder: (context, constraints) => SizedBox(
+                            height: 54,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: SizedBox(
+                                width: constraints.maxWidth,
+                                child: Text(
+                                    localizedTopicTitle(topic).toUpperCase(),
+                                    style: TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w800,
+                                        color: locked
+                                            ? (isDark
+                                                ? scheme.onSurface
+                                                    .withValues(alpha: 0.6)
+                                                : BrandColors.ink
+                                                    .withValues(alpha: 0.6))
+                                            : Colors.white)),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          locked
+                              ? tr('lockedWord').toUpperCase()
+                              : '${tr('levelWord')} ${unlocked > levelCount ? levelCount : unlocked} ${tr('quizOf')} $levelCount · ${tr('bestWord')}: $best%'
+                                  .toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                            color: locked
+                                ? (isDark
+                                    ? scheme.onSurface.withValues(alpha: 0.6)
+                                    : BrandColors.ink.withValues(alpha: 0.6))
+                                : Colors.white.withValues(alpha: 0.85),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Mascota ilustrada a la derecha (sin aro, sin
+                  // círculo blanco): Brenda los días pares y
+                  // Britany los impares.
+                  ClipOval(
+                    child: Image.asset(
+                      companionAsset(DateTime.now().day.isEven
+                          ? Companion.brenda
+                          : Companion.britany),
+                      width: 104,
+                      height: 104,
+                      fit: BoxFit.cover,
+                      filterQuality: FilterQuality.medium,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // Aire entre el cartel y el primer nodo (fix4, punto 13
+          // REVISADO): sin esto la bolita del nivel 1 tocaba el
+          // cartel. El pintor usa el mismo hueco (_pathTopGap).
+          const SizedBox(height: _pathTopGap),
+          for (var level = 1; level <= levelCount; level++)
+            // Entrada escalonada (pulido 7.7): cada nodo del
+            // camino entra con fundido + subida suave.
+            FadeSlideIn(
+              delay: Duration(milliseconds: ((level - 1) * 40).clamp(0, 400)),
+              child: RepaintBoundary(
+                child: _LevelNodeRow(
                   key: level == currentLevel ? currentKey : null,
                   topic: topic,
                   level: level,
@@ -999,6 +1103,8 @@ class _TopicPathSection extends StatelessWidget {
                   isCurrent: level == currentLevel,
                   onLevelTap: onLevelTap,
                 ),
+              ),
+            ),
         ],
       ),
     );
@@ -1070,6 +1176,7 @@ class _LevelNodeRow extends StatefulWidget {
   final bool isLast;
   final bool unlocked;
   final bool isCurrent;
+
   final void Function(int level, bool unlocked) onLevelTap;
 
   @override
@@ -1151,8 +1258,7 @@ class _LevelNodeRowState extends State<_LevelNodeRow>
           // Centro del nodo siguiente en las coordenadas de esta
           // fila (una fila más abajo): la linecilla punteada va
           // del centro de este nodo a ese centro.
-          final nextOffset =
-              _pathOffsets[widget.level % _pathOffsets.length];
+          final nextOffset = _pathOffsets[widget.level % _pathOffsets.length];
           final nextCx = constraints.maxWidth / 2 + nextOffset;
           // Sin recorte (Clip.none): el halo del nodo actual mide
           // 92 px centrado en el nodo y en su pulso máximo llega a
@@ -1172,8 +1278,7 @@ class _LevelNodeRowState extends State<_LevelNodeRow>
                     painter: _NodeConnectorPainter(
                       fromX: cx,
                       toX: nextCx,
-                      color: Theme.of(context).brightness ==
-                              Brightness.dark
+                      color: Theme.of(context).brightness == Brightness.dark
                           ? const Color(0xFF667885)
                           : const Color(0xFFBDBDBD),
                     ),
@@ -1215,9 +1320,7 @@ class _LevelNodeRowState extends State<_LevelNodeRow>
                       : cx + _nodeSize / 2 + 32,
                   top: _nodeCenterY - 20,
                   child: CompanionAvatar(
-                      companion: companionOfTheDay(),
-                      size: 40,
-                      ring: false),
+                      companion: companionOfTheDay(), size: 40, ring: false),
                 ),
               Positioned(
                 left: cx - _nodeSize / 2,
@@ -1240,16 +1343,23 @@ class _LevelNodeRowState extends State<_LevelNodeRow>
                           : (isDark
                               ? scheme.surfaceContainerHighest
                               : const Color(0xFFE5E5E5)),
-                      // Labio 4 px: sombra sólida (sin desenfoque)
-                      // del color oscuro, solo en nodos con color.
-                      boxShadow: nodeLit
-                          ? [
-                              BoxShadow(
-                                color: accentDark,
-                                offset: Offset(0, 4),
-                              ),
-                            ]
-                          : null,
+                      // Labio 4 px (Niveles con vida, 2026-11-14):
+                      // sombra sólida (sin desenfoque) en TODOS los
+                      // nodos, también en los bloqueados — antes
+                      // solo la tenían los de color y por eso los
+                      // bloqueados se veían planos. Bloqueado: gris
+                      // más oscuro que la cara (#CFCFCF en claro,
+                      // surfaceContainer en oscuro).
+                      boxShadow: [
+                        BoxShadow(
+                          color: nodeLit
+                              ? accentDark
+                              : (isDark
+                                  ? scheme.surfaceContainer
+                                  : const Color(0xFFCFCFCF)),
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
                     alignment: Alignment.center,
                     child: inner,
@@ -1270,8 +1380,7 @@ class _LevelNodeRowState extends State<_LevelNodeRow>
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(999),
-                        border: Border.all(
-                            color: const Color(0xFFE5E5E5)),
+                        border: Border.all(color: const Color(0xFFE5E5E5)),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -1297,7 +1406,156 @@ class _LevelNodeRowState extends State<_LevelNodeRow>
   }
 }
 
+/// Trofeo final del camino (Niveles con vida, 2026-11-14): la
+/// animación Lottie que mandó Kristian. Desbloqueado: el trofeo
+/// se mueve en bucle. Bloqueado: una FOTO del mismo trofeo —
+/// quieto a mitad de la animación, INCLINADO y OPACO (así lo
+/// pidió Kristian: "coge una foto inclinada de esa misma
+/// animación anterior y opaca").
+class _TrophyLottie extends StatefulWidget {
+  const _TrophyLottie({required this.unlocked});
+
+  final bool unlocked;
+
+  @override
+  State<_TrophyLottie> createState() => _TrophyLottieState();
+}
+
+class _TrophyLottieState extends State<_TrophyLottie>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this);
+  }
+
+  @override
+  void didUpdateWidget(_TrophyLottie oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.unlocked && !_ctrl.isAnimating && _ctrl.duration != null) {
+      _ctrl.repeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final frozen = !widget.unlocked;
+    final lottie = Lottie.asset(
+      'assets/trophy.json',
+      width: 120,
+      height: 120,
+      fit: BoxFit.contain,
+      controller: _ctrl,
+      onLoaded: (composition) {
+        _ctrl.duration = composition.duration;
+        if (frozen ||
+            isFlutterTest ||
+            MediaQuery.of(context).disableAnimations) {
+          _ctrl.value = 0.5;
+        } else if (!_ctrl.isAnimating) {
+          _ctrl.repeat();
+        }
+      },
+    );
+    if (!frozen) return lottie;
+    return Opacity(
+      opacity: 0.45,
+      child: Transform.rotate(angle: -0.15, child: lottie),
+    );
+  }
+}
+
 /// El trofeo final del camino: el examen mixto de la pista.
+/// Examen de un tema (Kristian, 2026-11-14): al final de cada tema,
+/// con su trofeo. Desbloqueado al completar todos los niveles del
+/// tema; al aprobarlo (>= 80 %, como el examen mixto) se gana el
+/// trofeo de ese tema. Misma forma que _FinalExamSection: trofeo
+/// Lottie animado si está desbloqueado, foto inclinada y opaca si no.
+class _TopicExamSection extends StatelessWidget {
+  const _TopicExamSection({
+    required this.topic,
+    required this.unlocked,
+    required this.levelsDone,
+    required this.levelCount,
+    required this.onTap,
+  });
+
+  final String topic;
+  final bool unlocked;
+
+  /// Niveles pasados del tema (para la línea de progreso bloqueado).
+  final int levelsDone;
+  final int levelCount;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = ProgressService.instance;
+    final best = progress.bestScore(ProgressService.topicExamTestId(topic));
+    final scheme = Theme.of(context).colorScheme;
+    final title =
+        tr('topicExamTitle').replaceFirst('%s', localizedTopicTitle(topic));
+    return Column(
+      children: [
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            CircleAvatar(
+              radius: 22,
+              backgroundColor: BrandColors.amber.withValues(alpha: 0.15),
+              child: const LucideIcon(LucideIcons.trophy,
+                  color: BrandColors.amber, threeD: true),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: const TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text(tr('topicExamBody')),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        GestureDetector(
+          onTap: onTap,
+          child: _TrophyLottie(unlocked: unlocked),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          unlocked
+              ? (best > 0
+                  ? '$title · ${tr('bestWord')}: $best%'
+                  : '$title · ${ProgressService.topicExamSize} ${tr('questionsWord')}')
+              : '$title · ${tr('levelWord')} $levelsDone ${tr('quizOf')} $levelCount',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+          textAlign: TextAlign.center,
+        ),
+        if (!unlocked)
+          Text(
+            tr('topicExamLocked'),
+            style: TextStyle(color: scheme.onSurface.withValues(alpha: 0.7)),
+            textAlign: TextAlign.center,
+          ),
+        const SizedBox(height: 20),
+      ],
+    );
+  }
+}
+
 class _FinalExamSection extends StatelessWidget {
   const _FinalExamSection({
     required this.unlocked,
@@ -1322,7 +1580,6 @@ class _FinalExamSection extends StatelessWidget {
     final progress = ProgressService.instance;
     final best = progress.bestScore('mixto');
     final scheme = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       children: [
         const SizedBox(height: 8),
@@ -1353,37 +1610,12 @@ class _FinalExamSection extends StatelessWidget {
         GestureDetector(
           key: isCurrent ? currentKey : null,
           onTap: onTap,
-          // Trofeo Duolingo (§3.2.1, mismo patrón que los nodos):
-          // cara sólida teal + labio 4 px, sin degradado, sin
-          // brillo, sin sombra borrosa.
-          child: Container(
-            width: 84,
-            height: 84,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              // Bloqueado en oscuro (auditoría 7.2): gris oscuro
-              // del tema, no #E5E5E5 claro.
-              color: unlocked
-                  ? AppAccent.primary
-                  : (isDark
-                      ? scheme.surfaceContainerHighest
-                      : const Color(0xFFE5E5E5)),
-              boxShadow: unlocked
-                  ? [
-                      BoxShadow(
-                        color: AppAccent.primaryDark,
-                        offset: Offset(0, 4),
-                      ),
-                    ]
-                  : null,
-            ),
-            alignment: Alignment.center,
-            child: LucideIcon(
-              unlocked ? LucideIcons.trophy : LucideIcons.lock,
-              size: 44,
-              color: unlocked ? Colors.white : const Color(0xFFAFAFAF),
-            ),
-          ),
+          // Trofeo Lottie (Niveles con vida, 2026-11-14): la
+          // animación que mandó Kristian. Desbloqueado se mueve;
+          // bloqueado es una foto inclinada y opaca del mismo
+          // trofeo (ver _TrophyLottie). Ya no es el círculo teal
+          // con el icono.
+          child: _TrophyLottie(unlocked: unlocked),
         ),
         const SizedBox(height: 8),
         Text(
@@ -1432,8 +1664,8 @@ class _ReminderCard extends StatelessWidget {
           margin: EdgeInsets.zero,
           elevation: 3,
           shadowColor: BrandColors.amber.withValues(alpha: 0.25),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           child: const ListTile(
             // Icono 3D (fix3, punto 6): ámbar con degradado + brillo.
             leading: LucideIcon(LucideIcons.alarmClock,
@@ -1537,6 +1769,13 @@ class _QuizRunnerState extends State<_QuizRunner> {
   /// escrito sigue ahí. Se limpia al pasar a otra pregunta.
   double? _pendingNumeric;
 
+  /// Expresión tal cual se dejó ("2+5", "2+"), junto al valor
+  /// (corrección de Kristian 2026-11-13: "Sea lo que sea que deje
+  /// se queda" — la expresión vuelve tal cual, no solo el valor).
+  /// Se limpia con _pendingNumeric al pasar a otra pregunta o al
+  /// responder.
+  String? _pendingNumericExpr;
+
   /// Valor numérico ya enviado con "Usar resultado": el campo lo
   /// muestra apagado cuando la pregunta está contestada.
   double? _submittedNumeric;
@@ -1583,6 +1822,7 @@ class _QuizRunnerState extends State<_QuizRunner> {
     _order = [0, 1, 2, 3]..shuffle(PracticarScreen.randomFactory());
     _selected = null;
     _pendingNumeric = null;
+    _pendingNumericExpr = null;
     _submittedNumeric = null;
   }
 
@@ -1662,6 +1902,7 @@ class _QuizRunnerState extends State<_QuizRunner> {
     // muestre apagado.
     _submittedNumeric = value;
     _pendingNumeric = null;
+    _pendingNumericExpr = null;
     // Las preguntas de cálculo no tienen opciones que seleccionar:
     // el valor tecleado se responde en un solo paso.
     _answer(displayedIndexForNumericAnswer(
@@ -1673,6 +1914,14 @@ class _QuizRunnerState extends State<_QuizRunner> {
   void _onNumericDraft(double? value) {
     if (_pendingNumeric == value) return;
     setState(() => _pendingNumeric = value);
+  }
+
+  /// Expresión que reporta la calculadora en cada cambio (corrección
+  /// de Kristian 2026-11-13): se guarda por pregunta y se vuelve a
+  /// sembrar tal cual al reabrirla ("2+5", "2+").
+  void _onNumericExpression(String? expr) {
+    if (_pendingNumericExpr == expr) return;
+    setState(() => _pendingNumericExpr = expr);
   }
 
   /// Abre la calculadora desde el campo de respuesta (ronda 7.2):
@@ -1692,6 +1941,8 @@ class _QuizRunnerState extends State<_QuizRunner> {
       unit: _q.numericUnit,
       initialValue: _pendingNumeric,
       onDraftChanged: _onNumericDraft,
+      initialExpression: _pendingNumericExpr,
+      onExpressionChanged: _onNumericExpression,
     );
     if (value != null) _answerNumeric(value);
   }
@@ -1705,8 +1956,7 @@ class _QuizRunnerState extends State<_QuizRunner> {
   /// solo borrador (submitResult: false) para calcular a mano.
   Future<void> _openOptionCalculator() async {
     if (_selected != null) return;
-    final allNumeric =
-        _q.options.every((o) => parseOptionNumber(o) != null);
+    final allNumeric = _q.options.every((o) => parseOptionNumber(o) != null);
     final value = await CalculatorScreen.open(
       context,
       // El teclado sigue la dificultad de la pregunta — sencillo si
@@ -1716,6 +1966,8 @@ class _QuizRunnerState extends State<_QuizRunner> {
       unit: allNumeric ? parseOptionUnit(_q.options[_q.answer]) : null,
       initialValue: _pendingNumeric,
       onDraftChanged: _onNumericDraft,
+      initialExpression: _pendingNumericExpr,
+      onExpressionChanged: _onNumericExpression,
     );
     if (!mounted) return;
     if (value == null) return;
@@ -1765,8 +2017,8 @@ class _QuizRunnerState extends State<_QuizRunner> {
         // su referido como 'rewarded' (el invitador cobra al
         // abrir Invitar). Sin await: el premio no bloquea la
         // pantalla de resultado.
-        unawaited(ReferralService.maybeRewardInviteeOnLevelPass(
-            widget.spec.level));
+        unawaited(
+            ReferralService.maybeRewardInviteeOnLevelPass(widget.spec.level));
         // Puntuación del nivel (fix5, punto 15, CORREGIDO): el
         // PROMEDIO de todas las notas con las que se pasó, no la
         // mejor ni la primera. Un replay fallido no llama aquí:
@@ -1817,8 +2069,7 @@ class _QuizRunnerState extends State<_QuizRunner> {
     }
 
     final total = widget.quiz.items.length;
-    final wasCorrect =
-        _selected != null && _order[_selected!] == _q.answer;
+    final wasCorrect = _selected != null && _order[_selected!] == _q.answer;
     return Column(
       children: [
         Expanded(
@@ -1851,8 +2102,8 @@ class _QuizRunnerState extends State<_QuizRunner> {
                     ? mascotLineKey(
                         companionForTurn(_index), MascotLine.ask, _index)
                     : (wasCorrect
-                        ? mascotLineKey(companionForTurn(_index),
-                            MascotLine.praise, _index)
+                        ? mascotLineKey(
+                            companionForTurn(_index), MascotLine.praise, _index)
                         : mascotLineKey(companionForTurn(_index),
                             MascotLine.console, _index))),
               ),
@@ -1877,22 +2128,18 @@ class _QuizRunnerState extends State<_QuizRunner> {
                 const SizedBox(height: 16),
                 NumericAnswerField(
                   key: const Key('numeric-answer-field'),
-                  value: _selected != null
-                      ? _submittedNumeric
-                      : _pendingNumeric,
+                  value:
+                      _selected != null ? _submittedNumeric : _pendingNumeric,
                   unit: _q.numericUnit,
                   answered: _selected != null,
-                  onTap:
-                      _selected == null ? _openNumericCalculator : null,
+                  onTap: _selected == null ? _openNumericCalculator : null,
                 ),
                 const SizedBox(height: 6),
                 Text(
                   tr('numericKeyboardHint'),
                   style: TextStyle(
                       fontSize: 14,
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurfaceVariant),
+                      color: Theme.of(context).colorScheme.onSurfaceVariant),
                 ),
               ],
               const SizedBox(height: 16),
@@ -1928,12 +2175,10 @@ class _QuizRunnerState extends State<_QuizRunner> {
                     width: double.infinity,
                     child: OutlinedButton.icon(
                       onPressed: _openOptionCalculator,
-                      icon: const LucideIcon(LucideIcons.calculator,
-                          size: 20),
+                      icon: const LucideIcon(LucideIcons.calculator, size: 20),
                       label: Text(tr('quizCalculator')),
                       style: OutlinedButton.styleFrom(
-                        side: BorderSide(
-                            color: AppAccent.primary, width: 2),
+                        side: BorderSide(color: AppAccent.primary, width: 2),
                         foregroundColor: AppAccent.primary,
                         padding: const EdgeInsets.symmetric(
                             horizontal: 12, vertical: 12),
@@ -2055,8 +2300,7 @@ class _QuizRunnerState extends State<_QuizRunner> {
             builder: (context, constraints) {
               return SingleChildScrollView(
                 child: ConstrainedBox(
-                  constraints:
-                      BoxConstraints(minHeight: constraints.maxHeight),
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
                     child: Column(
@@ -2179,8 +2423,7 @@ class _QuizRunnerState extends State<_QuizRunner> {
               );
             },
           ),
-          if (passedLevel)
-            const Positioned.fill(child: CelebrationOverlay()),
+          if (passedLevel) const Positioned.fill(child: CelebrationOverlay()),
         ],
       ),
     );
@@ -2206,7 +2449,7 @@ class _ResultStatCard extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
         decoration: BoxDecoration(
           color: color,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
         ),
         child: Column(
           children: [

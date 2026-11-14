@@ -7,6 +7,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/localization.dart';
+import '../services/progress.dart';
 import '../services/social_service.dart';
 import '../services/user_prefs.dart';
 import '../widgets/duo_button.dart';
@@ -209,6 +210,35 @@ class _TournamentCard extends StatelessWidget {
   final ColorScheme scheme;
   final VoidCallback onTap;
 
+  /// Entrar al torneo (7.7: varios cuestan puntos). Si no alcanzan
+  /// los puntos, se avisa y no se descuenta nada ni se entra. Al
+  /// entrar NO se muestra SnackBar: el botón ya cambia a "Jugar"
+  /// y un aviso flotante taparía las opciones si se juega enseguida.
+  Future<void> _join(BuildContext context, TournamentInfo t) async {
+    final result =
+        await SocialService.joinTournament(t.id, entryFee: t.entryFee);
+    if (!context.mounted) return;
+    switch (result) {
+      case TournamentJoinResult.joined:
+      case TournamentJoinResult.alreadyJoined:
+        break;
+      case TournamentJoinResult.notEnoughPoints:
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              tr('tournNotEnoughPoints').replaceFirst(
+                  '%s',
+                  '${t.entryFee - ProgressService.instance.points}'),
+            ),
+          ),
+        );
+      case TournamentJoinResult.failed:
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(tr('tournJoinFailed'))),
+        );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = tournament;
@@ -309,6 +339,32 @@ class _TournamentCard extends StatelessWidget {
                   ),
                 ],
               ),
+              if (t.entryFee > 0) ...[
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    const LucideIcon(
+                      LucideIcons.star,
+                      size: 16,
+                      color: Color(0xFFFFC800),
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        tr('tournEntry')
+                            .replaceFirst('%s', '${t.entryFee}'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
               if (t.myBestScore != null) ...[
                 const SizedBox(height: 4),
                 Text(
@@ -339,13 +395,17 @@ class _TournamentCard extends StatelessWidget {
                             onPressed: onTap,
                             fontSize: 17,
                           )
-                    // Entrar gratis: azul #1CB0F6 (la acción
-                    // secundaria es azul en Duolingo). Nunca ámbar.
+                    // Entrar: gratis o pagando la entrada (7.7). El
+                    // botón muestra la entrada ("UNIRSE · 20 PTS").
+                    // Azul #1CB0F6 (la acción secundaria es azul en
+                    // Duolingo). Nunca ámbar.
                     : DuoButton.primary(
-                        label: tr('tournJoin').toUpperCase(),
-                        onPressed: () async {
-                          await SocialService.joinTournament(t.id);
-                        },
+                        label: (t.entryFee > 0
+                                ? tr('tournJoinPaid')
+                                    .replaceFirst('%s', '${t.entryFee}')
+                                : tr('tournJoin'))
+                            .toUpperCase(),
+                        onPressed: () => _join(context, t),
                         topColor: const Color(0xFF1CB0F6),
                         bottomColor: const Color(0xFF1CB0F6),
                         edgeColor: const Color(0xFF1899D6),
@@ -439,6 +499,73 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
     }
   }
 
+  /// Entrar al torneo (7.7: varios cuestan puntos). Si no alcanzan
+  /// los puntos, se avisa y no se descuenta nada ni se entra. Al
+  /// entrar NO se muestra SnackBar: el botón ya cambia a "Jugar"
+  /// y un aviso flotante taparía las opciones si se juega enseguida.
+  Future<void> _join(TournamentInfo t) async {
+    final result =
+        await SocialService.joinTournament(t.id, entryFee: t.entryFee);
+    if (!mounted) return;
+    switch (result) {
+      case TournamentJoinResult.joined:
+      case TournamentJoinResult.alreadyJoined:
+        break;
+      case TournamentJoinResult.notEnoughPoints:
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              tr('tournNotEnoughPoints').replaceFirst(
+                  '%s',
+                  '${t.entryFee - ProgressService.instance.points}'),
+            ),
+          ),
+        );
+      case TournamentJoinResult.failed:
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(tr('tournJoinFailed'))),
+        );
+    }
+  }
+
+  /// Salir del torneo: se pide confirmación y se avisa de que la
+  /// entrada pagada SE PIERDE (no hay reembolso). Al confirmar se
+  /// quita de 'tournamentsJoined'; el stream actualiza la pantalla.
+  Future<void> _confirmLeave(TournamentInfo t) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(tr('tournLeaveTitle')),
+        content: Text(
+          t.entryFee > 0
+              ? tr('tournLeaveLoseFee')
+                  .replaceFirst('%s', '${t.entryFee}')
+              : tr('tournLeaveConfirm'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(tr('cancel')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(tr('tournLeave')),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    final ok = await SocialService.leaveTournament(t.id);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok ? tr('tournLeftOk') : tr('tournLeaveFailed'),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -475,11 +602,8 @@ class _TournamentDetailScreenState extends State<TournamentDetailScreen> {
                   onRetry: _retrySubmit,
                   onPlay:
                       t.status == 'active' && t.joined ? _startPlaying : null,
-                  onJoin: t.joined
-                      ? null
-                      : () async {
-                          await SocialService.joinTournament(t.id);
-                        },
+                  onJoin: t.joined ? null : () => _join(t),
+                  onLeave: t.joined ? () => _confirmLeave(t) : null,
                 ),
                 if (_showVictory)
                   TournamentVictory(
@@ -503,6 +627,7 @@ class _DetailBody extends StatelessWidget {
     required this.onRetry,
     required this.onPlay,
     required this.onJoin,
+    required this.onLeave,
   });
 
   final TournamentInfo tournament;
@@ -511,6 +636,9 @@ class _DetailBody extends StatelessWidget {
   final VoidCallback onRetry;
   final VoidCallback? onPlay;
   final VoidCallback? onJoin;
+
+  /// Salir del torneo (solo cuando estoy dentro y aún no jugué).
+  final VoidCallback? onLeave;
 
   @override
   Widget build(BuildContext context) {
@@ -576,6 +704,32 @@ class _DetailBody extends StatelessWidget {
                     ),
                   ],
                 ),
+                if (t.entryFee > 0) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const LucideIcon(
+                        LucideIcons.star,
+                        size: 16,
+                        color: Color(0xFFFFC800),
+                      ),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          tr('tournEntry')
+                              .replaceFirst('%s', '${t.entryFee}'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 if (t.myBestScore != null) ...[
                   const SizedBox(height: 4),
                   Text(
@@ -597,7 +751,11 @@ class _DetailBody extends StatelessWidget {
                         )
                       : onJoin != null
                           ? DuoButton.primary(
-                              label: tr('tournJoin').toUpperCase(),
+                              label: (t.entryFee > 0
+                                      ? tr('tournJoinPaid').replaceFirst(
+                                          '%s', '${t.entryFee}')
+                                      : tr('tournJoin'))
+                                  .toUpperCase(),
                               onPressed: onJoin,
                               topColor: const Color(0xFF1CB0F6),
                               bottomColor: const Color(0xFF1CB0F6),
@@ -609,6 +767,18 @@ class _DetailBody extends StatelessWidget {
                               child: Text(tr('tournJoined')),
                             ),
                 ),
+                // Salir: solo dentro y sin haber jugado todavía (si ya
+                // jugué, mi puntaje queda en la clasificación). La
+                // entrada pagada NO se devuelve (lo avisa el diálogo).
+                if (t.joined && t.myBestScore == null && onLeave != null) ...[
+                  const SizedBox(height: 8),
+                  Center(
+                    child: TextButton(
+                      onPressed: onLeave,
+                      child: Text(tr('tournLeave')),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

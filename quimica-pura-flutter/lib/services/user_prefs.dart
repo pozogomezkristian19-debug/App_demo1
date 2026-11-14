@@ -28,6 +28,22 @@ class UserPrefs {
   static const _kMetBrenda = 'melli_met_brenda';
   static const _kMetBritany = 'melli_met_britany';
   static const _kMetKristian = 'melli_met_kristian';
+  // Crear cuenta (Quemia 7.7, Kristian 2026-11-13, flujo estilo
+  // Duolingo): cómo supo de Quemia, cuánta química sabe y su meta
+  // diaria. Se guardan al confirmar cada pantalla del inicio.
+  static const _kHeardFrom = 'quemia_heard_from'; // 'google' |
+  // 'instagram' | 'facebook' | 'tiktok' | 'friends' | 'other'
+  static const _kChemLevel = 'quemia_chem_level'; // 0..4
+  static const _kDailyGoal = 'quemia_daily_goal'; // minutos/día
+
+  /// ¿Cómo supo de Quemia? ('' = aún no lo dijo).
+  static String heardFrom = '';
+
+  /// ¿Cuánta química sabe? 0..4 (-1 = aún no lo dijo).
+  static int chemLevel = -1;
+
+  /// Meta diaria de estudio en minutos (3 | 10 | 15 | 30).
+  static int dailyGoalMinutes = 10;
 
   static bool onboardingDone = false;
   static String userName = '';
@@ -56,6 +72,12 @@ class UserPrefs {
   }
 
   static String language = 'es';
+
+  /// Si el usuario eligió el idioma alguna vez (hay valor guardado
+  /// en 'melli_language'). Si es false (primera instalación), la app
+  /// coge el idioma del sistema del teléfono (ver AppLang.load).
+  static bool languageSet = false;
+
   static String track = 'uni';
 
   /// Nombre público ÚNICO (referidos 7.3): el que se ve en la
@@ -108,8 +130,12 @@ class UserPrefs {
     themeModeNotifier.value = themeMode;
     isDark = effectiveDark;
     language = prefs.getString(_kLanguage) ?? 'es';
+    languageSet = prefs.containsKey(_kLanguage);
     publicUsername = prefs.getString(_kPublicUsername) ?? '';
-    track = prefs.getString(_kTrack) ?? 'uni';
+    // Quemia 7.7: el Bachillerato se eliminó. Un teléfono que tenía
+    // 'bach' guardado vuelve a 'uni' solo al abrir la app.
+    final storedTrack = prefs.getString(_kTrack) ?? 'uni';
+    track = storedTrack == 'bach' ? 'uni' : storedTrack;
     soundOn = prefs.getBool(_kSoundOn) ?? true;
     reminderOn = prefs.getBool(_kReminderOn) ?? false;
     reminderHour = prefs.getInt(_kReminderHour) ?? 19;
@@ -122,9 +148,22 @@ class UserPrefs {
     metBrenda = prefs.getBool(_kMetBrenda) ?? false;
     metBritany = prefs.getBool(_kMetBritany) ?? false;
     metKristian = prefs.getBool(_kMetKristian) ?? false;
+    // Crear cuenta (Quemia 7.7): cómo supo de Quemia, cuánto sabe
+    // y su meta diaria. Sin guardar: '' / -1 / 10 min.
+    heardFrom = prefs.getString(_kHeardFrom) ?? '';
+    chemLevel = prefs.getInt(_kChemLevel) ?? -1;
+    dailyGoalMinutes = prefs.getInt(_kDailyGoal) ?? 10;
+    if (dailyGoalMinutes != 3 &&
+        dailyGoalMinutes != 10 &&
+        dailyGoalMinutes != 15 &&
+        dailyGoalMinutes != 30) {
+      dailyGoalMinutes = 10;
+    }
   }
 
-  static Future<void> saveProfile(String name, String gender) async {
+  /// Sin género (Quemia 7.7, Kristian 2026-11-13: ya no se pregunta
+  /// el género): [gender] es '' y el saludo usa "Bienvenido/a".
+  static Future<void> saveProfile(String name, [String gender = '']) async {
     final prefs = await SharedPreferences.getInstance();
     userName = name.trim();
     userGender = gender;
@@ -132,6 +171,42 @@ class UserPrefs {
     await prefs.setString(_kUserName, userName);
     await prefs.setString(_kUserGender, userGender);
     await prefs.setBool(_kOnboardingDone, true);
+  }
+
+  /// Marca el onboarding como hecho SIN guardar perfil (ruta "Sin
+  /// conexión", Quemia 7.7, Kristian 2026-11-13): el usuario entra
+  /// directo a la principal sin nombre ni género, y el onboarding
+  /// no vuelve a salir al abrir la app. El perfil se puede crear
+  /// después desde Cuenta (vincular Google o rellenar el perfil).
+  static Future<void> markOnboardingDone() async {
+    final prefs = await SharedPreferences.getInstance();
+    onboardingDone = true;
+    await prefs.setBool(_kOnboardingDone, true);
+  }
+
+  /// Crear cuenta (Quemia 7.7): guarda cómo supo de Quemia
+  /// ('google' | 'instagram' | 'facebook' | 'tiktok' | 'friends' |
+  /// 'other'). Se llama al confirmar la pantalla del inicio.
+  static Future<void> saveHeardFrom(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    heardFrom = value;
+    await prefs.setString(_kHeardFrom, value);
+  }
+
+  /// Crear cuenta (Quemia 7.7): guarda cuánta química sabe (0..4).
+  static Future<void> saveChemLevel(int level) async {
+    final prefs = await SharedPreferences.getInstance();
+    chemLevel = level;
+    await prefs.setInt(_kChemLevel, level);
+  }
+
+  /// Crear cuenta (Quemia 7.7): guarda su meta diaria (3 | 10 |
+  /// 15 | 30 min). Un valor raro se sanea a 10.
+  static Future<void> saveDailyGoal(int minutes) async {
+    final prefs = await SharedPreferences.getInstance();
+    dailyGoalMinutes =
+        (minutes == 3 || minutes == 15 || minutes == 30) ? minutes : 10;
+    await prefs.setInt(_kDailyGoal, dailyGoalMinutes);
   }
 
   /// Guarda el nombre público único (referidos 7.3): el que se ve
@@ -166,6 +241,7 @@ class UserPrefs {
   static Future<void> saveLanguage(String code) async {
     final prefs = await SharedPreferences.getInstance();
     language = code;
+    languageSet = true;
     await prefs.setString(_kLanguage, code);
   }
 
@@ -245,7 +321,13 @@ class UserPrefs {
   /// Sin nombre guardado, "Hola" como antes.
   static String get greeting {
     if (userName.isEmpty) return 'Hola';
-    final word = userGender == 'Femenino' ? 'Bienvenida' : 'Bienvenido';
+    // Sin género guardado (Quemia 7.7, Kristian 2026-11-13: ya no
+    // se pregunta el género): saludo neutro "Bienvenido/a".
+    final word = switch (userGender) {
+      'Femenino' => 'Bienvenida',
+      'Masculino' => 'Bienvenido',
+      _ => 'Bienvenido/a',
+    };
     return '$word $firstName';
   }
 }

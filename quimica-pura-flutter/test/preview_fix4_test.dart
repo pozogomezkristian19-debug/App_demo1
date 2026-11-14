@@ -8,7 +8,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quimica_pura/main.dart';
-import 'package:quimica_pura/screens/account_screen.dart';
 import 'package:quimica_pura/screens/notifications_screen.dart';
 import 'package:quimica_pura/screens/settings_screen.dart';
 import 'package:quimica_pura/screens/tabla_screen.dart';
@@ -282,36 +281,10 @@ void main() {
     await shot(tester, 'fix4_update_check_button.png');
   });
 
-  testWidgets('fix4_cuenta_soporte: Cuenta con la fila de Soporte al final',
-      (tester) async {
-    await setPhone(tester);
-    await tester.pumpWidget(
-      MaterialApp(
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(useMaterial3: true),
-        home: Scaffold(
-          body: AccountScreen(
-            onOpenScreen: (_) {},
-            onShowAbout: () {},
-            onShowShareApp: () {},
-            trackTopics: const [],
-          ),
-        ),
-      ),
-    );
-    // Sin pumpAndSettle: el corazón de la tarjeta de estadísticas
-    // late sin parar (PulseWidget repite cada 1200 ms).
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.scrollUntilVisible(
-      find.text('Soporte'),
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-    await shot(tester, 'fix4_cuenta_soporte.png');
-  });
+  // Quemia 7.7: Soporte ELIMINADO (se borró la fila de Cuenta
+  // y la ruta 'support'). Este test buscaba la fila 'Soporte' en
+  // Cuenta; se borra entero (el golden fix4_cuenta_soporte.png
+  // queda obsoleto).
 
   testWidgets(
       'fix4_inbox_v2: bandeja rediseñada (tintes por tipo, sin leer '

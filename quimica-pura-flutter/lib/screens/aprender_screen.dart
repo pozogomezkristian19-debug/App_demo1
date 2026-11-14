@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/icon_animations.dart';
 import '../services/accent.dart';
 import '../widgets/lucide_icons.dart';
 import '../data/i18n/content_i18n.dart';
@@ -114,12 +115,12 @@ class _AprenderScreenState extends State<AprenderScreen> {
           elevation: 0,
           color: cardColor,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(20),
             side: BorderSide(color: borderColor),
           ),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(20),
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const TipsScreen()),
@@ -171,7 +172,7 @@ class _AprenderScreenState extends State<AprenderScreen> {
           elevation: 0,
           color: cardColor,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(20),
             side: BorderSide(color: borderColor),
           ),
           child: Padding(
@@ -224,17 +225,26 @@ class _AprenderScreenState extends State<AprenderScreen> {
         // (TopicDetailScreen, la misma que usan las Ramas y la
         // búsqueda). Nada se despliega dentro de la tarjeta.
         for (var i = 0; i < visibleTopics.length; i++)
-          _TopicCard(
-            title: visibleTopics[i].title,
-            subtitle: visibleTopics[i].level,
-            cardColor: cardColor,
-            borderColor: borderColor,
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                    builder: (_) => TopicDetailScreen(topic: visibleTopics[i])),
-              );
-            },
+          // Entrada escalonada (pulido 7.7): cada tarjeta entra
+          // con fundido + subida suave, 40 ms después que la
+          // anterior (tope 400 ms para no eternizar la lista).
+          FadeSlideIn(
+            delay: Duration(milliseconds: (i * 40).clamp(0, 400)),
+            child: RepaintBoundary(
+              child: _TopicCard(
+                title: visibleTopics[i].title,
+                subtitle: visibleTopics[i].level,
+                cardColor: cardColor,
+                borderColor: borderColor,
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                        builder: (_) =>
+                            TopicDetailScreen(topic: visibleTopics[i])),
+                  );
+                },
+              ),
+            ),
           ),
       ],
     );
@@ -270,12 +280,12 @@ class _TopicCard extends StatelessWidget {
       elevation: 0,
       color: cardColor,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         side: BorderSide(color: borderColor),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(16),

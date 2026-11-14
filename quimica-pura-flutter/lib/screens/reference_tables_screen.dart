@@ -107,8 +107,7 @@ class _ActivityTab extends StatelessWidget {
                       color: i < 11 ? scheme.primary : scheme.onSurface),
                 ),
               ),
-              title: Text(
-                  '${i + 1}. ${metalActivitySeries[i].name}',
+              title: Text('${i + 1}. ${metalActivitySeries[i].name}',
                   style: const TextStyle(fontWeight: FontWeight.bold)),
               subtitle: Text(metalActivitySeries[i].reaction),
             ),
@@ -165,11 +164,11 @@ class _SolubilityTab extends StatelessWidget {
                               horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
                             color: _cellColor(v),
-                            borderRadius: BorderRadius.circular(6),
+                            borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(v,
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold)),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold)),
                         ),
                       ),
                   ],

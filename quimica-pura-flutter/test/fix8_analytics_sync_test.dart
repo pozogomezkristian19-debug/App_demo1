@@ -71,6 +71,10 @@ class HangingAnalyticsRepository implements AnalyticsRepository {
       Completer<void>().future;
 
   @override
+  Future<void> deleteDoc(String collection, String docId) =>
+      Completer<void>().future;
+
+  @override
   Future<void> removeFromArray(
           String collection, String docId, String field, Object value) =>
       Completer<void>().future;

@@ -3,10 +3,14 @@
 //   brillo del teléfono; quien guardó 'claro' u 'oscuro' lo
 //   mantiene; el legado isDark=true sigue dando 'oscuro'.
 // - Cuenta reordenada (7.1, Zona H): Vincular con Google
-//   (prominente, primera fila), Estadísticas, Mis errores,
-//   Amigos, Tabla de posiciones, Torneo, Grupos de estudio,
-//   Tienda, Acerca de, Compartir, Soporte y Ajustes; el resto
-//   vive en la pantalla Ajustes.
+//   (prominente, primera fila), Estadísticas, Amigos, Tabla de
+//   posiciones, Torneo, Tienda, Acerca de, Compartir y Ajustes;
+//   el resto vive en la pantalla Ajustes.
+//   Quemia 7.7: se borraron "Mis errores" (la pantalla de repaso
+//   sigue, desde notificaciones/búsqueda/píldora), "Grupos de
+//   estudio" y "Soporte"; en Ajustes se borró "Cambiar versión"
+//   (la pista es siempre 'uni'). Cuenta queda en 9 filas y
+//   Ajustes en 7.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quimica_pura/screens/account_screen.dart';
@@ -124,21 +128,20 @@ void main() {
       // Buscar actualización ya NO están aquí: viven en Ajustes.
       // (Diseño 7.0: la fila "Compartir mi progreso" se quitó;
       // compartir es automático.)
+      // Quemia 7.7: 9 filas (sin "Mis errores", "Grupos de
+      // estudio" ni "Soporte", eliminados).
       final expectedOrder = [
         tr('accountLinkGoogle'),
         tr('accountStats'),
-        tr('accountReview'),
         tr('accountFriends'),
         tr('accountLeaderboard'),
         tr('accountTournaments'),
-        tr('accountGroups'),
         tr('accountShop'),
         tr('accountAbout'),
         tr('accountShareApp'),
-        tr('supportWord'),
         tr('settingsTitle'),
       ];
-      expect(expectedOrder.length, 12);
+      expect(expectedOrder.length, 9);
       final texts = tester
           .widgetList<Text>(find.byType(Text))
           .map((t) => t.data ?? '')
@@ -150,28 +153,31 @@ void main() {
         if (titles.isEmpty || titles.last != data) titles.add(data);
       }
       expect(titles, expectedOrder);
-      // Las 3 primeras no cambian: Google, Estadísticas, Errores.
+      // Las 3 primeras no cambian: Google, Estadísticas, Amigos
+      // (7.7: "Mis errores" ya no es fila de Cuenta).
       expect(titles.sublist(0, 3), [
         tr('accountLinkGoogle'),
         tr('accountStats'),
-        tr('accountReview'),
+        tr('accountFriends'),
       ]);
       // El resto sigue el orden pedido.
       expect(titles.sublist(3), [
-        tr('accountFriends'),
         tr('accountLeaderboard'),
         tr('accountTournaments'),
-        tr('accountGroups'),
         tr('accountShop'),
         tr('accountAbout'),
         tr('accountShareApp'),
-        tr('supportWord'),
         tr('settingsTitle'),
       ]);
-      // Nada de lo que se mudó a Ajustes queda en Cuenta.
+      // Nada de lo que se mudó a Ajustes queda en Cuenta — y
+      // tampoco el interruptor rápido "Tema": desde la 7.7
+      // (Kristian 2026-11-14: "el botón de cambiar modo claro y
+      // oscuro, me gusta, pero no ahí" — "En el menú lateral")
+      // vive al pie del MENÚ LATERAL, en su sección "TEMA";
+      // el sistema de temas sigue viviendo en Ajustes.
+      expect(find.text(tr('themeTitle')), findsNothing);
       for (final moved in [
         tr('howToPlayTitle'),
-        tr('themeTitle'),
         tr('accountLanguage'),
         tr('accountVersion'),
         tr('accountFavorites'),
@@ -181,6 +187,8 @@ void main() {
       ]) {
         expect(find.text(moved), findsNothing);
       }
+      // (El tap del interruptor rápido vive ahora en el menú
+      // lateral: lo cubre fix6_menu_test.dart.)
     });
 
     testWidgets('Ajustes trae las filas mudadas, en su orden',
@@ -206,17 +214,18 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
+      // Quemia 7.7: 7 filas (sin "Cambiar versión", eliminado;
+      // la pista es siempre 'uni').
       final expectedOrder = [
         tr('themeTitle'),
         tr('accountReminder'),
         tr('howToPlayTitle'),
         tr('checkUpdateTitle'),
         tr('accountLanguage'),
-        tr('accountVersion'),
         tr('accountFavorites'),
         tr('accountShareProgress'),
       ];
-      expect(expectedOrder.length, 8);
+      expect(expectedOrder.length, 7);
       final texts = tester
           .widgetList<Text>(find.byType(Text))
           .map((t) => t.data ?? '')

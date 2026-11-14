@@ -56,6 +56,38 @@ void main() {
     UserPrefs.soundOn = false;
     await SoundService.correct();
     await SoundService.levelUp();
+    await SoundService.tap();
+    await SoundService.preloadTap();
     UserPrefs.soundOn = true;
+  });
+
+  test('preloadTap no lanza sin plugin de audio', () async {
+    UserPrefs.soundOn = true;
+    await SoundService.preloadTap();
+    // Y se puede llamar dos veces seguidas sin problema.
+    await SoundService.preloadTap();
+  });
+
+  test('tap() es dispara y olvida: se completa al instante', () async {
+    UserPrefs.soundOn = true;
+    final sw = Stopwatch()..start();
+    await SoundService.tap();
+    sw.stop();
+    // Si tap() esperara al sonido (o al stop de 300 ms), tardaría
+    // más; al ser dispara y olvida, vuelve en milisegundos.
+    expect(sw.elapsedMilliseconds, lessThan(500));
+  });
+
+  test('toques rápidos seguidos no se cortan ni lanzan', () async {
+    UserPrefs.soundOn = true;
+    // Diez toques sin esperar entre ellos, como al tocar botones
+    // rápido: ninguno debe lanzar ni quedarse colgado, y todos
+    // deben completarse.
+    final futures = <Future<void>>[
+      for (var i = 0; i < 10; i++) SoundService.tap(),
+    ];
+    await Future.wait(futures);
+    // Y un toque justo después de la ráfaga también funciona.
+    await SoundService.tap();
   });
 }

@@ -238,8 +238,13 @@ class ProgressService {
   }
 
   /// Cambia de pista y vuelve a leer el progreso guardado de esa pista.
+  /// Quemia 7.7 (Kristian): el Bachillerato se eliminó — solo queda
+  /// la Universidad, un nivel global. 'bach' ya no se acepta: se
+  /// trata como 'uni' para que un teléfono viejo no se quede en una
+  /// pista que ya no existe.
   static Future<void> setTrack(String t) async {
-    if (t != trackBach && t != trackUni) return;
+    if (t == trackBach) t = trackUni;
+    if (t != trackUni) return;
     if (t == track) return;
     track = t;
     final prefs = instance._prefs ?? await SharedPreferences.getInstance();
@@ -428,6 +433,29 @@ class ProgressService {
 
   int bestScore(String testId) => bestScores[testId] ?? 0;
 
+  // ---- Examen por tema y trofeos (Kristian, 2026-11-14) ----
+
+  /// Preguntas del examen de un tema (el mismo tamaño en las dos
+  /// pistas: el banco más corto, Bachillerato, tiene 8 preguntas
+  /// por tema; las 2 que faltan salen del generador, como en el
+  /// examen mixto).
+  static const int topicExamSize = 10;
+
+  /// Nota mínima para ganar el trofeo del tema: la misma que el
+  /// examen mixto (logro en achievements.dart: bestScore >= 80).
+  static const int topicExamPassPercent = 80;
+
+  /// Clave de mejor puntuación del examen de un tema.
+  static String topicExamTestId(String topic) => 'examen:$topic';
+
+  /// ¿El tema tiene su trofeo ganado? (examen aprobado con >= 80 %).
+  bool hasTrophy(String topic) =>
+      bestScore(topicExamTestId(topic)) >= topicExamPassPercent;
+
+  /// Trofeos ganados de una lista de temas (la pista actual).
+  int trophyCount(List<String> topics) =>
+      topics.where(hasTrophy).length;
+
   void recordScore(String testId, int percent) {
     if (percent > bestScore(testId)) {
       bestScores[testId] = percent;
@@ -497,6 +525,7 @@ class ProgressService {
   /// manda lo del teléfono.
   static Future<void> applyRecoveredData({
     Map<String, Map<String, int>> levelsByTrack = const {},
+    Map<String, List<String>> trophiesByTrack = const {},
     int? points,
     Iterable<String> practiceDays = const [],
   }) async {
@@ -518,6 +547,26 @@ class ProgressService {
           changed = true;
         }
       });
+      if (changed) await prefs.setString(key, jsonEncode(current));
+    }
+    // Trofeos por pista (examen por tema, Kristian 2026-11-14): un
+    // trofeo ganado deja la mejor nota del examen en 80 % como mínimo
+    // (el listón del trofeo), sin tocar las notas mayores que ya haya.
+    for (final entry in trophiesByTrack.entries) {
+      final t = entry.key;
+      if (t != trackBach && t != trackUni) continue;
+      final key = t == trackBach
+          ? 'melli_progress_bach_best'
+          : 'melli_progress_best';
+      final current = _readIntMap(prefs.getString(key));
+      var changed = false;
+      for (final topic in entry.value) {
+        final testId = topicExamTestId(topic);
+        if ((current[testId] ?? 0) < topicExamPassPercent) {
+          current[testId] = topicExamPassPercent;
+          changed = true;
+        }
+      }
       if (changed) await prefs.setString(key, jsonEncode(current));
     }
     // Releer (la pista actual refleja la mezcla) y luego puntos/racha.

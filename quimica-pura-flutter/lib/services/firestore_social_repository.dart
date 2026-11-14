@@ -41,11 +41,14 @@
 //   - Amigos: la lista muestra solo a los que dieron permiso.
 import 'dart:async';
 
+import '../data/topics.dart';
 import 'analytics_sync.dart';
 import 'auth_service.dart';
 import 'duels_service.dart';
 import 'friends_groups_service.dart' as fg;
 import 'online_common.dart';
+import 'presence_service.dart';
+import 'progress.dart';
 import 'reports_service.dart';
 import 'shop_service.dart';
 import 'social_service.dart';
@@ -114,6 +117,26 @@ class FirestoreSocialRepository implements SocialRepository {
       orElse: () => '',
     );
     if (avatarIdRaw.isNotEmpty) avatarId = avatarIdRaw;
+    // Trofeos (examen por tema, Kristian 2026-11-14): los demás ven
+    // cuántos trofeos lleva el amigo, de los temas de SU pista.
+    var trophiesWon = 0;
+    var trophiesTotal = 0;
+    final friendTrack = doc?['track']?.toString();
+    final friendTopics = friendTrack == ProgressService.trackBach
+        ? bachTopics
+        : uniTopics;
+    trophiesTotal = friendTopics.length;
+    final rawTrophies = doc?['trophies'];
+    if (rawTrophies is Map) {
+      final list = rawTrophies[friendTrack == ProgressService.trackBach
+          ? ProgressService.trackBach
+          : ProgressService.trackUni];
+      if (list is List) {
+        trophiesWon = list
+            .where((v) => v is String && friendTopics.contains(v))
+            .length;
+      }
+    }
     return FriendEntry(
       deviceId: f.uid,
       username: f.username,
@@ -122,6 +145,10 @@ class FirestoreSocialRepository implements SocialRepository {
       streak: f.streak,
       badgeId: badgeId,
       avatarId: avatarId,
+      lastSeenMs: f.lastSeenMs,
+      isBot: f.isBot,
+      trophiesWon: trophiesWon,
+      trophiesTotal: trophiesTotal,
     );
   }
 
@@ -200,21 +227,42 @@ class FirestoreSocialRepository implements SocialRepository {
   Future<DuelState> createDuel(
       {String? opponentUsername, bool random = false}) async {
     Duel? duel;
+    String? offlineName;
     if (random) {
       duel = await DuelService.createRandomDuel();
     } else {
       final name = (opponentUsername ?? '').trim();
       final rival = name.isEmpty ? null : await findUserByUsername(name);
       if (rival != null) {
-        duel = await DuelService.createDuel(
-          rivalUid: rival.deviceId,
-          rivalName: rival.username,
-        );
+        // Retar exige rival en línea (corrección de Kristian
+        // 2026-11-13). El rival ya trae su último latido en la
+        // entrada (sin lectura extra): si es REAL y no está en
+        // línea, no se crea el duelo y la pantalla avisa. Los bots
+        // quedan exentos (siempre disponibles).
+        if (!rival.isBot &&
+            !PresenceService.isOnline(rival.lastSeenMs)) {
+          offlineName = rival.username;
+        } else {
+          duel = await DuelService.createDuel(
+            rivalUid: rival.deviceId,
+            rivalName: rival.username,
+          );
+        }
       }
     }
     if (duel == null) {
-      // Sin rival o sin red: la pantalla no tiene estado de error,
-      // así que se devuelve "buscando rival" (se puede cancelar).
+      // Rival sin conexión: la pantalla avisa "[nombre] no está en
+      // línea" en vez de quedarse en "buscando rival" para siempre.
+      // Sin rival o sin red: "buscando rival" (se puede cancelar).
+      if (offlineName != null) {
+        return DuelState(
+          matchId: '',
+          opponentName: offlineName,
+          phase: DuelPhase.searching,
+          questions: const [],
+          offlineOpponent: offlineName,
+        );
+      }
       return const DuelState(
         matchId: '',
         opponentName: '',
@@ -464,6 +512,7 @@ class FirestoreSocialRepository implements SocialRepository {
         dateRange: _dateRange(t.startAtMs, t.endAtMs),
         questionCount: t.questionIds.length,
         prizePoints: t.prizePoints,
+        entryFee: t.entryFee,
         status: t.isActive ? 'active' : 'upcoming',
         myBestScore: myScore?.bestScore,
         joined: joined.contains(t.id) || myScore != null,
@@ -495,10 +544,27 @@ class FirestoreSocialRepository implements SocialRepository {
   }
 
   @override
-  Future<void> joinTournament(String id) async {
-    if (!OnlineCommon.allowed || _me.isEmpty || id.isEmpty) return;
-    await OnlineCommon.write(() => AnalyticsSync.repository
+  Future<bool> joinTournament(String id, {int? newPointsBalance}) async {
+    if (!OnlineCommon.allowed || _me.isEmpty || id.isEmpty) return false;
+    final ok = await OnlineCommon.write(() => AnalyticsSync.repository
         .addToArray('users', _me, 'tournamentsJoined', id));
+    if (!ok) return false;
+    if (newPointsBalance != null) {
+      // La entrada ya se descontó en local: se escribe el saldo
+      // nuevo en el doc (el campo 'points' está permitido). Si esto
+      // falla, no pasa nada grave: el próximo uploadProgress vuelve
+      // a subir el saldo local.
+      await OnlineCommon.write(() => AnalyticsSync.repository.setDoc(
+          'users', _me, <String, dynamic>{'points': newPointsBalance}));
+    }
+    return true;
+  }
+
+  @override
+  Future<bool> leaveTournament(String id) async {
+    if (!OnlineCommon.allowed || _me.isEmpty || id.isEmpty) return false;
+    return OnlineCommon.write(() => AnalyticsSync.repository
+        .removeFromArray('users', _me, 'tournamentsJoined', id));
   }
 
   @override

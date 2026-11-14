@@ -898,6 +898,8 @@ class _RedeemCodeScreenState extends State<RedeemCodeScreen> {
                         controller: _controllers[i],
                         focusNode: _nodes[i],
                         textAlign: TextAlign.center,
+                        cursorHeight: 28,
+                        textAlignVertical: TextAlignVertical.center,
                         textCapitalization: TextCapitalization.characters,
                         keyboardType: TextInputType.text,
                         maxLength: 1,
@@ -922,9 +924,7 @@ class _RedeemCodeScreenState extends State<RedeemCodeScreen> {
                           // captura y rellenas en la siguiente).
                           filled: true,
                           fillColor: isDark
-                              ? (AppAccent.isViolet
-                                  ? const Color(0xFF1C1533)
-                                  : const Color(0xFF0F241E))
+                              ? AppAccent.darkCard
                               : Colors.white,
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(16),

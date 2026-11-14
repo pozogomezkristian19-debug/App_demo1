@@ -147,20 +147,37 @@ void main() {
   }
 
   /// Lleva el onboarding hasta la pantalla de permiso de
-  /// notificaciones (después del nombre, antes del idioma).
+  /// notificaciones (Quemia 7.7: Bienvenida -> Elección -> la gemela
+  /// -> Perfil -> Referido -> Notificaciones; sin pantalla de idioma
+  /// ni las 3 explicativas).
   Future<void> goToNotificationsPage(WidgetTester tester) async {
     await tester.pumpWidget(
       MaterialApp(home: OnboardingScreen(onFinished: () {})),
     );
     await tester.pumpAndSettle();
-    for (var i = 0; i < 4; i++) {
-      await tester.tap(find.text('SIGUIENTE'));
-      await tester.pumpAndSettle();
-    }
-    await tester.enterText(find.byType(TextField), 'Kristian');
-    await tester.tap(find.text('Masculino'));
+    // Bienvenida -> Elección -> la gemela -> cómo supo -> cuánta
+    // química sabe -> meta diaria -> Notificaciones (rediseño 7.7:
+    // Continuar, Crear mi perfil, Vamos, elegir, Continuar,
+    // elegir, Continuar, elegir, Guardar mi meta; sin pantalla de
+    // idioma). El perfil y el referido van DESPUÉS de
+    // Notificaciones, así que aquí no se rellenan.
+    await tester.tap(find.text('CONTINUAR'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('SIGUIENTE'));
+    await tester.tap(find.text('CREAR MI PERFIL'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('VAMOS'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Instagram'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('CONTINUAR'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Conozco lo básico'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('CONTINUAR'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('10 min al día'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('GUARDAR MI META'));
     await tester.pumpAndSettle();
   }
 

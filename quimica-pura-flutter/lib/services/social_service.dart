@@ -128,6 +128,10 @@ class FriendEntry {
     required this.streak,
     this.badgeId,
     this.avatarId,
+    this.lastSeenMs,
+    this.isBot = false,
+    this.trophiesWon = 0,
+    this.trophiesTotal = 0,
   });
 
   final String deviceId;
@@ -145,6 +149,19 @@ class FriendEntry {
   /// equipan aparte y se dibujan como anillo alrededor de la
   /// foto), pero no viven en este campo.
   final String? avatarId;
+
+  /// Último latido de presencia (ms desde epoch, null = nunca):
+  /// para saber si está en línea antes de retarlo a un duelo.
+  final int? lastSeenMs;
+
+  /// true si es un BOT (usuario simulado): exento del control de
+  /// en línea (siempre disponible para retar).
+  final bool isBot;
+
+  /// Trofeos de exámenes por tema (Kristian, 2026-11-14): ganados y
+  /// temas de la pista del amigo. 0/0 = sin datos (no se muestran).
+  final int trophiesWon;
+  final int trophiesTotal;
 
   /// Ruta del asset de la foto equipada, o null sin foto.
   String? get avatarAsset => SocialService.avatarAssetForId(avatarId);
@@ -282,6 +299,7 @@ class DuelState {
     this.opponentTimeMs = 0,
     this.winnerIsMe,
     this.incoming = false,
+    this.offlineOpponent,
   });
 
   final String matchId;
@@ -314,6 +332,12 @@ class DuelState {
 
   /// true si el duelo llegó de otro jugador (yo soy el retado).
   final bool incoming;
+
+  /// Nombre del rival que NO está en línea (retar exige rival en
+  /// línea): cuando no es null, el duelo no se creó y la pantalla
+  /// enseña "[nombre] no está en línea" en vez de quedarse en
+  /// "buscando rival" para siempre. Null = no aplica.
+  final String? offlineOpponent;
 
   bool get iWon {
     if (phase != DuelPhase.finished) return false;
@@ -427,6 +451,21 @@ const List<QuizQuestion> kDuelQuestions = [
 ];
 
 /// Un torneo: título, tema, fechas, preguntas, premio en puntos.
+/// Resultado de entrar a un torneo (7.7: varios cuestan puntos).
+enum TournamentJoinResult {
+  /// Entré (se descontó la entrada, si la había).
+  joined,
+
+  /// Ya estaba dentro: no se cobra dos veces.
+  alreadyJoined,
+
+  /// No alcanzan los puntos: no se descontó nada ni se entró.
+  notEnoughPoints,
+
+  /// La unión falló (sin internet): si se había descontado, se devolvió.
+  failed,
+}
+
 class TournamentInfo {
   const TournamentInfo({
     required this.id,
@@ -439,6 +478,7 @@ class TournamentInfo {
     this.myBestScore,
     this.joined = false,
     this.ranking = const [],
+    this.entryFee = 0,
   });
 
   final String id;
@@ -449,6 +489,10 @@ class TournamentInfo {
   final String dateRange;
   final int questionCount;
   final int prizePoints;
+
+  /// Entrada en puntos para participar (0 = gratis). Se paga al
+  /// unirse y no se devuelve si se sale del torneo.
+  final int entryFee;
 
   /// 'active' | 'upcoming'.
   final String status;
@@ -464,6 +508,7 @@ class TournamentInfo {
     int? myBestScore,
     bool? joined,
     List<FriendEntry>? ranking,
+    int? entryFee,
   }) =>
       TournamentInfo(
         id: id,
@@ -476,6 +521,7 @@ class TournamentInfo {
         myBestScore: myBestScore ?? this.myBestScore,
         joined: joined ?? this.joined,
         ranking: ranking ?? this.ranking,
+        entryFee: entryFee ?? this.entryFee,
       );
 }
 
@@ -559,7 +605,19 @@ abstract class SocialRepository {
   // --- Torneos ---
   Future<List<TournamentInfo>> tournaments();
   Stream<List<TournamentInfo>> tournamentsStream();
-  Future<void> joinTournament(String id);
+
+  /// Me une al torneo. Devuelve true si quedó unido. [newPointsBalance]
+  /// es el saldo de puntos DESPUÉS de descontar la entrada (si se
+  /// pagó): la implementación lo escribe en el doc del usuario junto
+  /// con la unión, para que el saldo nuevo quede también en la nube
+  /// (el descuento local lo hace quien llama, con ProgressService).
+  /// null = no se tocó el saldo (entrada gratis).
+  Future<bool> joinTournament(String id, {int? newPointsBalance});
+
+  /// Salgo del torneo (quita el id de 'tournamentsJoined'). La
+  /// entrada pagada NO se devuelve: quien llama ya avisó al usuario.
+  /// Devuelve true si se quitó.
+  Future<bool> leaveTournament(String id);
   Future<TournamentInfo?> submitTournamentScore(String id, int score,
       {int timeMs = 0});
 
@@ -667,6 +725,7 @@ class InMemorySocialRepository implements SocialRepository {
           dateRange: '10–16 nov',
           questionCount: 20,
           prizePoints: 500,
+          entryFee: 0,
           status: 'active',
           myBestScore: 12,
           joined: true,
@@ -684,6 +743,7 @@ class InMemorySocialRepository implements SocialRepository {
           dateRange: '11–17 nov',
           questionCount: 15,
           prizePoints: 400,
+          entryFee: 25,
           status: 'active',
           ranking: [
             kDemoSocialUsers[9].copyAs(points: 14),
@@ -698,6 +758,7 @@ class InMemorySocialRepository implements SocialRepository {
           dateRange: '20–26 nov',
           questionCount: 25,
           prizePoints: 800,
+          entryFee: 50,
           status: 'upcoming',
         ),
       ];
@@ -1192,11 +1253,25 @@ class InMemorySocialRepository implements SocialRepository {
       _tournamentsStream.stream;
 
   @override
-  Future<void> joinTournament(String id) async {
+  Future<bool> joinTournament(String id, {int? newPointsBalance}) async {
+    // newPointsBalance se ignora aquí: los puntos viven en
+    // ProgressService (local) en los tests, no en este repo.
+    if (!_tournaments.any((t) => t.id == id)) return false;
     _tournaments = _tournaments
         .map((t) => t.id == id ? t.copyWith(joined: true) : t)
         .toList();
     _tournamentsStream.update(currentTournaments);
+    return true;
+  }
+
+  @override
+  Future<bool> leaveTournament(String id) async {
+    if (!_tournaments.any((t) => t.id == id)) return false;
+    _tournaments = _tournaments
+        .map((t) => t.id == id ? t.copyWith(joined: false) : t)
+        .toList();
+    _tournamentsStream.update(currentTournaments);
+    return true;
   }
 
   @override
@@ -1249,6 +1324,13 @@ class InMemorySocialRepository implements SocialRepository {
   /// tests): null si no hay tiempo conocido.
   int? tournamentBestTimeMs(String tournamentId, String username) =>
       _tournTimes[tournamentId]?[username];
+
+  /// Sustituye la lista de torneos (solo tests: para probar, por
+  /// ejemplo, un torneo gratis al que aún no me uní).
+  void setTournamentsForTests(List<TournamentInfo> tournaments) {
+    _tournaments = List.of(tournaments);
+    _tournamentsStream.update(currentTournaments);
+  }
 
   // --- Tienda ---
 
@@ -1525,6 +1607,17 @@ class SocialService {
   static Future<List<DuelState>> myOpenDuels() =>
       _safe(() => _repo.myOpenDuels(), <DuelState>[]);
 
+  /// Salgo de la cola de duelo al azar (al cancelar la búsqueda o
+  /// al cerrarla). Delega en DuelService: la cola vive en el
+  /// repositorio de Analytics, no en el social.
+  static Future<void> leaveDuelQueue() async {
+    try {
+      await DuelService.leaveDuelQueue();
+    } catch (_) {
+      // Silencio: salir de la cola es best-effort.
+    }
+  }
+
   // --- Torneos ---
 
   static Future<List<TournamentInfo>> tournaments() =>
@@ -1533,8 +1626,48 @@ class SocialService {
   static Stream<List<TournamentInfo>> tournamentsStream() =>
       _safeStream(_repo.tournamentsStream());
 
-  static Future<void> joinTournament(String id) =>
-      _safeVoid(() => _repo.joinTournament(id));
+  /// Entrar a un torneo (7.7: varios cuestan puntos).
+  /// - Si ya estoy dentro, no se cobra dos veces.
+  /// - Con entrada > 0: si no alcanzan los puntos, no se descuenta
+  ///   nada ni se entra (notEnoughPoints). Si alcanzan, se descuenta
+  ///   la entrada del saldo local (mismo patrón que la tienda) y se
+  ///   escribe el saldo nuevo en la nube junto con la unión; si la
+  ///   unión falla, se devuelve lo descontado (failed).
+  static Future<TournamentJoinResult> joinTournament(String id,
+      {int entryFee = 0}) async {
+    final current =
+        await _safe(() => _repo.tournaments(), <TournamentInfo>[]);
+    if (current.any((t) => t.id == id && t.joined)) {
+      return TournamentJoinResult.alreadyJoined;
+    }
+    if (entryFee > 0) {
+      if (ProgressService.instance.points < entryFee) {
+        return TournamentJoinResult.notEnoughPoints;
+      }
+      ProgressService.instance.addPoints(-entryFee);
+    }
+    final ok = await _safe(
+        () => _repo.joinTournament(id,
+            newPointsBalance:
+                entryFee > 0 ? ProgressService.instance.points : null),
+        false);
+    if (!ok) {
+      if (entryFee > 0) {
+        // La unión falló (sin internet): se devuelve la entrada.
+        ProgressService.instance.addPoints(entryFee);
+      }
+      return TournamentJoinResult.failed;
+    }
+    return TournamentJoinResult.joined;
+  }
+
+  /// Salgo de un torneo: se quita de 'tournamentsJoined' y la
+  /// entrada pagada NO se devuelve (quien llama ya avisó). La
+  /// pantalla vuelve a mostrar el botón de entrar (pagando otra vez
+  /// si hace falta); el puntaje ya jugado, si lo hay, se queda en
+  /// la clasificación.
+  static Future<bool> leaveTournament(String id) =>
+      _safe(() => _repo.leaveTournament(id), false);
 
   static Future<TournamentInfo?> submitTournamentScore(String id, int score,
           {int timeMs = 0}) =>

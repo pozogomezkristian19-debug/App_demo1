@@ -76,6 +76,11 @@ import 'shadows.dart';
 /// (ver [_draft]): lo que se lleva escrito, aunque no se haya pulsado
 /// '='. null = a nadie le importa el borrador (opción múltiple: la
 /// calculadora es solo para calcular a mano y no persiste nada).
+/// [initialExpression] siembra la EXPRESIÓN tal cual se dejó
+/// (corrección de Kristian 2026-11-13: "Sea lo que sea que deje se
+/// queda" — "2+5" o "2+" vuelven tal cual, no solo el valor).
+/// [onExpressionChanged] reporta la expresión en cada cambio (null
+/// cuando queda vacía), para guardarla por pregunta junto al valor.
 class NumericKeypad extends StatefulWidget {
   const NumericKeypad({
     super.key,
@@ -85,6 +90,8 @@ class NumericKeypad extends StatefulWidget {
     this.scientific = true,
     this.initialValue,
     this.onDraftChanged,
+    this.initialExpression,
+    this.onExpressionChanged,
   });
 
   final String? unit;
@@ -93,6 +100,8 @@ class NumericKeypad extends StatefulWidget {
   final bool scientific;
   final double? initialValue;
   final ValueChanged<double?>? onDraftChanged;
+  final String? initialExpression;
+  final ValueChanged<String?>? onExpressionChanged;
 
   @override
   State<NumericKeypad> createState() => _NumericKeypadState();
@@ -124,6 +133,18 @@ class _NumericKeypadState extends State<NumericKeypad> {
   /// escribe una expresión nueva manda el resultado en vivo; si la
   /// expresión está incompleta ('5+'), se conserva el último valor
   /// válido en vez de perderlo.
+  /// Último borrador VÁLIDO (no nulo) que se reportó. El borrador
+  /// (_draft) es nulo cuando la expresión está incompleta (p. ej.
+  /// "2+"): si se reportara ese nulo, quien lo guarda (la pregunta)
+  /// borraría lo que el usuario llevaba escrito y al reabrir el
+  /// teclado saldría vacío — el error que reportó Kristian
+  /// (2026-11-13): escribe los datos, vuelve a la pregunta a
+  /// revisarlos y al volver al teclado todo se eliminó. Por eso
+  /// _notifyDraft reporta el último valor válido, no el nulo de
+  /// una expresión a medias. Solo se resetea a nulo cuando el campo
+  /// queda vacío de verdad (borrar todo / borrar hasta el final).
+  double? _lastDraft;
+
   double? get _draft {
     if (_justEvaluated) return _answerValue;
     if (_expr.isNotEmpty) return _liveResult ?? _answerValue;
@@ -131,20 +152,54 @@ class _NumericKeypadState extends State<NumericKeypad> {
   }
 
   /// Avisa del borrador actual a quien lo guarda (el runner, por
-  /// pregunta). Se llama después de cada cambio de tecla.
-  void _notifyDraft() => widget.onDraftChanged?.call(_draft);
+  /// pregunta). Se llama después de cada cambio de tecla. Reporta
+  /// el último valor válido: si la expresión está a medias ("2+")
+  /// el borrador es nulo pero NO se pierde lo escrito — se reporta
+  /// el 2. Solo cuando el campo queda vacío de verdad se reporta
+  /// nulo (borrar todo / borrar hasta el final).
+  void _notifyDraft() {
+    final d = _draft;
+    if (d != null) {
+      _lastDraft = d;
+    } else if (_expr.isEmpty && _answer.isEmpty) {
+      _lastDraft = null;
+    }
+    widget.onDraftChanged?.call(_lastDraft);
+    // La expresión tal cual se dejó ("2+5", "2+"): solo mientras se
+    // está escribiendo. Tras '=' la expresión ya está consumida (el
+    // resultado está en el campo de respuesta) y se reporta null para
+    // que al reabrir se siembre el valor, no la expresión vieja (si
+    // no, un dígito se añadiría a "2+5" en vez de empezar de nuevo).
+    widget.onExpressionChanged?.call(
+        (!_justEvaluated && _expr.isNotEmpty) ? _expr : null);
+  }
 
   @override
   void initState() {
     super.initState();
-    // Siembra el campo de respuesta (ronda 7.2): al reabrir la
-    // calculadora el valor que se llevaba escrito ya está en el
-    // campo, como si se acabara de pulsar '=' (un dígito empieza un
-    // cálculo nuevo y un operador sigue desde ese valor).
-    final seed = widget.initialValue;
-    if (seed != null) {
-      _answer = formatCalculatorResult(seed);
-      _justEvaluated = true;
+    // Siembra la EXPRESIÓN tal cual se dejó (corrección de Kristian
+    // 2026-11-13): si hay expresión, manda ella — el usuario sigue
+    // escribiendo donde lo dejó ("2+" + "5" = "2+5"). Solo si NO hay
+    // expresión se siembra el valor en el campo de respuesta (como
+    // si se acabara de pulsar '=').
+    final expr = widget.initialExpression;
+    if (expr != null && expr.isNotEmpty) {
+      _expr = expr;
+      _justEvaluated = false;
+    } else {
+      // Siembra el campo de respuesta (ronda 7.2): al reabrir la
+      // calculadora el valor que se llevaba escrito ya está en el
+      // campo, como si se acabara de pulsar '=' (un dígito empieza un
+      // cálculo nuevo y un operador sigue desde ese valor).
+      final seed = widget.initialValue;
+      if (seed != null) {
+        _answer = formatCalculatorResult(seed);
+        _justEvaluated = true;
+        // El valor con el que se siembra también es el último
+        // borrador válido: si el usuario toca un operador y cierra
+        // sin completar, no se pierde la semilla.
+        _lastDraft = seed;
+      }
     }
   }
 

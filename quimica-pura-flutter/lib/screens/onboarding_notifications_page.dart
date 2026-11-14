@@ -24,12 +24,12 @@
 
 import 'package:flutter/material.dart';
 
-import '../services/accent.dart';
 import '../services/localization.dart';
 import '../services/notification_service.dart';
 import '../widgets/duo_button.dart';
-import '../widgets/lucide_icons.dart';
+import '../widgets/icon_animations.dart';
 import '../widgets/notification_settings_dialog.dart';
+import '../widgets/play_once_lottie.dart';
 
 class OnboardingNotificationsPage extends StatefulWidget {
   const OnboardingNotificationsPage({super.key, required this.onNext});
@@ -124,9 +124,6 @@ class _OnboardingNotificationsPageState
 
   @override
   Widget build(BuildContext context) {
-    // Quemia 7.3 (P12): la campana era menta fija; ahora sigue al
-    // acento elegido, como el resto de la app.
-    final accent = AppAccent.primary;
     // Contraste (zona E): título y cuerpo con el on-surface del
     // tema (#4B4B4B en claro, casi blanco en oscuro); el #4B4B4B y
     // el #777777 fijos eran ilegibles sobre el fondo oscuro.
@@ -136,37 +133,89 @@ class _OnboardingNotificationsPageState
     final bodyColor = isDark
         ? scheme.onSurface.withValues(alpha: 0.75)
         : const Color(0xFF777777);
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(32),
+    // Botón ABAJO como en el resto del inicio (Quemia 7.7, Kristian
+    // 2026-11-13: el botón quedaba a mitad de pantalla mientras en
+    // las demás pantallas va pegado abajo, como Duolingo).
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const SizedBox(height: 24),
-          Center(
-            child: CircleAvatar(
-              radius: 44,
-              backgroundColor: accent.withValues(alpha: 0.18),
-              child:
-                  LucideIcon(LucideIcons.bellRing, size: 46, color: accent),
+          Expanded(
+            // Contenido CENTRADO en vertical (Quemia 7.7, Kristian
+            // 2026-11-13: el botón abajo dejaba un hueco vacío enorme
+            // en el medio; como en Duolingo, la campana y el texto
+            // van en el centro y el botón abajo).
+            child: Center(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    const SizedBox(height: 24),
+                    // Entrada suave (Quemia 7.7, animación simple como el
+                    // vídeo de Duolingo): la campana y el título aparecen
+                    // con fundido + subida.
+                    //
+                    // Campana (Lottie, Kristian 2026-11-14: "en la
+                    // de activar notificaciones pon este"; 2026-11-14
+                    // mandó la campana nueva "bell-notification-icon"
+                    // y pidió que suene una sola vez al abrir la
+                    // página y luego quede quieta): la animación
+                    // "notifications" de LottieFiles en vez de la
+                    // campana dibujada con _BellRing (borrado, ya no
+                    // se usa). La campana va sobre un círculo
+                    // blanco: el modelo trae un cuadro claro detrás
+                    // y con el círculo el fondo es el mismo en claro
+                    // y en oscuro. El Lottie mide 130 dentro del
+                    // círculo de 200 para que ese cuadro no asome
+                    // por las esquinas.
+                    FadeSlideIn(
+                      child: Center(
+                        child: Container(
+                          width: 200,
+                          height: 200,
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Center(
+                            child: PlayOnceLottie(
+                              asset: 'assets/notifications.json',
+                              width: 130,
+                              height: 130,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 28),
+                    FadeSlideIn(
+                      delay: const Duration(milliseconds: 80),
+                      child: Text(
+                        tr('obNotifTitle'),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w800,
+                            color: ink),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    FadeSlideIn(
+                      delay: const Duration(milliseconds: 140),
+                      child: Text(
+                        tr('obNotifBody'),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            fontSize: 16, height: 1.5, color: bodyColor),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
-          const SizedBox(height: 28),
-          Text(
-            tr('obNotifTitle'),
-            textAlign: TextAlign.center,
-            style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.w800,
-                color: ink),
-          ),
           const SizedBox(height: 12),
-          Text(
-            tr('obNotifBody'),
-            textAlign: TextAlign.center,
-            style: TextStyle(
-                fontSize: 16, height: 1.5, color: bodyColor),
-          ),
-          const SizedBox(height: 32),
           SizedBox(
             width: double.infinity,
             // Botón primario Duolingo: sólido teal + labio.

@@ -404,14 +404,18 @@ void main() {
     await tester.tap(find.text(tr('accountTitle')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
-    // Las tres primeras filas, en orden (7.1): Vincular con Google
-    // (prominente, primera fila), Estadísticas y Mis errores. Las
-    // filas en tarjeta ya no son ListTile — se leen por sus títulos
-    // de texto, en orden de aparición en la lista.
+    // Las tres primeras filas, en orden (7.1, revisado 7.7):
+    // Vincular con Google (prominente, primera fila), Estadísticas
+    // y Amigos. "Mis errores" ya NO es fila de Cuenta (7.7: se
+    // quitó; el repaso sigue desde notificaciones y búsqueda).
+    // "Mis trofeos" (2026-11-14) es una tarjeta, no una fila, así
+    // que no aparece en esta lista. Las filas en tarjeta ya no son
+    // ListTile — se leen por sus títulos de texto, en orden de
+    // aparición en la lista.
     final expectedOrder = [
       tr('accountLinkGoogle'),
       tr('accountStats'),
-      tr('accountReview'),
+      tr('accountFriends'),
     ];
     final seenTitles = tester
         .widgetList<Text>(find.byType(Text))

@@ -1,18 +1,22 @@
 // Pruebas de la ronda #5 (Quemia 6.2), punto del CONFETI AL GANAR
-// UN NIVEL. Causa del bug (verificada en celebration.dart): cada
-// pieza caía con `p = (progress * speed)` y speed 0,5–1,0, así que
-// al terminar la animación las piezas lentas quedaban a mitad de
-// pantalla con alfa 1,0, CONGELADAS y opacas para siempre, y el
-// overlay nunca se desmontaba (practicar_screen.dart ~2000 lo deja
-// montado cuando passedLevel). Aquí se verifica la física nueva
-// (retardo por pieza + progreso local que llega a 1 para todas),
-// el desmontaje al terminar y que los botones "Repetir"/"Volver"
-// se pueden tocar TAMBIÉN DURANTE la celebración.
+// UN NIVEL. Causa del bug (verificada en celebration.dart): el
+// confeti dibujado por código se quedaba CONGELADO y opaco al
+// terminar, tapando los botones, y el overlay nunca se desmontaba
+// (practicar_screen.dart ~2000 lo deja montado cuando passedLevel).
+// El arreglo fix5 (retardo por pieza + desmontaje al terminar) se
+// mantuvo, y el 2026-11-14 el confeti dibujado se cambió por la
+// animación "confetti" de LottieFiles que mandó Kristian
+// (https://lottiefiles.com/free-animation/confetti-3ofTs67sBx):
+// una sola pasada de ~5 s y al terminar el overlay se desmonta.
+// Aquí se verifica el Lottie en pantalla, el desmontaje al terminar
+// y que los botones "Repetir"/"Volver" se pueden tocar TAMBIÉN
+// DURANTE la celebración.
 // Las dos capturas (fix5_confeti_mitad / fix5_confeti_limpio) se
 // generan con --update-goldens SOLO sobre este archivo.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lottie/lottie.dart';
 import 'package:quimica_pura/services/localization.dart';
 import 'package:quimica_pura/widgets/celebration.dart';
 import 'package:quimica_pura/widgets/twin_avatars.dart';
@@ -177,48 +181,39 @@ void main() {
     await tester.pump(const Duration(seconds: 2));
   });
 
-  group('Física del confeti (confettiPieceState)', () {
-    const size = Size(393, 852);
-
-    test('al final TODAS las piezas salen por abajo y su alfa es 0',
-        () {
-      for (var i = 0; i < 110; i++) {
-        final s = confettiPieceState(i, 1.0, size);
-        expect(s.y, greaterThan(size.height),
-            reason: 'pieza $i debe estar por debajo de la pantalla');
-        expect(s.alpha, 0, reason: 'pieza $i debe estar desvanecida');
-      }
+  group('Confeti Lottie (assets/confetti.json)', () {
+    testWidgets('la lluvia Lottie está en pantalla al aparecer',
+        (tester) async {
+      await pumpResult(tester, onRepeat: () {}, onExit: () {});
+      expect(
+        find.descendant(
+          of: find.byType(CelebrationOverlay),
+          matching: find.byType(Lottie),
+        ),
+        findsOneWidget,
+      );
     });
 
-    test('a mitad de la animación las 110 piezas caen visibles', () {
-      var visibles = 0;
-      for (var i = 0; i < 110; i++) {
-        final s = confettiPieceState(i, 0.5, size);
-        if (s.y > 0 && s.y < size.height && s.alpha > 0) visibles++;
-      }
-      expect(visibles, 110);
-    });
-
-    test('al empezar ninguna pieza se ve todavía (alfa 0, arriba)',
-        () {
-      for (var i = 0; i < 110; i++) {
-        final s = confettiPieceState(i, 0.0, size);
-        expect(s.alpha, 0, reason: 'pieza $i');
-        expect(s.y, lessThanOrEqualTo(0), reason: 'pieza $i');
-      }
-    });
-
-    test('las piezas lentas ya no se quedan a mitad al final', () {
-      // El bug viejo: con speed 0,5 la pieza quedaba en p = 0,5
-      // (y ≈ mitad de pantalla, alfa 1,0). Con el progreso local,
-      // a progress = 0,99 incluso la pieza con más retardo ya casi
-      // salió y casi se desvaneció.
-      for (var i = 0; i < 110; i++) {
-        final s = confettiPieceState(i, 0.99, size);
-        expect(s.y, greaterThan(size.height * 0.8),
-            reason: 'pieza $i');
-        expect(s.alpha, lessThan(0.5), reason: 'pieza $i');
-      }
+    testWidgets('a mitad de la pasada (2,5 s) el confeti sigue '
+        'cayendo', (tester) async {
+      await pumpResult(tester, onRepeat: () {}, onExit: () {});
+      await tester.pump(const Duration(milliseconds: 2500));
+      expect(
+        find.descendant(
+          of: find.byType(CelebrationOverlay),
+          matching: find.byType(Lottie),
+        ),
+        findsOneWidget,
+      );
+      // Y ya no queda nada pintado después de la pasada (~5 s).
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: find.byType(CelebrationOverlay),
+          matching: find.byType(Lottie),
+        ),
+        findsNothing,
+      );
     });
   });
 
@@ -231,22 +226,22 @@ void main() {
         onRepeat: () => repetido = true,
         onExit: () {},
       );
-      // A mitad de la celebración el confeti está pintando.
+      // A mitad de la celebración el confeti está cayendo.
       await tester.pump(const Duration(milliseconds: 2100));
       expect(
         find.descendant(
           of: find.byType(CelebrationOverlay),
-          matching: find.byType(CustomPaint),
+          matching: find.byType(Lottie),
         ),
         findsOneWidget,
       );
-      // Tras la animación (4,2 s) el overlay se encoge: ya no
+      // Tras la animación (~5 s) el overlay se encoge: ya no
       // pinta nada.
       await tester.pumpAndSettle();
       expect(
         find.descendant(
           of: find.byType(CelebrationOverlay),
-          matching: find.byType(CustomPaint),
+          matching: find.byType(Lottie),
         ),
         findsNothing,
       );
@@ -272,12 +267,12 @@ void main() {
         onRepeat: () => repetido = true,
         onExit: () => salido = true,
       );
-      // A 1 s (progreso ~0,24) el confeti está cayendo a tope.
+      // A 1 s (progreso ~0,2) el confeti está cayendo a tope.
       await tester.pump(const Duration(seconds: 1));
       expect(
         find.descendant(
           of: find.byType(CelebrationOverlay),
-          matching: find.byType(CustomPaint),
+          matching: find.byType(Lottie),
         ),
         findsOneWidget,
       );

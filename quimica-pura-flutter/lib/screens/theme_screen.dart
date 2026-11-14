@@ -310,7 +310,7 @@ class _OptionTile extends StatelessWidget {
     final c = _ThemeColors.of(context);
     return Expanded(
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(20),
         onTap: () {
           if (!selected) {
             SoundService.tap();
@@ -325,7 +325,7 @@ class _OptionTile extends StatelessWidget {
             // degradado suave + sombra tintada). El círculo con
             // su anillo de 2 px NO se toca (lo afirman los tests).
             color: selected ? color.withValues(alpha: 0.12) : null,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: selected ? color : c.border,
               width: selected ? 2 : 1,
@@ -343,8 +343,16 @@ class _OptionTile extends StatelessWidget {
                 ),
                 alignment: Alignment.center,
                 child: selected
-                    ? const LucideIcon(LucideIcons.check,
-                        size: 18, color: Colors.white)
+                    ? LucideIcon(LucideIcons.check,
+                        size: 18,
+                        // Check según el brillo del relleno (auditoría
+                        // 7.7): blanco sobre claro no se veía (el
+                        // círculo "Claro" en oscuro ~1,3:1); relleno
+                        // claro -> check oscuro, relleno oscuro ->
+                        // check blanco.
+                        color: color.computeLuminance() > 0.5
+                            ? const Color(0xFF4B4B4B)
+                            : Colors.white)
                     : icon == null
                         ? null
                         : LucideIcon(icon!, size: 18, color: color),
@@ -384,7 +392,7 @@ class _ShopThemeTile extends StatelessWidget {
     final color = Color(item.color ?? 0xFF00C2A8);
     return Expanded(
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(20),
         onTap: () {
           SoundService.tap();
           onTap();
@@ -396,7 +404,7 @@ class _ShopThemeTile extends StatelessWidget {
             // seleccionar. El círculo con su anillo de 2 px NO
             // se toca (lo afirman los tests).
             color: selected ? color.withValues(alpha: 0.12) : null,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: selected ? color : c.border,
               width: selected ? 2 : 1,
@@ -414,8 +422,16 @@ class _ShopThemeTile extends StatelessWidget {
                 ),
                 alignment: Alignment.center,
                 child: selected
-                    ? const LucideIcon(LucideIcons.check,
-                        size: 18, color: Colors.white)
+                    ? LucideIcon(LucideIcons.check,
+                        size: 18,
+                        // Check según el brillo del relleno (auditoría
+                        // 7.7): blanco sobre claro no se veía (el
+                        // círculo "Claro" en oscuro ~1,3:1); relleno
+                        // claro -> check oscuro, relleno oscuro ->
+                        // check blanco.
+                        color: color.computeLuminance() > 0.5
+                            ? const Color(0xFF4B4B4B)
+                            : Colors.white)
                     : locked
                         ? LucideIcon(LucideIcons.lock, size: 16, color: color)
                         : null,

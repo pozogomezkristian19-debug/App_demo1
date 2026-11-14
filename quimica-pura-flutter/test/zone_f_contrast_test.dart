@@ -18,13 +18,11 @@ import 'package:quimica_pura/main.dart';
 import 'package:quimica_pura/screens/calculator_screen.dart';
 import 'package:quimica_pura/screens/duel_screen.dart';
 import 'package:quimica_pura/screens/friends_screen.dart';
-import 'package:quimica_pura/screens/groups_screen.dart';
 import 'package:quimica_pura/screens/lab_sim_screen.dart';
 import 'package:quimica_pura/screens/leaderboard_screen.dart';
 import 'package:quimica_pura/screens/notes_screen.dart';
 import 'package:quimica_pura/screens/practicar_screen.dart';
 import 'package:quimica_pura/screens/shop_screen.dart';
-import 'package:quimica_pura/screens/support_screen.dart';
 import 'package:quimica_pura/screens/timed_exam_screen.dart';
 import 'package:quimica_pura/screens/topic_detail_screen.dart';
 import 'package:quimica_pura/screens/tournaments_screen.dart';
@@ -33,7 +31,6 @@ import 'package:quimica_pura/services/analytics_sync.dart';
 import 'package:quimica_pura/services/localization.dart';
 import 'package:quimica_pura/services/progress.dart';
 import 'package:quimica_pura/services/social_service.dart';
-import 'package:quimica_pura/services/support_service.dart';
 import 'package:quimica_pura/services/user_prefs.dart';
 import 'package:quimica_pura/widgets/brand_logo.dart';
 import 'package:quimica_pura/widgets/element_sheet.dart';
@@ -389,56 +386,6 @@ class _ZfNotificationsFake extends AndroidFlutterLocalNotificationsPlugin
     String? title,
     AndroidScheduleMode scheduleMode = AndroidScheduleMode.exact,
   }) async {}
-}
-
-class _ZfSupportFake implements SupportService {
-  final _messages = <SupportMessage>[
-    SupportMessage(
-      id: 'm1',
-      authorUid: 'uid-kristian',
-      username: 'kristian',
-      message: 'No me sale el balanceo de la reacción del hierro',
-      createdAt: DateTime(2026, 11, 11, 10, 0),
-      status: 'respondido',
-      reply: 'Revisa los coeficientes del oxígeno primero.',
-      replyAt: DateTime(2026, 11, 11, 11, 0),
-    ),
-  ];
-
-  @override
-  Future<bool> sendMessage(String text) async => true;
-
-  @override
-  Future<List<SupportMessage>> fetchMyMessages() async =>
-      List.unmodifiable(_messages);
-
-  @override
-  Stream<List<SupportMessage>> watchMyMessages() async* {
-    yield List.unmodifiable(_messages);
-  }
-
-  @override
-  Future<SupportSettings> fetchSupportSettings() async =>
-      const SupportSettings(
-          supportNumber: '+53 5 9999999', showWhatsApp: true);
-
-  @override
-  Future<List<SupportMessage>> pendingMessages() async => const [];
-
-  @override
-  Future<int> pendingCount() async => 0;
-
-  @override
-  void listenForReplies() {}
-
-  @override
-  Future<void> checkRepliesNow() async {}
-
-  @override
-  Future<int> retryPendingSupport() async => 0;
-
-  @override
-  void resetForTests() {}
 }
 
 void main() {
@@ -841,17 +788,6 @@ void main() {
     await shot(tester, 'zonef_torneos_violeta_oscuro.png');
   });
 
-  testWidgets('zonef_grupos_violeta_oscuro', (tester) async {
-    await pumpScreenCombo(
-      tester,
-      const GroupsScreen(isGoogleLinked: true),
-      accent: 'violeta',
-      dark: true,
-    );
-    await socialSettle(tester);
-    await shot(tester, 'zonef_grupos_violeta_oscuro.png');
-  });
-
   testWidgets('zonef_tabla_pos_violeta_oscuro', (tester) async {
     final entries = kDemoSocialUsers
         .map((f) => LeaderboardEntry(
@@ -875,17 +811,6 @@ void main() {
     );
     await socialSettle(tester);
     await shot(tester, 'zonef_tabla_pos_violeta_oscuro.png');
-  });
-
-  testWidgets('zonef_soporte_violeta_oscuro', (tester) async {
-    await pumpScreenCombo(
-      tester,
-      SupportScreen(isGoogleLinked: true, service: _ZfSupportFake()),
-      accent: 'violeta',
-      dark: true,
-    );
-    await socialSettle(tester);
-    await shot(tester, 'zonef_soporte_violeta_oscuro.png');
   });
 
   testWidgets('zonef_duelo_violeta_oscuro', (tester) async {

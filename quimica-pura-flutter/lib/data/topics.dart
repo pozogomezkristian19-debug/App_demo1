@@ -1,6 +1,31 @@
 // Temas de estudio: mismo contenido que la app web original.
 import '../models.dart';
 
+/// Temas de la pista Universidad, en orden (el camino de Niveles).
+/// Vivían en practicar_screen.dart; se mudaron aquí (2026-11-14)
+/// porque el examen por tema, los trofeos de Cuenta y la sincronización
+/// también necesitan la lista de temas de cada pista.
+const List<String> uniTopics = [
+  'estequiometria',
+  'gases',
+  'disoluciones',
+  'acido-base',
+  'equilibrio',
+  'termo-cinetica',
+  'tabla',
+  'enlace',
+  'organica',
+  'laboratorio',
+];
+
+/// Temas de la pista Bachillerato, en orden.
+const List<String> bachTopics = [
+  'bach-estequiometria',
+  'bach-disoluciones',
+  'bach-gases',
+  'bach-acido-base',
+];
+
 const List<StudyTopic> topics = [
   StudyTopic(
     slug: 'estequiometria',

@@ -26,6 +26,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import '../widgets/icon_animations.dart';
 import '../services/accent.dart';
 
 import '../services/localization.dart';
@@ -162,45 +163,70 @@ class _ShopScreenState extends State<ShopScreen> {
                         ),
                       ),
                       _SectionTitle(text: tr('shopThemes')),
-                      for (final item in items.where((i) => i.kind == 'theme'))
-                        _ItemCard(
-                          item: item,
-                          points: points,
-                          owned: _owned.contains(item.id),
-                          equipped: _equippedThemeId == item.id,
-                          onBuy: () => _buy(item),
-                          onEquip: () => _equip(item),
+                      for (final (i, item)
+                          in items.where((i) => i.kind == 'theme').indexed)
+                        FadeSlideIn(
+                          delay: Duration(milliseconds: (i * 40).clamp(0, 400)),
+                          child: RepaintBoundary(
+                            child: _ItemCard(
+                              item: item,
+                              points: points,
+                              owned: _owned.contains(item.id),
+                              equipped: _equippedThemeId == item.id,
+                              onBuy: () => _buy(item),
+                              onEquip: () => _equip(item),
+                            ),
+                          ),
                         ),
                       _SectionTitle(text: tr('shopAvatars')),
-                      for (final item in items.where((i) => i.kind == 'avatar'))
-                        _ItemCard(
-                          item: item,
-                          points: points,
-                          owned: _owned.contains(item.id),
-                          equipped: _equippedAvatarId == item.id,
-                          onBuy: () => _buy(item),
-                          onEquip: () => _equip(item),
+                      for (final (i, item)
+                          in items.where((i) => i.kind == 'avatar').indexed)
+                        FadeSlideIn(
+                          delay: Duration(milliseconds: (i * 40).clamp(0, 400)),
+                          child: RepaintBoundary(
+                            child: _ItemCard(
+                              item: item,
+                              points: points,
+                              owned: _owned.contains(item.id),
+                              equipped: _equippedAvatarId == item.id,
+                              onBuy: () => _buy(item),
+                              onEquip: () => _equip(item),
+                            ),
+                          ),
                         ),
                       _SectionTitle(text: tr('shopBadges')),
-                      for (final item in items.where((i) => i.kind == 'badge'))
-                        _ItemCard(
-                          item: item,
-                          points: points,
-                          owned: _owned.contains(item.id),
-                          equipped: _equippedBadgeId == item.id,
-                          onBuy: () => _buy(item),
-                          onEquip: () => _equip(item),
+                      for (final (i, item)
+                          in items.where((i) => i.kind == 'badge').indexed)
+                        FadeSlideIn(
+                          delay: Duration(milliseconds: (i * 40).clamp(0, 400)),
+                          child: RepaintBoundary(
+                            child: _ItemCard(
+                              item: item,
+                              points: points,
+                              owned: _owned.contains(item.id),
+                              equipped: _equippedBadgeId == item.id,
+                              onBuy: () => _buy(item),
+                              onEquip: () => _equip(item),
+                            ),
+                          ),
                         ),
                       if (items.any((i) => i.kind == 'frame')) ...[
                         _SectionTitle(text: tr('shopFrames')),
-                        for (final item in items.where((i) => i.kind == 'frame'))
-                          _ItemCard(
-                            item: item,
-                            points: points,
-                            owned: _owned.contains(item.id),
-                            equipped: _equippedFrameId == item.id,
-                            onBuy: () => _buy(item),
-                            onEquip: () => _equip(item),
+                        for (final (i, item)
+                            in items.where((i) => i.kind == 'frame').indexed)
+                          FadeSlideIn(
+                            delay:
+                                Duration(milliseconds: (i * 40).clamp(0, 400)),
+                            child: RepaintBoundary(
+                              child: _ItemCard(
+                                item: item,
+                                points: points,
+                                owned: _owned.contains(item.id),
+                                equipped: _equippedFrameId == item.id,
+                                onBuy: () => _buy(item),
+                                onEquip: () => _equip(item),
+                              ),
+                            ),
                           ),
                       ],
                     ],
@@ -369,7 +395,8 @@ class _ItemCard extends StatelessWidget {
 
   /// Botón de acción del producto: equipado = chip "Equipado";
   /// comprado = "EQUIPAR"; sin comprar y con puntos = "COMPRAR ·
-  /// precio"; sin puntos = chip "Te faltan X puntos".
+  /// precio"; sin puntos = SOLO el precio (Quemia 7.7, Kristian:
+  /// que no diga "Te faltan X puntos", que ponga un precio y ya).
   Widget _action(BuildContext context) {
     if (equipped) {
       return _StateChip(label: tr('shopEquipped'), filled: true);
@@ -389,8 +416,12 @@ class _ItemCard extends StatelessWidget {
       );
     }
     return _StateChip(
-      label: tr('shopNeedMore').replaceFirst('%s', '${item.price - points}'),
+      label: '${item.price}',
       filled: false,
+      withStar: true,
+      // El precio lleva el color del artículo (cada tema con su
+      // color: Coral naranja, Rosa rosa, Azul azul…).
+      color: item.color == null ? null : Color(item.color!),
     );
   }
 
@@ -458,13 +489,14 @@ class _ItemCard extends StatelessWidget {
       );
     }
     final action = _action(context);
-    final description =
-        item.description.isNotEmpty ? item.description : (_avatarJokes[item.id] ?? '');
+    final description = item.description.isNotEmpty
+        ? item.description
+        : (_avatarJokes[item.id] ?? '');
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         color: isDark ? scheme.surfaceContainerHighest : Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         // Sin borde en oscuro (Kristian, 2026-11-13).
         border: isDark
             ? null
@@ -569,45 +601,81 @@ class _BuyButton extends StatelessWidget {
 
 /// Chip de estado (rediseño Duolingo 7.0): plano, sin degradado y
 /// sin sombra. Equipado = teal sólido con texto blanco en negrita
-/// (regla 7); "Te faltan X puntos" = transparente con borde
-/// neutro. Alto fijo 56 pt: igual que el botón de compra con
-/// fuente 17, así todas las tarjetas de la pantalla miden
-/// exactamente lo mismo tengan botón o chip (regla 8).
+/// (regla 7); precio sin puntos = SÓLIDO con el color del artículo
+/// (Quemia 7.7, Kristian 2026-11-13: los botones de precio en
+/// blanco estaban feos; cada cosa con el color de su tema — el de
+/// Coral naranja, el de Rosa rosa, el de Azul azul…), estrella y
+/// precio en blanco, con labio 4 pt más oscuro del mismo color.
+/// Alto fijo 56 pt: igual que el botón de compra con fuente 17, así
+/// todas las tarjetas de la pantalla miden exactamente lo mismo
+/// tengan botón o chip (regla 8).
 class _StateChip extends StatelessWidget {
-  const _StateChip({required this.label, required this.filled});
+  const _StateChip({
+    required this.label,
+    required this.filled,
+    this.withStar = false,
+    this.color,
+  });
   final String label;
   final bool filled;
+  final bool withStar;
+
+  /// Color del artículo: si viene, el chip es sólido con ese color
+  /// (precio según el tema). Si no viene, manda `filled` (teal) o
+  /// el estilo transparente con borde.
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
     final accent = AppAccent.primary;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Fondo: color del artículo si lo hay; si no, teal si es
+    // "Equipado", transparente si no.
+    final bg = color ?? (filled ? accent : null);
+    final ink = bg != null
+        ? Colors.white
+        : Theme.of(context).colorScheme.onSurfaceVariant;
+    // Labio 4 pt más oscuro del mismo color (estilo Duolingo).
+    final lip = bg == null ? null : Color.lerp(bg, Colors.black, 0.18);
     return Container(
       height: 56,
       alignment: Alignment.center,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: filled ? accent : Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
-        border: filled
-            ? null
-            // Borde según el tema (auditoría 7.2).
-            : Border.all(
-                color: isDark ? AppAccent.darkBorder : const Color(0xFFE5E5E5),
-                width: 2),
+        color: bg ?? Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        border: bg != null
+            ? Border(bottom: BorderSide(color: lip!, width: 4))
+            : (filled
+                ? null
+                // Borde según el tema (auditoría 7.2).
+                : Border.all(
+                    color:
+                        isDark ? AppAccent.darkBorder : const Color(0xFFE5E5E5),
+                    width: 2)),
       ),
-      child: Text(
-        label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w800,
-          color: filled
-              ? Colors.white
-              : Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          if (withStar) ...[
+            LucideIcon(LucideIcons.star, size: 18, color: ink),
+            const SizedBox(width: 6),
+          ],
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                color: ink,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

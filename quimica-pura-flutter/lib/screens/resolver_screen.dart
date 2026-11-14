@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../widgets/icon_animations.dart';
 import '../widgets/lucide_icons.dart';
 import '../data/i18n/content_i18n.dart';
 import '../services/accent.dart';
@@ -281,7 +282,7 @@ class _ResolverScreenState extends State<ResolverScreen> {
           elevation: 0,
           color: cardColor,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(20),
             side: BorderSide(color: borderColor),
           ),
           child: Padding(
@@ -345,9 +346,16 @@ class _ResolverScreenState extends State<ResolverScreen> {
                     fontSize: 20, fontWeight: FontWeight.w800, color: ink)),
           ),
           for (var k = 0; k < entriesByGroup[group]!.length; k++)
-            _SolverRow(
-              entry: solverEntries[entriesByGroup[group]![k]],
-              onTap: () => _openSolver(entriesByGroup[group]![k]),
+            // Entrada escalonada (pulido 7.7): cada solucionador
+            // entra con fundido + subida suave.
+            FadeSlideIn(
+              delay: Duration(milliseconds: (k * 40).clamp(0, 400)),
+              child: RepaintBoundary(
+                child: _SolverRow(
+                  entry: solverEntries[entriesByGroup[group]![k]],
+                  onTap: () => _openSolver(entriesByGroup[group]![k]),
+                ),
+              ),
             ),
         ],
         const SizedBox(height: 16),
@@ -371,7 +379,7 @@ class _RectChip extends StatelessWidget {
     return Material(
       color: isDark ? AppAccent.darkCard : Colors.white,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(20),
         side: BorderSide(
             color: isDark ? AppAccent.darkBorder : const Color(0xFFE5E5E5)),
       ),
@@ -411,7 +419,7 @@ class _SolverRow extends StatelessWidget {
       elevation: 0,
       color: isDark ? AppAccent.darkCard : Colors.white,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         side: BorderSide(
             color: isDark ? AppAccent.darkBorder : const Color(0xFFE5E5E5)),
       ),

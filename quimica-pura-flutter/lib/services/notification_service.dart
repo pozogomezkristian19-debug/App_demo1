@@ -181,14 +181,12 @@
 //  intenta siempre.
 
 import 'dart:async';
-import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
@@ -198,6 +196,7 @@ import '../data/questions.dart';
 import '../widgets/twin_avatars.dart';
 import 'accent.dart';
 import 'localization.dart';
+import 'temp_file.dart';
 import 'nav_requests.dart';
 import 'notification_inbox.dart';
 import 'progress.dart';
@@ -510,8 +509,7 @@ class NotificationService {
       }
       final prefs = await SharedPreferences.getInstance();
       _exactAlarms = prefs.getBool(_kExactAlarms) ?? false;
-      const androidSettings =
-          AndroidInitializationSettings(_smallIcon);
+      const androidSettings = AndroidInitializationSettings(_smallIcon);
       await _plugin.initialize(
         settings: const InitializationSettings(android: androidSettings),
         onDidReceiveNotificationResponse: (response) {
@@ -587,8 +585,7 @@ class NotificationService {
       // mock se queda colgado), no se puede quedar la app esperando:
       // se asume que sí, como antes (fix5). Es una consulta local y
       // en el teléfono responde en milisegundos.
-      return await enabled.timeout(const Duration(milliseconds: 100)) ??
-          true;
+      return await enabled.timeout(const Duration(milliseconds: 100)) ?? true;
     } catch (_) {
       return true;
     }
@@ -721,10 +718,10 @@ class NotificationService {
         scheduled.add(at);
       }
       final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_kLastNotif,
+          scheduled.isEmpty ? '' : scheduled.last.toIso8601String());
       await prefs.setString(
-          _kLastNotif, scheduled.isEmpty ? '' : scheduled.last.toIso8601String());
-      await prefs.setString(_kNextNotifs,
-          scheduled.map((d) => d.toIso8601String()).join(','));
+          _kNextNotifs, scheduled.map((d) => d.toIso8601String()).join(','));
     } catch (_) {
       // Si programar falla (p. ej. sin plugin en pruebas), no se rompe
       // la app: el recordatorio simplemente no llega.
@@ -801,12 +798,12 @@ class NotificationService {
   static Future<void> _recordLastSent() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(
-          _kLastSent, DateTime.now().toIso8601String());
+      await prefs.setString(_kLastSent, DateTime.now().toIso8601String());
     } catch (_) {
       // Guardar la hora es opcional.
     }
   }
+
   /// estudio que ya se dispararon (fix4, punto 8): cada hora
   /// programada que ya pasó genera una entrada ("Hora de repasar"),
   /// por si el usuario no vio el aviso. Se llama al abrir la app
@@ -935,18 +932,14 @@ class NotificationService {
       final companion = companionOfTheDay();
       final asset = companionAsset(companion);
       final name = 'melli_notif_${companion.name}.png';
-      final dir = await getTemporaryDirectory();
       // La copia es "lo mejor posible": si el disco tarda demasiado,
       // no se bloquea la programación de los avisos (ni el avance del
       // onboarding): se sigue sin icono grande, pero el aviso sale.
-      return await Future<AndroidBitmap<Object>>(() async {
-        final file = File('${dir.path}/$name');
-        if (!await file.exists()) {
-          final bytes = await rootBundle.load(asset);
-          await file.writeAsBytes(bytes.buffer.asUint8List());
-        }
-        return FilePathAndroidBitmap(file.path);
-      }).timeout(const Duration(seconds: 3));
+      // En web no hay archivos: copyAssetToTemp devuelve null.
+      final path = await Future<String?>(() => copyAssetToTemp(asset, name))
+          .timeout(const Duration(seconds: 3));
+      if (path == null) return null;
+      return FilePathAndroidBitmap(path);
     } catch (_) {
       return null;
     }
@@ -1077,8 +1070,7 @@ class NotificationService {
   ///    de verdad. La prueba ya no se fía de esa suposición:
   ///    [_isPermissionGrantedStrict] espera hasta 2 s y, si no
   ///    puede comprobarlo, lo dice (null) en vez de mentir.
-  static Future<bool> sendTest() async =>
-      (await sendTestDetailed()).sent;
+  static Future<bool> sendTest() async => (await sendTestDetailed()).sent;
 
   /// Resultado TIPADO de la prueba (Zona G). La pantalla lo usa
   /// para nombrar la causa real en vez del genérico

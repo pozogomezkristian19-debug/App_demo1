@@ -53,6 +53,15 @@ class _DuelScreenState extends State<DuelScreen> {
   var _disconnectDismissed = false;
   var _cancelled = false;
 
+  /// Sondeo del match al azar: mientras estoy en "buscando rival",
+  /// el otro puede hacerme match (él crea el duelo conmigo de
+  /// playerB). Cada 5 s miro mis duelos abiertos; si aparece uno,
+  /// lo abro. Solo corre cuando el match es "buscando" sin id
+  /// (el camino real): el falso de tests crea el duelo con id y
+  /// emite la intro por el stream, así que ahí no hace falta.
+  Timer? _matchPollTimer;
+  var _pollInFlight = false;
+
   /// Tiempo de juego: desde "Empezar el duelo" hasta terminar.
   /// Es el desempate (a igualdad de aciertos gana el más rápido).
   final _playStopwatch = Stopwatch();
@@ -71,6 +80,21 @@ class _DuelScreenState extends State<DuelScreen> {
         );
     if (!mounted || match == null) return;
     setState(() => _match = match);
+    // Rival sin conexión: no hay duelo que seguir (no se creó).
+    // La pantalla enseña "[nombre] no está en línea" y no se
+    // suscribe a nada.
+    if (match.offlineOpponent != null) return;
+    if (match.phase == DuelPhase.searching && match.matchId.isEmpty) {
+      _startMatchPolling();
+      return;
+    }
+    _subscribeToMatch(match);
+  }
+
+  /// Suscribe la pantalla al stream de un duelo ya creado (la
+  /// lógica de fusión de fases vive aquí, igual que antes).
+  void _subscribeToMatch(DuelState match) {
+    _sub?.cancel();
     _sub = SocialService.duelStream(match.matchId).listen((next) {
       if (!mounted) return;
       setState(() {
@@ -107,9 +131,63 @@ class _DuelScreenState extends State<DuelScreen> {
     });
   }
 
+  /// Sondea mis duelos abiertos mientras busco rival al azar. Si el
+  /// otro me hizo match, aparece un duelo conmigo de playerB: lo
+  /// abro (el más reciente, si hay varios por la carrera de dos
+  /// matches simultáneos) y salgo de la cola.
+  void _startMatchPolling() {
+    _matchPollTimer?.cancel();
+    _matchPollTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => _pollForMatch(),
+    );
+    // Un primer intento inmediato, sin esperar 5 s.
+    _pollForMatch();
+  }
+
+  Future<void> _pollForMatch() async {
+    if (!mounted || _pollInFlight) return;
+    final current = _match;
+    if (current == null ||
+        current.phase != DuelPhase.searching ||
+        current.matchId.isNotEmpty) {
+      return;
+    }
+    _pollInFlight = true;
+    try {
+      final open = await SocialService.myOpenDuels();
+      if (!mounted) return;
+      if (open.isEmpty) return;
+      // myOpenDuels viene del más reciente al más viejo.
+      final found = open.first;
+      _stopMatchPolling();
+      await SocialService.leaveDuelQueue();
+      if (!mounted) return;
+      setState(() => _match = found);
+      _subscribeToMatch(found);
+    } finally {
+      _pollInFlight = false;
+    }
+  }
+
+  void _stopMatchPolling() {
+    _matchPollTimer?.cancel();
+    _matchPollTimer = null;
+  }
+
   @override
   void dispose() {
+    _stopMatchPolling();
     _sub?.cancel();
+    // Si me voy mientras sigo buscando, salgo de la cola para no
+    // dejar una entrada fantasma (el otro no me encontraría en
+    // línea de todos modos, pero la cola queda limpia).
+    final match = _match;
+    if (match != null &&
+        match.phase == DuelPhase.searching &&
+        match.matchId.isEmpty) {
+      unawaited(SocialService.leaveDuelQueue());
+    }
     super.dispose();
   }
 
@@ -134,7 +212,17 @@ class _DuelScreenState extends State<DuelScreen> {
 
   Future<void> _cancel() async {
     final match = _match;
-    if (match != null) await SocialService.cancelDuel(match.matchId);
+    // Si cancelo mientras busco rival al azar, salgo de la cola
+    // para no dejar una entrada fantasma.
+    if (match != null &&
+        match.phase == DuelPhase.searching &&
+        match.matchId.isEmpty) {
+      _stopMatchPolling();
+      await SocialService.leaveDuelQueue();
+    }
+    if (match != null && match.matchId.isNotEmpty) {
+      await SocialService.cancelDuel(match.matchId);
+    }
     if (!mounted) return;
     setState(() => _cancelled = true);
   }
@@ -203,6 +291,18 @@ class _DuelScreenState extends State<DuelScreen> {
   Widget _phaseContent(DuelState match) {
     switch (match.phase) {
       case DuelPhase.searching:
+        // Reté a alguien que no está en línea: se avisa con su
+        // nombre en vez de quedarse en "buscando rival" para
+        // siempre. El botón de cancelar vuelve atrás.
+        if (match.offlineOpponent != null) {
+          return _WaitingView(
+            title: tr('duelRivalNotOnline')
+                .replaceFirst('%s', match.offlineOpponent!),
+            subtitle: null,
+            showCancel: true,
+            onCancel: _cancel,
+          );
+        }
         return _WaitingView(
           title: tr('duelFindingOpponent'),
           subtitle: null,

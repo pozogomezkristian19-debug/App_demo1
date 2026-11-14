@@ -255,404 +255,412 @@ class _FriendsScreenState extends State<FriendsScreen> {
       body: OnlineGate(
         isGoogleLinked: widget.isGoogleLinked,
         onLinkGoogle: widget.onLinkGoogle,
-        child: Column(
-          children: [
-            // Duelo al azar: se queda, con su fila plana sin sombra.
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: _randomDuel,
-                  child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 4, vertical: 14),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: accent.withValues(alpha: 0.14),
-                          ),
-                          alignment: Alignment.center,
-                          child: LucideIcon(
-                            LucideIcons.gamepad2,
-                            size: 22,
-                            color: accent,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                tr('friendsRandomDuel'),
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: scheme.onSurface,
-                                ),
-                              ),
-                              Text(
-                                tr('friendsRandomDuelSub'),
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: scheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const LucideIcon(
-                          LucideIcons.chevronRight,
-                          size: 20,
-                          color: Colors.grey,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            Divider(
-              height: 1,
-              thickness: 1,
-              indent: 16,
-              endIndent: 16,
-              color: isDark ? _lineDark : _lineLight,
-            ),
-            // Mis duelos abiertos: sin la lista, el retado no puede
-            // ver ni abrir su duelo. Solo se muestra si hay alguno
-            // (y si hay internet); al volver de un duelo se recarga.
-            if (_online && _myDuels.isNotEmpty)
+        // Toda la página desplaza como una sola (fix8_amigos):
+        // antes el Column fijo + Expanded(lista) se desbordaba
+        // 14 px cuando había duelo entrante Y solicitudes a la
+        // vez, porque las secciones fijas sumaban más que la
+        // pantalla y la lista quedaba en altura ~0.
+        child: SingleChildScrollView(
+          child: Column(
+            children: [
+              // Duelo al azar: se queda, con su fila plana sin sombra.
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(left: 4, bottom: 6),
-                      child: Text(
-                        tr('myDuelsTitle'),
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
-                          color: isDark ? Colors.white : _sectionLight,
-                        ),
-                      ),
-                    ),
-                    // Duelos abiertos, filas planas sin tarjeta ni
-                    // sombra, separadas por líneas finas.
-                    Column(
-                      children: [
-                        for (var i = 0; i < _myDuels.length; i++) ...[
-                          if (i > 0)
-                            Divider(
-                              height: 1,
-                              thickness: 1,
-                              indent: 68,
-                              color: isDark ? _lineDark : _lineLight,
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: _randomDuel,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 14),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: accent.withValues(alpha: 0.14),
                             ),
-                          Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              onTap: () => _openDuel(_myDuels[i]),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 4, vertical: 12),
-                                child: Row(
-                                  children: [
-                                    SocialAvatar(
-                                      username: _myDuels[i].opponentName,
-                                      size: 40,
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            _myDuels[i].opponentName,
-                                            style: TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.bold,
-                                              color: scheme.onSurface,
-                                            ),
-                                          ),
-                                          Text(
-                                            _duelStatus(_myDuels[i]),
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              color: scheme.onSurfaceVariant,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const LucideIcon(
-                                      LucideIcons.chevronRight,
-                                      size: 20,
-                                      color: Colors.grey,
-                                    ),
-                                  ],
+                            alignment: Alignment.center,
+                            child: LucideIcon(
+                              LucideIcons.gamepad2,
+                              size: 22,
+                              color: accent,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  tr('friendsRandomDuel'),
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: scheme.onSurface,
+                                  ),
                                 ),
-                              ),
+                                Text(
+                                  tr('friendsRandomDuelSub'),
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: scheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
                             ),
+                          ),
+                          const LucideIcon(
+                            LucideIcons.chevronRight,
+                            size: 20,
+                            color: Colors.grey,
                           ),
                         ],
-                      ],
-                    ),
-                    Divider(
-                      height: 1,
-                      thickness: 1,
-                      color: isDark ? _lineDark : _lineLight,
-                    ),
-                  ],
-                ),
-              ),
-            // Mi nombre de usuario (Quemia 7.3, Kristian): para
-            // que un amigo me agregue, le doy ESTE nombre, no el
-            // código de referido (ese es para invitar). Tarjeta con
-            // tinte del acento + botón COPIAR; si aún no existe
-            // (sin internet), se dice que aparecerá aquí.
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: accent.withValues(alpha: 0.35),
-                    width: 1,
-                  ),
-                ),
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      tr('myUsernameTitle'),
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: scheme.onSurfaceVariant,
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            _myUsername == null
-                                ? '…'
-                                : (_myUsername!.isEmpty
-                                    ? tr('myUsernamePending')
-                                    : _myUsername!),
-                            // 2 líneas (antes 1): el mensaje pendiente
-                            // "Tu nombre de usuario aparecerá aquí" se
-                            // cortaba a "Tu nombre de usuario…" porque
-                            // el botón COPIAR ocupa ancho; el nombre
-                            // real es una sola palabra y cabe en 1.
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w800,
-                              color: _myUsername != null &&
-                                      _myUsername!.isNotEmpty
-                                  ? scheme.onSurface
-                                  : scheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              Divider(
+                height: 1,
+                thickness: 1,
+                indent: 16,
+                endIndent: 16,
+                color: isDark ? _lineDark : _lineLight,
+              ),
+              // Mis duelos abiertos: sin la lista, el retado no puede
+              // ver ni abrir su duelo. Solo se muestra si hay alguno
+              // (y si hay internet); al volver de un duelo se recarga.
+              if (_online && _myDuels.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4, bottom: 6),
+                        child: Text(
+                          tr('myDuelsTitle'),
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            color: isDark ? Colors.white : _sectionLight,
+                          ),
+                        ),
+                      ),
+                      // Duelos abiertos, filas planas sin tarjeta ni
+                      // sombra, separadas por líneas finas.
+                      Column(
+                        children: [
+                          for (var i = 0; i < _myDuels.length; i++) ...[
+                            if (i > 0)
+                              Divider(
+                                height: 1,
+                                thickness: 1,
+                                indent: 68,
+                                color: isDark ? _lineDark : _lineLight,
+                              ),
+                            Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () => _openDuel(_myDuels[i]),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 4, vertical: 12),
+                                  child: Row(
+                                    children: [
+                                      SocialAvatar(
+                                        username: _myDuels[i].opponentName,
+                                        size: 40,
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              _myDuels[i].opponentName,
+                                              style: TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.bold,
+                                                color: scheme.onSurface,
+                                              ),
+                                            ),
+                                            Text(
+                                              _duelStatus(_myDuels[i]),
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                color: scheme.onSurfaceVariant,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const LucideIcon(
+                                        LucideIcons.chevronRight,
+                                        size: 20,
+                                        color: Colors.grey,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      Divider(
+                        height: 1,
+                        thickness: 1,
+                        color: isDark ? _lineDark : _lineLight,
+                      ),
+                    ],
+                  ),
+                ),
+              // Mi nombre de usuario (Quemia 7.3, Kristian): para
+              // que un amigo me agregue, le doy ESTE nombre, no el
+              // código de referido (ese es para invitar). Tarjeta con
+              // tinte del acento + botón COPIAR; si aún no existe
+              // (sin internet), se dice que aparecerá aquí.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: accent.withValues(alpha: 0.35),
+                      width: 1,
+                    ),
+                  ),
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        tr('myUsernameTitle'),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _myUsername == null
+                                  ? '…'
+                                  : (_myUsername!.isEmpty
+                                      ? tr('myUsernamePending')
+                                      : _myUsername!),
+                              // 2 líneas (antes 1): el mensaje pendiente
+                              // "Tu nombre de usuario aparecerá aquí" se
+                              // cortaba a "Tu nombre de usuario…" porque
+                              // el botón COPIAR ocupa ancho; el nombre
+                              // real es una sola palabra y cabe en 1.
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w800,
+                                color: _myUsername != null &&
+                                        _myUsername!.isNotEmpty
+                                    ? scheme.onSurface
+                                    : scheme.onSurfaceVariant,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        DuoButton.secondary(
-                          label: tr('referralCopy'),
-                          onPressed: (_myUsername != null &&
-                                  _myUsername!.isNotEmpty)
-                              ? _copyUsername
-                              : null,
-                          fontSize: 15,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      tr('myUsernameHint'),
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: scheme.onSurfaceVariant,
+                          const SizedBox(width: 8),
+                          DuoButton.secondary(
+                            label: tr('referralCopy'),
+                            onPressed:
+                                (_myUsername != null && _myUsername!.isNotEmpty)
+                                    ? _copyUsername
+                                    : null,
+                            fontSize: 15,
+                          ),
+                        ],
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 4),
+                      Text(
+                        tr('myUsernameHint'),
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            // Agregar por nombre: campo con radio 16 y borde 2 pt
-            // #E5E5E5, 56 pt de alto; el botón "AGREGAR" va a ancho
-            // completo DEBAJO del campo (rediseño Duolingo 7.0).
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  SizedBox(
-                    height: 56,
-                    child: TextField(
-                      controller: _nameCtrl,
-                      decoration: InputDecoration(
-                        hintText: tr('friendsAddHint'),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: BorderSide(
-                            // Borde según el tema (auditoría 7.2).
-                            color: isDark ? _lineDark : _lineLight,
-                            width: 2,
-                          ),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: BorderSide(
-                            color: isDark ? _lineDark : _lineLight,
-                            width: 2,
-                          ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: const BorderSide(
-                            color: Color(0xFF84D8FF),
-                            width: 2,
-                          ),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 16),
-                      ),
-                      textInputAction: TextInputAction.done,
-                      onSubmitted: (_) => _add(),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: DuoButton.primary(
-                      label: tr('friendsAddButton').toUpperCase(),
-                      onPressed: _adding ? null : _add,
-                      fontSize: 17,
-                      shine: false,
-                    ),
-                  ),
-                  if (_addMessage != null) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      _addMessage!,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            // Solicitudes pendientes: aunque la notificación no
-            // llegue, aquí se ve quién me escribió y puedo confirmar
-            // o eliminar; las mías muestran "Solicitud enviada" +
-            // Cancelar. Con Retar solo en amigos confirmados.
-            if (_online && (_incoming.isNotEmpty || _sent.isNotEmpty))
+              // Agregar por nombre: campo con radio 16 y borde 2 pt
+              // #E5E5E5, 56 pt de alto; el botón "AGREGAR" va a ancho
+              // completo DEBAJO del campo (rediseño Duolingo 7.0).
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Padding(
-                      padding: const EdgeInsets.only(left: 4, bottom: 6),
-                      child: Text(
-                        tr('friendsRequestsTitle'),
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
-                          color: isDark ? Colors.white : _sectionLight,
+                    SizedBox(
+                      height: 56,
+                      child: TextField(
+                        controller: _nameCtrl,
+                        decoration: InputDecoration(
+                          hintText: tr('friendsAddHint'),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide(
+                              // Borde según el tema (auditoría 7.2).
+                              color: isDark ? _lineDark : _lineLight,
+                              width: 2,
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide(
+                              color: isDark ? _lineDark : _lineLight,
+                              width: 2,
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: const BorderSide(
+                              color: Color(0xFF84D8FF),
+                              width: 2,
+                            ),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 16),
                         ),
+                        textInputAction: TextInputAction.done,
+                        onSubmitted: (_) => _add(),
                       ),
                     ),
-                    for (final r in _incoming) ...[
-                      _RequestRow(
-                        request: r,
-                        incoming: true,
-                        isDark: isDark,
-                        scheme: scheme,
-                        onConfirm: () => _accept(r),
-                        onDelete: () => _reject(r),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: DuoButton.primary(
+                        label: tr('friendsAddButton').toUpperCase(),
+                        onPressed: _adding ? null : _add,
+                        fontSize: 17,
+                        shine: false,
                       ),
-                      Divider(
-                        height: 1,
-                        thickness: 1,
-                        color: isDark ? _lineDark : _lineLight,
-                      ),
-                    ],
-                    for (final r in _sent) ...[
-                      _RequestRow(
-                        request: r,
-                        incoming: false,
-                        isDark: isDark,
-                        scheme: scheme,
-                        onConfirm: () {},
-                        onDelete: () => _cancel(r),
-                      ),
-                      Divider(
-                        height: 1,
-                        thickness: 1,
-                        color: isDark ? _lineDark : _lineLight,
+                    ),
+                    if (_addMessage != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        _addMessage!,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: scheme.onSurfaceVariant,
+                        ),
                       ),
                     ],
                   ],
                 ),
               ),
-            const SizedBox(height: 4),
-            Expanded(
-              child: !_online
-                  ? _CalmLine(text: tr('socialOffline'))
-                  : StreamBuilder<List<FriendEntry>>(
-                      stream: SocialService.friendsStream(),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState ==
-                                ConnectionState.waiting &&
-                            !snapshot.hasData) {
-                          return const Center(
-                              child: CircularProgressIndicator());
-                        }
-                        if (snapshot.hasError) {
-                          return _CalmLine(text: tr('socialOffline'));
-                        }
-                        final friends = snapshot.data ?? [];
-                        if (friends.isEmpty) {
-                          return _EmptyFriends(scheme: scheme);
-                        }
-                        // Filas planas separadas por líneas finas
-                        // (rediseño Duolingo 7.0).
-                        return ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(16, 2, 16, 16),
-                          itemCount: friends.length,
-                          separatorBuilder: (context, index) => Divider(
-                            height: 1,
-                            thickness: 1,
-                            color: isDark ? _lineDark : _lineLight,
+              // Solicitudes pendientes: aunque la notificación no
+              // llegue, aquí se ve quién me escribió y puedo confirmar
+              // o eliminar; las mías muestran "Solicitud enviada" +
+              // Cancelar. Con Retar solo en amigos confirmados.
+              if (_online && (_incoming.isNotEmpty || _sent.isNotEmpty))
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4, bottom: 6),
+                        child: Text(
+                          tr('friendsRequestsTitle'),
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            color: isDark ? Colors.white : _sectionLight,
                           ),
-                          itemBuilder: (context, index) => _FriendRow(
-                            friend: friends[index],
-                            isDark: isDark,
-                            scheme: scheme,
-                            onChallenge: () => _challenge(friends[index]),
-                          ),
-                        );
-                      },
-                    ),
-            ),
-          ],
+                        ),
+                      ),
+                      for (final r in _incoming) ...[
+                        _RequestRow(
+                          request: r,
+                          incoming: true,
+                          isDark: isDark,
+                          scheme: scheme,
+                          onConfirm: () => _accept(r),
+                          onDelete: () => _reject(r),
+                        ),
+                        Divider(
+                          height: 1,
+                          thickness: 1,
+                          color: isDark ? _lineDark : _lineLight,
+                        ),
+                      ],
+                      for (final r in _sent) ...[
+                        _RequestRow(
+                          request: r,
+                          incoming: false,
+                          isDark: isDark,
+                          scheme: scheme,
+                          onConfirm: () {},
+                          onDelete: () => _cancel(r),
+                        ),
+                        Divider(
+                          height: 1,
+                          thickness: 1,
+                          color: isDark ? _lineDark : _lineLight,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 4),
+              // Sin Expanded: dentro del scroll, la lista mide su
+              // propio alto (shrinkWrap) y la página entera desplaza.
+              if (!_online)
+                _CalmLine(text: tr('socialOffline'))
+              else
+                StreamBuilder<List<FriendEntry>>(
+                  stream: SocialService.friendsStream(),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting &&
+                        !snapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    if (snapshot.hasError) {
+                      return _CalmLine(text: tr('socialOffline'));
+                    }
+                    final friends = snapshot.data ?? [];
+                    if (friends.isEmpty) {
+                      return _EmptyFriends(scheme: scheme);
+                    }
+                    // Filas planas separadas por líneas finas
+                    // (rediseño Duolingo 7.0).
+                    return ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(16, 2, 16, 16),
+                      itemCount: friends.length,
+                      separatorBuilder: (context, index) => Divider(
+                        height: 1,
+                        thickness: 1,
+                        color: isDark ? _lineDark : _lineLight,
+                      ),
+                      itemBuilder: (context, index) => _FriendRow(
+                        friend: friends[index],
+                        isDark: isDark,
+                        scheme: scheme,
+                        onChallenge: () => _challenge(friends[index]),
+                      ),
+                    );
+                  },
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -769,7 +777,10 @@ class _FriendRow extends StatelessWidget {
                 Text(
                   '${tr('lbLevels')} ${friend.levelsPassedTotal} · '
                   '${tr('pointsWord')} ${friend.points} · '
-                  '${tr('streakWord')} ${friend.streak}',
+                  '${tr('streakWord')} ${friend.streak}'
+                  // Trofeos (examen por tema, Kristian 2026-11-14):
+                  // los demás ven cuántos trofeos lleva cada amigo.
+                  '${friend.trophiesTotal > 0 ? ' · ${tr('trophiesWord')} ${friend.trophiesWon}/${friend.trophiesTotal}' : ''}',
                   // Una sola línea con elipsis: si el texto es
                   // largo, todas las filas siguen midiendo lo
                   // mismo (regla 8) en vez de crecer a dos líneas.
@@ -821,7 +832,6 @@ class _RequestRow extends StatelessWidget {
   final ColorScheme scheme;
   final VoidCallback onConfirm;
   final VoidCallback onDelete;
-
 
   @override
   Widget build(BuildContext context) {

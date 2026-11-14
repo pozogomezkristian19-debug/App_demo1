@@ -41,12 +41,8 @@ void main() {
       expect(destinationForPushType('duel_result'), PushDestination.friends);
     });
 
-    test('soporte va a Soporte y avisos a la bandeja', () {
-      expect(destinationForPushType('support_reply'),
-          PushDestination.support);
-      expect(
-          destinationForPushType('announcement'), PushDestination.inbox);
-    });
+    // (7.7: Soporte borrado — 'support_reply' viejo va a la
+    // bandeja; el test de la destinación Soporte se borró.)
 
     test('tipo desconocido o nulo va a la bandeja (se ve igual)', () {
       expect(destinationForPushType('admin_new_user'), PushDestination.inbox);
@@ -58,7 +54,6 @@ void main() {
   group('screenKeyForDestination', () {
     test('claves de HomeScreen._openScreenKey', () {
       expect(screenKeyForDestination(PushDestination.friends), 'friends');
-      expect(screenKeyForDestination(PushDestination.support), 'support');
       expect(
           screenKeyForDestination(PushDestination.inbox), 'notifications');
     });
@@ -296,15 +291,8 @@ void main() {
       expect(NavRequests.pendingPushScreen, 'friends');
     });
 
-    test('toque de respuesta de soporte: pide Soporte', () async {
-      await PushService.handlePushTapData(
-        {'type': 'support_reply', 'messageId': 'm-3'},
-        title: 'Soporte te respondió',
-        body: 'Listo.',
-        messageId: 'fcm-tap-2',
-      );
-      expect(NavRequests.pendingPushScreen, 'support');
-    });
+    // (7.7: Soporte borrado — la pantalla Soporte ya no existe;
+    // el test de su navegación se borró.)
 
     test('toque de aviso del admin: pide la bandeja', () async {
       await PushService.handlePushTapData(

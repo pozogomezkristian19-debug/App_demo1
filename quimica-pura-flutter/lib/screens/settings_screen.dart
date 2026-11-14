@@ -19,7 +19,6 @@ import 'package:flutter/material.dart';
 
 import '../services/accent.dart';
 import '../services/localization.dart';
-import '../services/progress.dart';
 import '../services/sound_service.dart';
 import '../services/update_check.dart';
 import '../services/user_prefs.dart';
@@ -167,8 +166,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             icon: LucideIcons.download,
             iconColor: teal,
             title: tr('checkUpdateTitle'),
-            subtitle:
-                tr('checkUpdateSub').replaceFirst('%s', kDisplayVersion),
+            subtitle: tr('checkUpdateSub').replaceFirst('%s', kDisplayVersion),
             onTap: _manualUpdateCheck,
           ),
           // Idioma: abre el selector de idioma.
@@ -181,16 +179,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     orElse: () => AppLang.supported.first)
                 .$2,
             onTap: () => widget.onOpenScreen('language'),
-          ),
-          // Cambiar versión: Bachillerato o Universidad.
-          _SettingsRow(
-            icon: LucideIcons.refreshCw,
-            iconColor: amber,
-            title: tr('accountVersion'),
-            subtitle: ProgressService.track == ProgressService.trackBach
-                ? tr('trackBach')
-                : tr('trackUni'),
-            onTap: () => widget.onOpenScreen('version'),
           ),
           // Favoritos: los elementos guardados.
           _SettingsRow(
@@ -241,10 +229,9 @@ class _SettingsRow extends StatelessWidget {
     final c = _SettingsColors.of(context);
     // En modo oscuro, los iconos llevan el color del acento, como
     // en Cuenta.
-    final effectiveIconColor =
-        Theme.of(context).brightness == Brightness.dark
-            ? Theme.of(context).colorScheme.primary
-            : iconColor;
+    final effectiveIconColor = Theme.of(context).brightness == Brightness.dark
+        ? Theme.of(context).colorScheme.primary
+        : iconColor;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -269,11 +256,10 @@ class _SettingsRow extends StatelessWidget {
                   height: 48,
                   decoration: BoxDecoration(
                     color: effectiveIconColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(16),
                   ),
                   alignment: Alignment.center,
-                  child:
-                      LucideIcon(icon, color: effectiveIconColor, size: 24),
+                  child: LucideIcon(icon, color: effectiveIconColor, size: 24),
                 ),
                 const SizedBox(width: 14),
                 Expanded(

@@ -79,10 +79,13 @@ service cloud.firestore {
     // debe ser privada, hay que guardarla SOLO en la colección 'friends'
     // (lectura privada) y NO en este documento.
     function userWritableFields() {
-      return ['username', 'joinedAt', 'lastActive', 'levelsPassed',
-              'points', 'streak', 'track', 'appVersion',
+      return ['username', 'joinedAt', 'lastActive', 'lastSeenMs',
+              'levelsPassed',
+              'levels', 'trophies', 'practiceDays', 'points', 'streak', 'track',
+              'appVersion', 'shared',
               'purchases', 'friends', 'tournamentMedals',
-              'bestTournamentScores',
+              'bestTournamentScores', 'tournamentsJoined',
+              'fcmToken', 'fcmTokenUpdatedAt',
               'referralCode', 'referredBy', 'referredByUid',
               'referralRewarded', 'referralsCount', 'referralMilestones',
               'referralLastInvitee'];
@@ -303,47 +306,92 @@ service cloud.firestore {
       // LECTURA: solo los 2 participantes. Nadie más (ni siquiera otros
       // usuarios autenticados) puede ver un duelo ajeno: ni las preguntas,
       // ni las respuestas, ni los tiempos.
+      // CORREGIDO 2026-11-13: la app escribe playerA/playerB (no
+      // 'participants'), así que la lectura se comprueba contra esos
+      // dos campos. Antes esta regla pedía 'participants' y ningún
+      // duelo se podía crear ni leer (0 duelos en Firestore).
       allow read: if isSignedIn()
-        && request.auth.uid in resource.data.participants;
+        && (request.auth.uid == resource.data.playerA
+          || request.auth.uid == resource.data.playerB);
 
       // CREAR: solo un participante, y tiene que incluirse a sí mismo.
-      // participants tiene que ser exactamente 2 uid distintos, uno de
-      // ellos el creador; questions, una lista de ids de pregunta. La
-      // validez de las preguntas y de las transiciones de estado se
+      // playerA y playerB tienen que ser 2 uid distintos, uno de
+      // ellos el creador; questionIds, una lista de ids de pregunta.
+      // La validez de las preguntas y de las transiciones de estado se
       // comprueba en la app: las reglas no conocen el banco de preguntas.
       allow create: if isSignedIn()
-        && request.resource.data.participants is list
-        && request.resource.data.participants.size() == 2
-        && request.auth.uid in request.resource.data.participants
-        && request.resource.data.participants[0] != request.resource.data.participants[1]
-        && request.resource.data.questions is list;
+        && request.resource.data.playerA is string
+        && request.resource.data.playerB is string
+        && request.resource.data.playerA != ''
+        && request.resource.data.playerB != ''
+        && request.resource.data.playerA != request.resource.data.playerB
+        && (request.auth.uid == request.resource.data.playerA
+          || request.auth.uid == request.resource.data.playerB)
+        && request.resource.data.questionIds is list;
 
       // ACTUALIZAR: solo un participante del duelo, y solo puede cambiar
-      // el desarrollo (respuestas, tiempos, estado, ganador). participants
-      // y questions son INMUTABLES: nadie puede meter a un tercero en un
-      // duelo en curso ni cambiar las preguntas una vez creado. Además,
-      // cada jugador solo puede tocar SU propia entrada en 'answers'
-      // (mapa por uid): un participante NO puede escribir ni cambiar las
-      // respuestas/tiempos del otro jugador, y tampoco puede borrar el
-      // campo 'answers' entero. Lo que las reglas NO pueden impedir es que
-      // un participante infle sus PROPIOS tiempos/respuestas, o que
-      // declare el 'winner'/'status' a su favor sin haber ganado de verdad
-      // (las reglas no conocen las respuestas correctas): eso se detecta
-      // en la app de admin.
+      // el desarrollo (resultados, tiempos, estado, ganador). playerA,
+      // playerB y questionIds son INMUTABLES: nadie puede meter a un
+      // tercero en un duelo en curso ni cambiar las preguntas una vez
+      // creado. Además, cada jugador solo puede tocar SU propia entrada
+      // en 'results' (mapa por uid): un participante NO puede escribir
+      // ni cambiar los resultados/tiempos del otro jugador, y tampoco
+      // puede borrar el campo 'results' entero. Lo que las reglas NO
+      // pueden impedir es que un participante infle sus PROPIOS
+      // tiempos/respuestas, o que declare el 'winnerUid'/'status' a su
+      // favor sin haber ganado de verdad (las reglas no conocen las
+      // respuestas correctas): eso se detecta en la app de admin.
       allow update: if isSignedIn()
-        && request.auth.uid in resource.data.participants
-        && request.auth.uid in request.resource.data.participants
-        && request.resource.data.participants == resource.data.participants
-        && request.resource.data.questions == resource.data.questions
-        && (!('answers' in resource.data)
-          || ('answers' in request.resource.data))
-        && (!('answers' in request.resource.data)
-          || request.resource.data.answers.diff(
-              resource.data.get('answers', {})).affectedKeys()
+        && (request.auth.uid == resource.data.playerA
+          || request.auth.uid == resource.data.playerB)
+        && request.resource.data.playerA == resource.data.playerA
+        && request.resource.data.playerB == resource.data.playerB
+        && request.resource.data.questionIds == resource.data.questionIds
+        && (!('results' in resource.data)
+          || ('results' in request.resource.data))
+        && (!('results' in request.resource.data)
+          || request.resource.data.results.diff(
+              resource.data.get('results', {})).affectedKeys()
                 .hasOnly([request.auth.uid]));
 
       // BORRAR: nadie desde un cliente; el historial de duelos se conserva.
       allow delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    //  Colección 'duel_queue' — cola de matchmaking del duelo al azar.
+    //  Un documento por usuario que está BUSCANDO duelo (id = uid).
+    //  Campos: uid, username, createdAtMs. El duelo al azar SOLO hace
+    //  match entre dos personas que están en la cola A LA VEZ (y en
+    //  línea): quien encuentra a otro crea el duelo y los dos salen
+    //  de la cola. Los BOTS nunca entran en la cola (no son personas
+    //  buscando duelo) y nunca se les hace match aleatorio.
+    //  Cada lado borra SOLO su propia entrada: el que crea el duelo
+    //  borra la suya y el retado borra la suya cuando su pantalla
+    //  detecta el duelo. Por eso el borrado es solo-propio: si
+    //  cualquiera pudiera borrar la entrada de otro, podría sacar a
+    //  cualquiera de la cola. La entrada que queda fantasma (app
+    //  cerrada sin salir) no hace match: el que busca comprueba que
+    //  el rival siga en línea (lastSeenMs) antes de crear el duelo.
+    // -------------------------------------------------------------------------
+    match /duel_queue/{uid} {
+
+      // LECTURA: cualquier usuario con sesión (para encontrar a
+      // alguien buscando). Solo uid, nombre y fecha: nada sensible.
+      allow read: if isSignedIn();
+
+      // CREAR: solo mi propia entrada, y el uid del documento tiene
+      // que ser el mío.
+      allow create: if isSignedIn()
+        && request.auth.uid == uid
+        && request.resource.data.uid == request.auth.uid;
+
+      // ACTUALIZAR: nunca (la entrada se escribe una vez; para
+      // volver a entrar se borra y se crea de nuevo).
+      allow update: if false;
+
+      // BORRAR: solo mi propia entrada.
+      allow delete: if isSignedIn() && request.auth.uid == uid;
     }
 
     // -------------------------------------------------------------------------
@@ -402,70 +450,6 @@ service cloud.firestore {
       // historial (cerrados quedan con status 'arreglado' o 'rechazado').
       allow delete: if false;
     }
-
-    // -------------------------------------------------------------------------
-    //  Colección 'support_messages' — mensajes de Soporte. Campos
-    //  CANÓNICOS (fijados en esta ronda, ver FIREBASE_SETUP.md):
-    //  authorUid (uid del usuario que escribe), username (nombre que
-    //  muestra en la bandeja del admin), message (texto del usuario),
-    //  createdAt (fecha de envío), status ('abierto' | 'respondido'),
-    //  reply (respuesta del admin; ausente o vacía mientras el
-    //  mensaje está 'abierto'), replyAt (fecha de la respuesta, la
-    //  escribe el admin al responder).
-    //  El usuario escribe en una ventanita dentro de la app (ya NO abre
-    //  WhatsApp directo); sin internet el mensaje se guarda en local y se
-    //  envía al volver la conexión. La app de admin tiene una bandeja de
-    //  Soporte para leer y responder; la respuesta la ve el usuario en su
-    //  ventanita. Es el mismo patrón que 'reports' (autor + estado que
-    //  solo tocan los admins), pero con respuesta visible para el autor.
-    // -------------------------------------------------------------------------
-    match /support_messages/{messageId} {
-
-      // LECTURA: solo los admins y el propio autor. Un usuario NO puede
-      // leer los mensajes de Soporte de otros usuarios (ni siquiera
-      // sabiendo el id del documento: una lectura directa también exige
-      // ser el autor o admin). Los admins ven toda la bandeja.
-      allow read: if isAdmin()
-        || (isSignedIn() && resource.data.authorUid == request.auth.uid);
-
-      // CREAR: solo un usuario autenticado, como autor de su propio
-      // mensaje: authorUid tiene que ser su uid, el estado inicial tiene
-      // que ser 'abierto', message tiene que ser un texto no vacío y
-      // username, un texto. El usuario NO puede crear un mensaje ya
-      // con respuesta: 'reply' no puede venir en la creación (la
-      // respuesta solo la escribe un admin después, con 'update').
-      allow create: if isSignedIn()
-        && request.resource.data.authorUid == request.auth.uid
-        && request.resource.data.status == 'abierto'
-        && request.resource.data.message is string
-        && request.resource.data.message.size() > 0
-        && request.resource.data.username is string
-        && !('reply' in request.resource.data);
-
-      // ACTUALIZAR: SOLO los admins, y SOLO los campos de respuesta y
-      // estado ('reply', 'status', 'replyAt'). Ningún otro campo
-      // (autor, nombre, mensaje, fecha de envío) se puede tocar después
-      // de creado: si un admin intenta cambiar algo más, la escritura se
-      // rechaza. El usuario NO puede editar su propio mensaje una vez
-      // enviado ni cambiar el estado (ni marcarlo 'respondido' él mismo,
-      // ni reabrirlo). Si el estado pasa a 'respondido', tiene que haber
-      // una respuesta de texto ('reply' presente y string); un
-      // mensaje 'abierto' puede no tenerla todavía.
-      allow update: if isAdmin()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reply', 'replyAt'])
-        && request.resource.data.status in ['abierto', 'respondido']
-        && (request.resource.data.status != 'respondido'
-          || ('reply' in request.resource.data
-            && request.resource.data.reply is string
-            && request.resource.data.reply.size() > 0));
-
-      // BORRAR: nadie desde un cliente. Los mensajes de Soporte se
-      // conservan como historial (cerrados quedan con status
-      // 'respondido'); si hay que borrar uno, se hace a mano desde la
-      // consola de Firebase.
-      allow delete: if false;
-    }
-
     // -------------------------------------------------------------------------
     //  Colección 'announcements' — anuncios para todos los usuarios.
     //  Campos: title, body (texto), createdAt (fecha).
@@ -478,72 +462,6 @@ service cloud.firestore {
       // ESCRITURA: solo administradores (el dueño incluido).
       allow create, update, delete: if isAdmin();
     }
-
-    // -------------------------------------------------------------------------
-    //  Colección 'groups' — grupos de estudio. Campos: name, code
-    //  (código de invitación), members (lista de uid), creatorUid (uid del
-    //  creador).
-    //  ------------------------------------------------------------------
-    //  CÓMO SE ENTRA CON EL CÓDIGO (leer antes de programar la app):
-    //  la lectura es SOLO para miembros, así que alguien que todavía no es
-    //  miembro NO puede buscar el grupo por su código (una consulta por
-    //  inviteCode fallaría: las reglas no pueden comparar el código que
-    //  el usuario escribe con el del documento). Por eso el DOCUMENTO
-    //  TIENE QUE SER LOCALIZABLE SIN BUSCAR: la app debe usar el propio
-    //  código de invitación como id del documento (o compartir el id del
-    //  documento junto con el código). Quien conoce el código puede unirse;
-    //  el código ES la llave, como el enlace de un grupo de WhatsApp: no
-    //  hay verificación del código en el servidor. La app debe comprobar
-    //  en local que el código escrito coincide con inviteCode antes de
-    //  intentar unirse, y si algún día hace falta una unión verificada en
-    //  servidor, hará falta una Cloud Function (no existe en esta ronda;
-    //  plan Spark: las funciones no están incluidas en el plan gratuito).
-    // -------------------------------------------------------------------------
-    match /groups/{groupId} {
-
-      // LECTURA: solo los miembros del grupo. Nadie más puede ver ni el
-      // nombre, ni los miembros, ni el código de invitación.
-      allow read: if isSignedIn()
-        && request.auth.uid in resource.data.memberUids;
-
-      // CREAR: el creador es quien crea el grupo y su único miembro
-      // inicial; ownerUid tiene que ser su uid, y name y code,
-      // texto.
-      allow create: if isSignedIn()
-        && request.resource.data.ownerUid == request.auth.uid
-        && request.resource.data.memberUids == [request.auth.uid]
-        && request.resource.data.name is string
-        && request.resource.data.code is string;
-
-      // ACTUALIZAR: el creador (ownerUid) NUNCA cambia. Tres casos:
-      //   1. El CREADOR edita nombre, código o miembros, y sigue siendo
-      //      miembro (puede añadir o quitar a otros, no quitarse a sí mismo).
-      //   2. UNIRSE: quien NO era miembro se añade SOLO a sí mismo a
-      //      memberUids, sin tocar ningún otro campo. Así entra con el código.
-      //   3. SALIRSE: un miembro se quita SOLO a sí mismo de memberUids, sin
-      //      tocar ningún otro campo.
-      // Un miembro que no es creador NO puede editar el nombre, el código
-      // ni a otros miembros, y nadie puede cambiar el creador del grupo.
-      allow update: if isSignedIn()
-        && request.resource.data.ownerUid == resource.data.ownerUid
-        && ((resource.data.ownerUid == request.auth.uid
-            && request.auth.uid in request.resource.data.memberUids)
-          || (!(request.auth.uid in resource.data.memberUids)
-            && request.auth.uid in request.resource.data.memberUids
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids'])
-            && request.resource.data.memberUids.hasAll(resource.data.memberUids)
-            && request.resource.data.memberUids.size() == resource.data.memberUids.size() + 1)
-          || ((request.auth.uid in resource.data.memberUids)
-            && !(request.auth.uid in request.resource.data.memberUids)
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids'])
-            && resource.data.memberUids.hasAll(request.resource.data.memberUids)
-            && request.resource.data.memberUids.size() == resource.data.memberUids.size() - 1));
-
-      // BORRAR: solo el creador del grupo.
-      allow delete: if isSignedIn()
-        && resource.data.ownerUid == request.auth.uid;
-    }
-
     // -------------------------------------------------------------------------
     //  Colección 'friends' — lista de amigos por usuario. Un documento
     //  por usuario, con el mismo id que su uid. Campos: friends (lista

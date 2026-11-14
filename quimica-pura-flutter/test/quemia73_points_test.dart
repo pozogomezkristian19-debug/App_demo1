@@ -171,6 +171,9 @@ class _Q73FakeRepo implements AnalyticsRepository {
           Object value) async {}
 
   @override
+  Future<void> deleteDoc(String collection, String docId) async {}
+
+  @override
   Future<void> removeFromArray(String collection, String docId,
           String field, Object value) async {}
 
@@ -482,10 +485,10 @@ void main() {
   });
 
   group('P13 versión pública 1.0', () {
-    test('la pública es 1.0 y la interna sigue en 7.3 (el comprobador '
+    test('la pública es 1.0 y la interna sigue en 7.7 (el comprobador '
         'compara la interna)', () {
       expect(kDisplayVersion, '1.0');
-      expect(kAppVersion, '7.3');
+      expect(kAppVersion, '7.7');
     });
 
     testWidgets('Ajustes muestra "Versión instalada: 1.0"',
@@ -527,7 +530,7 @@ void main() {
       );
       final context = tester.element(find.byType(Scaffold));
       const info = UpdateInfo(
-        latest: '7.3',
+        latest: '7.7',
         apkUrl: 'https://example.com/app.apk',
         notes: 'Novedades',
         force: false,
@@ -536,7 +539,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('Versión 1.0 disponible'), findsOneWidget);
-      expect(find.text('Versión 7.3 disponible'), findsNothing);
+      expect(find.text('Versión 7.7 disponible'), findsNothing);
     });
   });
 

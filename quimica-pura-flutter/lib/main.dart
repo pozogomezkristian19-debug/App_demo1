@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import 'widgets/lucide_icons.dart';
 import 'data/periodic_table.dart';
 import 'data/search_index.dart';
+import 'data/topics.dart';
 import 'screens/account_screen.dart';
 import 'screens/aprender_screen.dart';
 import 'screens/avatar_editor_screen.dart';
@@ -18,7 +19,6 @@ import 'screens/favorites_screen.dart';
 import 'screens/formula_screen.dart';
 import 'screens/friends_screen.dart';
 import 'screens/glossary_screen.dart';
-import 'screens/groups_screen.dart';
 import 'screens/how_to_play_screen.dart';
 import 'screens/lab_screen.dart';
 import 'screens/lab_sim_screen.dart';
@@ -37,7 +37,6 @@ import 'screens/settings_screen.dart';
 import 'screens/shop_screen.dart';
 import 'screens/splash_screen.dart';
 import 'screens/stats_screen.dart';
-import 'screens/support_screen.dart';
 import 'screens/tabla_screen.dart';
 import 'screens/table_quiz_screen.dart';
 import 'screens/theme_screen.dart';
@@ -45,7 +44,6 @@ import 'screens/timed_exam_screen.dart';
 import 'screens/tips_screen.dart';
 import 'screens/topic_detail_screen.dart';
 import 'screens/tournaments_screen.dart';
-import 'screens/version_screen.dart';
 import 'data/i18n/content_i18n.dart';
 import 'services/favorites.dart';
 import 'services/home_widget_service.dart';
@@ -67,17 +65,18 @@ import 'services/auth_service.dart';
 import 'services/duels_service.dart';
 import 'services/firestore_social_repository.dart';
 import 'services/friends_groups_service.dart';
+import 'services/presence_service.dart';
 import 'services/remote_content_service.dart';
 import 'services/referral_service.dart';
 import 'services/reports_service.dart';
 import 'services/shop_service.dart';
-import 'services/support_service.dart';
 import 'services/tournaments_service.dart';
 import 'widgets/banned_screen.dart';
 import 'widgets/brand_logo.dart';
 import 'widgets/element_sheet.dart';
 import 'widgets/lives_chip.dart';
 import 'widgets/main_bottom_nav.dart';
+import 'widgets/theme_toggle.dart';
 
 /// URL de la página de descarga de Melli-Qui (landing en GitHub Pages).
 const String kLandingUrl =
@@ -112,8 +111,8 @@ Future<void> main() async {
   // y el splash nativo se quedaba todo ese tiempo. La app arranca
   // sin uid (id temporal) y el uid llega en segundo plano; nada de
   // la primera pantalla lo necesita.
-  unawaited(AuthService.ensureAnonymous().then(
-      (_) => AnalyticsSync.init().timeout(
+  unawaited(
+      AuthService.ensureAnonymous().then((_) => AnalyticsSync.init().timeout(
             const Duration(seconds: 3),
             onTimeout: () {},
           )));
@@ -130,6 +129,11 @@ Future<void> main() async {
   // (Ahora corre en segundo plano, encadenado al inicio anónimo de
   // arriba: la migración necesita el uid.)
   await UserPrefs.load();
+  // Precarga del clic (7.7): el pool de baja latencia del toque se
+  // crea al arrancar para que el primer toque suene al instante.
+  // Sin esperar: si el audio falla, el toque se precarga en su
+  // primera llamada y el arranque no se retrasa.
+  unawaited(SoundService.preloadTap());
   // Compras y cosméticos de la tienda (Quemia 7.0): se cargan
   // antes de arrancar para que el tema equipado tiña la app
   // desde el primer fotograma.
@@ -167,6 +171,10 @@ Future<void> main() async {
   // y fallan en silencio.
   unawaited(AnalyticsSync.applyRemoteSettings());
   unawaited(AnalyticsSync.uploadProgress());
+  // Presencia online (7.7): latido cada 30 s con lastSeenMs para
+  // que el duelo al azar y los retos sepan quién está en línea.
+  // Sin Google vinculada el latido no escribe nada.
+  PresenceService.start();
   // Respaldo con Google (backupToCloud es hoy un alias de
   // uploadProgress con force: con Google enlazado sube aunque no
   // haya permiso de compartir, en privado).
@@ -188,22 +196,12 @@ Future<void> main() async {
   // Bandeja al abrir (Zona G2, capa sin push): lo que llegó online
   // mientras no había internet aparece en Notificaciones al abrir,
   // sin depender de que llegara el push FCM: solicitudes, duelos
-  // (reto y resultado) y avisos del creador. Las respuestas de
-  // soporte ya las vigila SupportService.listenForReplies() abajo.
+  // (reto y resultado) y avisos del creador.
   // Todo con try/catch interno y vacío sin internet: nunca bloquea
   // el arranque.
   unawaited(SocialService.syncFriendRequestInbox());
   unawaited(SocialService.syncDuelInbox());
   unawaited(AnnouncementsService.syncToInbox());
-  // Soporte (7.0, Kristian 09:52): enviar lo que quedó encolado sin
-  // internet y vigilar si el admin ya respondió a mis mensajes.
-  // Con try/catch y sin bloquear el arranque.
-  try {
-    unawaited(SupportService.instance.retryPendingSupport());
-    SupportService.instance.listenForReplies();
-  } catch (_) {
-    // Sin soporte online: la app sigue.
-  }
   // Primer frame YA: nada de red se esperó antes de aquí salvo los
   // 3 s acotados de arriba. El baneo se re-chequea en el primer
   // frame dentro de MelliQuiApp (ver initState).
@@ -382,14 +380,6 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
       unawaited(SocialService.syncFriendRequestInbox());
       unawaited(SocialService.syncDuelInbox());
       unawaited(AnnouncementsService.syncToInbox());
-      // Soporte (7.0): reenviar lo encolado y mirar si el admin
-      // respondió mientras la app estaba en segundo plano.
-      try {
-        unawaited(SupportService.instance.retryPendingSupport());
-        SupportService.instance.listenForReplies();
-      } catch (_) {
-        // Sin soporte online: la app sigue.
-      }
     }
   }
 
@@ -432,21 +422,37 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
     // verde oscuro de siempre; Violeta usa fondo con tinte violeta,
     // superficie violeta oscura y primario violeta claro (legible
     // sobre oscuro, como el menta lo es sobre el verde oscuro).
+    // AUDITORÍA 7.7 (punto 2): con un tema de la tienda equipado,
+    // TODO el oscuro deriva del color comprado — antes el
+    // colorScheme.primary, el fondo y los botones se quedaban en
+    // verde/violeta mientras el acento ya era Coral/Rosa/Azul.
+    // Sin tema de tienda, todo igual que siempre.
+    final shop = SocialService.equippedThemeColor;
     final violet = AppAccent.isViolet;
-    final bg = violet ? const Color(0xFF17112A) : _deepGreen;
-    final surface = violet ? const Color(0xFF241B3D) : _surfaceGreen;
-    final onSurface =
-        violet ? const Color(0xFFEDE9F7) : const Color(0xFFE6F4EE);
-    final primary = violet ? BrandColors.violetLight : BrandColors.mintLight;
-    final secondary = violet ? BrandColors.violet : BrandColors.mint;
-    final containerHighest =
-        violet ? const Color(0xFF2E2350) : const Color(0xFF1B3A31);
-    final buttonBg = violet ? BrandColors.violet : BrandColors.teal;
-    final buttonShadow = violet ? BrandColors.violetDeep : BrandColors.tealDark;
-    final inputFill =
-        violet ? const Color(0xFF1C1533) : const Color(0xFF0F241E);
-    final unselected =
-        violet ? const Color(0xFF9B8FC4) : const Color(0xFF8A9A93);
+    final bg = shop != null
+        ? AppAccent.darkBackground
+        : (violet ? const Color(0xFF17112A) : _deepGreen);
+    final surface = shop != null
+        ? AppAccent.darkCard
+        : (violet ? const Color(0xFF241B3D) : _surfaceGreen);
+    final onSurface = shop != null
+        ? Color.lerp(AppAccent.primary, Colors.white, 0.85)!
+        : (violet ? const Color(0xFFEDE9F7) : const Color(0xFFE6F4EE));
+    // primaryLight/primary/primaryDark ya respetan el tema de
+    // tienda y son idénticos a los valores viejos sin tema.
+    final primary = AppAccent.primaryLight;
+    final secondary = AppAccent.primary;
+    final containerHighest = shop != null
+        ? AppAccent.darkBorder
+        : (violet ? const Color(0xFF2E2350) : const Color(0xFF1B3A31));
+    final buttonBg = AppAccent.primary;
+    final buttonShadow = AppAccent.primaryDark;
+    final inputFill = shop != null
+        ? AppAccent.darkCard
+        : (violet ? const Color(0xFF1C1533) : const Color(0xFF0F241E));
+    final unselected = shop != null
+        ? AppAccent.darkInkSoft
+        : (violet ? const Color(0xFF9B8FC4) : const Color(0xFF8A9A93));
     return ThemeData(
       useMaterial3: true,
       fontFamily: 'Nunito',
@@ -506,8 +512,17 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
         elevation: 0,
         margin: const EdgeInsets.symmetric(vertical: 6),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
           side: const BorderSide(color: Color(0xFF37464F), width: 2),
+        ),
+      ),
+
+      // Hojas inferiores bien redondeadas (pulido 7.7): radio
+      // superior 24, mismo color de superficie que las tarjetas.
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: surface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
       ),
       // Las líneas divisorias NO son negras: divisor oscuro #37464F.
@@ -717,8 +732,17 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
         elevation: 0,
         margin: const EdgeInsets.symmetric(vertical: 6),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
           side: const BorderSide(color: Color(0xFFE5E5E5), width: 2),
+        ),
+      ),
+
+      // Hojas inferiores bien redondeadas (pulido 7.7): radio
+      // superior 24, mismo color de superficie que las tarjetas.
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
       ),
       // Las líneas divisorias NO son negras: gris muy claro.
@@ -972,12 +996,23 @@ class _ReviewChip extends StatelessWidget {
               LucideIcon(LucideIcons.rotateCcw,
                   size: 20, color: AppAccent.pillDarkForeground),
               const SizedBox(width: 4),
-              Text(
-                '$count',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                  color: AppAccent.pillDarkForeground,
+              // El número cambia con animación (pulido 7.7): al
+              // repasar, el conteo no salta de golpe, entra con
+              // escala + fundido.
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                transitionBuilder: (child, animation) => ScaleTransition(
+                  scale: animation,
+                  child: FadeTransition(opacity: animation, child: child),
+                ),
+                child: Text(
+                  '$count',
+                  key: ValueKey(count),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: AppAccent.pillDarkForeground,
+                  ),
                 ),
               ),
             ],
@@ -1318,8 +1353,6 @@ class _HomeScreenState extends State<HomeScreen> {
         page = const TournamentsScreen();
       case 'shop':
         page = const ShopScreen();
-      case 'groups':
-        page = const GroupsScreen();
       // Referidos (7.3): invita con tu código y los dos ganan
       // puntos. Va justo después de la Tienda: los premios de
       // los hitos son artículos de la tienda.
@@ -1330,10 +1363,6 @@ class _HomeScreenState extends State<HomeScreen> {
       // casillas (RedeemCodeScreen), sin pasar por Referidos.
       case 'redeem':
         page = const RedeemCodeScreen();
-      // Soporte en la app (7.0, Kristian 09:52): ventanita con hilo
-      // y compositor (ya no abre WhatsApp directo).
-      case 'support':
-        page = const SupportScreen();
       // Ajustes (7.1, Zona H): última fila de Cuenta; abre su
       // propia pantalla con Tema, Recordatorios, Notificaciones,
       // Cómo se juega, Buscar actualización, Idioma, Cambiar
@@ -1368,8 +1397,6 @@ class _HomeScreenState extends State<HomeScreen> {
         page = const TableQuizScreen();
       case 'labSim':
         page = const LabSimScreen();
-      case 'version':
-        page = VersionScreen(onVersionChanged: widget.onTrackChanged);
       case 'theme':
         page = const ThemeScreen();
       case 'howToPlay':
@@ -1459,13 +1486,24 @@ class _HomeScreenState extends State<HomeScreen> {
     return m == null ? raw.trim() : '+53 ${m.group(1)}';
   }
 
-  /// Hoja "Acerca de Melli-Qui" con los datos de soporte. El
-  /// teléfono es el número REMOTO de Soporte (7.0, 09:52; por
-  /// defecto +5356519431), no un número fijo en el código.
+  /// Hoja "Acerca de Melli-Qui" con el número de soporte. El teléfono
+  /// es el número REMOTO (por defecto +5356519431), que el creador
+  /// cambia desde la app de Administrador (ajustes remotos,
+  /// 'supportNumber'); no es un número fijo en el código. El Soporte
+  /// (mensajería) se eliminó en la 7.7: en Acerca de solo queda el
+  /// número para contactar.
   Future<void> _showAbout(BuildContext context) async {
-    final settings = await SupportService.instance.fetchSupportSettings();
+    var number = '+5356519431';
+    try {
+      final remote = await AnalyticsSync.fetchRemoteSettings();
+      final remoteNumber = remote['supportNumber'];
+      if (remoteNumber is String && remoteNumber.trim().isNotEmpty) {
+        number = remoteNumber.trim();
+      }
+    } catch (_) {
+      // Sin red: sigue el número por defecto.
+    }
     if (!context.mounted) return;
-    final number = settings.supportNumber;
     final display = _formatSupportPhone(number);
     showModalBottomSheet<void>(
       context: context,
@@ -1683,8 +1721,7 @@ class _HomeScreenState extends State<HomeScreen> {
         // punto 9): cada uno lleva _kTopBarGap a ambos lados.
         Center(
           child: Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: _kTopBarGap),
+            padding: const EdgeInsets.symmetric(horizontal: _kTopBarGap),
             child: ValueListenableBuilder<int>(
               valueListenable: ProgressService.livesNotifier,
               builder: (context, _, __) => LivesChip(
@@ -1700,8 +1737,7 @@ class _HomeScreenState extends State<HomeScreen> {
         // El avatar del usuario ya NO está aquí (fix2, item 6).
         Center(
           child: Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: _kTopBarGap),
+            padding: const EdgeInsets.symmetric(horizontal: _kTopBarGap),
             child: ValueListenableBuilder<int>(
               valueListenable: ProgressService.failedNotifier,
               builder: (context, _, __) => _ReviewChip(
@@ -1717,8 +1753,7 @@ class _HomeScreenState extends State<HomeScreen> {
         // (§3.9.5, Zona A), no píldora.
         Center(
           child: Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: _kTopBarGap),
+            padding: const EdgeInsets.symmetric(horizontal: _kTopBarGap),
             child: _NotificationBell(
               onTap: () => _openScreenKey('notifications'),
             ),
@@ -1745,9 +1780,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final tabColors = List<Color>.generate(
       5,
       (i) => widget.isDark
-          ? (AppAccent.isViolet
-              ? BrandColors.violetLight
-              : BrandColors.mintLight)
+          // En oscuro, el tinte claro del acento (auditoría 7.7:
+          // AppAccent.primaryLight ya respeta el tema de tienda y
+          // es idéntico a violeta claro/menta sin tema).
+          ? AppAccent.primaryLight
           : AppAccent.tabColor(_navOldIndex[i]),
     );
     return PopScope(
@@ -1881,7 +1917,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   // el anillo transparente, como en
                                   // el splash.)
                                   ClipRRect(
-                                    borderRadius: BorderRadius.circular(14),
+                                    borderRadius: BorderRadius.circular(16),
                                     child: Image.asset(
                                       scheme.brightness == Brightness.dark
                                           ? 'assets/ring_logo.png'
@@ -2025,10 +2061,30 @@ class _HomeScreenState extends State<HomeScreen> {
                             // Ronda #6, ítem 5: "Mi cuaderno" sale del menú
                             // (clave 'notes'); la pantalla de notas sigue
                             // existiendo en _openScreenKey y en la búsqueda.
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 8),
                           ],
                         ),
                       ),
+                      // Pie FIJO del menú (Kristian, 2026-11-14: el
+                      // botón claro/oscuro se queda aquí abajo, pero
+                      // para llegar a él no hay que bajar hasta el
+                      // fondo: va fijo como un navbar, el menú se
+                      // desliza y él se queda ahí). SOLO la fila del
+                      // interruptor, sin sección "TEMA" arriba ni
+                      // línea divisoria (Kristian 2026-11-14 ~11:51:
+                      // "porque se repite dos veces tema, deja donde
+                      // dice tema y el botón al lado, y el tema ese
+                      // arriba en grande y esa línea abajo nono,
+                      // quitalo"): el "Tema" que se queda es el de la
+                      // propia fila, al lado del botón.
+                      _drawerCard([
+                        const Padding(
+                          padding: EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 10),
+                          child: ThemeToggle(),
+                        ),
+                      ]),
+                      const SizedBox(height: 8),
                     ],
                   ),
                 ),
@@ -2077,8 +2133,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     key: const ValueKey('homeBody'),
                     child: AnimatedSwitcher(
                       duration: const Duration(milliseconds: 250),
-                      transitionBuilder: (child, animation) =>
-                          FadeTransition(
+                      transitionBuilder: (child, animation) => FadeTransition(
                         opacity: animation,
                         child: SlideTransition(
                           position: Tween<Offset>(

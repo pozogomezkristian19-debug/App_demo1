@@ -317,3 +317,198 @@ exports.onSupportCreatedNotifyAdmins = onDocumentCreated(
     }
   },
 );
+
+/* ==========================================================================
+ * OTP por correo (Quemia 7.7, Kristian)
+ * --------------------------------------------------------------------------
+ * Firebase Auth NO manda códigos de 6 dígitos (manda enlaces), así que
+ * el registro con correo y la recuperación de contraseña usan estas tres
+ * funciones HTTP (POST JSON, respuesta {ok: true/false}):
+ *   - sendOtp: genera un código de 6 dígitos, lo guarda en
+ *     `otp_codes/{correo}_{proposito}` (caduca en 10 min) y lo manda
+ *     por correo con Nodemailer + SMTP de Gmail.
+ *   - verifyOtp: comprueba el código (máx. 5 intentos; al acertar lo
+ *     borra para que no se reutilice).
+ *   - resetPasswordWithOtp: verifica el código y cambia la contraseña
+ *     con el Admin SDK (la app no puede hacerlo sola: el usuario no
+ *     ha iniciado sesión).
+ *
+ * Límites anti-spam: 60 s entre envíos al mismo correo, 5 intentos
+ * por código, caducidad de 10 min.
+ *
+ * Configuración (secretos, NO en el código): SMTP_USER = cuenta de
+ * Gmail que manda los correos; SMTP_PASS = contraseña de aplicación
+ * de esa cuenta (Google > Seguridad > Contraseñas de aplicaciones).
+ *   firebase functions:secrets:set SMTP_USER
+ *   firebase functions:secrets:set SMTP_PASS
+ *
+ * Despliegue: necesita el plan Blaze (estas funciones son HTTP, no
+ * triggers de Firestore). Sin desplegar, la app no puede mandar los
+ * códigos y OtpService devuelve false.
+ * ========================================================================== */
+
+const { onRequest } = require('firebase-functions/v2/https');
+const { defineSecret } = require('firebase-functions/params');
+const { getAuth } = require('firebase-admin/auth');
+const crypto = require('crypto');
+const nodemailer = require('nodemailer');
+
+const smtpUser = defineSecret('SMTP_USER');
+const smtpPass = defineSecret('SMTP_PASS');
+const auth = getAuth();
+
+const OTP_TTL_MS = 10 * 60 * 1000; // 10 min
+const OTP_RESEND_MS = 60 * 1000; // 60 s entre envíos
+const OTP_MAX_ATTEMPTS = 5;
+const OTP_PURPOSES = ['register', 'reset'];
+
+function otpDocId(email, purpose) {
+  return `${String(email).trim().toLowerCase()}_${purpose}`;
+}
+
+function otpCode() {
+  return String(crypto.randomInt(100000, 1000000));
+}
+
+function validEmail(email) {
+  return typeof email === 'string' &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
+
+function mailer() {
+  return nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: smtpUser.value(), pass: smtpPass.value() },
+  });
+}
+
+function otpMail(email, code, purpose) {
+  const para = purpose === 'reset'
+    ? 'recuperar tu contraseña de Quemia'
+    : 'confirmar tu correo en Quemia';
+  return {
+    from: `"Quemia" <${smtpUser.value()}>`,
+    to: email,
+    subject: `Tu código de Quemia: ${code}`,
+    text: `Hola,\n\nTu código para ${para} es:\n\n${code}\n\nCaduca en 10 minutos. Si no fuiste tú quien lo pidió, ignora este correo.\n\nQuemia`,
+    html: `<p>Hola,</p><p>Tu código para ${para} es:</p>` +
+      `<p style="font-size:32px;font-weight:bold;letter-spacing:6px;">${code}</p>` +
+      `<p>Caduca en 10 minutos. Si no fuiste tú quien lo pidió, ignora este correo.</p><p>Quemia</p>`,
+  };
+}
+
+/** Lee el JSON del body (onRequest no lo parsea solo). */
+function readJson(req) {
+  if (req.body && typeof req.body === 'object') return req.body;
+  try {
+    return JSON.parse(req.body || '{}');
+  } catch (_) {
+    return {};
+  }
+}
+
+/** Genera el código, lo guarda y lo manda por correo. */
+exports.sendOtp = onRequest(
+  { secrets: [smtpUser, smtpPass] },
+  async (req, res) => {
+    try {
+      if (req.method !== 'POST') return res.status(405).json({ ok: false });
+      const { email, purpose } = readJson(req);
+      if (!validEmail(email) || !OTP_PURPOSES.includes(purpose)) {
+        return res.status(400).json({ ok: false });
+      }
+      const id = otpDocId(email, purpose);
+      const ref = db.collection('otp_codes').doc(id);
+      const snap = await ref.get();
+      const now = Date.now();
+      if (snap.exists) {
+        const createdAt = snap.get('createdAtMs') || 0;
+        if (now - createdAt < OTP_RESEND_MS) {
+          return res.json({ ok: false, error: 'too_soon' });
+        }
+      }
+      const code = otpCode();
+      await ref.set({
+        code,
+        email: String(email).trim().toLowerCase(),
+        purpose,
+        createdAtMs: now,
+        expiresAtMs: now + OTP_TTL_MS,
+        attempts: 0,
+      });
+      await mailer().sendMail(otpMail(email, code, purpose));
+      return res.json({ ok: true });
+    } catch (error) {
+      logger.error('sendOtp falló', error);
+      return res.status(500).json({ ok: false });
+    }
+  },
+);
+
+/** Comprueba el código (lo borra al acertar). */
+exports.verifyOtp = onRequest(async (req, res) => {
+  try {
+    if (req.method !== 'POST') return res.status(405).json({ ok: false });
+    const { email, code, purpose } = readJson(req);
+    if (!validEmail(email) || !OTP_PURPOSES.includes(purpose) ||
+        typeof code !== 'string') {
+      return res.status(400).json({ ok: false });
+    }
+    const ref = db.collection('otp_codes').doc(otpDocId(email, purpose));
+    const snap = await ref.get();
+    if (!snap.exists) return res.json({ ok: false });
+    const data = snap.data();
+    if (Date.now() > (data.expiresAtMs || 0)) {
+      await ref.delete();
+      return res.json({ ok: false, error: 'expired' });
+    }
+    if ((data.attempts || 0) >= OTP_MAX_ATTEMPTS) {
+      await ref.delete();
+      return res.json({ ok: false, error: 'too_many_attempts' });
+    }
+    if (String(data.code) !== code.trim()) {
+      await ref.update({ attempts: (data.attempts || 0) + 1 });
+      return res.json({ ok: false });
+    }
+    await ref.delete();
+    return res.json({ ok: true });
+  } catch (error) {
+    logger.error('verifyOtp falló', error);
+    return res.status(500).json({ ok: false });
+  }
+});
+
+/** Verifica el código y cambia la contraseña (Admin SDK). */
+exports.resetPasswordWithOtp = onRequest(async (req, res) => {
+  try {
+    if (req.method !== 'POST') return res.status(405).json({ ok: false });
+    const { email, code, newPassword } = readJson(req);
+    if (!validEmail(email) || typeof code !== 'string' ||
+        typeof newPassword !== 'string' || newPassword.length < 6) {
+      return res.status(400).json({ ok: false });
+    }
+    const ref = db.collection('otp_codes').doc(otpDocId(email, 'reset'));
+    const snap = await ref.get();
+    if (!snap.exists) return res.json({ ok: false });
+    const data = snap.data();
+    if (Date.now() > (data.expiresAtMs || 0)) {
+      await ref.delete();
+      return res.json({ ok: false, error: 'expired' });
+    }
+    if ((data.attempts || 0) >= OTP_MAX_ATTEMPTS) {
+      await ref.delete();
+      return res.json({ ok: false, error: 'too_many_attempts' });
+    }
+    if (String(data.code) !== code.trim()) {
+      await ref.update({ attempts: (data.attempts || 0) + 1 });
+      return res.json({ ok: false });
+    }
+    await ref.delete();
+    const user = await auth.getUserByEmail(email.trim().toLowerCase());
+    await auth.updateUser(user.uid, { password: newPassword });
+    return res.json({ ok: true });
+  } catch (error) {
+    logger.error('resetPasswordWithOtp falló', error);
+    return res.status(500).json({ ok: false });
+  }
+});

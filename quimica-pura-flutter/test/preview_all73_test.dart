@@ -46,7 +46,6 @@ import 'package:quimica_pura/screens/favorites_screen.dart';
 import 'package:quimica_pura/screens/formula_screen.dart';
 import 'package:quimica_pura/screens/friends_screen.dart';
 import 'package:quimica_pura/screens/glossary_screen.dart';
-import 'package:quimica_pura/screens/groups_screen.dart';
 import 'package:quimica_pura/screens/how_to_play_screen.dart';
 import 'package:quimica_pura/screens/lab_screen.dart';
 import 'package:quimica_pura/screens/lab_sim_screen.dart';
@@ -62,14 +61,12 @@ import 'package:quimica_pura/screens/resolver_screen.dart';
 import 'package:quimica_pura/screens/settings_screen.dart';
 import 'package:quimica_pura/screens/shop_screen.dart';
 import 'package:quimica_pura/screens/stats_screen.dart';
-import 'package:quimica_pura/screens/support_screen.dart';
 import 'package:quimica_pura/screens/tabla_screen.dart';
 import 'package:quimica_pura/screens/table_quiz_screen.dart';
 import 'package:quimica_pura/screens/theme_screen.dart';
 import 'package:quimica_pura/screens/timed_exam_screen.dart';
 import 'package:quimica_pura/screens/topic_detail_screen.dart';
 import 'package:quimica_pura/screens/tournaments_screen.dart';
-import 'package:quimica_pura/screens/version_screen.dart';
 import 'package:quimica_pura/services/accent.dart';
 import 'package:quimica_pura/services/analytics_sync.dart';
 import 'package:quimica_pura/services/localization.dart';
@@ -100,14 +97,13 @@ const _updateInfo73 = UpdateInfo(
 /// preview_fix8_test.dart): teal #00C2A8 con acento Verde.
 ThemeData melliLightTheme() => ThemeData(
       useMaterial3: true,
-      fontFamily: 'Roboto',
+      fontFamily: 'Nunito',
       brightness: Brightness.light,
       scaffoldBackgroundColor: Colors.white,
       colorScheme: ColorScheme.light(
         primary: AppAccent.primary,
         onPrimary: Colors.white,
-        secondary:
-            AppAccent.isViolet ? BrandColors.teal : BrandColors.violet,
+        secondary: AppAccent.isViolet ? BrandColors.teal : BrandColors.violet,
         surface: Colors.white,
         onSurface: BrandColors.ink,
         surfaceContainerHighest: BrandColors.cardGray,
@@ -119,7 +115,7 @@ ThemeData melliLightTheme() => ThemeData(
         elevation: 0,
         scrolledUnderElevation: 0,
         titleTextStyle: TextStyle(
-          fontFamily: 'Roboto',
+          fontFamily: 'Nunito',
           fontSize: 20,
           fontWeight: FontWeight.w800,
           color: BrandColors.ink,
@@ -149,9 +145,7 @@ ThemeData melliLightTheme() => ThemeData(
           shape: DuoPillBorder(edgeColor: AppAccent.primaryDark),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           textStyle: const TextStyle(
-              fontFamily: 'Roboto',
-              fontSize: 16,
-              fontWeight: FontWeight.w800),
+              fontFamily: 'Nunito', fontSize: 16, fontWeight: FontWeight.w800),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
@@ -165,9 +159,7 @@ ThemeData melliLightTheme() => ThemeData(
           shape: DuoPillBorder(edgeColor: AppAccent.primaryDark),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           textStyle: const TextStyle(
-              fontFamily: 'Roboto',
-              fontSize: 16,
-              fontWeight: FontWeight.w800),
+              fontFamily: 'Nunito', fontSize: 16, fontWeight: FontWeight.w800),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -178,18 +170,14 @@ ThemeData melliLightTheme() => ThemeData(
           shape: const StadiumBorder(),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           textStyle: const TextStyle(
-              fontFamily: 'Roboto',
-              fontSize: 16,
-              fontWeight: FontWeight.w800),
+              fontFamily: 'Nunito', fontSize: 16, fontWeight: FontWeight.w800),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: AppAccent.primary,
           textStyle: const TextStyle(
-              fontFamily: 'Roboto',
-              fontSize: 15,
-              fontWeight: FontWeight.w700),
+              fontFamily: 'Nunito', fontSize: 15, fontWeight: FontWeight.w700),
         ),
       ),
       switchTheme: SwitchThemeData(
@@ -231,15 +219,12 @@ ThemeData melliLightTheme() => ThemeData(
 ThemeData melliDarkTheme() {
   final violet = AppAccent.isViolet;
   final bg = violet ? const Color(0xFF17112A) : const Color(0xFF131F24);
-  final surface =
-      violet ? const Color(0xFF241B3D) : const Color(0xFF1F2C34);
-  final onSurface =
-      violet ? const Color(0xFFEDE9F7) : const Color(0xFFE6F4EE);
-  final primary =
-      violet ? BrandColors.violetLight : BrandColors.mintLight;
+  final surface = violet ? const Color(0xFF241B3D) : const Color(0xFF1F2C34);
+  final onSurface = violet ? const Color(0xFFEDE9F7) : const Color(0xFFE6F4EE);
+  final primary = violet ? BrandColors.violetLight : BrandColors.mintLight;
   return ThemeData(
     useMaterial3: true,
-    fontFamily: 'Roboto',
+    fontFamily: 'Nunito',
     brightness: Brightness.dark,
     scaffoldBackgroundColor: bg,
     colorScheme: ColorScheme.dark(
@@ -258,7 +243,7 @@ ThemeData melliDarkTheme() {
       elevation: 0,
       scrolledUnderElevation: 0,
       titleTextStyle: TextStyle(
-        fontFamily: 'Roboto',
+        fontFamily: 'Nunito',
         fontSize: 20,
         fontWeight: FontWeight.w800,
         color: onSurface,
@@ -282,15 +267,13 @@ ThemeData melliDarkTheme() {
         backgroundColor: violet ? BrandColors.violet : BrandColors.teal,
         foregroundColor: Colors.white,
         elevation: 2,
-        shadowColor:
-            violet ? BrandColors.violetDeep : BrandColors.tealDark,
+        shadowColor: violet ? BrandColors.violetDeep : BrandColors.tealDark,
         surfaceTintColor: Colors.transparent,
         shape: DuoPillBorder(
-            edgeColor:
-                violet ? BrandColors.violetDeep : BrandColors.tealDark),
+            edgeColor: violet ? BrandColors.violetDeep : BrandColors.tealDark),
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         textStyle: const TextStyle(
-            fontFamily: 'Roboto', fontSize: 16, fontWeight: FontWeight.w800),
+            fontFamily: 'Nunito', fontSize: 16, fontWeight: FontWeight.w800),
       ),
     ),
     // Campo Duolingo §1.6 (igual que el tema real de la app en
@@ -299,8 +282,7 @@ ThemeData melliDarkTheme() {
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: violet ? const Color(0xFF1C1533) : const Color(0xFF0F241E),
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       constraints: const BoxConstraints(minHeight: 56),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
@@ -317,6 +299,7 @@ ThemeData melliDarkTheme() {
     ),
   );
 }
+
 /// Fake del plugin de notificaciones: permiso concedido, sin
 /// programar nada (patrón de preview_fix8_test.dart).
 class _All73PreviewFake extends AndroidFlutterLocalNotificationsPlugin
@@ -367,6 +350,7 @@ class _All73PreviewFake extends AndroidFlutterLocalNotificationsPlugin
     AndroidScheduleMode scheduleMode = AndroidScheduleMode.exact,
   }) async {}
 }
+
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -433,6 +417,10 @@ void main() {
   tearDown(() {
     SocialService.resetForTests();
     AnalyticsSync.resetForTests();
+    // El diálogo de actualización deja _dialogShowing en true si
+    // no se cierra (los tests solo hacen la foto); sin reset, el
+    // segundo diálogo (oscuro) no se abre.
+    UpdateCheckService.resetForTests();
     NavRequests.startReview = false;
     UserPrefs.rulesSeenV6 = false;
     UserPrefs.themeAccent = 'verde';
@@ -492,6 +480,24 @@ void main() {
     await settle(tester);
   }
 
+  /// Las gemelas de Niveles se decodifican de forma asíncrona: sin
+  /// precache, la primera foto del proceso sale con los huecos en
+  /// blanco (la cabecera sin Brenda y el camino sin la gemela del
+  /// día). Las fotos de Niveles la llaman antes de disparar.
+  Future<void> precacheNivelesImages(WidgetTester tester) async {
+    await tester.runAsync(() async {
+      final context = tester.element(find.byType(MaterialApp));
+      for (final a in [
+        'assets/brenda.png',
+        'assets/britany.png',
+        'assets/kristian.png',
+      ]) {
+        await precacheImage(AssetImage(a), context);
+      }
+    });
+    await tester.pump();
+  }
+
   /// App completa en modo oscuro (el setUp deja el tema en claro).
   Future<void> pumpAppDark(WidgetTester tester) async {
     await UserPrefs.saveThemeMode('oscuro');
@@ -500,8 +506,7 @@ void main() {
   }
 
   /// Abre la hoja del elemento buscándolo por su símbolo.
-  Future<void> openElementSheet(
-      WidgetTester tester, String symbol) async {
+  Future<void> openElementSheet(WidgetTester tester, String symbol) async {
     await tester.tap(find.text(symbol).first);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));
@@ -546,8 +551,9 @@ void main() {
   /// Toca una tecla de la calculadora por su etiqueta.
   Future<void> tapCalcKey(WidgetTester tester, String label) async {
     final filled = find.widgetWithText(FilledButton, label);
-    final target =
-        filled.evaluate().isNotEmpty ? filled : find.widgetWithText(OutlinedButton, label);
+    final target = filled.evaluate().isNotEmpty
+        ? filled
+        : find.widgetWithText(OutlinedButton, label);
     await tester.tap(target);
     await tester.pump();
   }
@@ -605,20 +611,32 @@ void main() {
           body: Row(
             key: Key('warmup'),
             children: [
-              Image(image: AssetImage('assets/google_g.png'),
-                  width: 40, height: 40),
-              Image(image: AssetImage('assets/app_icon.png'),
-                  width: 40, height: 40),
-              Image(image: AssetImage('assets/ring_logo.png'),
-                  width: 40, height: 40),
-              Image(image: AssetImage('assets/brenda.png'),
-                  width: 40, height: 40),
-              Image(image: AssetImage('assets/britany.png'),
-                  width: 40, height: 40),
-              Image(image: AssetImage('assets/kristian.png'),
-                  width: 40, height: 40),
-              Image(image: AssetImage('assets/logo.png'),
-                  width: 40, height: 40),
+              Image(
+                  image: AssetImage('assets/google_g.png'),
+                  width: 40,
+                  height: 40),
+              Image(
+                  image: AssetImage('assets/app_icon.png'),
+                  width: 40,
+                  height: 40),
+              Image(
+                  image: AssetImage('assets/ring_logo.png'),
+                  width: 40,
+                  height: 40),
+              Image(
+                  image: AssetImage('assets/brenda.png'),
+                  width: 40,
+                  height: 40),
+              Image(
+                  image: AssetImage('assets/britany.png'),
+                  width: 40,
+                  height: 40),
+              Image(
+                  image: AssetImage('assets/kristian.png'),
+                  width: 40,
+                  height: 40),
+              Image(
+                  image: AssetImage('assets/logo.png'), width: 40, height: 40),
             ],
           ),
         ),
@@ -658,9 +676,8 @@ void main() {
         300,
         scrollable: find.descendant(
           of: find.byType(AccountScreen),
-          matching: find.byWidgetPredicate((w) =>
-              w is Scrollable &&
-              w.axisDirection == AxisDirection.down),
+          matching: find.byWidgetPredicate(
+              (w) => w is Scrollable && w.axisDirection == AxisDirection.down),
         ),
       );
       await tester.pump();
@@ -798,8 +815,7 @@ void main() {
     // Como en la foto72: científica con −log(0.01) tecleado y el
     // resultado 2 en el visor; "Usar resultado" habilitado.
     Future<void> openWorked(WidgetTester tester, {bool dark = false}) async {
-      await openCalculator(tester,
-          scientific: true, unit: 'pH', dark: dark);
+      await openCalculator(tester, scientific: true, unit: 'pH', dark: dark);
       for (final label in ['−', 'log', '0', '.', '0', '1', ')', '=']) {
         await tapCalcKey(tester, label);
       }
@@ -932,11 +948,10 @@ void main() {
     });
   });
 
+
   group('all73 detalle_elemento', () {
-    Future<void> openMoscovio(WidgetTester tester,
-        {bool dark = false}) async {
-      await pumpScreen(tester, const Scaffold(body: TablaScreen()),
-          dark: dark);
+    Future<void> openMoscovio(WidgetTester tester, {bool dark = false}) async {
+      await pumpScreen(tester, const Scaffold(body: TablaScreen()), dark: dark);
       await tester.enterText(find.byType(TextField).first, 'Moscovio');
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
@@ -1147,25 +1162,6 @@ void main() {
     });
   });
 
-  group('all73 grupos', () {
-    testWidgets('foto73_all_grupos_claro', (tester) async {
-      await pumpScreen(
-        tester,
-        const Scaffold(body: GroupsScreen(isGoogleLinked: true)),
-      );
-      await shot(tester, 'foto73_all_grupos_claro.png');
-    });
-
-    testWidgets('foto73_all_grupos_oscuro', (tester) async {
-      await pumpScreen(
-        tester,
-        const Scaffold(body: GroupsScreen(isGoogleLinked: true)),
-        dark: true,
-      );
-      await shot(tester, 'foto73_all_grupos_oscuro.png');
-    });
-  });
-
   group('all73 idioma', () {
     testWidgets('foto73_all_idioma_claro', (tester) async {
       await pumpScreen(
@@ -1229,11 +1225,13 @@ void main() {
   group('all73 niveles', () {
     testWidgets('foto73_all_niveles_claro', (tester) async {
       await pumpApp(tester);
+      await precacheNivelesImages(tester);
       await shot(tester, 'foto73_all_niveles_claro.png');
     });
 
     testWidgets('foto73_all_niveles_oscuro', (tester) async {
       await pumpAppDark(tester);
+      await precacheNivelesImages(tester);
       await shot(tester, 'foto73_all_niveles_oscuro.png');
     });
   });
@@ -1256,6 +1254,7 @@ void main() {
       await shot(tester, 'foto73_all_onboarding_oscuro.png');
     });
   });
+
 
   group('all73 pregunta_multiple', () {
     QuizQuestion mcQuestion() =>
@@ -1462,25 +1461,6 @@ void main() {
     });
   });
 
-  group('all73 soporte', () {
-    testWidgets('foto73_all_soporte_claro', (tester) async {
-      await pumpScreen(
-        tester,
-        const Scaffold(body: SupportScreen()),
-      );
-      await shot(tester, 'foto73_all_soporte_claro.png');
-    });
-
-    testWidgets('foto73_all_soporte_oscuro', (tester) async {
-      await pumpScreen(
-        tester,
-        const Scaffold(body: SupportScreen()),
-        dark: true,
-      );
-      await shot(tester, 'foto73_all_soporte_oscuro.png');
-    });
-  });
-
   group('all73 tabla', () {
     testWidgets('foto73_all_tabla_claro', (tester) async {
       await pumpScreen(tester, const Scaffold(body: TablaScreen()));
@@ -1601,22 +1581,8 @@ void main() {
     });
   });
 
-  group('all73 version', () {
-    testWidgets('foto73_all_version_claro', (tester) async {
-      await pumpScreen(
-        tester,
-        Scaffold(body: VersionScreen(onVersionChanged: () {})),
-      );
-      await shot(tester, 'foto73_all_version_claro.png');
-    });
 
-    testWidgets('foto73_all_version_oscuro', (tester) async {
-      await pumpScreen(
-        tester,
-        Scaffold(body: VersionScreen(onVersionChanged: () {})),
-        dark: true,
-      );
-      await shot(tester, 'foto73_all_version_oscuro.png');
-    });
-  });
+
+
+
 }

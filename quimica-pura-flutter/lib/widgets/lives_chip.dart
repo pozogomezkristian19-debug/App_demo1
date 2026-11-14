@@ -7,6 +7,10 @@
 // AppBar, en la tarjeta de estadísticas de Cuenta y en Mis
 // estadísticas. La lógica de las vidas no cambia (5 máx., -1 por
 // abandonar, +1 por pasar, recarga diaria, 0 bloquea).
+// (2026-11-14 ~13:45, Kristian: "Puntos, vidas ponlo como la app
+// preterminada, no estos cambios que lo hicimos ahora": el corazón
+// "beating-heart" de Lottie que mandó él se usó 2026-11-14 y se
+// quita — vuelve el corazón dibujado con degradado y brillo.)
 
 import 'package:flutter/material.dart';
 
@@ -135,12 +139,23 @@ class LivesChip extends StatelessWidget {
         children: [
           pulse ? PulseWidget(child: heart) : heart,
           const SizedBox(width: 5),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: compact ? 14 : fontSize,
-              fontWeight: FontWeight.w800,
-              color: const Color(0xFFFF4B4B),
+          // El número cambia con animación (pulido 7.7): al ganar
+          // o perder una vida, el conteo entra con escala +
+          // fundido en vez de saltar.
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            transitionBuilder: (child, animation) => ScaleTransition(
+              scale: animation,
+              child: FadeTransition(opacity: animation, child: child),
+            ),
+            child: Text(
+              label,
+              key: ValueKey(label),
+              style: TextStyle(
+                fontSize: compact ? 14 : fontSize,
+                fontWeight: FontWeight.w800,
+                color: const Color(0xFFFF4B4B),
+              ),
             ),
           ),
         ],

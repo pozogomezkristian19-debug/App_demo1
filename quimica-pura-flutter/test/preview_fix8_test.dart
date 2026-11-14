@@ -36,18 +36,15 @@ import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:quimica_pura/main.dart';
 import 'package:quimica_pura/screens/duel_screen.dart';
 import 'package:quimica_pura/screens/friends_screen.dart';
-import 'package:quimica_pura/screens/groups_screen.dart';
 import 'package:quimica_pura/screens/leaderboard_screen.dart';
 import 'package:quimica_pura/screens/onboarding_screen.dart';
 import 'package:quimica_pura/screens/shop_screen.dart';
-import 'package:quimica_pura/screens/support_screen.dart';
 import 'package:quimica_pura/screens/tournaments_screen.dart';
 import 'package:quimica_pura/services/accent.dart';
 import 'package:quimica_pura/services/analytics_sync.dart';
 import 'package:quimica_pura/services/localization.dart';
 import 'package:quimica_pura/services/progress.dart';
 import 'package:quimica_pura/services/social_service.dart';
-import 'package:quimica_pura/services/support_service.dart';
 import 'package:quimica_pura/services/user_prefs.dart';
 import 'package:quimica_pura/widgets/brand_logo.dart';
 import 'package:quimica_pura/widgets/twin_avatars.dart';
@@ -66,8 +63,7 @@ ThemeData melliLightTheme() => ThemeData(
       colorScheme: ColorScheme.light(
         primary: AppAccent.primary,
         onPrimary: Colors.white,
-        secondary:
-            AppAccent.isViolet ? BrandColors.teal : BrandColors.violet,
+        secondary: AppAccent.isViolet ? BrandColors.teal : BrandColors.violet,
         surface: Colors.white,
         onSurface: BrandColors.ink,
         surfaceContainerHighest: BrandColors.cardGray,
@@ -115,9 +111,7 @@ ThemeData melliLightTheme() => ThemeData(
           shape: DuoPillBorder(edgeColor: AppAccent.primaryDark),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           textStyle: const TextStyle(
-              fontFamily: 'Roboto',
-              fontSize: 16,
-              fontWeight: FontWeight.w800),
+              fontFamily: 'Roboto', fontSize: 16, fontWeight: FontWeight.w800),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
@@ -131,9 +125,7 @@ ThemeData melliLightTheme() => ThemeData(
           shape: DuoPillBorder(edgeColor: AppAccent.primaryDark),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           textStyle: const TextStyle(
-              fontFamily: 'Roboto',
-              fontSize: 16,
-              fontWeight: FontWeight.w800),
+              fontFamily: 'Roboto', fontSize: 16, fontWeight: FontWeight.w800),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -144,18 +136,14 @@ ThemeData melliLightTheme() => ThemeData(
           shape: const StadiumBorder(),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           textStyle: const TextStyle(
-              fontFamily: 'Roboto',
-              fontSize: 16,
-              fontWeight: FontWeight.w800),
+              fontFamily: 'Roboto', fontSize: 16, fontWeight: FontWeight.w800),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: AppAccent.primary,
           textStyle: const TextStyle(
-              fontFamily: 'Roboto',
-              fontSize: 15,
-              fontWeight: FontWeight.w700),
+              fontFamily: 'Roboto', fontSize: 15, fontWeight: FontWeight.w700),
         ),
       ),
       // Como en el tema real: interruptor teal, no violeta.
@@ -224,78 +212,6 @@ class _Fix8PreviewFake extends AndroidFlutterLocalNotificationsPlugin
 /// Fake de SupportService para el preview de la ventanita: un hilo
 /// respondido + uno abierto, y el interruptor de WhatsApp encendido
 /// con un número remoto distinto del de por defecto.
-class _PreviewSupportFake implements SupportService {
-  final _messages = <SupportMessage>[
-    SupportMessage(
-      id: 'm1',
-      authorUid: 'uid-kristian',
-      username: 'kristian',
-      message: 'No me sale el balanceo de la reacción del hierro',
-      createdAt: DateTime(2026, 11, 11, 10, 0),
-      status: 'respondido',
-      reply: 'Revisa los coeficientes del oxígeno primero: ¡eso lo '
-          'destraba casi siempre!',
-      replyAt: DateTime(2026, 11, 11, 11, 0),
-    ),
-    SupportMessage(
-      id: 'm2',
-      authorUid: 'uid-kristian',
-      username: 'kristian',
-      message: 'Hola, ¿cuándo hay torneo nuevo?',
-      createdAt: DateTime(2026, 11, 11, 9, 30),
-      status: 'abierto',
-    ),
-  ];
-
-  @override
-  Future<bool> sendMessage(String text) async {
-    _messages.insert(
-      0,
-      SupportMessage(
-        id: 'm${_messages.length}',
-        authorUid: 'uid-kristian',
-        username: 'kristian',
-        message: text,
-        createdAt: DateTime.now(),
-        status: 'abierto',
-      ),
-    );
-    return true;
-  }
-
-  @override
-  Future<List<SupportMessage>> fetchMyMessages() async =>
-      List.unmodifiable(_messages);
-
-  @override
-  Stream<List<SupportMessage>> watchMyMessages() async* {
-    yield List.unmodifiable(_messages);
-  }
-
-  @override
-  Future<SupportSettings> fetchSupportSettings() async =>
-      const SupportSettings(
-          supportNumber: '+53 5 9999999', showWhatsApp: true);
-
-  @override
-  Future<List<SupportMessage>> pendingMessages() async => const [];
-
-  @override
-  Future<int> pendingCount() async => 0;
-
-  @override
-  void listenForReplies() {}
-
-  @override
-  Future<void> checkRepliesNow() async {}
-
-  @override
-  Future<int> retryPendingSupport() async => 0;
-
-  @override
-  void resetForTests() {}
-}
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() async {
@@ -518,7 +434,7 @@ void main() {
           ))
       .toList();
 
-  Future<void> goToProfilePage(WidgetTester tester) async {
+  Future<void> goToRegisterPage(WidgetTester tester) async {
     await setPhone(tester);
     await tester.pumpWidget(
       MaterialApp(
@@ -528,10 +444,43 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    for (var i = 0; i < 4; i++) {
-      await tester.tap(find.text(tr('obNext').toUpperCase()));
-      await tester.pumpAndSettle();
-    }
+    // Quemia 7.7 (rediseño 2026-11-13): sin pantalla de idioma y sin
+    // barra de progreso; el inicio es Bienvenida -> Elección ->
+    // la gemela -> cómo supo -> cuánta química sabe -> meta diaria
+    // -> Notificaciones -> la racha -> aviso "¡No pierdas tu
+    // progreso!" -> Registro. En Notificaciones el permiso está
+    // negado en pruebas: sale "Ir a Ajustes" y al cerrarlo se
+    // avanza a la racha.
+    await tester.tap(find.text(tr('obContinue').toUpperCase()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(tr('obCreateProfile').toUpperCase()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(tr('obVamos').toUpperCase()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(tr('obSourceInstagram')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(tr('obContinue').toUpperCase()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(tr('obLevel1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(tr('obContinue').toUpperCase()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(tr('obGoal10')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(tr('obGoalSave').toUpperCase()));
+    await tester.pumpAndSettle();
+    // En preview el permiso SÍ se concede (plataforma falsa
+    // _Fix8PreviewFake): al activar no sale "Ir a Ajustes", se
+    // programa la tanda y se avanza a la racha. Hay que avanzar el
+    // reloj 4 s para que el tope de la copia del icono dispare y el
+    // flujo siga (como en fix3, caso concedido).
+    await tester.tap(find.text(tr('obNotifEnable').toUpperCase()));
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(tr('obStreakStart').toUpperCase()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(tr('obContinue').toUpperCase()));
+    await tester.pumpAndSettle();
   }
 
   testWidgets('fix8_navbar: Niveles con la barra nueva', (tester) async {
@@ -560,22 +509,28 @@ void main() {
     await shot(tester, 'fix8_leaderboard.png');
   });
 
-  testWidgets('fix8_onboarding_google: perfil con Google',
-      (tester) async {
-    await goToProfilePage(tester);
-    expect(find.text(tr('googleContinue').toUpperCase()), findsOneWidget);
+  testWidgets('fix8_onboarding_google: registro con Google', (tester) async {
+    await goToRegisterPage(tester);
+    // Quemia 7.7 (Kristian 2026-11-13): la pantalla de registro es
+    // como la de Duolingo — "CONTINUAR CON GOOGLE" con su G real y
+    // "CONTINUAR CON CORREO ELECTRÓNICO", sin nombre ni género.
+    expect(find.text(tr('obRegisterGoogle').toUpperCase()), findsOneWidget);
+    expect(find.text(tr('obRegisterEmail').toUpperCase()), findsOneWidget);
     await warmLaurels(tester);
     await shot(tester, 'fix8_onboarding_google.png');
   });
 
-  testWidgets('fix8_onboarding_nombre: nombre y género rediseñados',
-      (tester) async {
-    await goToProfilePage(tester);
-    expect(find.text(tr('obProfileTitle')), findsOneWidget);
-    expect(find.text(tr('obFemale')), findsOneWidget);
-    expect(find.text(tr('obMale')), findsOneWidget);
+  testWidgets('fix8_onboarding_registro: registro con correo', (tester) async {
+    await goToRegisterPage(tester);
+    expect(find.text(tr('obRegisterTitle')), findsOneWidget);
+    await tester.tap(find.text(tr('obRegisterEmail').toUpperCase()));
+    await tester.pumpAndSettle();
+    expect(
+        find.byWidgetPredicate((w) =>
+            w is TextField && w.decoration?.hintText == tr('obEmailFieldHint')),
+        findsOneWidget);
     await warmLaurels(tester);
-    await shot(tester, 'fix8_onboarding_nombre.png');
+    await shot(tester, 'fix8_onboarding_registro.png');
   });
 
   testWidgets('fix8_amigos: amigos + Mis duelos (retado)', (tester) async {
@@ -592,12 +547,9 @@ void main() {
     expect(find.text(tr('friendsRequestsTitle')), findsOneWidget);
     expect(find.text('daniel'), findsOneWidget);
     expect(find.text('rosa'), findsOneWidget);
-    expect(find.text(tr('friendsRequestAccept').toUpperCase()),
-        findsOneWidget);
-    expect(find.text(tr('friendsRequestReject').toUpperCase()),
-        findsOneWidget);
-    expect(find.text(tr('friendsRequestCancel').toUpperCase()),
-        findsOneWidget);
+    expect(find.text(tr('friendsRequestAccept').toUpperCase()), findsOneWidget);
+    expect(find.text(tr('friendsRequestReject').toUpperCase()), findsOneWidget);
+    expect(find.text(tr('friendsRequestCancel').toUpperCase()), findsOneWidget);
     // Precarga de los avatares premium (laura/sofia): sin ella la
     // foto sale en blanco en la captura.
     await warmAvatars(tester);
@@ -637,8 +589,7 @@ void main() {
     await socialSettle(tester);
     repo.simulateOpponentDisconnects(match.matchId);
     await socialSettle(tester);
-    expect(
-        find.text(tr('duelOpponentOffline').replaceFirst('%s', 'laura')),
+    expect(find.text(tr('duelOpponentOffline').replaceFirst('%s', 'laura')),
         findsOneWidget);
     await shot(tester, 'fix8_duelo_desconexion.png');
   });
@@ -658,13 +609,6 @@ void main() {
     // Precarga de los avatares premium: sin ella salen en blanco.
     await warmAvatars(tester);
     await shot(tester, 'fix8_tienda.png');
-  });
-
-  testWidgets('fix8_grupos: grupos con el grupo semilla', (tester) async {
-    await pumpScreen(tester, const GroupsScreen(isGoogleLinked: true));
-    await socialSettle(tester);
-    expect(find.text('Químicos nocturnos'), findsOneWidget);
-    await shot(tester, 'fix8_grupos.png');
   });
 
   testWidgets('fix8_tabla_vacia: "sé el primero"', (tester) async {
@@ -701,15 +645,6 @@ void main() {
     await shot(tester, 'fix8_torneos_vacios.png');
   });
 
-  testWidgets('fix8_grupos_vacios: sin grupos', (tester) async {
-    repo = InMemorySocialRepository(seedDemo: false);
-    SocialService.setRepositoryForTests(repo);
-    await pumpScreen(tester, const GroupsScreen(isGoogleLinked: true));
-    await socialSettle(tester);
-    expect(find.text(tr('groupsEmpty')), findsOneWidget);
-    await shot(tester, 'fix8_grupos_vacios.png');
-  });
-
   testWidgets('fix8_duelo_vacio: buscando rival al azar', (tester) async {
     await pumpScreen(
         tester, const DuelScreen(random: true, isGoogleLinked: true));
@@ -723,8 +658,7 @@ void main() {
 
   testWidgets('fix8_puerta_tabla: puerta de Google en la tabla',
       (tester) async {
-    await pumpScreen(
-        tester, const LeaderboardScreen(isGoogleLinked: false));
+    await pumpScreen(tester, const LeaderboardScreen(isGoogleLinked: false));
     expect(find.text(tr('onlineNeedGoogle')), findsOneWidget);
     await shot(tester, 'fix8_puerta_tabla.png');
   });
@@ -739,10 +673,8 @@ void main() {
   testWidgets('fix8_torneo_sin_conexion: entregar sin internet',
       (tester) async {
     repo.onlineFlag = false;
-    await pumpScreen(
-        tester,
-        const TournamentDetailScreen(
-            tournamentId: 't1', isGoogleLinked: true));
+    await pumpScreen(tester,
+        const TournamentDetailScreen(tournamentId: 't1', isGoogleLinked: true));
     await socialSettle(tester);
     // El botón del detalle es DuoButton (§1.4): la etiqueta llega
     // en mayúsculas (como en la lista y como espera
@@ -756,20 +688,5 @@ void main() {
     // clasificación): sin ella la foto sale en blanco.
     await warmAvatars(tester);
     await shot(tester, 'fix8_torneo_sin_conexion.png');
-  });
-
-  testWidgets('fix8_soporte: ventanita con hilo y WhatsApp', (tester) async {
-    await pumpScreen(
-      tester,
-      SupportScreen(
-        isGoogleLinked: true,
-        service: _PreviewSupportFake(),
-      ),
-    );
-    await socialSettle(tester);
-    expect(find.text('No me sale el balanceo de la reacción del hierro'),
-        findsOneWidget);
-    expect(find.textContaining('¿Prefieres WhatsApp?'), findsOneWidget);
-    await shot(tester, 'fix8_soporte.png');
   });
 }

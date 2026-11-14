@@ -115,7 +115,7 @@ class QuizOptionButton extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: edge, width: 2),
         // Labio 2 pt: sombra sólida (sin desenfoque) desplazada 2 px
         // hacia abajo, del mismo color que el borde.
@@ -125,7 +125,7 @@ class QuizOptionButton extends StatelessWidget {
       ),
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(20),
         clipBehavior: Clip.antiAlias,
         child: ElevatedButton(
           style: ElevatedButton.styleFrom(
@@ -136,7 +136,7 @@ class QuizOptionButton extends StatelessWidget {
             alignment: Alignment.centerLeft,
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(20),
             ),
           ),
           onPressed: onPressed,
@@ -370,6 +370,11 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
   /// escrito sigue ahí. Se limpia al pasar a otra pregunta.
   double? _pendingNumeric;
 
+  /// Expresión tal cual se dejó ("2+5", "2+"), junto al valor
+  /// (corrección de Kristian 2026-11-13). Se limpia con
+  /// _pendingNumeric al pasar a otra pregunta o al responder.
+  String? _pendingNumericExpr;
+
   /// Valor numérico ya enviado con "Usar resultado": el campo lo
   /// muestra apagado cuando la pregunta está contestada.
   double? _submittedNumeric;
@@ -433,6 +438,7 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
       ..shuffle(seed == null ? Random() : Random(seed * 7919 + _index));
     _selected = null;
     _pendingNumeric = null;
+    _pendingNumericExpr = null;
     _submittedNumeric = null;
   }
 
@@ -504,6 +510,7 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
     // muestre apagado.
     _submittedNumeric = value;
     _pendingNumeric = null;
+    _pendingNumericExpr = null;
     // Las preguntas de cálculo no tienen opciones que seleccionar:
     // el valor tecleado se responde en un solo paso.
     _answer(displayedIndexForNumericAnswer(
@@ -515,6 +522,14 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
   void _onNumericDraft(double? value) {
     if (_pendingNumeric == value) return;
     setState(() => _pendingNumeric = value);
+  }
+
+  /// Expresión que reporta la calculadora en cada cambio
+  /// (corrección de Kristian 2026-11-13): se guarda por
+  /// pregunta y se vuelve a sembrar tal cual al reabrirla.
+  void _onNumericExpression(String? expr) {
+    if (_pendingNumericExpr == expr) return;
+    setState(() => _pendingNumericExpr = expr);
   }
 
   /// Abre la calculadora desde el campo de respuesta (ronda 7.2):
@@ -534,6 +549,8 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
       unit: _q.numericUnit,
       initialValue: _pendingNumeric,
       onDraftChanged: _onNumericDraft,
+      initialExpression: _pendingNumericExpr,
+      onExpressionChanged: _onNumericExpression,
     );
     if (value != null) _answerNumeric(value);
   }
@@ -547,8 +564,7 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
   /// (submitResult: false) para calcular a mano.
   Future<void> _openOptionCalculator() async {
     if (_selected != null) return;
-    final allNumeric =
-        _q.options.every((o) => parseOptionNumber(o) != null);
+    final allNumeric = _q.options.every((o) => parseOptionNumber(o) != null);
     final value = await CalculatorScreen.open(
       context,
       // El teclado sigue la dificultad de la pregunta — sencillo si
@@ -558,6 +574,8 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
       unit: allNumeric ? parseOptionUnit(_q.options[_q.answer]) : null,
       initialValue: _pendingNumeric,
       onDraftChanged: _onNumericDraft,
+      initialExpression: _pendingNumericExpr,
+      onExpressionChanged: _onNumericExpression,
     );
     if (!mounted) return;
     if (value == null) return;
@@ -876,12 +894,11 @@ class _SimpleQuizRunnerState extends State<SimpleQuizRunner> {
                       width: double.infinity,
                       child: OutlinedButton.icon(
                         onPressed: _openOptionCalculator,
-                        icon: const LucideIcon(LucideIcons.calculator,
-                            size: 20),
+                        icon:
+                            const LucideIcon(LucideIcons.calculator, size: 20),
                         label: Text(tr('quizCalculator')),
                         style: OutlinedButton.styleFrom(
-                          side: BorderSide(
-                              color: AppAccent.primary, width: 2),
+                          side: BorderSide(color: AppAccent.primary, width: 2),
                           foregroundColor: AppAccent.primary,
                           padding: const EdgeInsets.symmetric(
                               horizontal: 12, vertical: 12),

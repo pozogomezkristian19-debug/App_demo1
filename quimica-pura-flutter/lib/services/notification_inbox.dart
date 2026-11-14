@@ -63,17 +63,26 @@ class InboxEntry {
   final bool read;
 
   /// Datos extra para abrir lo que toca al tocar la entrada: en una
-  /// de actualización, el UpdateInfo serializado.
+  /// de actualización, el UpdateInfo serializado. Además, en una
+  /// descarga en marcha: 'downloadProgress' (double 0..1, o -1 si el
+  /// total aún no se conoce) y 'downloaded' (true cuando el APK ya
+  /// está y la entrada pasa a "lista para instalar").
   final Map<String, dynamic> data;
 
-  InboxEntry copyWith({bool? read}) => InboxEntry(
+  InboxEntry copyWith({
+    String? title,
+    String? body,
+    bool? read,
+    Map<String, dynamic>? data,
+  }) =>
+      InboxEntry(
         id: id,
         kind: kind,
-        title: title,
-        body: body,
+        title: title ?? this.title,
+        body: body ?? this.body,
         createdAt: createdAt,
         read: read ?? this.read,
-        data: data,
+        data: data ?? this.data,
       );
 
   Map<String, dynamic> toJson() => {
@@ -266,6 +275,60 @@ class NotificationInbox {
     await _ensureLoaded();
     final list =
         entriesNotifier.value.where((e) => e.kind != kind).toList();
+    await _save(list);
+  }
+
+  /// Progreso de la descarga de una actualización, DENTRO de la
+  /// bandeja (Kristian 2026-11-14: al tocar "Actualizar ahora" el
+  /// progreso tiene que verse también en Notificaciones, no solo en
+  /// la notificación del sistema). Reutiliza la entrada de esa
+  /// versión (la misma que deja "Más tarde", id 'update-<versión>'):
+  /// si no existe, la crea arriba del todo; si existe, la actualiza
+  /// en su sitio, sin tocar si está leída ni su hora.
+  ///
+  /// [progress]: 0..1, o -1 si el total aún no se conoce (barra
+  /// indeterminada). [downloaded]: true cuando el APK ya está y la
+  /// entrada pasa a "lista para instalar". [progress] null = la
+  /// descarga ya no está en marcha (falló o quedó a medias): la
+  /// entrada vuelve al aviso normal de "hay actualización", sin
+  /// progreso. [infoJson] es el UpdateInfo serializado (lo que
+  /// necesita el diálogo al tocar la entrada).
+  static Future<void> setDownloadProgress({
+    required Map<String, dynamic> infoJson,
+    double? progress,
+    bool downloaded = false,
+    required String title,
+    required String body,
+  }) async {
+    await _ensureLoaded();
+    final version = infoJson['latest'];
+    if (version is! String || version.isEmpty) return;
+    final id = 'update-$version';
+    final data = Map<String, dynamic>.of(infoJson);
+    if (progress == null) {
+      data.remove('downloadProgress');
+      data.remove('downloaded');
+    } else {
+      data['downloadProgress'] = progress;
+      data['downloaded'] = downloaded;
+    }
+    final list = List<InboxEntry>.of(entriesNotifier.value);
+    final i = list.indexWhere((e) => e.id == id);
+    if (i >= 0) {
+      list[i] = list[i].copyWith(title: title, body: body, data: data);
+    } else {
+      list.insert(
+        0,
+        InboxEntry(
+          id: id,
+          kind: InboxKind.update,
+          title: title,
+          body: body,
+          createdAt: DateTime.now(),
+          data: data,
+        ),
+      );
+    }
     await _save(list);
   }
 

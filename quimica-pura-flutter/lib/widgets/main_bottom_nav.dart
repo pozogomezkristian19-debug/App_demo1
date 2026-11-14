@@ -38,6 +38,7 @@
 
 import 'package:flutter/material.dart';
 
+import 'icon_animations.dart';
 import '../services/accent.dart';
 import '../services/localization.dart';
 import 'lucide_icons.dart';
@@ -93,91 +94,89 @@ class MainBottomNav extends StatelessWidget {
       top: false,
       bottom: true,
       child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          height: 1,
-          color: isDark
-              ? const Color(0xFF37464F)
-              : const Color(0xFFE5E5E5),
-        ),
-        SizedBox(
-          height: barHeight,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              // Fondo de la barra.
-              Positioned.fill(
-                child: Container(
-                  color: isDark ? AppAccent.darkCard : Colors.white,
-                ),
-              ),
-          // Las 4 pestañas de fuera; el hueco central tiene flex 1
-          // (antes 2: los vecinos quedaban lejos del círculo).
-          Positioned.fill(
-            child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            height: 1,
+            color: isDark ? const Color(0xFF37464F) : const Color(0xFFE5E5E5),
+          ),
+          SizedBox(
+            height: barHeight,
+            child: Stack(
+              clipBehavior: Clip.none,
               children: [
-                Expanded(
-                  child: _TabButton(
-                    index: 0,
-                    icon: LucideIcons.bookOpen,
-                    label: tr('tabLearn'),
-                    selectedIndex: selectedIndex,
-                    onSelected: onSelected,
-                    isDark: isDark,
-                    activeColor: _activeColor(0),
+                // Fondo de la barra.
+                Positioned.fill(
+                  child: Container(
+                    color: isDark ? AppAccent.darkCard : Colors.white,
                   ),
                 ),
-                Expanded(
-                  child: _TabButton(
-                    index: 1,
-                    icon: LucideIcons.calculator,
-                    label: tr('tabResolver'),
-                    selectedIndex: selectedIndex,
-                    onSelected: onSelected,
-                    isDark: isDark,
-                    activeColor: _activeColor(1),
+                // Las 4 pestañas de fuera; el hueco central tiene flex 1
+                // (antes 2: los vecinos quedaban lejos del círculo).
+                Positioned.fill(
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _TabButton(
+                          index: 0,
+                          icon: LucideIcons.bookOpen,
+                          label: tr('tabLearn'),
+                          selectedIndex: selectedIndex,
+                          onSelected: onSelected,
+                          isDark: isDark,
+                          activeColor: _activeColor(0),
+                        ),
+                      ),
+                      Expanded(
+                        child: _TabButton(
+                          index: 1,
+                          icon: LucideIcons.calculator,
+                          label: tr('tabResolver'),
+                          selectedIndex: selectedIndex,
+                          onSelected: onSelected,
+                          isDark: isDark,
+                          activeColor: _activeColor(1),
+                        ),
+                      ),
+                      const Expanded(flex: 1, child: SizedBox.shrink()),
+                      Expanded(
+                        child: _TabButton(
+                          index: 3,
+                          icon: LucideIcons.layoutGrid,
+                          label: tr('tabTable'),
+                          selectedIndex: selectedIndex,
+                          onSelected: onSelected,
+                          isDark: isDark,
+                          activeColor: _activeColor(3),
+                        ),
+                      ),
+                      Expanded(
+                        child: _TabButton(
+                          index: 4,
+                          icon: LucideIcons.userRound,
+                          label: tr('accountTitle'),
+                          selectedIndex: selectedIndex,
+                          onSelected: onSelected,
+                          isDark: isDark,
+                          activeColor: _activeColor(4),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const Expanded(flex: 1, child: SizedBox.shrink()),
-                Expanded(
-                  child: _TabButton(
-                    index: 3,
-                    icon: LucideIcons.layoutGrid,
-                    label: tr('tabTable'),
-                    selectedIndex: selectedIndex,
-                    onSelected: onSelected,
-                    isDark: isDark,
-                    activeColor: _activeColor(3),
-                  ),
-                ),
-                Expanded(
-                  child: _TabButton(
-                    index: 4,
-                    icon: LucideIcons.userRound,
-                    label: tr('accountTitle'),
-                    selectedIndex: selectedIndex,
-                    onSelected: onSelected,
-                    isDark: isDark,
-                    activeColor: _activeColor(4),
-                  ),
+                // El círculo central de Niveles, 4 dp por encima de la
+                // barra, con su etiqueta debajo.
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  top: -4,
+                  child: Center(child: _centerTab()),
                 ),
               ],
             ),
           ),
-          // El círculo central de Niveles, 4 dp por encima de la
-          // barra, con su etiqueta debajo.
-          Positioned(
-            left: 0,
-            right: 0,
-            top: -4,
-            child: Center(child: _centerTab()),
-          ),
-            ],
-          ),
-        ),
-      ],
-    ),
+        ],
+      ),
     );
   }
 
@@ -190,70 +189,75 @@ class MainBottomNav extends StatelessWidget {
   /// su color sigue al acento, como los demás botones primarios.
   Widget _centerTab() {
     final selected = selectedIndex == 2;
-    return GestureDetector(
-      key: const ValueKey('nav-center-levels'),
-      behavior: HitTestBehavior.opaque,
-      onTap: () => onSelected(2),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: _circleSize,
-            // 60 dp de círculo + 4 dp de labio que asoma abajo.
-            height: _circleSize + 4,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                // Labio: disco oscuro de 58 dp, 3 dp más abajo y
-                // centrado (1 dp a cada lado): solo asoma su
-                // creciente inferior, más fina que un disco igual
-                // (centro medido a +2,75 dp contra el golden).
-                Positioned(
-                  top: 3,
-                  left: 1,
-                  child: Container(
-                    width: _circleSize - 2,
-                    height: _circleSize - 2,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: AppAccent.primaryDark,
+    // Feedback táctil (pulido 7.7): el círculo se encoge un poco
+    // al pulsarlo, como una tecla. El PressScale no lleva onTap:
+    // el GestureDetector de dentro sigue siendo el que navega.
+    return PressScale(
+      scale: 0.95,
+      child: GestureDetector(
+        key: const ValueKey('nav-center-levels'),
+        behavior: HitTestBehavior.opaque,
+        onTap: () => onSelected(2),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: _circleSize,
+              // 60 dp de círculo + 4 dp de labio que asoma abajo.
+              height: _circleSize + 4,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  // Labio: disco oscuro de 58 dp, 3 dp más abajo y
+                  // centrado (1 dp a cada lado): solo asoma su
+                  // creciente inferior, más fina que un disco igual
+                  // (centro medido a +2,75 dp contra el golden).
+                  Positioned(
+                    top: 3,
+                    left: 1,
+                    child: Container(
+                      width: _circleSize - 2,
+                      height: _circleSize - 2,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppAccent.primaryDark,
+                      ),
                     ),
                   ),
-                ),
-                // Círculo principal: color del acento, sólido, sin degradado.
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  child: Container(
-                    width: _circleSize,
-                    height: _circleSize,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: AppAccent.primary,
-                      boxShadow: [floatingShadow],
-                    ),
-                    alignment: Alignment.center,
-                    child: const LucideIcon(
-                      LucideIcons.route,
-                      color: Colors.white,
-                      size: 28,
+                  // Círculo principal: color del acento, sólido, sin degradado.
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    child: Container(
+                      width: _circleSize,
+                      height: _circleSize,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppAccent.primary,
+                        boxShadow: [floatingShadow],
+                      ),
+                      alignment: Alignment.center,
+                      child: const LucideIcon(
+                        LucideIcons.route,
+                        color: Colors.white,
+                        size: 28,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            tr('tabLevels'),
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight:
-                  selected ? FontWeight.bold : FontWeight.w600,
-              color: selected ? _activeColor(2) : _inactive,
+            const SizedBox(height: 8),
+            Text(
+              tr('tabLevels'),
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: selected ? FontWeight.bold : FontWeight.w600,
+                color: selected ? _activeColor(2) : _inactive,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -308,13 +312,19 @@ class _TabButton extends StatelessWidget {
                 width: 64,
                 height: 36,
                 child: Center(
-                  child: LucideIcon(
-                    icon,
-                    size: 28,
-                    color: selected
-                        ? activeColor
-                        : MainBottomNav._inactive,
-                    threeD: selected,
+                  // La pestaña activa crece un poco (pulido 7.7):
+                  // el cambio de pestaña se siente, no es solo un
+                  // cambio de color.
+                  child: AnimatedScale(
+                    scale: selected ? 1.15 : 1.0,
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeOutCubic,
+                    child: LucideIcon(
+                      icon,
+                      size: 28,
+                      color: selected ? activeColor : MainBottomNav._inactive,
+                      threeD: selected,
+                    ),
                   ),
                 ),
               ),
@@ -323,11 +333,8 @@ class _TabButton extends StatelessWidget {
                 label,
                 style: TextStyle(
                   fontSize: 11,
-                  fontWeight:
-                      selected ? FontWeight.bold : FontWeight.w600,
-                  color: selected
-                      ? activeColor
-                      : MainBottomNav._inactive,
+                  fontWeight: selected ? FontWeight.bold : FontWeight.w600,
+                  color: selected ? activeColor : MainBottomNav._inactive,
                 ),
               ),
             ],

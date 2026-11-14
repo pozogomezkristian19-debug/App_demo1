@@ -258,6 +258,13 @@ class _EntryTile extends StatelessWidget {
       InboxKind.announcement => (LucideIcons.bell, AppAccent.primary),
     };
     final unread = !entry.read;
+    // Progreso de la descarga, si esta entrada es una actualización
+    // descargándose (Kristian 2026-11-14): la barra vive dentro de
+    // la bandeja, no solo en la notificación del sistema. -1 =
+    // total aún desconocido (barra indeterminada).
+    final downloadProgress = entry.data['downloadProgress'] is num
+        ? (entry.data['downloadProgress'] as num).toDouble()
+        : null;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
@@ -308,6 +315,21 @@ class _EntryTile extends StatelessWidget {
                             fontSize: 15,
                             color: scheme.onSurface
                                 .withValues(alpha: unread ? 0.85 : 0.65),
+                          ),
+                        ),
+                      ],
+                      if (downloadProgress != null) ...[
+                        const SizedBox(height: 8),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(3),
+                          child: LinearProgressIndicator(
+                            value: downloadProgress < 0
+                                ? null
+                                : downloadProgress,
+                            minHeight: 6,
+                            backgroundColor: scheme.surfaceContainerHigh,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                                AppAccent.primary),
                           ),
                         ),
                       ],

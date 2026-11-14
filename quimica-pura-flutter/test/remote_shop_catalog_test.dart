@@ -525,15 +525,17 @@ void main() {
       expect(find.text('ADN'), findsOneWidget);
       expect(find.text('Marco dorado'), findsOneWidget);
       expect(find.text('Marco arcoíris'), findsOneWidget);
-      // Los 4 estados visibles a la vez.
+      // Los 4 estados visibles a la vez (Quemia 7.7: sin puntos ya
+      // no dice "Te faltan X puntos", solo muestra el precio).
       expect(find.text('Equipado'), findsOneWidget);
       expect(find.text('EQUIPAR'), findsOneWidget);
       expect(find.textContaining('COMPRAR'), findsWidgets);
-      expect(find.textContaining('Te faltan'), findsWidgets);
       // Precios del mockup: menta 300 comprable, galaxia 350.
       expect(find.textContaining('COMPRAR · 300'), findsWidgets);
-      expect(find.text('Te faltan 30 puntos'), findsOneWidget);
-      expect(find.text('Te faltan 180 puntos'), findsWidgets);
+      // Galaxia 350 (30 puntos más que el saldo 320): solo el precio.
+      expect(find.text('350'), findsWidgets);
+      // El de 500 (180 más que el saldo): solo el precio.
+      expect(find.text('500'), findsWidgets);
     });
   });
 }
