@@ -22,9 +22,42 @@ Future<void> _loadRealFonts() async {
   await nunito.load();
 
   final icons = FontLoader('MaterialIcons');
-  icons.addFont(_readFile(
-      '/home/hatch/sdks/flutter-3.47.9/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf'));
+  icons.addFont(_readFile(_findMaterialIconsFont()));
   await icons.load();
+}
+
+// La fuente MaterialIcons vive dentro del SDK de Flutter, pero su ruta
+// absoluta cambia según dónde esté instalado (en esta máquina es
+// /home/hatch/sdks/flutter-3.47.9/..., en el runner de GitHub Actions
+// es otra). La versión anterior tenía la ruta fija y la compilación
+// en la nube fallaba con PathNotFoundException. Ahora se busca: la
+// ruta de esta máquina, FLUTTER_ROOT si existe, y subiendo desde el
+// ejecutable que corre la prueba (flutter_tester o dart) hasta dar
+// con la raíz del SDK.
+String _findMaterialIconsFont() {
+  const relative =
+      'bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf';
+  final candidates = <String>[
+    '/home/hatch/sdks/flutter-3.47.9/$relative',
+  ];
+  final flutterRoot = Platform.environment['FLUTTER_ROOT'];
+  if (flutterRoot != null && flutterRoot.isNotEmpty) {
+    candidates.add('$flutterRoot/$relative');
+  }
+  var dir = File(Platform.resolvedExecutable).parent;
+  while (true) {
+    final candidate = '${dir.path}/$relative';
+    if (!candidates.contains(candidate)) candidates.add(candidate);
+    final parent = dir.parent;
+    if (parent.path == dir.path) break;
+    dir = parent;
+  }
+  for (final candidate in candidates) {
+    if (File(candidate).existsSync()) return candidate;
+  }
+  throw StateError(
+      'MaterialIcons-Regular.otf no encontrado. Rutas buscadas:\n'
+      '${candidates.join('\n')}');
 }
 
 Future<ByteData> _readFile(String path) async {
