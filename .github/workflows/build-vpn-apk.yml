@@ -1,0 +1,81 @@
+name: Build VPN Cuba APK
+
+# Nombre distinto al de Quemia (build-apk.yml) para no pisarlo: este
+# workflow vive en la raíz del repo como .github/workflows/build-vpn-apk.yml.
+# NO se dispara solo: se lanza a mano (workflow_dispatch) o con un push
+# a la carpeta vpn-cuba. No publica nada en ningún sitio.
+on:
+  push:
+    paths:
+      - "vpn-cuba/**"
+      - ".github/workflows/build-vpn-apk.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Flutter 3.47.9
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.9"
+
+      # Los binarios viajan como texto base64 (el conector de GitHub
+      # rechaza binarios en el push): se restauran aquí antes de todo.
+      # Mismo patrón que Quemia (build-apk.yml).
+      - name: Restore binary assets from base64
+        run: |
+          cd vpn-cuba
+          # Assets con sufijo .b64 (logo, fuentes Nunito).
+          find assets -name "*.b64" | while read -r b; do
+            base64 -d "$b" > "${b%.b64}"
+            echo "Restaurado: ${b%.b64}"
+          done
+          # Wrapper de Gradle, iconos, goldens y capturas: llegan como
+          # texto base64 en su misma ruta; si ya son binarios, se dejan.
+          for f in android/gradle/wrapper/gradle-wrapper.jar android/app/src/main/res/mipmap-*/ic_launcher.png test/goldens/*.png previews/*.png; do
+            if [ ! -f "$f" ]; then
+              echo "Falta: $f (se salta)"
+              continue
+            fi
+            if file "$f" | grep -qE "Zip archive|PNG image"; then
+              echo "OK binario: $f"
+            else
+              base64 -d "$f" > /tmp/restore.bin && mv /tmp/restore.bin "$f"
+              echo "Restaurado: $f"
+            fi
+          done
+
+      - name: Install dependencies
+        run: flutter pub get
+        working-directory: vpn-cuba
+
+      - name: Analyze + tests
+        run: |
+          flutter analyze
+          flutter test
+        working-directory: vpn-cuba
+
+      # Firmado con claves debug hasta que se configure el keystore
+      # release #2 de Quemia con sus secretos (con su aprobación).
+      - name: Build release APK
+        run: flutter build apk --release
+        working-directory: vpn-cuba
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vpn-cuba-apk
+          path: vpn-cuba/build/app/outputs/flutter-apk/app-release.apk
