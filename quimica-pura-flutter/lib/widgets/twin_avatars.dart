@@ -205,12 +205,20 @@ class _TwinAvatarImage extends StatelessWidget {
     required this.accent,
     required this.size,
     this.ring = true,
+    this.background,
   });
 
   final String asset;
   final Color accent;
   final double size;
   final bool ring;
+
+  /// Fondo del círculo. Si es null, el de siempre por tema
+  /// (transparente en oscuro, blanco en claro). Se pasa explícito
+  /// cuando la superficie NO coincide con el tema: la pantalla de
+  /// resultado es oscura siempre, así que en tema claro el disco
+  /// blanco se vería detrás de la cara sobre el fondo oscuro.
+  final Color? background;
 
   @override
   Widget build(BuildContext context) {
@@ -226,7 +234,7 @@ class _TwinAvatarImage extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         border: ring ? Border.all(color: accent, width: size * 0.05) : null,
-        color: isDark ? Colors.transparent : Colors.white,
+        color: background ?? (isDark ? Colors.transparent : Colors.white),
       ),
       child: ClipOval(
         child: Image.asset(
@@ -308,12 +316,18 @@ class CompanionAvatar extends StatelessWidget {
     this.size = 52,
     this.mood = TwinMood.happy,
     this.ring = true,
+    this.background,
   });
 
   final Companion companion;
   final double size;
   final TwinMood mood;
   final bool ring;
+
+  /// Fondo del círculo (ver [_TwinAvatarImage.background]): null
+  /// es el de siempre por tema; se pasa transparente cuando la
+  /// superficie es oscura aunque el tema sea claro (resultado).
+  final Color? background;
 
   @override
   Widget build(BuildContext context) {
@@ -322,6 +336,7 @@ class CompanionAvatar extends StatelessWidget {
       accent: companionAccent(companion),
       size: size,
       ring: ring,
+      background: background,
     );
   }
 }

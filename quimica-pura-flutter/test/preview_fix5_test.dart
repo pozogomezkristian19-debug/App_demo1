@@ -214,18 +214,21 @@ void main() {
     await tester.tap(find.text(tr('accountTitle')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
-    // 7.1: "¿Cómo se juega?" vive en Ajustes (última fila de
-    // Cuenta): hay que bajar hasta ella para que se construya.
+    // 7.1: "¿Cómo se juega?" vive en Ajustes; en Cuenta ya NO hay
+    // fila "Ajustes" (rediseño Duolingo: lo abre el engranaje de
+    // la cabecera). Se toca el engranaje por su tooltip.
+    await tester.tap(find.byTooltip(tr('settingsTitle')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    // La fila está en la sección SOPORTE, abajo: el ListView de
+    // Ajustes es perezoso y la fila no existe hasta bajar hasta
+    // ella (por eso ensureVisible solo no vale: primero hay que
+    // construirla con scrollUntilVisible).
     await tester.scrollUntilVisible(
-      find.text(tr('settingsTitle')),
+      find.text(tr('howToPlayTitle')),
       200,
       scrollable: find.byType(Scrollable).first,
     );
-    await tester.pump();
-    await tester.tap(find.text(tr('settingsTitle')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
-    await tester.ensureVisible(find.text(tr('howToPlayTitle')));
     await tester.pump();
     await tester.tap(find.text(tr('howToPlayTitle')));
     await tester.pump();

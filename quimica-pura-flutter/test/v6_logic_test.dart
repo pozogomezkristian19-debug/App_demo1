@@ -75,9 +75,9 @@ void main() {
   });
 
   group('Vidas (v6, item 1)', () {
-    test('día nuevo repone las 5 vidas (función pura)', () {
-      expect(livesLeftToday(0, '2026-11-09', '2026-11-10'), 5);
-      expect(livesLeftToday(0, null, '2026-11-10'), 5);
+    test('día nuevo repone las 10 vidas (función pura)', () {
+      expect(livesLeftToday(0, '2026-11-09', '2026-11-10'), 10);
+      expect(livesLeftToday(0, null, '2026-11-10'), 10);
       expect(canStartLevel(0, '2026-11-09', '2026-11-10'), isTrue);
     });
 
@@ -86,44 +86,44 @@ void main() {
       expect(canStartLevel(0, '2026-11-10', '2026-11-10'), isFalse);
     });
 
-    test('ProgressService: 5 vidas, abandonar cuesta 1', () {
+    test('ProgressService: 10 vidas, abandonar cuesta 1', () {
       final p = ProgressService.instance;
-      expect(p.livesLeft, 5);
+      expect(p.livesLeft, 10);
       expect(p.canStartLevel, isTrue);
       p.loseLifeOnAbandon();
       p.loseLifeOnAbandon();
-      expect(p.livesLeft, 3);
-      for (var i = 0; i < 5; i++) {
+      expect(p.livesLeft, 8);
+      for (var i = 0; i < 8; i++) {
         p.loseLifeOnAbandon();
       }
       expect(p.livesLeft, 0);
       expect(p.canStartLevel, isFalse);
     });
 
-    test('ganar un nivel completo restaura 1 vida (hasta 5)', () {
+    test('ganar un nivel completo restaura 1 vida (hasta 10)', () {
       final p = ProgressService.instance;
-      // Con 5 no suma nada.
+      // Con 10 no suma nada.
       expect(p.restoreLifeOnPass(), isFalse);
-      expect(p.livesLeft, 5);
-      // Abandonar 1 y ganar 1: vuelve a 5.
+      expect(p.livesLeft, 10);
+      // Abandonar 1 y ganar 1: vuelve a 10.
       p.loseLifeOnAbandon();
-      expect(p.livesLeft, 4);
+      expect(p.livesLeft, 9);
       expect(p.restoreLifeOnPass(), isTrue);
-      expect(p.livesLeft, 5);
-      // Abandonar 2 y ganar 1: queda 4 (solo +1 por nivel ganado).
+      expect(p.livesLeft, 10);
+      // Abandonar 2 y ganar 1: queda 9 (solo +1 por nivel ganado).
       p.loseLifeOnAbandon();
       p.loseLifeOnAbandon();
-      expect(p.livesLeft, 3);
+      expect(p.livesLeft, 8);
       expect(p.restoreLifeOnPass(), isTrue);
-      expect(p.livesLeft, 4);
+      expect(p.livesLeft, 9);
       expect(p.restoreLifeOnPass(), isTrue);
-      expect(p.livesLeft, 5);
+      expect(p.livesLeft, 10);
       expect(p.restoreLifeOnPass(), isFalse);
     });
 
     test('de 0 vidas, ganar un nivel devuelve solo 1', () {
       final p = ProgressService.instance;
-      for (var i = 0; i < 5; i++) {
+      for (var i = 0; i < 10; i++) {
         p.loseLifeOnAbandon();
       }
       expect(p.livesLeft, 0);

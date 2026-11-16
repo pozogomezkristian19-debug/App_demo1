@@ -1,5 +1,5 @@
 // Las vidas, como corazón + número (rediseño 2026-11-10, fix 1/5):
-// ya NO hay fila de 5 corazones en ningún sitio. El corazón es el
+// ya NO hay fila de 10 corazones en ningún sitio. El corazón es el
 // de Lucide (icono moderno minimalista, trazado fino), relleno con
 // un degradado coral-rojo y un brillito blanco para que se vea
 // vivo y con volumen, nunca un emoji ni el corazón plano de antes.
@@ -14,6 +14,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../services/premium_service.dart';
 import 'icon_animations.dart';
 import 'lucide_icons.dart';
 
@@ -95,12 +96,13 @@ class LivesChip extends StatelessWidget {
   const LivesChip({
     super.key,
     required this.lives,
-    this.maxLives = 5,
+    this.maxLives = 10,
     this.showMax = false,
     this.pulse = true,
     this.heartSize = 20,
     this.fontSize = 18,
     this.compact = false,
+    this.unlimited,
   });
 
   final int lives;
@@ -109,6 +111,14 @@ class LivesChip extends StatelessWidget {
   final bool pulse;
   final double heartSize;
   final double fontSize;
+
+  /// Corazones ilimitados (Premium PAGADO, solo web): el número
+  /// es '∞' en vez del conteo, en TODOS los sitios donde sale el
+  /// chip. null (por defecto) = automático: ∞ solo en web +
+  /// Premium PAGADO vigente, escuchando el estado en vivo; la
+  /// prueba NO da ∞ (Kristian 2026-11-16); en móvil siempre el
+  /// número. Un valor explícito manda sobre el automático.
+  final bool? unlimited;
 
   /// Variante compacta SOLO para "Mis estadísticas" (Quemia 7.3):
   /// la píldora de la barra superior (36 dp) se veía demasiado
@@ -121,7 +131,24 @@ class LivesChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = showMax ? '$lives/$maxLives' : '$lives';
+    // El ∞ es automático y EN VIVO: si nadie pasa `unlimited`, el
+    // chip escucha el estado del Premium PAGADO y cambia solo a ∞
+    // al aprobar (y vuelve al número al vencer). La prueba NO da ∞
+    // (Kristian 2026-11-16). El corazón NO cambia: solo el número
+    // pasa a ∞.
+    return ValueListenableBuilder<bool>(
+      valueListenable: PremiumService.paidPremiumNotifier,
+      builder: (context, isPaidPremium, _) {
+        final showInfinite = unlimited ?? isPaidPremium;
+        final label = showInfinite
+            ? '∞'
+            : (showMax ? '$lives/$maxLives' : '$lives');
+        return _buildChip(context, label);
+      },
+    );
+  }
+
+  Widget _buildChip(BuildContext context, String label) {
     final heart = LivesHeart(size: compact ? 15 : heartSize);
     return Container(
       // Píldora rosa claro con el número dentro (imagen de

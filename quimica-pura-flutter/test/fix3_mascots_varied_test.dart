@@ -133,13 +133,15 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: ThemeData(useMaterial3: true),
-          home: Scaffold(
-            body: AccountScreen(
-              onOpenScreen: (_) {},
-              onShowAbout: () {},
-              onShowShareApp: () {},
-              trackTopics: const ['estequiometria'],
-            ),
+          // 2026-11-16: la pantalla COMPLETA (AccountProfilePage),
+          // no solo el cuerpo: el título "Cuenta" vive en la
+          // AppBar (el nombre bajo la foto se quitó: aparece UNA
+          // vez, en el título).
+          home: AccountProfilePage(
+            onOpenScreen: (_) {},
+            onShowAbout: () {},
+            onShowShareApp: () {},
+            trackTopics: const ['estequiometria'],
           ),
         ),
       );
@@ -148,19 +150,20 @@ void main() {
     }
 
     testWidgets(
-        'círculo grande del avatar del usuario (96 dp) + miniatura '
+        'círculo grande del avatar del usuario (160 dp) + miniatura '
         'de la compañera (22 dp) junto a la línea, sin selector viejo',
         (tester) async {
       await pumpAccount(tester);
       final companion = companionOfTheDay();
       // Alcance 9 (7.1): el círculo grande de la cabecera ES el
-      // avatar del usuario (SocialAvatar de 96 dp, con su lápiz),
+      // avatar del usuario (SocialAvatar de 160 dp, con su lápiz;
+      // 96 dp hasta el perfil estilo Duolingo de 2026-11-16),
       // ya NO la compañera del día. La compañera sigue en su
       // miniatura (CompanionAvatar de 22 dp) junto a la línea
       // "Hoy te acompaña…", así foto y línea coinciden.
       expect(find.byType(SocialAvatar), findsOneWidget);
       expect(tester.getSize(find.byType(SocialAvatar)),
-          const Size(96, 96));
+          const Size(160, 160));
       expect(find.byType(CompanionAvatar), findsOneWidget);
       expect(tester.getSize(find.byType(CompanionAvatar)),
           const Size(22, 22));
@@ -173,8 +176,9 @@ void main() {
       expect(find.byType(MelliAvatar), findsNothing);
       expect(find.text(tr('accountAvatarTitle')), findsNothing);
       expect(find.text(tr('accountAvatarHint')), findsNothing);
-      // El título sigue como texto (sin nombre guardado, el banner
-      // muestra "Cuenta").
+      // El título sigue como texto (sin nombre guardado, el título
+      // de la AppBar muestra "Cuenta": el nombre aparece UNA vez,
+      // en el título, desde el lote de 11 puntos).
       expect(find.text(tr('accountTitle')), findsOneWidget);
     });
 

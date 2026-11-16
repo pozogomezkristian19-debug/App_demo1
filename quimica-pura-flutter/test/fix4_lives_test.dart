@@ -133,28 +133,28 @@ void main() {
       await pumpRunner(tester);
       final p = ProgressService.instance;
       expect(p.points, 0);
-      expect(p.livesLeft, 5);
+      expect(p.livesLeft, 10);
 
       await answer(tester, 'A fácil');
       expect(p.points, 3);
-      expect(p.livesLeft, 5);
+      expect(p.livesLeft, 10);
       await next(tester);
 
       await answer(tester, 'A media');
       expect(p.points, -5);
-      expect(p.livesLeft, 5);
+      expect(p.livesLeft, 10);
       await next(tester);
 
       await answer(tester, 'C difícil');
       expect(p.points, 3);
-      expect(p.livesLeft, 5);
+      expect(p.livesLeft, 10);
 
       // La última pregunta se cierra con el botón "RESULTADO"
       // (flujo original): al salir del bloque ya está el resultado.
       await next(tester);
       // El resultado muestra los puntos ganados en la partida.
       expect(find.text('Puntos: +3'), findsOneWidget);
-      expect(p.livesLeft, 5);
+      expect(p.livesLeft, 10);
       expect(tester.takeException(), isNull);
     });
   });
@@ -163,7 +163,7 @@ void main() {
     testWidgets('con 0 vidas el quiz de la tabla se abre igual '
         '(los niveles sí están bloqueados)', (tester) async {
       final p = ProgressService.instance;
-      for (var i = 0; i < 5; i++) p.loseLifeOnAbandon();
+      for (var i = 0; i < 10; i++) p.loseLifeOnAbandon();
       expect(p.livesLeft, 0);
       expect(p.canStartLevel, isFalse);
 

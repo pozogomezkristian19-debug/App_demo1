@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:share_plus/share_plus.dart';
+import 'firebase_options.dart';
 import 'widgets/lucide_icons.dart';
 import 'data/periodic_table.dart';
 import 'data/search_index.dart';
@@ -44,6 +46,7 @@ import 'screens/timed_exam_screen.dart';
 import 'screens/tips_screen.dart';
 import 'screens/topic_detail_screen.dart';
 import 'screens/tournaments_screen.dart';
+import 'screens/trial_ended_screen.dart';
 import 'data/i18n/content_i18n.dart';
 import 'services/favorites.dart';
 import 'services/home_widget_service.dart';
@@ -53,6 +56,9 @@ import 'services/notification_service.dart';
 import 'services/push_service.dart';
 import 'services/nav_requests.dart';
 import 'services/notes.dart';
+import 'services/premium.dart';
+import 'services/premium_service.dart';
+import 'services/trial.dart';
 import 'services/progress.dart';
 import 'services/social_service.dart';
 import 'services/sound_service.dart';
@@ -60,8 +66,10 @@ import 'services/update_check.dart';
 import 'services/user_prefs.dart';
 import 'services/accent.dart';
 import 'services/analytics_sync.dart';
+import 'services/remote_tuning.dart';
 import 'services/announcements_service.dart';
 import 'services/auth_service.dart';
+import 'services/email_index.dart';
 import 'services/duels_service.dart';
 import 'services/firestore_social_repository.dart';
 import 'services/friends_groups_service.dart';
@@ -72,8 +80,11 @@ import 'services/reports_service.dart';
 import 'services/shop_service.dart';
 import 'services/tournaments_service.dart';
 import 'widgets/banned_screen.dart';
+import 'widgets/maintenance_screen.dart';
 import 'widgets/brand_logo.dart';
 import 'widgets/element_sheet.dart';
+import 'screens/premium_paywall_screen.dart';
+import 'screens/premium_sign_in_choice_screen.dart';
 import 'widgets/lives_chip.dart';
 import 'widgets/main_bottom_nav.dart';
 import 'widgets/theme_toggle.dart';
@@ -92,7 +103,12 @@ Future<void> main() async {
   // Firebase (ronda fix8, analítica): si falla, la app arranca igual
   // 100% offline; la analítica y el bloqueo remoto quedan apagados.
   try {
-    await Firebase.initializeApp();
+    // En web no hay google-services.json: se usan las opciones
+    // de la app web "Quemia web" (lib/firebase_options.dart). En
+    // el móvil se sigue sin opciones (google-services.json).
+    await Firebase.initializeApp(
+      options: kIsWeb ? DefaultFirebaseOptions.web : null,
+    );
     AnalyticsSync.markFirebaseReady();
   } catch (_) {
     // Sin Firebase: todo sigue local, como antes.
@@ -122,6 +138,20 @@ Future<void> main() async {
   // y se reintenta en la próxima apertura. No retrasa el arranque.
   unawaited(AuthService.ensureAnonymous()
       .then((_) => ReferralService.redeemOnboardingCode()));
+  // Índice de correos (Kristian 2026-11-15): las cuentas creadas
+  // antes del índice no están en él; al abrir la app con sesión y
+  // correo, la entrada se escribe sola si falta (merge, sin tocar
+  // hasPassword). En segundo plano, nunca retrasa el arranque ni
+  // lanza nada.
+  unawaited(AuthService.ensureAnonymous().then((_) =>
+      EmailIndex.ensureIndexed(
+          email: AuthService.accountEmail, uid: AuthService.currentUid)));
+  // Prueba GRATIS de 3 días (Kristian 2026-11-15): la
+  // prueba empieza SOLA al primer arranque con este código (si no
+  // hay inicio guardado en local, se guarda ahora). En segundo
+  // plano, sin internet no pasa nada (el inicio local basta) y
+  // nunca retrasa el arranque ni lanza nada.
+  unawaited(TrialService.instance.start());
   // Límite de 3 s (Quemia 7.3): init() migra el documento heredado
   // por red (dos llamadas con timeout de 5 s cada una) y no puede
   // retrasar el primer frame más de 3 s; si se agota, la migración
@@ -129,6 +159,11 @@ Future<void> main() async {
   // (Ahora corre en segundo plano, encadenado al inicio anónimo de
   // arriba: la migración necesita el uid.)
   await UserPrefs.load();
+  // Vista previa web REAL (2026-11-15): si la entrada marcó el
+  // salto, se fuerza aquí mismo, después de cargar las
+  // preferencias, para que un almacenamiento local roto no pueda
+  // devolver la app a las bienvenidas.
+  if (UserPrefs.previewSkipOnboarding) UserPrefs.onboardingDone = true;
   // Precarga del clic (7.7): el pool de baja latencia del toque se
   // crea al arrancar para que el primer toque suene al instante.
   // Sin esperar: si el audio falla, el toque se precarga en su
@@ -325,6 +360,7 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
     // frame, y si la cuenta está baneada aparece la suspensión.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) unawaited(_recheckBanned());
+      if (mounted) unawaited(_recheckMaintenance());
     });
     // El modo de tema vive SOLO en Cuenta (fix3, punto 13): cuando
     // cambia, este aviso reconstruye el tema en el acto, igual que
@@ -364,6 +400,7 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       unawaited(_recheckBanned());
+      unawaited(_recheckMaintenance());
       unawaited(AnalyticsSync.retryPending());
       // Reintentos online 7.0 (Regla 2): lo que quedó encolado sin
       // internet se sincroniza al volver, en segundo plano.
@@ -389,6 +426,25 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
     if (mounted && banned != _banned) {
       setState(() => _banned = banned);
     }
+  }
+
+  /// Modo mantenimiento (lo activa el panel de Admin en
+  /// 'settings/app'): se re-chequea en el primer frame y al volver a
+  /// primer plano, igual que el baneo. Si el servidor no responde,
+  /// el modo queda como estaba (sin internet la app abre normal).
+  Future<void> _recheckMaintenance() async {
+    final wasOn = RemoteTuning.maintenanceMode;
+    await AnalyticsSync.applyRemoteSettings();
+    if (mounted && RemoteTuning.maintenanceMode != wasOn) {
+      setState(() {});
+    }
+  }
+
+  /// Botón REINTENTAR de la pantalla de mantenimiento: vuelve a leer
+  /// los ajustes; si el modo ya está apagado, entra a la app normal.
+  Future<void> _retryMaintenance() async {
+    await AnalyticsSync.applyRemoteSettings();
+    if (mounted) setState(() {});
   }
 
   /// ThemeMode real: 'sistema' sigue al teléfono; 'oscuro' y 'claro'
@@ -935,19 +991,24 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
                 )
               : _banned
                   ? const BannedScreen()
-                  : _onboardingDone
-                      ? KeyedSubtree(
-                          key: ValueKey('home-$_reloadToken'),
-                          child: HomeScreen(
-                            isDark: _isDark,
-                            onToggleTheme: _toggleTheme,
-                            onTrackChanged: _reloadApp,
-                          ),
+                  : RemoteTuning.maintenanceMode
+                      ? MaintenanceScreen(
+                          message: RemoteTuning.maintenanceMessage,
+                          onRetry: _retryMaintenance,
                         )
-                      : OnboardingScreen(
-                          onFinished: () =>
-                              setState(() => _onboardingDone = true),
-                        ),
+                      : _onboardingDone
+                          ? KeyedSubtree(
+                              key: ValueKey('home-$_reloadToken'),
+                              child: HomeScreen(
+                                isDark: _isDark,
+                                onToggleTheme: _toggleTheme,
+                                onTrackChanged: _reloadApp,
+                              ),
+                            )
+                          : OnboardingScreen(
+                              onFinished: () =>
+                                  setState(() => _onboardingDone = true),
+                            ),
         ),
       ),
     );
@@ -1188,6 +1249,15 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    // Premium REAL: escucha en vivo el vencimiento, la
+    // solicitud de pago y settings/app (precios/tarjeta).
+    PremiumService.instance.start();
+    PremiumService.paywallRequested.addListener(_onPaywallRequested);
+    // Fin de la prueba (Kristian 2026-11-16): cuando la prueba se
+    // acaba con la app abierta, el notifier cambia a false y sale
+    // la pantalla "Se acabó tu prueba" (si no está en mitad de un
+    // quiz: eso lo mira _maybeShowTrialEnded).
+    TrialService.trialNotifier.addListener(_onTrialChanged);
     // Tocar una notificación (o su acción "Repasar ahora") pide el
     // repaso de errores aunque la app ya estuviera abierta (fix3,
     // punto 9): sin este aviso, Niveles ya montada no volvería a
@@ -1201,6 +1271,12 @@ class _HomeScreenState extends State<HomeScreen> {
     // pide el diálogo o la instalación, igual que el repaso.
     NavRequests.updateRequested.addListener(_onNotificationUpdateRequest);
     NavRequests.installRequested.addListener(_onNotificationInstallRequest);
+    // Recordatorio de contraseña (Kristian 2026-11-15): si la cuenta
+    // es de Google y aún no tiene contraseña, programa la notificación
+    // de cada hora ("Asegura tu cuenta con una contraseña"). También
+    // reprograma tras un reinicio o tras apagar los recordatorios
+    // (que borran todo lo programado).
+    unawaited(NotificationService.schedulePasswordReminder());
     // Tras el primer frame: el diálogo de actualización si la app
     // se abrió desde su recordatorio, y si no, la comprobación
     // normal vía GitHub (fix3, punto 20). La pantalla pedida por
@@ -1220,16 +1296,126 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       // Logros nuevos y aviso de racha en la bandeja (fix4, punto 8).
       await NotificationInbox.syncDaily(_trackTopics);
+      // Cuenta atrás en vivo de la racha (Kristian 2026-11-16):
+      // si la racha está en juego y ya es la hora del recordatorio,
+      // sale ahora con el tic-tac hasta medianoche; si aún no es la
+      // hora, se programa sola.
+      unawaited(NotificationService.syncLiveCountdown());
+      // Fin de la prueba (Kristian 2026-11-16): al abrir la app
+      // con la prueba ya vencida sale UNA vez la pantalla "Se
+      // acabó tu prueba" (al final del arranque, para no pelearse
+      // con el diálogo de actualización ni con la pantalla del
+      // push).
+      _maybeShowTrialEnded();
     });
+  }
+
+  /// La prueba se acaba con la app abierta: el notifier cambia y
+  /// sale la pantalla (si no hay un quiz en curso).
+  void _onTrialChanged() {
+    if (!TrialService.trialNotifier.value) _maybeShowTrialEnded();
+  }
+
+  /// ¿Toca enseñar la pantalla "Se acabó tu prueba"? Ver
+  /// shouldShowTrialEnded(): prueba que existió y terminó, sin
+  /// Premium pagado y sin haberla enseñado ya. En mitad de un
+  /// quiz no se interrumpe: sale al abrir la app la próxima vez
+  /// (el flag no se marca y el arranque la vuelve a pedir).
+  void _maybeShowTrialEnded() {
+    if (!mounted || _inSession) return;
+    if (!shouldShowTrialEnded(
+      hadTrial: TrialService.instance.hadTrial,
+      trialActiveNow: TrialService.isTrialActiveNow,
+      hasPaidPremium: PremiumService.hasPaidPremium,
+      alreadyShown: UserPrefs.trialEndedShown,
+    )) {
+      return;
+    }
+    unawaited(UserPrefs.saveTrialEndedShown());
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const TrialEndedScreen(),
+      ),
+    );
   }
 
   @override
   void dispose() {
+    PremiumService.paywallRequested.removeListener(_onPaywallRequested);
+    TrialService.trialNotifier.removeListener(_onTrialChanged);
+    PremiumService.instance.stop();
     NavRequests.reviewRequested.removeListener(_onNotificationReviewRequest);
     NavRequests.pushRequested.removeListener(_onPushRequest);
     NavRequests.updateRequested.removeListener(_onNotificationUpdateRequest);
     NavRequests.installRequested.removeListener(_onNotificationInstallRequest);
     super.dispose();
+  }
+
+  /// ¿Está abierto el paywall? (para no apilarlo dos veces si dos
+  /// entradas piden abrirlo a la vez).
+  bool _paywallOpen = false;
+
+  /// Un candado o la fila Premium de Cuenta pidieron el paywall.
+  void _onPaywallRequested() {
+    if (!mounted) return;
+    _openPaywall();
+  }
+
+  /// Abre el paywall Premium. TODAS las entradas (barra
+  /// de candado, repaso de Mis errores, fila Premium de Cuenta)
+  /// llegan aquí: no hay otro push de PremiumPaywallScreen en
+  /// toda la app — esta es la ÚNICA puerta.
+  ///
+  /// Cambio 6 + v4 (2026-11-15): Premium exige iniciar sesión. Sin
+  /// sesión (invitado) NO se abre el paywall: primero la PÁGINA DE
+  /// ELECCIÓN (PremiumSignInChoiceScreen: por correo o con Google)
+  /// y solo si ahí inicia sesión se abre el paywall. Si cancela,
+  /// no se abre nada.
+  ///
+  /// POR QUÉ la elección y no el popup directo (defecto grave de
+  /// v3, verificado en vivo 2026-11-15 20:18-20:22): la puerta
+  /// anterior llamaba a linkWithGoogle() directamente, y su popup
+  /// en web puede completarse SOLO con la sesión de Google ya
+  /// guardada en ese navegador (perfil compartido de la nube: el
+  /// popup se abre y se cierra sin que nadie elija nada, y
+  /// linkWithGoogle devuelve true). El invitado llegaba al paywall
+  /// sin haber elegido nada (el enlace sube authVersion y pone
+  /// isGoogleLinked en true). Con la página de elección el inicio
+  /// es EXPLÍCITO. Además, antes de abrir el paywall se
+  /// RE-CHEQUEA la sesión EN VIVO (PremiumService.isSignedIn): el
+  /// paywall NUNCA se abre para un invitado, aunque la página
+  /// devolviera true por error. Con sesión (Google o correo) el
+  /// flujo sigue normal. La sesión NO se pide al entrar a
+  /// Aprender/Resolver/Temas/Mis errores: el invitado sigue viendo
+  /// el contenido desvanecido.
+  Future<void> _openPaywall() async {
+    if (!mounted || _paywallOpen) return;
+    _paywallOpen = true;
+    try {
+      if (!PremiumService.isSignedIn) {
+        final signedIn = await Navigator.of(context).push<bool>(
+          MaterialPageRoute(
+            builder: (_) => const PremiumSignInChoiceScreen(),
+          ),
+        );
+        if (!mounted) return;
+        // Re-chequeo en vivo: nunca abrir el paywall para un
+        // invitado. Repintar el shell con la sesión actual (si
+        // canceló, todo sigue como estaba).
+        if (signedIn != true || !PremiumService.isSignedIn) {
+          setState(() {});
+          return;
+        }
+        // La sesión cambió: repintar el shell antes de abrir el
+        // paywall.
+        setState(() {});
+      }
+      await Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const PremiumPaywallScreen()),
+      );
+    } finally {
+      _paywallOpen = false;
+    }
   }
 
   /// Repaso pedido por una notificación: ir a Niveles y arrancar el
@@ -1278,6 +1464,11 @@ class _HomeScreenState extends State<HomeScreen> {
   // Niveles, Tabla, Cuenta.
   // Quemia 7.3 (Kristian): Aprender PRIMERO y Resolver después:
   // Aprender, Resolver, Niveles, Tabla, Cuenta.
+  // Perfil estilo Duolingo (Kristian 2026-11-16): la pestaña
+  // Cuenta ya NO cambia el cuerpo — al tocarla se abre la
+  // pantalla aparte (AccountProfilePage, ruta propia, sin barra
+  // de abajo ni barra de corazones). El hueco 4 del _pages queda
+  // como marcador vacío que nunca se enseña: _index nunca es 4.
   List<Widget> get _pages => [
         const AprenderScreen(),
         const ResolverScreen(),
@@ -1287,16 +1478,35 @@ class _HomeScreenState extends State<HomeScreen> {
             onSessionChanged: (inSession) {
               if (_inSession != inSession) {
                 setState(() => _inSession = inSession);
+                // Al terminar una sesión (lección hecha) la racha ya
+                // está a salvo: la cuenta atrás en vivo se quita.
+                if (!inSession) {
+                  unawaited(NotificationService.syncLiveCountdown());
+                }
               }
             }),
         const TablaScreen(),
-        AccountScreen(
+        const SizedBox.shrink(),
+      ];
+
+  /// Abre Cuenta como PANTALLA APARTE (perfil estilo Duolingo,
+  /// Kristian 2026-11-16): ruta propia encima del shell, sin la
+  /// barra de abajo ni la barra de corazones. Se vuelve con la X
+  /// de la pantalla o con el atrás del teléfono. La pestaña de
+  /// debajo queda como estaba (al volver se ve la pestaña de
+  /// antes).
+  void _openAccount() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => AccountProfilePage(
           onOpenScreen: _openScreenKey,
           onShowAbout: () => _showAbout(context),
           onShowShareApp: () => _showShareApp(context),
           trackTopics: _trackTopics,
         ),
-      ];
+      ),
+    );
+  }
 
   /// Temas de la pista actual, en orden (para Mis estadísticas).
   List<String> get _trackTopics =>
@@ -1322,7 +1532,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Repaso desde la barra de arriba (fix2, item 2): si hay errores,
   /// va a Niveles y arranca el repaso; si no hay, avisa.
+  /// Mis errores es Premium: el usuario gratis ve el paywall
+  /// en vez del repaso.
   void _startReviewFromAppBar() {
+    if (premiumSectionLocked(
+      isPremium: PremiumService.isPremiumNow,
+      section: PremiumLockedSection.misErrores,
+    )) {
+      _openPaywall();
+      return;
+    }
     if (ProgressService.instance.failedCount == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(tr('quizNoErrors'))),
@@ -1333,7 +1552,20 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// Abre una pantalla del menú o de la búsqueda por su clave.
+  /// LÓGICA (Kristian 2026-11-16: a un invitado no le sale lo de
+  /// buscar otra gente, así que no puede seguir a nadie): las
+  /// pantallas de gente — Amigos, Tabla de posiciones, Torneos —
+  /// NO se abren sin sesión, por ningún camino (fila de Cuenta,
+  /// menú, notificación o push). Las entradas visibles ya se
+  /// esconden; esto es el cierre por si llega una ruta vieja.
   void _openScreenKey(String key) {
+    if ((key == 'friends' ||
+            key == 'leaderboard' ||
+            key == 'tournaments') &&
+        !AuthService.isGoogleLinked &&
+        !AuthService.isEmailLinked) {
+      return;
+    }
     Widget? page;
     switch (key) {
       case 'branches':
@@ -1407,6 +1639,20 @@ class _HomeScreenState extends State<HomeScreen> {
         page = const TipsScreen();
       case 'review':
         _goToTab(2, startReview: true);
+        return;
+      case 'account':
+        // Cuenta como pantalla aparte (perfil estilo Duolingo,
+        // Kristian 2026-11-16): la abre el recordatorio de
+        // contraseña de la cuenta de Google y la búsqueda.
+        _openAccount();
+        return;
+      case 'about':
+        // Acerca de Quemia: vive en Ajustes (sección Soporte).
+        _showAbout(context);
+        return;
+      case 'shareApp':
+        // Compartir la app: vive en Ajustes (sección Soporte).
+        _showShareApp(context);
         return;
     }
     if (page != null) {
@@ -1722,10 +1968,18 @@ class _HomeScreenState extends State<HomeScreen> {
         Center(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: _kTopBarGap),
-            child: ValueListenableBuilder<int>(
-              valueListenable: ProgressService.livesNotifier,
-              builder: (context, _, __) => LivesChip(
-                lives: ProgressService.instance.livesLeft,
+            child: ValueListenableBuilder<bool>(
+              valueListenable: PremiumService.paidPremiumNotifier,
+              builder: (context, isPaidPremium, _) =>
+                  ValueListenableBuilder<int>(
+                valueListenable: ProgressService.livesNotifier,
+                builder: (context, _, __) => LivesChip(
+                  lives: ProgressService.instance.livesLeft,
+                  // Corazones ilimitados (SOLO Premium PAGADO):
+                  // '∞' en vez del conteo. La prueba
+                  // de 3 días NO da ∞ (Kristian 2026-11-16).
+                  unlimited: isPaidPremium,
+                ),
               ),
             ),
           ),
@@ -1975,31 +2229,33 @@ class _HomeScreenState extends State<HomeScreen> {
                                 subtitle: tr('timedSub'),
                                 onTap: () => _openScreenKey('timed'),
                               ),
-                              _drawerItem(
-                                icon: LucideIcons.trophy,
-                                title: tr('accountLeaderboard'),
-                                subtitle: tr('accountLeaderboardSub'),
-                                onTap: () => _openScreenKey('leaderboard'),
-                              ),
-                              // Quemia 7.0: social junto a la tabla.
-                              _drawerItem(
-                                icon: LucideIcons.userRound,
-                                title: tr('accountFriends'),
-                                subtitle: tr('accountFriendsSub'),
-                                onTap: () => _openScreenKey('friends'),
-                              ),
-                              _drawerItem(
-                                icon: LucideIcons.award,
-                                title: tr('accountTournaments'),
-                                subtitle: tr('accountTournamentsSub'),
-                                onTap: () => _openScreenKey('tournaments'),
-                              ),
-                              _drawerItem(
-                                icon: LucideIcons.network,
-                                title: tr('accountGroups'),
-                                subtitle: tr('accountGroupsSub'),
-                                onTap: () => _openScreenKey('groups'),
-                              ),
+                              // Lo de buscar otra gente SOLO con
+                              // sesión (Kristian 2026-11-16): un
+                              // invitado no ve Tabla, Amigos ni
+                              // Torneos en el menú, así no puede
+                              // seguir a nadie.
+                              if (AuthService.isGoogleLinked ||
+                                  AuthService.isEmailLinked) ...[
+                                _drawerItem(
+                                  icon: LucideIcons.trophy,
+                                  title: tr('accountLeaderboard'),
+                                  subtitle: tr('accountLeaderboardSub'),
+                                  onTap: () => _openScreenKey('leaderboard'),
+                                ),
+                                // Quemia 7.0: social junto a la tabla.
+                                _drawerItem(
+                                  icon: LucideIcons.userRound,
+                                  title: tr('accountFriends'),
+                                  subtitle: tr('accountFriendsSub'),
+                                  onTap: () => _openScreenKey('friends'),
+                                ),
+                                _drawerItem(
+                                  icon: LucideIcons.award,
+                                  title: tr('accountTournaments'),
+                                  subtitle: tr('accountTournamentsSub'),
+                                  onTap: () => _openScreenKey('tournaments'),
+                                ),
+                              ],
                               // Referidos (7.3): junto a Amigos y
                               // Grupos, en la misma sección social.
                               _drawerItem(
@@ -2155,6 +2411,14 @@ class _HomeScreenState extends State<HomeScreen> {
                           selectedIndex: _index,
                           onSelected: (i) {
                             SoundService.tap();
+                            // La pestaña Cuenta abre la pantalla
+                            // aparte (perfil estilo Duolingo,
+                            // Kristian 2026-11-16): no cambia la
+                            // pestaña de debajo.
+                            if (i == 4) {
+                              _openAccount();
+                              return;
+                            }
                             setState(() => _index = i);
                           },
                           isDark: widget.isDark,
@@ -2162,6 +2426,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                 ],
               ),
+              // Sin diamante flotante (Kristian 2026-11-15: tapaba
+              // el texto del botón DESBLOQUEAR CON PREMIUM y las
+              // pantallas con candado ya piden Premium solas). La
+              // entrada a Premium queda en los botones DESBLOQUEAR
+              // de las pantallas con candado y en la fila Premium
+              // de Cuenta.
               _drawerBlurOverlay(),
             ],
           ),

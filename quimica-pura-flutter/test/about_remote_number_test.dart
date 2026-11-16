@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quimica_pura/main.dart';
+import 'package:quimica_pura/screens/account_screen.dart';
 import 'package:quimica_pura/services/analytics_sync.dart';
 import 'package:quimica_pura/services/localization.dart';
 import 'package:quimica_pura/services/progress.dart';
@@ -63,9 +64,15 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
   }
 
-  /// Abre la hoja "Acerca de" desde la fila de Cuenta.
+  /// Abre la hoja "Acerca de" desde Ajustes (sección SOPORTE).
+  /// 2026-11-16 (perfil estilo Duolingo): "Acerca de" vive en
+  /// Ajustes; la puerta es el engranaje de arriba del perfil.
   Future<void> openAboutSheet(WidgetTester tester) async {
     await tester.tap(find.text(tr('accountTitle')).first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(AccountProfilePage), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('accountSettingsButton')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     await tester.scrollUntilVisible(

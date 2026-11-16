@@ -23,7 +23,7 @@
 //   nota5 = (puntos ganados / puntos máximos) × 5
 //
 // ## Vidas
-// 5 vidas. Abandonar un nivel en curso (botón Salir o botón atrás del
+// 10 vidas. Abandonar un nivel en curso (botón Salir o botón atrás del
 // móvil) cuesta 1 vida. Terminar un nivel (aprobado o suspendido) no
 // cuesta nada. Con 0 vidas no se puede empezar ningún nivel hasta
 // mañana: cada día nuevo las vidas vuelven a 5.
@@ -85,8 +85,8 @@ double levelScore5(List<int> difficulties, List<bool> correct) {
 bool levelPassed(int correct, int total) =>
     total > 0 && correct * 5 >= total * RemoteTuning.passRequired;
 
-/// Vidas: 5 como máximo, se reponen cada día nuevo. El máximo puede
-/// venir del servidor (RemoteTuning); sin él, 5, como siempre.
+/// Vidas: 10 como máximo, se reponen cada día nuevo. El máximo puede
+/// venir del servidor (RemoteTuning); sin él, 10, como siempre.
 int get maxLives => RemoteTuning.maxLives;
 
 /// Vidas que quedan hoy, según las guardadas y la fecha guardada.

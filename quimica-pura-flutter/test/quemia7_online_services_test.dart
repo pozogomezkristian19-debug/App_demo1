@@ -381,7 +381,7 @@ void main() {
       expect(
           DuelService.canClaimForfeit(current, nowMs: now), isTrue);
       expect(myPoints, 0);
-      expect(myLives, 5);
+      expect(myLives, 10);
       expect(await DuelService.claimForfeitWin(duel.id), isTrue);
       current = await DuelService.getDuel(duel.id);
       expect(current!.status, 'finished');
@@ -389,7 +389,7 @@ void main() {
       expect(current.forfeit, isTrue);
       // Gané por abandono: +10 puntos y SIN perder vidas.
       expect(myPoints, 10);
-      expect(myLives, 5);
+      expect(myLives, 10);
     });
 
     test('rival que nunca jugó: abandono solo tras 24 h', () async {
@@ -423,13 +423,13 @@ void main() {
       final duel = await DuelService.createDuel(
           rivalUid: 'uid-b', rivalName: 'miguel');
       expect(myPoints, 0);
-      expect(myLives, 5);
+      expect(myLives, 10);
       expect(await DuelService.cancelDuel(duel!.id), isTrue);
       final current = await DuelService.getDuel(duel.id);
       expect(current!.status, 'cancelled');
       expect(current.winnerUid, isNull);
       expect(myPoints, 0);
-      expect(myLives, 5);
+      expect(myLives, 10);
       expect(await DuelService.cancelDuel(duel.id), isFalse);
     });
 

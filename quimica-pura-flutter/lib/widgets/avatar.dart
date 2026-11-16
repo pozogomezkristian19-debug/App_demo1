@@ -137,8 +137,8 @@ class _AvatarPainter extends CustomPainter {
       }
     }
 
-    // Ojos.
-    final eyePaint = Paint()..color = const Color(0xFF2B2118);
+    // Ojos (2026-11-16, Kristian): transparentes — no se pintan.
+    final eyePaint = Paint()..color = const Color(0x00000000);
     canvas.drawCircle(Offset(s * 0.40, s * 0.54), s * 0.032, eyePaint);
     canvas.drawCircle(Offset(s * 0.60, s * 0.54), s * 0.032, eyePaint);
 

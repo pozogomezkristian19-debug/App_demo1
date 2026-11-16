@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quimica_pura/main.dart';
+import 'package:quimica_pura/screens/account_screen.dart';
 import 'package:quimica_pura/screens/how_to_play_screen.dart';
 import 'package:quimica_pura/services/localization.dart';
 import 'package:quimica_pura/services/notification_inbox.dart';
@@ -172,25 +173,26 @@ void main() {
     await setPhone(tester);
     await tester.pumpWidget(const MelliQuiApp());
     await settle(tester);
-    // Ir a Cuenta (quinta pestaña) y de ahí a Ajustes (última
-    // fila, 7.1): "¿Cómo se juega?" vive ahora en Ajustes. La
-    // fila está al final de la lista: hay que bajar hasta ella
-    // para que se construya (el ListView solo pinta lo visible).
+    // Ir a Cuenta (quinta pestaña) y de ahí a Ajustes: "¿Cómo se
+    // juega?" vive ahora en Ajustes. 2026-11-16 (perfil estilo
+    // Duolingo): Cuenta es una pantalla aparte y la puerta a
+    // Ajustes es el ENGRANAJE de arriba, no una fila al final.
     await tester.tap(find.text(tr('accountTitle')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
-    await tester.scrollUntilVisible(
-      find.text(tr('settingsTitle')),
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pump();
-    await tester.tap(find.text(tr('settingsTitle')));
+    expect(find.byType(AccountProfilePage), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('accountSettingsButton')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
-    // La fila "¿Cómo se juega?" puede quedar bajo el pliegue en
-    // Ajustes: se lleva a la vista antes de tocarla.
-    await tester.ensureVisible(find.text(tr('howToPlayTitle')));
+    // La fila "¿Cómo se juega?" queda bajo el pliegue en Ajustes
+    // (12 filas + 3 secciones): se baja hasta ella antes de
+    // tocarla. El ListView de Ajustes es el último del árbol
+    // (debajo quedan el perfil y la pestaña anterior).
+    await tester.scrollUntilVisible(
+      find.text(tr('howToPlayTitle')),
+      200,
+      scrollable: find.byType(Scrollable).last,
+    );
     await tester.pump();
     await tester.tap(find.text(tr('howToPlayTitle')));
     await tester.pump();

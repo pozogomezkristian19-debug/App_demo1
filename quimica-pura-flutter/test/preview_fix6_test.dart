@@ -26,6 +26,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:quimica_pura/main.dart';
+import 'package:quimica_pura/screens/account_screen.dart';
 import 'package:quimica_pura/screens/reminder_screen.dart';
 import 'package:quimica_pura/services/accent.dart';
 import 'package:quimica_pura/services/localization.dart';
@@ -404,25 +405,37 @@ void main() {
     await tester.tap(find.text(tr('accountTitle')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
-    // Las tres primeras filas, en orden (7.1, revisado 7.7):
-    // Vincular con Google (prominente, primera fila), Estadísticas
-    // y Amigos. "Mis errores" ya NO es fila de Cuenta (7.7: se
-    // quitó; el repaso sigue desde notificaciones y búsqueda).
-    // "Mis trofeos" (2026-11-14) es una tarjeta, no una fila, así
-    // que no aparece en esta lista. Las filas en tarjeta ya no son
-    // ListTile — se leen por sus títulos de texto, en orden de
-    // aparición en la lista.
+    // Las tres primeras filas, en orden (2026-11-16, Cuenta
+    // actual): Estadísticas, Tienda y Premium. "Vincular con
+    // Google" se mudó a Ajustes y Amigos/Tabla/Torneos solo salen
+    // con sesión (09:01: un invitado no ve lo de buscar gente).
+    // La lista tiene scroll (ventana de teléfono 393x852) y las
+    // filas de abajo no se construyen hasta bajar; para leer el
+    // orden en el árbol se agranda la ventana un momento (a 3000
+    // cabe todo) y luego se vuelve a tamaño de teléfono para la
+    // foto. Los títulos se leen DENTRO de AccountProfilePage: la
+    // "Tienda" del menú hamburguesa (cerrado, pero en el árbol)
+    // duplicaría el texto.
+    tester.view.physicalSize = const Size(393 * 2, 3000 * 2);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
     final expectedOrder = [
-      tr('accountLinkGoogle'),
       tr('accountStats'),
-      tr('accountFriends'),
+      tr('accountShop'),
+      tr('accountPremium'),
     ];
     final seenTitles = tester
-        .widgetList<Text>(find.byType(Text))
+        .widgetList<Text>(find.descendant(
+          of: find.byType(AccountProfilePage),
+          matching: find.byType(Text),
+        ))
         .map((t) => t.data ?? '')
         .where((data) => expectedOrder.contains(data))
         .toList();
     expect(seenTitles, expectedOrder);
+    tester.view.physicalSize = const Size(393 * 2, 852 * 2);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
     // Precarga de las fotos de los compañeros: la miniatura de la
     // línea "Hoy te acompaña…" es la del acompañante del día.
     await warmCompanions(tester);

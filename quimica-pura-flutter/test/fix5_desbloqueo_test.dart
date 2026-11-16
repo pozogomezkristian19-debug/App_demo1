@@ -147,8 +147,7 @@ void main() {
         break;
       }
     }
-    expect(shown, isNotNull,
-        reason: 'No se ve ninguna pregunta del banco');
+    expect(shown, isNotNull, reason: 'No se ve ninguna pregunta del banco');
     final q = shown!;
     final option = correct
         ? q.options[q.answer]
@@ -211,8 +210,8 @@ void main() {
       expect(levelPassed(4, 5), isTrue);
       // La nota ponderada cambia según qué se falló, pero la
       // puerta es el conteo, no la nota.
-      expect(levelScore5([2, 2, 2, 2, 2], [true, true, true, true, false]),
-          4.0);
+      expect(
+          levelScore5([2, 2, 2, 2, 2], [true, true, true, true, false]), 4.0);
       expect(levelScore5([2, 2, 2, 2, 1], [true, true, true, true, false]),
           closeTo(4.17, 0.01));
       // Fallar la difícil: nota 3,85 — antes NO pasaba; ahora sí.
@@ -225,15 +224,15 @@ void main() {
     });
 
     test('la nota ponderada se sigue calculando', () {
-      expect(levelScore5([2, 2, 2, 2, 2], [true, true, true, true, true]),
-          5.0);
-      expect(levelScore5([2, 2, 2, 2, 2], [true, true, true, false, false]),
-          3.0);
+      expect(levelScore5([2, 2, 2, 2, 2], [true, true, true, true, true]), 5.0);
+      expect(
+          levelScore5([2, 2, 2, 2, 2], [true, true, true, false, false]), 3.0);
     });
   });
 
   group('El caso de Kristian: 4/5 en el Nivel 1 desbloquea el 2', () {
-    testWidgets('4/5: pasa, desbloquea el 2 y el botón '
+    testWidgets(
+        '4/5: pasa, desbloquea el 2 y el botón '
         '"Pasar de nivel" está', (tester) async {
       await pumpNiveles(tester);
       final p = ProgressService.instance;
@@ -248,9 +247,8 @@ void main() {
       final note = levelScore5(diffs, correct);
       var delta = 0;
       for (var i = 0; i < 5; i++) {
-        delta += correct[i]
-            ? pointsForCorrect(diffs[i])
-            : pointsForWrong(diffs[i]);
+        delta +=
+            correct[i] ? pointsForCorrect(diffs[i]) : pointsForWrong(diffs[i]);
       }
 
       // Resultado (§3.4): título amarillo, XP grande "+N" (arriba
@@ -280,7 +278,8 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('pasar el 1 y cerrar/reabrir la app: el 2 sigue '
+    testWidgets(
+        'pasar el 1 y cerrar/reabrir la app: el 2 sigue '
         'desbloqueado y se puede tocar', (tester) async {
       await pumpNiveles(tester);
       final p = ProgressService.instance;
@@ -315,7 +314,8 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('"Pasar de nivel" arranca el Nivel 2 ahí mismo: '
+    testWidgets(
+        '"Pasar de nivel" arranca el Nivel 2 ahí mismo: '
         'pregunta 1, marcador a cero', (tester) async {
       await pumpNiveles(tester);
       await startLevel1(tester);
@@ -332,9 +332,9 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('3/5 no pasa: sin "Pasar de nivel", sin desbloqueo, '
-        'el mensaje sigue siendo "necesitas 4 de 5"',
-        (tester) async {
+    testWidgets(
+        '3/5 no pasa: sin "Pasar de nivel", sin desbloqueo, '
+        'el mensaje sigue siendo "necesitas 4 de 5"', (tester) async {
       await pumpNiveles(tester);
       final p = ProgressService.instance;
       await startLevel1(tester);
@@ -356,17 +356,23 @@ void main() {
     // Aquí se fija la semilla: el sorteo es el mismo en cada
     // corrida y la captura es estable; fuera de aquí el azar sigue
     // siendo azar.
+    // Igual con el tiempo (2026-11-16): el cronómetro mide tiempo
+    // real y el dígito de segundos de la tarjeta TIEMPO cambiaba
+    // entre pasadas (0-4 s según la carga), así que aquí se fija a
+    // 4 s para que la captura sea determinista.
     setUp(() {
       final seeded = Random(20261113);
       PracticarScreen.randomFactory = () => seeded;
+      PracticarScreen.debugElapsedMsOverride = 4000;
     });
     tearDown(() {
       PracticarScreen.randomFactory = Random.new;
+      PracticarScreen.debugElapsedMsOverride = null;
     });
 
-    testWidgets('fix5_resultado_pasar_nivel: resultado 4/5 con el '
-        'botón PASAR DE NIVEL y las 3 tarjetas (§3.4)',
-        (tester) async {
+    testWidgets(
+        'fix5_resultado_pasar_nivel: resultado 4/5 con el '
+        'botón PASAR DE NIVEL y las 3 tarjetas (§3.4)', (tester) async {
       await pumpNiveles(tester);
       await warmCompanions(tester);
       await startLevel1(tester);
@@ -378,7 +384,8 @@ void main() {
       await shot(tester, 'fix5_resultado_pasar_nivel.png');
     });
 
-    testWidgets('fix5_camino_desbloqueado: camino con el nivel 1 '
+    testWidgets(
+        'fix5_camino_desbloqueado: camino con el nivel 1 '
         'pasado (palomita) y el 2 desbloqueado', (tester) async {
       await pumpNiveles(tester);
       await warmCompanions(tester);

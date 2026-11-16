@@ -19,6 +19,7 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -28,10 +29,13 @@ import 'duels_service.dart';
 import 'localization.dart';
 import 'notification_inbox.dart';
 import 'progress.dart';
+import 'public_profile.dart';
 import 'referral_rewards.dart';
 import 'remote_shop_catalog.dart';
 import 'shop_item.dart';
+import 'user_prefs.dart';
 
+export 'public_profile.dart';
 export 'shop_item.dart';
 
 /// Los 12 usuarios de demostración (los mismos que usa el otro
@@ -206,8 +210,7 @@ class FriendRequest {
         createdAtMs: createdAtMs,
       );
 
-  static FriendRequest? fromMap(
-      String id, Map<String, dynamic>? raw) {
+  static FriendRequest? fromMap(String id, Map<String, dynamic>? raw) {
     if (raw == null) return null;
     final senderUid = raw['senderUid']?.toString() ?? '';
     final receiverUid = raw['receiverUid']?.toString() ?? '';
@@ -344,9 +347,7 @@ class DuelState {
     if (wonByForfeit) return true;
     if (winnerIsMe != null) return winnerIsMe!;
     if (myScore != opponentScore) return myScore > opponentScore;
-    if (myTimeMs > 0 &&
-        opponentTimeMs > 0 &&
-        myTimeMs != opponentTimeMs) {
+    if (myTimeMs > 0 && opponentTimeMs > 0 && myTimeMs != opponentTimeMs) {
       return myTimeMs < opponentTimeMs;
     }
     return false;
@@ -356,9 +357,7 @@ class DuelState {
     if (phase != DuelPhase.finished || wonByForfeit) return false;
     if (winnerIsMe != null) return false;
     if (myScore != opponentScore) return false;
-    if (myTimeMs > 0 &&
-        opponentTimeMs > 0 &&
-        myTimeMs != opponentTimeMs) {
+    if (myTimeMs > 0 && opponentTimeMs > 0 && myTimeMs != opponentTimeMs) {
       return false;
     }
     return true;
@@ -393,9 +392,8 @@ class DuelState {
         wonByForfeit: wonByForfeit ?? this.wonByForfeit,
         myTimeMs: myTimeMs ?? this.myTimeMs,
         opponentTimeMs: opponentTimeMs ?? this.opponentTimeMs,
-        winnerIsMe: winnerIsMe == _unsetWinner
-            ? this.winnerIsMe
-            : winnerIsMe as bool?,
+        winnerIsMe:
+            winnerIsMe == _unsetWinner ? this.winnerIsMe : winnerIsMe as bool?,
         incoming: incoming ?? this.incoming,
       );
 }
@@ -405,8 +403,7 @@ class DuelState {
 const List<QuizQuestion> kDuelQuestions = [
   QuizQuestion(
     topic: 'estequiometria',
-    question:
-        '¿Cuántos moles hay en 36 g de agua?\nDatos: M = 18.02 g/mol',
+    question: '¿Cuántos moles hay en 36 g de agua?\nDatos: M = 18.02 g/mol',
     options: ['0.50 mol', '1.00 mol', '2.00 mol', '3.60 mol'],
     answer: 2,
     explanation: 'n = m/M = 36 g ÷ 18.02 g/mol ≈ 2.00 mol.',
@@ -428,7 +425,8 @@ const List<QuizQuestion> kDuelQuestions = [
         'Datos: P constante, T₁ = 300 K, T₂ = 600 K',
     options: ['5 L', '10 L', '15 L', '20 L'],
     answer: 3,
-    explanation: 'Ley de Charles: V∝T (en kelvin). Al duplicar T, V se duplica: 20 L.',
+    explanation:
+        'Ley de Charles: V∝T (en kelvin). Al duplicar T, V se duplica: 20 L.',
     difficulty: 2,
   ),
   QuizQuestion(
@@ -574,6 +572,18 @@ abstract class SocialRepository {
   Future<List<FriendEntry>> friends();
   Stream<List<FriendEntry>> friendsStream();
   Future<FriendEntry?> findUserByUsername(String username);
+
+  /// Búsqueda de usuarios para invitar (Kristian 2026-11-15):
+  /// SOLO por nombre de usuario (el correo NO se busca: lo quitó
+  /// él 2026-11-15). Nombre de usuario exacto → solo ese usuario;
+  /// nombre normal/parcial ('bre') → todos los nombres
+  /// relacionados (Brenda, bren...). Cada resultado muestra el
+  /// nombre de usuario real, para verificar que es la cuenta
+  /// correcta antes de invitar. Sin distinción de mayúsculas.
+  /// Sin mí mismo, con límite de 10. Vacío sin internet o sin
+  /// consulta.
+  Future<List<FriendEntry>> searchUsers(String query);
+
   Future<bool> addFriend(String username);
   Future<void> removeFriend(String deviceId);
 
@@ -592,8 +602,7 @@ abstract class SocialRepository {
   // --- Duelos ---
   Future<DuelState> createDuel({String? opponentUsername, bool random = false});
   Stream<DuelState> duelStream(String matchId);
-  Future<void> submitDuelScore(String matchId, int score,
-      {int timeMs = 0});
+  Future<void> submitDuelScore(String matchId, int score, {int timeMs = 0});
   Future<void> forfeitDuel(String matchId);
   Future<void> cancelDuel(String matchId);
 
@@ -637,6 +646,104 @@ abstract class SocialRepository {
 
   // --- Reportes ---
   Future<void> reportQuestion(String questionId, String reason);
+
+  // --- Seguir / seguidores (lote seguir, 2026-11-16) ---
+  // Colección 'follows', doc '<seguidor>_<seguido>'. Amigos =
+  // seguimiento mutuo: al enviar una solicitud se sigue al
+  // destinatario y al aceptarla se sigue de vuelta.
+  Future<bool> followUser(String uid);
+  Future<bool> unfollowUser(String uid);
+  Future<bool> isFollowing(String uid);
+  Future<bool> isFollowedBy(String uid);
+  Future<bool> isMutualFollow(String uid);
+  Future<int> followingCount(String uid);
+  Future<int> followersCount(String uid);
+  Future<List<FriendEntry>> followingList(String uid);
+  Future<List<FriendEntry>> followersList(String uid);
+
+  // --- Sugerencias (rotación diaria determinista) ---
+  Future<List<FriendEntry>> friendSuggestions({DateTime? on});
+  Future<void> dismissSuggestion(String uid, {DateTime? on});
+
+  // --- Perfil público (datos 100 % reales) ---
+  Future<PublicProfile?> publicProfile(String uid);
+
+  // --- Reportar y bloquear usuarios ---
+  Future<bool> reportUser(String uid, String reason);
+  Future<bool> blockUser(String uid);
+  Future<bool> unblockUser(String uid);
+  Future<bool> isBlocked(String uid);
+  Future<List<String>> blockedUids();
+}
+
+/// Semilla determinista de una fecha ('yyyy-MM-dd'): mismo día →
+/// mismo número; días distintos → número distinto (casi siempre).
+int _dateSeed(DateTime d) {
+  final key = ProgressService.dateKey(d);
+  var h = 0;
+  for (final c in key.codeUnits) {
+    h = (h * 31 + c) & 0x7fffffff;
+  }
+  return h;
+}
+
+/// Mezcla determinista por fecha (rotación diaria de sugerencias):
+/// mismo día → mismo orden; días distintos → orden distinto. No
+/// toca la lista original.
+List<T> shuffleForDate<T>(List<T> items, DateTime on) {
+  final out = List<T>.of(items);
+  out.shuffle(Random(_dateSeed(on)));
+  return out;
+}
+
+/// Clave local de las sugerencias descartadas un día
+/// ('yyyy-MM-dd'): la X descarta a esa persona SOLO ese día.
+String dismissedSuggestionsKey(DateTime on) =>
+    'social_dismissed_${ProgressService.dateKey(on)}';
+
+/// Uids descartados ese día (guardado local, SharedPreferences).
+Future<Set<String>> loadDismissedSuggestions(DateTime on) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList(dismissedSuggestionsKey(on))?.toSet() ??
+        <String>{};
+  } catch (_) {
+    return <String>{};
+  }
+}
+
+/// Descarta [uid] solo ese día (guardado local).
+Future<void> dismissSuggestionLocal(String uid, DateTime on) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final key = dismissedSuggestionsKey(on);
+    final current = prefs.getStringList(key)?.toSet() ?? <String>{};
+    current.add(uid);
+    await prefs.setStringList(key, current.toList());
+  } catch (_) {}
+}
+
+/// Espejo local de bloqueados (SharedPreferences): el bloqueo vive
+/// en mi documento de usuario, pero el espejo deja filtrar sin
+/// internet (sugerencias, amigos, listas).
+const String blockedMirrorKey = 'social_blocked_uids';
+
+/// Uids bloqueados según el espejo local.
+Future<Set<String>> loadBlockedMirror() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList(blockedMirrorKey)?.toSet() ?? <String>{};
+  } catch (_) {
+    return <String>{};
+  }
+}
+
+/// Guarda el espejo local de bloqueados.
+Future<void> saveBlockedMirror(Set<String> uids) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(blockedMirrorKey, uids.toList());
+  } catch (_) {}
 }
 
 /// Stream que emite el valor actual al suscribirse y cada cambio.
@@ -645,21 +752,22 @@ class _ValueStream<T> {
   T _current;
   final _ctrl = StreamController<T>.broadcast();
 
-  Stream<T> get stream {
-    late StreamController<T> out;
-    out = StreamController<T>(
-      onListen: () {
-        out.add(_current);
+  /// Multi-escucha con replay (arreglo del bug gris 2026-11-16):
+  /// cada listener recibe el valor actual al suscribirse y luego
+  /// las actualizaciones. Un StreamBuilder reutilizado por el
+  /// SliverChildListDelegate al recrear el hijo tras un scroll
+  /// rápido vuelve a escuchar LA MISMA instancia de stream: con
+  /// un stream single-subscription eso lanzaba StateError y la
+  /// pantalla quedaba gris. Con Stream.multi broadcast no.
+  Stream<T> get stream => Stream<T>.multi((ctrl) {
+        ctrl.add(_current);
         final sub = _ctrl.stream.listen(
-          out.add,
-          onError: out.addError,
-          onDone: out.close,
+          ctrl.add,
+          onError: ctrl.addError,
+          onDone: ctrl.close,
         );
-        out.onCancel = sub.cancel;
-      },
-    );
-    return out.stream;
-  }
+        ctrl.onCancel = sub.cancel;
+      }, isBroadcast: true);
 
   void update(T value) {
     _current = value;
@@ -677,21 +785,18 @@ class _DuelRecord {
   DuelState state;
   final _ctrl = StreamController<DuelState>.broadcast();
 
-  Stream<DuelState> get stream {
-    late StreamController<DuelState> out;
-    out = StreamController<DuelState>(
-      onListen: () {
-        out.add(state);
+  /// Multi-escucha con replay (igual que [_ValueStream.stream]):
+  /// cada listener recibe el estado actual al suscribirse y luego
+  /// las actualizaciones.
+  Stream<DuelState> get stream => Stream<DuelState>.multi((ctrl) {
+        ctrl.add(state);
         final sub = _ctrl.stream.listen(
-          out.add,
-          onError: out.addError,
-          onDone: out.close,
+          ctrl.add,
+          onError: ctrl.addError,
+          onDone: ctrl.close,
         );
-        out.onCancel = sub.cancel;
-      },
-    );
-    return out.stream;
-  }
+        ctrl.onCancel = sub.cancel;
+      }, isBroadcast: true);
 
   void emit(DuelState next) {
     state = next;
@@ -796,6 +901,16 @@ class InMemorySocialRepository implements SocialRepository {
   final reports = <QuestionReport>[];
   final syncedPurchases = <String>{};
 
+  /// Seguimiento (lote seguir): seguidorUid -> uids que sigue.
+  final Map<String, Set<String>> _following = {};
+
+  /// Bloqueados por mí (además del espejo local en prefs).
+  final _blockedUids = <String>{};
+
+  /// Reportes de usuario enviados (en memoria): cada mapa lleva
+  /// 'createdAt' como Timestamp, 'type': 'user', 'reportedUid'.
+  final userReports = <Map<String, dynamic>>[];
+
   /// Lo equipado que se sincronizó (para tests): kind → itemId
   /// (null = se quitó).
   final syncedEquipped = <String, String?>{};
@@ -810,14 +925,31 @@ class InMemorySocialRepository implements SocialRepository {
       List<FriendEntry>.unmodifiable(_friends);
   List<TournamentInfo> get currentTournaments =>
       List<TournamentInfo>.unmodifiable(_tournaments);
-  List<StudyGroup> get currentGroups =>
-      List<StudyGroup>.unmodifiable(_groups);
+  List<StudyGroup> get currentGroups => List<StudyGroup>.unmodifiable(_groups);
 
   bool _checkOnline() => onlineFlag;
 
   @override
-  Future<List<FriendEntry>> friends() async =>
-      _checkOnline() ? currentFriends : <FriendEntry>[];
+  Future<List<FriendEntry>> friends() async {
+    if (!_checkOnline()) return <FriendEntry>[];
+    final blocked = await _myBlockedUids();
+    final out = currentFriends
+        .where((f) => !blocked.contains(f.deviceId))
+        .toList();
+    // Reparación perezosa: aseguro MIS edges hacia cada amigo
+    // actual (cada usuario solo escribe SUS propios edges).
+    for (final f in out) {
+      _followEdge(_meId, f.deviceId);
+    }
+    return out;
+  }
+
+  /// Mis bloqueados: el conjunto en memoria + el espejo local.
+  Future<Set<String>> _myBlockedUids() async {
+    final out = Set<String>.of(_blockedUids);
+    out.addAll(await loadBlockedMirror());
+    return out;
+  }
 
   @override
   Stream<List<FriendEntry>> friendsStream() => _friendsStream.stream;
@@ -831,6 +963,27 @@ class InMemorySocialRepository implements SocialRepository {
       if (u.username == name) return u;
     }
     return null;
+  }
+
+  @override
+  Future<List<FriendEntry>> searchUsers(String query) async {
+    final q = query.trim();
+    if (!_checkOnline() || q.isEmpty) return <FriendEntry>[];
+    // Sin correo: la búsqueda es SOLO por nombre de usuario
+    // (Kristian 2026-11-15: quitó la búsqueda por correo). Un
+    // texto con '@' no es un nombre válido: no devuelve nada.
+    final prefix = q.toLowerCase();
+    // Nombre de usuario exacto → solo ese perfil (Kristian
+    // 2026-11-15), aunque otros nombres compartan el prefijo.
+    final exact = kDemoSocialUsers.where(
+        (u) => u.deviceId != _meId && u.username.toLowerCase() == prefix);
+    if (exact.isNotEmpty) return exact.toList();
+    // Nombre normal/parcial → todos los nombres relacionados.
+    return kDemoSocialUsers
+        .where((u) =>
+            u.deviceId != _meId && u.username.toLowerCase().startsWith(prefix))
+        .take(10)
+        .toList();
   }
 
   @override
@@ -937,6 +1090,9 @@ class InMemorySocialRepository implements SocialRepository {
         createdAtMs: DateTime.now().millisecondsSinceEpoch,
       ),
     ];
+    // Al enviar la solicitud, el remitente SIGUE al destinatario
+    // (amigos = seguimiento mutuo, lote seguir).
+    _followEdge(_meId, found.deviceId);
     return FriendRequestResult.sent;
   }
 
@@ -975,14 +1131,13 @@ class InMemorySocialRepository implements SocialRepository {
     // quedo en la suya (en producción, escritura en su documento
     // de usuario con la regla estrecha de 'friends').
     final sender = _demoUserByName(req.senderUsername);
-    if (sender != null &&
-        !_friends.any((f) => f.deviceId == sender.deviceId)) {
+    if (sender != null && !_friends.any((f) => f.deviceId == sender.deviceId)) {
       _friends = [..._friends, sender];
       _friendsStream.update(currentFriends);
     }
-    _otherSideFriends
-        .putIfAbsent(req.senderUid, () => <String>{})
-        .add(_meId);
+    _otherSideFriends.putIfAbsent(req.senderUid, () => <String>{}).add(_meId);
+    // Al aceptar, el que acepta SIGUE de vuelta al remitente.
+    _followEdge(_meId, req.senderUid);
     return true;
   }
 
@@ -1191,8 +1346,7 @@ class InMemorySocialRepository implements SocialRepository {
   /// [timeMs] ms. Si yo ya terminé, el duelo se cierra y el
   /// ganador sale del desempate (aciertos, luego tiempo); si yo
   /// aún no jugué, solo queda registrado su resultado.
-  void simulateOpponentFinishes(String matchId, int score,
-      {int timeMs = 0}) {
+  void simulateOpponentFinishes(String matchId, int score, {int timeMs = 0}) {
     final record = _duels[matchId];
     if (record == null) return;
     var next = record.state.copyWith(
@@ -1249,8 +1403,7 @@ class InMemorySocialRepository implements SocialRepository {
       _checkOnline() ? currentTournaments : <TournamentInfo>[];
 
   @override
-  Stream<List<TournamentInfo>> tournamentsStream() =>
-      _tournamentsStream.stream;
+  Stream<List<TournamentInfo>> tournamentsStream() => _tournamentsStream.stream;
 
   @override
   Future<bool> joinTournament(String id, {int? newPointsBalance}) async {
@@ -1409,6 +1562,274 @@ class InMemorySocialRepository implements SocialRepository {
       at: DateTime.now(),
     ));
   }
+
+  // --- Seguir / seguidores (lote seguir, 2026-11-16) ---
+
+  void _followEdge(String from, String to) {
+    if (from.isEmpty || to.isEmpty || from == to) return;
+    _following.putIfAbsent(from, () => <String>{}).add(to);
+  }
+
+  void _unfollowEdge(String from, String to) {
+    _following[from]?.remove(to);
+  }
+
+  bool _isFollowingEdge(String from, String to) =>
+      _following[from]?.contains(to) ?? false;
+
+  /// Entrada de un usuario por uid (yo o uno de demostración).
+  FriendEntry? _entryForUid(String uid) {
+    if (uid == _meId) return kDemoSocialUsers[0];
+    for (final u in kDemoSocialUsers) {
+      if (u.deviceId == uid) return u;
+    }
+    return null;
+  }
+
+  @override
+  Future<bool> followUser(String uid) async {
+    if (!_checkOnline() || uid.isEmpty || uid == _meId) return false;
+    if (_entryForUid(uid) == null) return false;
+    if (_isFollowingEdge(_meId, uid)) return false;
+    _followEdge(_meId, uid);
+    return true;
+  }
+
+  @override
+  Future<bool> unfollowUser(String uid) async {
+    if (!_checkOnline() || uid.isEmpty || uid == _meId) return false;
+    _unfollowEdge(_meId, uid);
+    return true;
+  }
+
+  @override
+  Future<bool> isFollowing(String uid) async {
+    if (!_checkOnline() || uid.isEmpty || uid == _meId) return false;
+    return _isFollowingEdge(_meId, uid);
+  }
+
+  @override
+  Future<bool> isFollowedBy(String uid) async {
+    if (!_checkOnline() || uid.isEmpty || uid == _meId) return false;
+    return _isFollowingEdge(uid, _meId);
+  }
+
+  @override
+  Future<bool> isMutualFollow(String uid) async {
+    if (!_checkOnline() || uid.isEmpty || uid == _meId) return false;
+    return _isFollowingEdge(_meId, uid) && _isFollowingEdge(uid, _meId);
+  }
+
+  @override
+  Future<int> followingCount(String uid) async {
+    if (!_checkOnline() || uid.isEmpty) return 0;
+    return _following[uid]?.length ?? 0;
+  }
+
+  @override
+  Future<int> followersCount(String uid) async {
+    if (!_checkOnline() || uid.isEmpty) return 0;
+    var count = 0;
+    _following.forEach((_, followed) {
+      if (followed.contains(uid)) count++;
+    });
+    return count;
+  }
+
+  @override
+  Future<List<FriendEntry>> followingList(String uid) async {
+    if (!_checkOnline() || uid.isEmpty) return <FriendEntry>[];
+    final blocked = await _myBlockedUids();
+    final out = <FriendEntry>[];
+    for (final id in _following[uid] ?? <String>{}) {
+      if (blocked.contains(id)) continue;
+      final entry = _entryForUid(id);
+      if (entry != null) out.add(entry);
+    }
+    out.sort((a, b) => b.points.compareTo(a.points));
+    return out;
+  }
+
+  @override
+  Future<List<FriendEntry>> followersList(String uid) async {
+    if (!_checkOnline() || uid.isEmpty) return <FriendEntry>[];
+    final blocked = await _myBlockedUids();
+    final out = <FriendEntry>[];
+    _following.forEach((follower, followed) {
+      if (followed.contains(uid) && !blocked.contains(follower)) {
+        final entry = _entryForUid(follower);
+        if (entry != null) out.add(entry);
+      }
+    });
+    out.sort((a, b) => b.points.compareTo(a.points));
+    return out;
+  }
+
+  /// Gancho de test: otro usuario me empieza a seguir.
+  void simulateFollowFrom(String uid) {
+    _followEdge(uid, _meId);
+  }
+
+  // --- Sugerencias (rotación diaria determinista) ---
+
+  @override
+  Future<List<FriendEntry>> friendSuggestions({DateTime? on}) async {
+    if (!_checkOnline()) return <FriendEntry>[];
+    final day = on ?? DateTime.now();
+    final blocked = await _myBlockedUids();
+    final dismissed = await loadDismissedSuggestions(day);
+    final friendIds = _friends.map((f) => f.deviceId).toSet();
+    final pool = kDemoSocialUsers
+        .where((u) =>
+            u.deviceId != _meId &&
+            !friendIds.contains(u.deviceId) &&
+            !blocked.contains(u.deviceId) &&
+            !dismissed.contains(u.deviceId) &&
+            // Al seguir a alguien, su tarjeta se desliza y la
+            // sustituye la siguiente: los ya seguidos no se
+            // vuelven a sugerir (pulido 2026-11-16).
+            !_isFollowingEdge(_meId, u.deviceId))
+        .toList();
+    return shuffleForDate(pool, day).take(2).toList();
+  }
+
+  @override
+  Future<void> dismissSuggestion(String uid, {DateTime? on}) async {
+    await dismissSuggestionLocal(uid, on ?? DateTime.now());
+  }
+
+  // --- Perfil público (datos 100 % reales) ---
+
+  @override
+  Future<PublicProfile?> publicProfile(String uid) async {
+    if (!_checkOnline() || uid.isEmpty) return null;
+    if (uid == _meId) {
+      // Mi propio perfil: datos reales del progreso local.
+      final p = ProgressService.instance;
+      final myName = UserPrefs.publicUsername.isNotEmpty
+          ? UserPrefs.publicUsername
+          : UserPrefs.userName;
+      return PublicProfile.fromUserDoc(
+        <String, dynamic>{
+          'id': _meId,
+          'username': myName,
+          'displayName': UserPrefs.userName,
+          'joinedAt': 0,
+          'levelsPassed':
+              p.unlockedLevels.values.fold(0, (a, b) => a + b),
+          'levels': <String, Map<String, int>>{
+            ProgressService.track: Map<String, int>.from(p.unlockedLevels),
+          },
+          'points': p.points,
+          'streak': p.streakNow,
+          'practiceDays': p.practiceDays.toList(),
+          'trophies': <String, List<String>>{},
+          'dailyPoints': Map<String, int>.from(p.dailyPoints),
+          'correctTotal': p.totalCorrect,
+          'mixedBest': p.mixedBest,
+          'track': ProgressService.track,
+        },
+        viewerUid: _meId,
+        followingCount: await followingCount(_meId),
+        followersCount: await followersCount(_meId),
+      );
+    }
+    final entry = _entryForUid(uid);
+    if (entry == null) return null;
+    return PublicProfile.fromUserDoc(
+      _demoDocFor(entry),
+      viewerUid: _meId,
+      followingCount: await followingCount(uid),
+      followersCount: await followersCount(uid),
+      isFollowing: await isFollowing(uid),
+      isFollowedBy: await isFollowedBy(uid),
+    );
+  }
+
+  /// Documento sintetizado de un usuario de demostración (para el
+  /// perfil público): los días de práctica salen de su racha (los
+  /// últimos [streak] días seguidos hasta hoy). Es dato de
+  /// demostración, no de un usuario real.
+  Map<String, dynamic> _demoDocFor(FriendEntry entry) {
+    final days = <String>[];
+    final today = DateTime.now();
+    for (var i = 0; i < entry.streak; i++) {
+      days.add(ProgressService.dateKey(today.subtract(Duration(days: i))));
+    }
+    return <String, dynamic>{
+      'id': entry.deviceId,
+      'username': entry.username,
+      'joinedAt': 0,
+      'levelsPassed': entry.levelsPassedTotal,
+      'points': entry.points,
+      'streak': entry.streak,
+      'practiceDays': days,
+      'trophies': <String, List<String>>{
+        ProgressService.trackUni:
+            List<String>.filled(entry.trophiesWon, 'estequiometria'),
+      },
+      'track': ProgressService.trackUni,
+      'equippedAvatar': entry.avatarId,
+      'isBot': entry.isBot,
+    };
+  }
+
+  // --- Reportar y bloquear usuarios ---
+
+  @override
+  Future<bool> reportUser(String uid, String reason) async {
+    final clean = reason.trim();
+    if (uid.isEmpty || clean.isEmpty || uid == _meId) return false;
+    final target = _entryForUid(uid);
+    if (target == null) return false;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    userReports.add(<String, dynamic>{
+      'type': 'user',
+      'reportedUid': uid,
+      'reportedUsername': target.username,
+      'questionId': '',
+      'note': clean,
+      'uid': _meId,
+      'username':
+          UserPrefs.userName.isNotEmpty ? UserPrefs.userName : 'kristian',
+      'status': 'open',
+      'createdAt': Timestamp.now(),
+      'createdAtMs': now,
+    });
+    return _checkOnline();
+  }
+
+  @override
+  Future<bool> blockUser(String uid) async {
+    if (uid.isEmpty || uid == _meId) return false;
+    _blockedUids.add(uid);
+    final mirror = await loadBlockedMirror()..add(uid);
+    await saveBlockedMirror(mirror);
+    return true;
+  }
+
+  @override
+  Future<bool> unblockUser(String uid) async {
+    if (uid.isEmpty) return false;
+    _blockedUids.remove(uid);
+    final mirror = await loadBlockedMirror()..remove(uid);
+    await saveBlockedMirror(mirror);
+    return true;
+  }
+
+  @override
+  Future<bool> isBlocked(String uid) async {
+    if (uid.isEmpty) return false;
+    return _blockedUids.contains(uid) ||
+        (await loadBlockedMirror()).contains(uid);
+  }
+
+  @override
+  Future<List<String>> blockedUids() async {
+    final out = Set<String>.of(_blockedUids);
+    out.addAll(await loadBlockedMirror());
+    return out.toList()..sort();
+  }
 }
 
 extension on FriendEntry {
@@ -1487,6 +1908,9 @@ class SocialService {
   static Future<FriendEntry?> findUserByUsername(String username) =>
       _safe(() => _repo.findUserByUsername(username), null);
 
+  static Future<List<FriendEntry>> searchUsers(String query) =>
+      _safe(() => _repo.searchUsers(query), <FriendEntry>[]);
+
   // --- Solicitudes de amistad (ronda 2d) ---
 
   static Future<FriendRequestResult> sendFriendRequest(String username) =>
@@ -1523,8 +1947,8 @@ class SocialService {
       await NotificationInbox.addIfAbsent(
         id: 'friend-request-${r.id}',
         kind: InboxKind.friendRequest,
-        title: tr('inboxFriendRequestTitle')
-            .replaceFirst('%s', r.senderUsername),
+        title:
+            tr('inboxFriendRequestTitle').replaceFirst('%s', r.senderUsername),
         body: tr('inboxFriendRequestBody'),
         data: {'requestId': r.id, 'senderUsername': r.senderUsername},
       );
@@ -1546,8 +1970,7 @@ class SocialService {
     final open = await myOpenDuels();
     for (final d in open) {
       if (!d.incoming) continue;
-      if (d.phase == DuelPhase.finished ||
-          d.phase == DuelPhase.abandoned) {
+      if (d.phase == DuelPhase.finished || d.phase == DuelPhase.abandoned) {
         continue;
       }
       await NotificationInbox.addIfAbsent(
@@ -1558,8 +1981,7 @@ class SocialService {
         data: {'duelId': d.matchId, 'pushType': 'duel_challenge'},
       );
     }
-    final finished =
-        await _safe(() => DuelService.myFinishedDuels(), <Duel>[]);
+    final finished = await _safe(() => DuelService.myFinishedDuels(), <Duel>[]);
     if (finished.isEmpty) return;
     final me = AuthService.currentUid ?? '';
     final weekAgo = DateTime.now().millisecondsSinceEpoch -
@@ -1594,8 +2016,7 @@ class SocialService {
 
   static Future<void> submitDuelScore(String matchId, int score,
           {int timeMs = 0}) =>
-      _safeVoid(
-          () => _repo.submitDuelScore(matchId, score, timeMs: timeMs));
+      _safeVoid(() => _repo.submitDuelScore(matchId, score, timeMs: timeMs));
 
   static Future<void> forfeitDuel(String matchId) =>
       _safeVoid(() => _repo.forfeitDuel(matchId));
@@ -1635,8 +2056,7 @@ class SocialService {
   ///   unión falla, se devuelve lo descontado (failed).
   static Future<TournamentJoinResult> joinTournament(String id,
       {int entryFee = 0}) async {
-    final current =
-        await _safe(() => _repo.tournaments(), <TournamentInfo>[]);
+    final current = await _safe(() => _repo.tournaments(), <TournamentInfo>[]);
     if (current.any((t) => t.id == id && t.joined)) {
       return TournamentJoinResult.alreadyJoined;
     }
@@ -1671,9 +2091,7 @@ class SocialService {
 
   static Future<TournamentInfo?> submitTournamentScore(String id, int score,
           {int timeMs = 0}) =>
-      _safe(
-          () => _repo.submitTournamentScore(id, score, timeMs: timeMs),
-          null);
+      _safe(() => _repo.submitTournamentScore(id, score, timeMs: timeMs), null);
 
   // --- Tienda: compras guardadas EN LOCAL y sincronizadas ---
 
@@ -1767,8 +2185,7 @@ class SocialService {
   /// Amigos y en las filas de la tabla en lugar del disco con la
   /// inicial. Cubre los premium del catálogo Y los gratuitos de
   /// la galería (alcance 9).
-  static String? get equippedAvatarAsset =>
-      avatarAssetForId(_equippedAvatarId);
+  static String? get equippedAvatarAsset => avatarAssetForId(_equippedAvatarId);
 
   /// Id del avatar equipado (síncrono), o null.
   static String? get equippedAvatarId => _equippedAvatarId;
@@ -1982,8 +2399,8 @@ class SocialService {
 
   /// Fuerza la relectura remota del catálogo (tras publicar un
   /// artículo nuevo en Firestore).
-  static Future<List<ShopItem>> refreshShopItems() => _safe(
-      () => RemoteShopCatalog.instance.refreshCatalog(), <ShopItem>[]);
+  static Future<List<ShopItem>> refreshShopItems() =>
+      _safe(() => RemoteShopCatalog.instance.refreshCatalog(), <ShopItem>[]);
 
   // --- Grupos ---
 
@@ -2006,4 +2423,80 @@ class SocialService {
   /// la pantalla muestra solo "Gracias por avisar".
   static Future<void> reportQuestion(String questionId, String reason) =>
       _safeVoid(() => _repo.reportQuestion(questionId, reason));
+
+  // --- Seguir / seguidores (lote seguir, 2026-11-16) ---
+
+  /// Sigo a [uid]. false si ya lo sigo, si es yo mismo o sin red.
+  static Future<bool> followUser(String uid) =>
+      _safe(() => _repo.followUser(uid), false);
+
+  /// Dejo de seguir a [uid]. true si ya no lo sigo.
+  static Future<bool> unfollowUser(String uid) =>
+      _safe(() => _repo.unfollowUser(uid), false);
+
+  /// ¿Sigo a [uid]?
+  static Future<bool> isFollowing(String uid) =>
+      _safe(() => _repo.isFollowing(uid), false);
+
+  /// ¿[uid] me sigue?
+  static Future<bool> isFollowedBy(String uid) =>
+      _safe(() => _repo.isFollowedBy(uid), false);
+
+  /// ¿Nos seguimos mutuamente? (Amigos = seguimiento mutuo.)
+  static Future<bool> isMutualFollow(String uid) =>
+      _safe(() => _repo.isMutualFollow(uid), false);
+
+  /// Nº de personas que sigue [uid].
+  static Future<int> followingCount(String uid) =>
+      _safe(() => _repo.followingCount(uid), 0);
+
+  /// Nº de seguidores de [uid].
+  static Future<int> followersCount(String uid) =>
+      _safe(() => _repo.followersCount(uid), 0);
+
+  /// Personas que sigue [uid] (con datos de perfil).
+  static Future<List<FriendEntry>> followingList(String uid) =>
+      _safe(() => _repo.followingList(uid), <FriendEntry>[]);
+
+  /// Personas que siguen a [uid] (con datos de perfil).
+  static Future<List<FriendEntry>> followersList(String uid) =>
+      _safe(() => _repo.followersList(uid), <FriendEntry>[]);
+
+  // --- Sugerencias (rotación diaria determinista) ---
+
+  /// 2 personas para sugerir hoy (o las que haya): usuarios con
+  /// shared que no son amigos míos, no están bloqueados y no soy
+  /// yo. Mismo día → mismo orden; días distintos → orden distinto.
+  static Future<List<FriendEntry>> friendSuggestions({DateTime? on}) =>
+      _safe(() => _repo.friendSuggestions(on: on), <FriendEntry>[]);
+
+  /// La X descarta a esa persona SOLO ese día.
+  static Future<void> dismissSuggestion(String uid, {DateTime? on}) =>
+      _safeVoid(() => _repo.dismissSuggestion(uid, on: on));
+
+  // --- Perfil público (datos 100 % reales) ---
+
+  /// Perfil público de [uid], o null si no existe o sin red.
+  static Future<PublicProfile?> publicProfile(String uid) =>
+      _safe(() => _repo.publicProfile(uid), null);
+
+  // --- Reportar y bloquear usuarios ---
+
+  /// Reporta a un usuario: llega a la cola del Admin. Nunca lanza.
+  static Future<bool> reportUser(String uid, String reason) =>
+      _safe(() => _repo.reportUser(uid, reason), false);
+
+  /// Bloquea a [uid]: no sale en mis sugerencias ni en mis amigos.
+  /// Persiste en mi documento y en el espejo local (sin internet).
+  static Future<bool> blockUser(String uid) =>
+      _safe(() => _repo.blockUser(uid), false);
+
+  static Future<bool> unblockUser(String uid) =>
+      _safe(() => _repo.unblockUser(uid), false);
+
+  static Future<bool> isBlocked(String uid) =>
+      _safe(() => _repo.isBlocked(uid), false);
+
+  static Future<List<String>> blockedUids() =>
+      _safe(() => _repo.blockedUids(), <String>[]);
 }

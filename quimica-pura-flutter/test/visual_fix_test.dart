@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quimica_pura/screens/account_screen.dart';
 import 'package:quimica_pura/screens/practicar_screen.dart';
+import 'package:quimica_pura/services/localization.dart';
 import 'package:quimica_pura/services/user_prefs.dart';
 import 'package:quimica_pura/widgets/lives_chip.dart';
 import 'package:quimica_pura/widgets/stats_card.dart';
@@ -117,21 +118,25 @@ void main() {
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
-    // Restauración 6.3 (corrección de Kristian 2026-11-11): la
-    // tarjeta StatsCard VUELVE como la ÚNICA fila de estadísticas:
-    // 5 columnas CON ICONOS (Vidas con corazón, Puntos, Racha,
-    // Meta del día, Logros x/10). Las 3 columnas planas sin
-    // iconos del rediseño Duolingo 7.0 (NIVELES/PUNTOS/RACHA en
-    // mayúsculas) se quitaron; nada se duplica.
-    expect(find.byType(StatsCard), findsOneWidget);
-    expect(find.text('Vidas'), findsOneWidget);
-    expect(find.text('Puntos'), findsOneWidget);
+    // 2026-11-16 (perfil estilo Duolingo): la tarjeta StatsCard
+    // YA NO EXISTE en Cuenta — las estadísticas viven en el
+    // RESUMEN (2×2: Racha, Puntos, Trofeos, Logros), UN solo
+    // sitio, sin duplicar. Vidas y Meta del día no están en el
+    // perfil (las Vidas viven en la barra de arriba de las
+    // pantallas principales). Las 3 columnas planas sin iconos
+    // del rediseño Duolingo 7.0 (NIVELES/PUNTOS/RACHA en
+    // mayúsculas) tampoco: nada se duplica.
+    expect(find.byType(StatsCard), findsNothing);
+    expect(find.text(tr('accountSummary').toUpperCase()), findsOneWidget);
     expect(find.text('Racha'), findsOneWidget);
-    expect(find.text('Meta del día'), findsOneWidget);
+    expect(find.text('Puntos'), findsOneWidget);
+    expect(find.text('Trofeos'), findsOneWidget);
     expect(find.text('Logros'), findsOneWidget);
+    expect(find.text('Vidas'), findsNothing);
+    expect(find.text('Meta del día'), findsNothing);
     expect(find.text('NIVELES'), findsNothing);
     expect(find.text('PUNTOS'), findsNothing);
     expect(find.text('RACHA'), findsNothing);
-    expect(find.byType(LivesHeart), findsOneWidget);
+    expect(find.byType(LivesHeart), findsNothing);
   });
 }

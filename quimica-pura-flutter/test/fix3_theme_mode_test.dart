@@ -179,8 +179,8 @@ void main() {
 
   group('Ajustes: fila "Tema" + pantalla dedicada', () {
     testWidgets('El interruptor rápido Tema ya NO está en Cuenta (vive '
-        'en el menú lateral); la fila Ajustes sigue siendo la puerta '
-        'al sistema de temas', (tester) async {
+        'en el menú lateral); el engranaje del perfil sigue siendo la '
+        'puerta al sistema de temas', (tester) async {
       // 7.1 (ítem 9): Tema, Recordatorios, Notificaciones, Cómo se
       // juega y Buscar actualización viven en Ajustes; Cuenta solo
       // guarda la puerta (última fila). 7.7 (Kristian 2026-11-14):
@@ -190,14 +190,16 @@ void main() {
       // oscuro, me gusta, pero no ahí" — "En el menú lateral").
       // En Cuenta no queda ningún "Tema"; el sistema de temas
       // sigue viviendo en Ajustes.
+      // 2026-11-16 (perfil estilo Duolingo): la puerta a Ajustes
+      // ya NO es una fila al final de Cuenta: es el ENGRANAJE de
+      // arriba de la pantalla de perfil (AccountProfilePage).
       await UserPrefs.saveThemeMode('claro');
-      final opened = <String>[];
       await tester.pumpWidget(
         MaterialApp(
           theme: ThemeData(useMaterial3: true),
           home: Scaffold(
             body: AccountScreen(
-              onOpenScreen: opened.add,
+              onOpenScreen: (_) {},
               onShowAbout: () {},
               onShowShareApp: () {},
               trackTopics: const ['estequiometria'],
@@ -211,15 +213,25 @@ void main() {
       // único "Tema" de la app vive en el menú lateral y en
       // Ajustes (fila + pantalla dedicada).
       expect(find.text(tr('themeTitle')), findsNothing);
-      // La fila Ajustes es la ÚLTIMA de la lista: hay que bajar
-      // hasta verla (ListView perezoso, no se monta fuera de vista).
-      await tester.scrollUntilVisible(
-        find.text(tr('settingsTitle')),
-        300,
+      // Tampoco queda la fila "Ajustes" en el perfil: la puerta es
+      // el engranaje de arriba.
+      expect(find.text(tr('settingsTitle')), findsNothing);
+      // El engranaje abre Ajustes.
+      final opened = <String>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(useMaterial3: true),
+          home: AccountProfilePage(
+            onOpenScreen: opened.add,
+            onShowAbout: () {},
+            onShowShareApp: () {},
+            trackTopics: const ['estequiometria'],
+          ),
+        ),
       );
       await tester.pump();
-      expect(find.text(tr('settingsTitle')), findsOneWidget);
-      await tester.tap(find.text(tr('settingsTitle')));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(find.byKey(const ValueKey('accountSettingsButton')));
       await tester.pump();
       expect(opened, ['settings']);
     });

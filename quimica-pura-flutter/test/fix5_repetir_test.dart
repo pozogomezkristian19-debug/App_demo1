@@ -225,7 +225,7 @@ void main() {
         'sin resultado ni confeti viejo', (tester) async {
       await pumpNiveles(tester);
       final p = ProgressService.instance;
-      expect(p.livesLeft, 5);
+      expect(p.livesLeft, 10);
       await startLevel1(tester);
 
       await playLevelAllCorrect(tester);
@@ -235,7 +235,7 @@ void main() {
       expect(find.text('100%'), findsOneWidget);
       expect(find.text('+${p.points}'), findsWidgets);
       expect(find.byType(CelebrationOverlay), findsOneWidget);
-      expect(p.livesLeft, 5);
+      expect(p.livesLeft, 10);
 
       await tester.tap(find.text(tr('quizRepeat').toUpperCase()));
       await tester.pump();
@@ -246,7 +246,7 @@ void main() {
       expect(find.text(tr('quizLevelPassed')), findsNothing);
       expect(find.text('100%'), findsNothing);
       expect(find.byType(CelebrationOverlay), findsNothing);
-      expect(p.livesLeft, 5);
+      expect(p.livesLeft, 10);
       // Al ganar se programa la campana de racha 900 ms después
       // (Future.delayed en _next()): sin este avance el test
       // termina con ese temporizador pendiente y el binding falla
@@ -301,7 +301,7 @@ void main() {
       expect(find.text(tr('exitLevelTitle')), findsNothing);
       expect(find.byType(AlertDialog), findsNothing);
       expect(find.text(tr('levelsTitle')), findsOneWidget);
-      expect(p.livesLeft, 5);
+      expect(p.livesLeft, 10);
       expect(tester.takeException(), isNull);
     });
 
@@ -310,7 +310,7 @@ void main() {
         (tester) async {
       await pumpNiveles(tester);
       final p = ProgressService.instance;
-      expect(p.livesLeft, 5);
+      expect(p.livesLeft, 10);
       await startLevel1(tester);
       await answerCurrent(tester, correct: true);
       await next(tester);
@@ -325,13 +325,13 @@ void main() {
       expect(find.text(tr('exitLevelTitle')), findsOneWidget);
       expect(find.text(tr('exitLevelStay')), findsOneWidget);
       expect(find.text(tr('exitLevelLeave')), findsOneWidget);
-      expect(p.livesLeft, 5);
+      expect(p.livesLeft, 10);
 
       await tester.tap(find.text(tr('exitLevelLeave')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text(tr('levelsTitle')), findsOneWidget);
-      expect(p.livesLeft, 4);
+      expect(p.livesLeft, 9);
       expect(tester.takeException(), isNull);
     });
   });

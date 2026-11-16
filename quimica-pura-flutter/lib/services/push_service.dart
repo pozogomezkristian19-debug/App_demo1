@@ -151,8 +151,8 @@ PushInboxEntry inboxEntryForPush({
   var stable = (refId ?? '').trim();
   stable = stable.isEmpty ? (messageId ?? '').trim() : stable;
   final suffix = stable.isEmpty ? 'sin-id' : stable;
-  final (String id, InboxKind kind, String fallbackTitle,
-      String fallbackBody) = switch (type) {
+  final (String id, InboxKind kind, String fallbackTitle, String fallbackBody) =
+      switch (type) {
     'friend_request' => (
         'friend-request-$suffix',
         InboxKind.friendRequest,
@@ -212,8 +212,7 @@ PushInboxEntry inboxEntryForPush({
 /// borraría si fuera un método). Corre en un isolate aparte, sin
 /// acceso al estado de la app.
 @pragma('vm:entry-point')
-Future<void> firebaseMessagingBackgroundHandler(
-    RemoteMessage message) async {
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await PushService.handleBackgroundMessage(message);
 }
 
@@ -297,8 +296,7 @@ class PushService {
     // main() llama a init() antes de runApp(), así ningún mensaje
     // que llegue durante el arranque se pierde.
     try {
-      FirebaseMessaging.onBackgroundMessage(
-          firebaseMessagingBackgroundHandler);
+      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
     } catch (_) {
       // Sin FCM (tests): no hay fondo que registrar.
     }
@@ -311,8 +309,7 @@ class PushService {
       // Sin FCM: no hay mensajes que escuchar.
     }
     try {
-      _tokenRefreshSub =
-          FirebaseMessaging.instance.onTokenRefresh.listen((_) {
+      _tokenRefreshSub = FirebaseMessaging.instance.onTokenRefresh.listen((_) {
         unawaited(_saveCurrentToken());
       });
     } catch (_) {
@@ -370,8 +367,7 @@ class PushService {
       final settings = await FirebaseMessaging.instance
           .getNotificationSettings()
           .timeout(const Duration(seconds: 3));
-      if (settings.authorizationStatus ==
-          AuthorizationStatus.notDetermined) {
+      if (settings.authorizationStatus == AuthorizationStatus.notDetermined) {
         // Zona G2: en una instalación nueva el onboarding aún no
         // terminó: NO pedir aquí el permiso del sistema. Lo pide el
         // onboarding (NotificationService.enable(), el MISMO permiso
@@ -397,12 +393,10 @@ class PushService {
 
   /// Datos del token para users/{uid} (merge). [nowMs] es solo
   /// para los tests (una fecha fija).
-  static Map<String, Object?> tokenSaveData(String token,
-          {int? nowMs}) =>
+  static Map<String, Object?> tokenSaveData(String token, {int? nowMs}) =>
       <String, Object?>{
         tokenField: token,
-        tokenUpdatedAtField:
-            nowMs ?? DateTime.now().millisecondsSinceEpoch,
+        tokenUpdatedAtField: nowMs ?? DateTime.now().millisecondsSinceEpoch,
       };
 
   /// Guarda el token FCM en el documento del uid actual
@@ -447,8 +441,7 @@ class PushService {
   /// muestra el aviso local. Si el mensaje es data-only (sin
   /// notification), el título/cuerpo salen del fallback de
   /// inboxEntryForPush.
-  static Future<void> _handleForegroundMessage(
-      RemoteMessage message) async {
+  static Future<void> _handleForegroundMessage(RemoteMessage message) async {
     try {
       final data = _stringData(message.data);
       final entry = inboxEntryForPush(
@@ -543,8 +536,7 @@ class PushService {
   /// app cree la entrada en la bandeja al volver. Solo un mensaje
   /// data-only (sin notification) necesita que mostremos el aviso
   /// nosotros, porque si no nadie lo mostraría.
-  static Future<void> handleBackgroundMessage(
-      RemoteMessage message) async {
+  static Future<void> handleBackgroundMessage(RemoteMessage message) async {
     try {
       await stashMessage(message);
       if (message.notification == null) {
@@ -576,8 +568,9 @@ class PushService {
           messageId: mid,
         ),
       ];
-      final capped =
-          list.length > maxStashed ? list.sublist(list.length - maxStashed) : list;
+      final capped = list.length > maxStashed
+          ? list.sublist(list.length - maxStashed)
+          : list;
       await prefs.setStringList(stashKey, capped);
     } catch (_) {
       // Sin stash, la entrada se crea igual al tocar el aviso.
@@ -633,8 +626,8 @@ class PushService {
         final decoded = decodeStashEntry(item);
         if (decoded == null) continue;
         final dataRaw = decoded['data'] as Map;
-        final data = dataRaw.map(
-            (k, v) => MapEntry(k.toString(), v.toString()));
+        final data =
+            dataRaw.map((k, v) => MapEntry(k.toString(), v.toString()));
         final entry = inboxEntryForPush(
           data: data,
           title: decoded['title'] as String?,
@@ -817,6 +810,9 @@ class PushService {
       );
     } else if (response.payload == NotificationService.updatePayload) {
       NavRequests.requestUpdateDialog();
+    } else if (response.payload == NotificationService.passwordPayload) {
+      // Recordatorio de contraseña: abre Cuenta.
+      NavRequests.requestPushScreen('account');
     } else if (response.payload == NotificationService.installActionId ||
         response.actionId == NotificationService.installActionId) {
       NavRequests.requestInstallApk();

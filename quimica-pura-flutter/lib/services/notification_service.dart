@@ -195,7 +195,9 @@ import '../data/i18n/content_i18n.dart';
 import '../data/questions.dart';
 import '../widgets/twin_avatars.dart';
 import 'accent.dart';
+import 'auth_service.dart';
 import 'localization.dart';
+import 'live_countdown.dart';
 import 'temp_file.dart';
 import 'nav_requests.dart';
 import 'notification_inbox.dart';
@@ -280,8 +282,16 @@ class NotificationService {
   /// APK ya descargado.
   static const installActionId = 'install_update';
 
+  /// Tocar el recordatorio de contraseña: abre Cuenta, donde está
+  /// la tarjeta para crearla (Kristian 2026-11-15: el recordatorio
+  /// es una notificación cada hora).
+  static const passwordPayload = 'set_password';
+
   /// Id del recordatorio de actualización programado.
   static const _updateReminderId = 500;
+
+  /// Id del recordatorio de contraseña (cada hora).
+  static const _passwordReminderId = 501;
 
   /// Id de la notificación de descarga (progreso y "completa"): el
   /// mismo, para que una reemplace a la otra.
@@ -538,6 +548,10 @@ class NotificationService {
             // Recordatorio de actualización: la app se abre y sale el
             // diálogo de actualización (fix3, punto 20).
             NavRequests.requestUpdateDialog();
+          } else if (response.payload == passwordPayload) {
+            // Recordatorio de contraseña: abre Cuenta, donde está la
+            // tarjeta para crearla.
+            NavRequests.requestPushScreen('account');
           } else if (response.payload == installActionId ||
               response.actionId == installActionId) {
             // "Descarga completa" o su acción "Instalar": instala el
@@ -663,6 +677,9 @@ class NotificationService {
     await UserPrefs.saveReminder(
         true, UserPrefs.reminderHour, UserPrefs.reminderMinute);
     await scheduleNext();
+    // Cuenta atrás en vivo (Kristian 2026-11-16): si la racha está
+    // en juego y ya es la hora, sale ahora; si no, se programa sola.
+    unawaited(syncLiveCountdown());
     // Confirmación inmediata: que se VEA que funciona (fix5).
     unawaited(sendEnabledConfirmation());
     return true;
@@ -671,6 +688,8 @@ class NotificationService {
   /// Apaga los recordatorios y cancela los pendientes.
   static Future<void> disable() async {
     await _plugin.cancelAll();
+    // Sin recordatorios, tampoco hay cuenta atrás en vivo.
+    unawaited(LiveCountdown.cancel());
     try {
       // Sin avisos pendientes, la pantalla no debe mostrar un
       // "Próximo aviso" viejo.
@@ -713,8 +732,12 @@ class NotificationService {
         final gap =
             i == 0 ? nextFirstGapMinutes(random) : nextGapMinutes(random);
         at = at.add(Duration(minutes: gap));
-        final message = _pickMessage(random);
-        await _scheduleOne(100 + i, message, at, details);
+        // El título llama por el nombre y el cuerpo lleva la
+        // cuenta atrás para LA HORA DE ESTE AVISO (que es la hora
+        // de envío): el texto que llega es el que vale entonces.
+        final content = reminderContent(fireTime: at, rng: random);
+        await _scheduleOne(100 + i, content.body, at, details,
+            title: content.title);
         scheduled.add(at);
       }
       final prefs = await SharedPreferences.getInstance();
@@ -726,6 +749,17 @@ class NotificationService {
       // Si programar falla (p. ej. sin plugin en pruebas), no se rompe
       // la app: el recordatorio simplemente no llega.
     }
+    // El cancelAll() de arriba borra TAMBIÉN el recordatorio de
+    // contraseña (cada hora): se vuelve a programar aquí; si la
+    // cuenta ya tiene contraseña (o no es de Google), el método
+    // mismo lo cancela. En SEGUNDO PLANO, sin esperarlo: el
+    // recordatorio es de cada hora (no urge) y esperarlo alargaba
+    // scheduleNext() más allá de los topes que ya lleva la tanda
+    // (la copia del icono grande, 3 s) — en pruebas el flujo que
+    // espera a scheduleNext() (p. ej. Activar recordatorios en el
+    // inicio) se quedaba sin avanzar. Además se rearma al abrir la
+    // app, así que nada se pierde si este intento no llega.
+    unawaited(schedulePasswordReminder());
     return scheduled;
   }
 
@@ -839,13 +873,15 @@ class NotificationService {
   /// Programa UN aviso. Si la alarma exacta falla (permiso revocado
   /// en ajustes: SecurityException), se reintenta como inexacta y
   /// se apaga el modo exacto hasta que se vuelva a conceder.
+  /// [title] es el título de la notificación (por defecto 'Quemia';
+  /// los recordatorios de estudio pasan el suyo, con el nombre).
   static Future<void> _scheduleOne(
       int id, String body, tz.TZDateTime at, NotificationDetails details,
-      {String? payload}) async {
+      {String? payload, String title = 'Quemia'}) async {
     try {
       await _plugin.zonedSchedule(
         id: id,
-        title: 'Quemia',
+        title: title,
         body: body,
         scheduledDate: at,
         payload: payload ?? reviewPayload,
@@ -863,7 +899,7 @@ class NotificationService {
       }
       await _plugin.zonedSchedule(
         id: id,
-        title: 'Quemia',
+        title: title,
         body: body,
         scheduledDate: at,
         payload: payload ?? reviewPayload,
@@ -1111,12 +1147,17 @@ class NotificationService {
       );
     }
     // 3) Enviar, guardando ESTA VEZ la excepción: es la única
-    // prueba de lo que falla en el teléfono.
+    // prueba de lo que falla en el teléfono. El contenido es el
+    // mismo del recordatorio (título con el nombre + cuenta atrás
+    // para AHORA, la hora de envío): lo que se prueba es lo que
+    // llega.
     try {
+      final content =
+          reminderContent(fireTime: DateTime.now(), rng: Random());
       await _plugin.show(
         id: 9999,
-        title: 'Quemia',
-        body: _pickMessage(Random()),
+        title: content.title,
+        body: content.body,
         payload: reviewPayload,
         notificationDetails: await _testDetails(),
       );
@@ -1210,6 +1251,233 @@ class NotificationService {
       return weakTopicMessage(lang, localizedTopicTitle(weakest.first));
     }
     return generic[rng.nextInt(generic.length)];
+  }
+
+  /// Título del recordatorio: llama al usuario POR SU NOMBRE, como
+  /// la notificación de Duolingo ("¡Jorge, ven por una lección!").
+  /// Sin nombre (o con el rótulo de invitado), sin nombre: "¡Ven por
+  /// una lección!". (Para pruebas.)
+  static String reminderTitle(String? firstName, String lang) {
+    if (firstName == null || firstName.isEmpty) {
+      switch (lang) {
+        case 'en':
+          return 'Come get a lesson!';
+        case 'fr':
+          return 'Viens faire une leçon !';
+        case 'it':
+          return 'Vieni a fare una lezione!';
+        case 'pt':
+          return 'Vem fazer uma lição!';
+        case 'ru':
+          return 'Иди на урок!';
+        default:
+          return '¡Ven por una lección!';
+      }
+    }
+    switch (lang) {
+      case 'en':
+        return '$firstName, come get a lesson!';
+      case 'fr':
+        return '$firstName, viens faire une leçon !';
+      case 'it':
+        return '$firstName, vieni a fare una lezione!';
+      case 'pt':
+        return '$firstName, vem fazer uma lição!';
+      case 'ru':
+        return '$firstName, иди на урок!';
+      default:
+        return '¡$firstName, ven por una lección!';
+    }
+  }
+
+  /// Tiempo que queda hasta la PRÓXIMA medianoche desde [from]:
+  /// "2 h 6 min", "45 min" o "menos de un minuto". Es el tiempo que
+  /// le queda al usuario en ese día para no perder la racha.
+  /// (Para pruebas.)
+  static String timeLeftText(DateTime from, String lang) {
+    final midnight = DateTime(from.year, from.month, from.day)
+        .add(const Duration(days: 1));
+    final remaining = midnight.difference(from);
+    final hours = remaining.inHours;
+    final minutes = remaining.inMinutes % 60;
+    final hourUnit = lang == 'ru' ? 'ч' : 'h';
+    final minUnit = lang == 'ru' ? 'мин' : 'min';
+    if (hours >= 1) {
+      if (minutes > 0) return '$hours $hourUnit $minutes $minUnit';
+      return '$hours $hourUnit';
+    }
+    if (minutes >= 1) return '$minutes $minUnit';
+    switch (lang) {
+      case 'en':
+        return 'less than a minute';
+      case 'fr':
+        return "moins d'une minute";
+      case 'it':
+        return 'meno di un minuto';
+      case 'pt':
+        return 'menos de um minuto';
+      case 'ru':
+        return 'меньше минуты';
+      default:
+        return 'menos de un minuto';
+    }
+  }
+
+  /// Cuerpo del recordatorio con la cuenta atrás: "Te quedan 2 h
+  /// 6 min para no perder tu racha". La cuenta se calcula para la
+  /// hora de ENVÍO ([fireTime]): al programar, esa hora ya se
+  /// conoce, así que el texto que llega es el que vale en ese
+  /// momento (la notificación, una vez puesta, no se actualiza
+  /// sola: Android no hace tic-tac en el texto). (Para pruebas.)
+  static String streakCountdownBody(DateTime fireTime, String lang) {
+    final left = timeLeftText(fireTime, lang);
+    switch (lang) {
+      case 'en':
+        return 'You have $left left to keep your streak';
+      case 'fr':
+        return 'Il te reste $left pour ne pas perdre ta série';
+      case 'it':
+        return 'Ti restano $left per non perdere la tua serie';
+      case 'pt':
+        return 'Faltam $left para não perder sua sequência';
+      case 'ru':
+        return 'Осталось $left, чтобы не потерять серию';
+      default:
+        return 'Te quedan $left para no perder tu racha';
+    }
+  }
+
+  /// Cuenta atrás EN VIVO de la racha (Kristian 2026-11-16): el
+  /// aviso del recordatorio no dice un tiempo fijo, sino que muestra
+  /// la cuenta atrás TICKING hasta medianoche, como Duolingo, y se
+  /// queda hasta que se hace la lección o llega medianoche. En
+  /// Android 16+ es un Live Update y sale en Hyper Island.
+  ///
+  /// Cuándo sale: recordatorios activados + permiso dado + racha
+  /// viva y ese día aún sin practicar + ya es la hora del
+  /// recordatorio de hoy. Si aún no es la hora, se programa sola
+  /// con una alarma exacta (la app puede estar cerrada). Si no
+  /// toca (sin recordatorios, sin racha en juego o ya se practicó),
+  /// se quita la que hubiera. Nunca rompe el arranque: cualquier
+  /// fallo se traga.
+  static Future<void> syncLiveCountdown() async {
+    try {
+      final p = ProgressService.instance;
+      final now = DateTime.now();
+      final practicedToday =
+          p.practiceDays.contains(ProgressService.dateKey(now));
+      final atRisk = p.streakNow > 0 && !practicedToday;
+      final canPost = UserPrefs.reminderOn && await isPermissionGranted;
+      if (!canPost || !atRisk) {
+        await LiveCountdown.cancel();
+        return;
+      }
+      final title = reminderTitle(_reminderFirstName(), AppLang.code);
+      final body = tr('liveCountdownBody');
+      final largeIconPath = await _twinLargeIconPath();
+      final endsAt = liveCountdownEndsAt(now);
+      if (shouldShowLiveCountdown(
+        now: now,
+        reminderHour: UserPrefs.reminderHour,
+        reminderMinute: UserPrefs.reminderMinute,
+      )) {
+        await LiveCountdown.show(
+          endsAt: endsAt,
+          title: title,
+          body: body,
+          largeIconPath: largeIconPath,
+          startAt: now,
+        );
+        return;
+      }
+      final at = DateTime(
+        now.year,
+        now.month,
+        now.day,
+        UserPrefs.reminderHour,
+        UserPrefs.reminderMinute,
+      );
+      await LiveCountdown.schedule(
+        at: at,
+        endsAt: endsAt,
+        title: title,
+        body: body,
+        largeIconPath: largeIconPath,
+      );
+    } catch (_) {
+      // La cuenta atrás es un extra: nunca puede romper el arranque.
+    }
+  }
+
+  /// ¿Ya es la hora del recordatorio de hoy? Puro, para pruebas.
+  /// [now] es la hora actual; la hora del recordatorio es
+  /// [reminderHour]:[reminderMinute] de hoy.
+  static bool shouldShowLiveCountdown({
+    required DateTime now,
+    required int reminderHour,
+    required int reminderMinute,
+  }) {
+    final reminderToday = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      reminderHour,
+      reminderMinute,
+    );
+    return !now.isBefore(reminderToday);
+  }
+
+  /// La medianoche que cierra el día de [now] (fin de la cuenta
+  /// atrás). Puro, para pruebas.
+  static DateTime liveCountdownEndsAt(DateTime now) =>
+      DateTime(now.year, now.month, now.day).add(const Duration(days: 1));
+
+  /// Ruta del PNG de la melliza del día en un archivo temporal, o
+  /// null si no se puede copiar (en web siempre null). Igual que
+  /// _twinLargeIcon, pero devuelve la ruta para el aviso nativo.
+  static Future<String?> _twinLargeIconPath() async {
+    try {
+      final companion = companionOfTheDay();
+      final asset = companionAsset(companion);
+      final name = 'melli_notif_${companion.name}.png';
+      return await Future<String?>(() => copyAssetToTemp(asset, name))
+          .timeout(const Duration(seconds: 3));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Primer nombre para el título del recordatorio, o null si no
+  /// hay nombre real. "Invitado" (o su equivalente en el idioma
+  /// actual) no es un nombre: es el rótulo del invitado sin nombre.
+  static String? _reminderFirstName() {
+    final name = UserPrefs.firstName;
+    if (name.isEmpty) return null;
+    if (name == tr('obOffline') || name == 'Invitado') return null;
+    return name;
+  }
+
+  /// Título + cuerpo del recordatorio de estudio para un aviso que
+  /// se dispara a las [fireTime] (la hora de envío). El título
+  /// llama al usuario por su nombre; el cuerpo es la cuenta atrás
+  /// hasta medianoche SOLO si hay una racha en juego (racha viva y
+  /// ese día aún sin practicar: si ya practicó ese día, la racha
+  /// está a salvo y sale el mensaje variado de siempre). Sin racha
+  /// en juego, el cuerpo es el mensaje variado de siempre.
+  /// (Para pruebas.)
+  static ({String title, String body}) reminderContent({
+    required DateTime fireTime,
+    Random? rng,
+  }) {
+    final lang = AppLang.code;
+    final title = reminderTitle(_reminderFirstName(), lang);
+    final p = ProgressService.instance;
+    final atRisk = p.streakNow > 0 &&
+        !p.practiceDays.contains(ProgressService.dateKey(fireTime));
+    if (atRisk) {
+      return (title: title, body: streakCountdownBody(fireTime, lang));
+    }
+    return (title: title, body: _pickMessage(rng ?? Random()));
   }
 
   /// Mensaje de repaso del tema más débil. Recibe ya el NOMBRE BONITO
@@ -1317,6 +1585,60 @@ class NotificationService {
     } catch (_) {
       // Sin plugin, no hay nada que cancelar.
     }
+  }
+
+  /// ¿Toca recordarle la contraseña? Solo cuentas creadas con
+  /// Google que todavía no tienen contraseña (Kristian 2026-11-15:
+  /// el recordatorio es una notificación cada hora).
+  static bool shouldRemindPassword() =>
+      AuthService.isGoogleLinked && !AuthService.isEmailLinked;
+
+  /// Programa el recordatorio "Asegura tu cuenta con una
+  /// contraseña", cada hora, hasta que la contraseña quede puesta.
+  /// Inexacto a propósito: una vez por hora no necesita el permiso
+  /// de alarmas exactas y nunca falla por eso. Si la cuenta ya
+  /// tiene contraseña (o no es de Google), cancela el recordatorio
+  /// y devuelve false. Idempotente: llamar de nuevo con el mismo
+  /// id reprograma (la primera suena una hora después de la llamada).
+  static Future<bool> schedulePasswordReminder() async {
+    try {
+      if (!shouldRemindPassword()) {
+        await cancelPasswordReminder();
+        return false;
+      }
+      final details = await _updateReminderDetails();
+      // Tope de 2 s (convención del archivo): sin plugin real, la
+      // llamada al canal nativo no se resuelve nunca y dejaría
+      // colgado a scheduleNext() y al flujo que lo espera.
+      await _plugin
+          .periodicallyShow(
+            id: _passwordReminderId,
+            title: 'Quemia',
+            body: tr('passwordReminderBody'),
+            repeatInterval: RepeatInterval.hourly,
+            notificationDetails: details,
+            androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+            payload: passwordPayload,
+          )
+          .timeout(const Duration(seconds: 2));
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Cancela el recordatorio de contraseña (ya se puso).
+  ///
+  /// NO se espera a que el plugin responda: sin plugin real la
+  /// llamada al canal nativo no se resuelve nunca, y esperarla (o
+  /// ponerle un tope) dejaba colgado el flujo que llama — o un
+  /// temporizador pendiente que rompe las pruebas. El error, si lo
+  /// hay, se traga; la cancelación es de fondo y nada depende de
+  /// que ya haya terminado cuando esto devuelve.
+  static Future<void> cancelPasswordReminder() async {
+    unawaited(
+      _plugin.cancel(id: _passwordReminderId).then((_) {}, onError: (_) {}),
+    );
   }
 
   /// Detalles del recordatorio de actualización: MISMO canal, icono

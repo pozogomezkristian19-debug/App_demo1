@@ -5,6 +5,8 @@ import '../widgets/lucide_icons.dart';
 import '../data/i18n/content_i18n.dart';
 import '../data/topics.dart';
 import '../services/localization.dart';
+import '../services/premium.dart';
+import '../widgets/premium_lock.dart';
 import 'glossary_screen.dart';
 import 'notes_screen.dart';
 import 'tips_screen.dart';
@@ -38,8 +40,14 @@ class _AprenderScreenState extends State<AprenderScreen> {
         .where((t) => t.slug != 'organica' && t.slug != 'laboratorio')
         .map(localizedTopic)
         .toList();
-    return ListView(
-      padding: const EdgeInsets.all(16),
+    // Candado Premium (SOLO WEB): el usuario gratis entra, pero el
+    // contenido queda desvanecido con candado y nada dentro se
+    // puede abrir. En móvil o con Premium, la pantalla es la misma
+    // de siempre, sin tocarla.
+    return PremiumLockedContent(
+      section: PremiumLockedSection.aprender,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
       children: [
         Text(
           tr('learnTitle'),
@@ -247,6 +255,7 @@ class _AprenderScreenState extends State<AprenderScreen> {
             ),
           ),
       ],
+    ),
     );
   }
 }

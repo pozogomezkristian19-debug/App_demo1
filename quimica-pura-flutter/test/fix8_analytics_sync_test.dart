@@ -61,6 +61,14 @@ class HangingAnalyticsRepository implements AnalyticsRepository {
       Completer<List<Map<String, dynamic>>>().future;
 
   @override
+  Future<List<Map<String, dynamic>>> queryDocsByIdPrefix(
+    String collection,
+    String prefix, {
+    int? limit,
+  }) =>
+      Completer<List<Map<String, dynamic>>>().future;
+
+  @override
   Stream<Map<String, dynamic>?> watchDoc(
           String collection, String docId) =>
       Completer<Map<String, dynamic>?>().future.asStream();
@@ -543,7 +551,7 @@ void main() {
     expect(pointsForWrong(1), -5);
     expect(pointsForWrong(2), -8);
     expect(pointsForWrong(3), -12);
-    expect(maxLives, 5);
+    expect(maxLives, 10);
   });
 
   test('ajustes remotos rotos no rompen los locales', () async {
@@ -555,6 +563,6 @@ void main() {
     await AnalyticsSync.applyRemoteSettings();
     expect(levelPassed(4, 5), isTrue);
     expect(pointsForCorrect(1), 3);
-    expect(maxLives, 5);
+    expect(maxLives, 10);
   });
 }

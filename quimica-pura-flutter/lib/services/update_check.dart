@@ -1,7 +1,7 @@
-// Aviso de actualización vía GitHub (fix3, punto 20).
+// Aviso de actualización vía la web de Quemia (fix3, punto 20).
 //
-// Kristian anuncia una actualización editando version.json en la raíz
-// del repo (App_demo1): versión + notas + enlace al APK. Al abrirse
+// Kristian anuncia una actualización editando version.json en la web
+// (quemia-8410a.web.app): versión + notas + enlace al APK. Al abrirse
 // la app, este servicio descarga ese archivo y, si la versión remota
 // es mayor que la instalada, muestra el diálogo de actualización.
 //
@@ -58,9 +58,9 @@ import 'notification_service.dart';
 
 export 'app_version.dart';
 
-/// version.json en la raíz del repo, servido en crudo por GitHub.
+/// version.json en la web de Quemia (Firebase Hosting), ya no en GitHub.
 const String kUpdateCheckUrl =
-    'https://raw.githubusercontent.com/pozogomezkristian19-debug/App_demo1/main/version.json';
+    'https://quemia-8410a.web.app/version.json';
 
 /// Claves guardadas en el teléfono (SharedPreferences).
 const String kUpdateDismissedKey = 'melli_update_dismissed_version';
@@ -86,7 +86,7 @@ int compareVersions(String a, String b) {
   return 0;
 }
 
-/// Lo que dice version.json en GitHub.
+/// Lo que dice version.json en la web.
 class UpdateInfo {
   const UpdateInfo({
     required this.latest,

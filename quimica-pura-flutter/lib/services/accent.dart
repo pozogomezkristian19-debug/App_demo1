@@ -9,6 +9,8 @@
 // toman su color del tema (botones, camino de niveles, barra
 // inferior).
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../widgets/brand_logo.dart';
@@ -38,6 +40,34 @@ class AppAccent {
       return Color.lerp(shop, Colors.black, 0.18)!;
     }
     return isViolet ? BrandColors.violetDeep : BrandColors.tealDark;
+  }
+
+  /// Color del precio de los planes en el paywall (Kristian
+  /// 2026-11-16): el acento, pero en claro se oscurece hasta que
+  /// el contraste sobre la tarjeta sea ≥ 3,0 (WCAG texto grande,
+  /// 16 pt extra-bold). El teal #00C2A8 sobre blanco daba 2,26;
+  /// su versión oscura #00A18D (primaryDark) da 3,24. El violeta
+  /// en claro ya da 4,23 y se queda; en oscuro el acento ya pasa
+  /// (teal 6,65 / violeta 3,82 sobre la tarjeta oscura) y tampoco
+  /// cambia. Si un tema de la tienda trae un acento que no llega,
+  /// se oscurece (claro) o se aclara (oscuro) en pasos del 5 %
+  /// hasta llegar (máx. 60 %).
+  static Color planPriceColor({required bool isDark}) {
+    final bg = isDark ? darkCard : Colors.white;
+    var color = primary;
+    if (wcagContrastRatio(color, bg) >= 3.0) return color;
+    color = primaryDark;
+    if (wcagContrastRatio(color, bg) >= 3.0) return color;
+    var t = 0.0;
+    while (wcagContrastRatio(color, bg) < 3.0 && t < 0.6) {
+      t += 0.05;
+      color = Color.lerp(
+        primaryDark,
+        isDark ? Colors.white : Colors.black,
+        t,
+      )!;
+    }
+    return color;
   }
 
   /// Color claro para fondos tintados con el acento.
@@ -146,4 +176,30 @@ class AppAccent {
   static Color tabColor(int index) {
     return AppAccent.primary;
   }
+}
+
+/// Luminancia relativa WCAG 2.1 de un color opaco (0 negro – 1
+/// blanco). La usa [wcagContrastRatio]; también la usan los tests
+/// de contraste de los temas.
+double wcagLuminance(Color color) {
+  double channel(int value) {
+    final x = value / 255;
+    return x <= 0.04045
+        ? x / 12.92
+        : math.pow((x + 0.055) / 1.055, 2.4).toDouble();
+  }
+
+  return 0.2126 * channel((color.r * 255.0).round()) +
+      0.7152 * channel((color.g * 255.0).round()) +
+      0.0722 * channel((color.b * 255.0).round());
+}
+
+/// Contraste WCAG 2.1 entre dos colores opacos (1 – 21). Para
+/// texto grande (≥ 14 pt negrita / 18 pt) el mínimo es 3,0.
+double wcagContrastRatio(Color a, Color b) {
+  final la = wcagLuminance(a);
+  final lb = wcagLuminance(b);
+  final lighter = la > lb ? la : lb;
+  final darker = la > lb ? lb : la;
+  return (lighter + 0.05) / (darker + 0.05);
 }

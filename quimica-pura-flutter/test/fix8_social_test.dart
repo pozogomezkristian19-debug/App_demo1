@@ -149,23 +149,45 @@ void main() {
       expect(find.textContaining('15'), findsWidgets);
     });
 
-    testWidgets('agregar por nombre: aparece; desconocido: aviso tranquilo',
-        (tester) async {
+    testWidgets(
+        'buscar y agregar con la imagen: aparece; desconocido: aviso '
+        'tranquilo', (tester) async {
       await pumpScreen(
           tester, const FriendsScreen(isGoogleLinked: true),
           size: const Size(360, 1000));
+      // UNA SOLA casilla (Kristian 2026-11-15): sin segunda casilla
+      // ni botón AGREGAR grande; se busca y en el resultado se
+      // toca la imagen de agregar amigo.
+      expect(find.widgetWithText(TextField, tr('friendsAddHint')),
+          findsNothing);
+      expect(find.text(tr('friendsAddButton').toUpperCase()), findsNothing);
+      // Prefijo 'cami': la casilla muestra 'cami' y el resultado
+      // 'camila' (buscar 'camila' exacto hace que el texto salga
+      // dos veces: casilla + resultado).
       await tester.enterText(
-          find.widgetWithText(TextField, tr('friendsAddHint')), 'camila');
-      await tester.tap(
-          find.text(tr('friendsAddButton').toUpperCase()));
-      await _settle(tester);
+          find.widgetWithText(TextField, tr('friendsSearchHint')), 'cami');
+      // Debounce de 300 ms + búsqueda (patrón de fix9).
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
       expect(find.text('camila'), findsOneWidget);
-      await tester.enterText(
-          find.widgetWithText(TextField, tr('friendsAddHint')), 'nadie123');
-      await tester.tap(
-          find.text(tr('friendsAddButton').toUpperCase()));
+      expect(find.byKey(const ValueKey('addFriendImage-camila')),
+          findsOneWidget);
+      await tester
+          .tap(find.byKey(const ValueKey('addFriendImage-camila')));
       await _settle(tester);
-      expect(find.text(tr('friendsAddNotFound')), findsOneWidget);
+      expect(find.text(tr('friendsRequestSentOk')), findsOneWidget);
+      // 'camila' ahora está en el resultado (Enviada) y en la
+      // sección Solicitudes ("Solicitud enviada").
+      expect(find.text('camila'), findsWidgets);
+      expect(find.text(tr('friendsRequestSentLabel')), findsOneWidget);
+      await tester.enterText(
+          find.widgetWithText(TextField, tr('friendsSearchHint')),
+          'nadie123');
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text(tr('friendsSearchNoResults')), findsOneWidget);
       expect(find.byType(AlertDialog), findsNothing);
       expect(find.byType(SnackBar), findsNothing);
     });
@@ -766,6 +788,46 @@ void main() {
       expect(find.byKey(const ValueKey('rank-up-banner')), findsOneWidget);
       expect(
           find.text(tr('lbRankUp').replaceFirst('%s', '1')), findsOneWidget);
+    });
+
+    testWidgets('un usuario con 0 puntos no sale en la tabla',
+        (tester) async {
+      // 2026-11-16 (Kristian): la tabla solo muestra a quien ya
+      // tiene puntos; los de 0 no aparecen.
+      final ctrl = StreamController<List<LeaderboardEntry>>(sync: true);
+      addTearDown(() => ctrl.close());
+      await pumpScreen(
+          tester,
+          LeaderboardScreen(
+            entriesStream: ctrl.stream,
+            currentDeviceId: 'd-me',
+            isGoogleLinked: true,
+          ));
+      ctrl.add([
+        const LeaderboardEntry(
+            deviceId: 'd-sofia',
+            username: 'sofia',
+            points: 1500,
+            levelsPassedTotal: 30,
+            streak: 10),
+        const LeaderboardEntry(
+            deviceId: 'd-cero',
+            username: 'cero',
+            points: 0,
+            levelsPassedTotal: 0,
+            streak: 0),
+        const LeaderboardEntry(
+            deviceId: 'd-me',
+            username: 'kristian',
+            points: 1200,
+            levelsPassedTotal: 24,
+            streak: 8),
+      ]);
+      await _settle(tester);
+      expect(find.text('sofia'), findsOneWidget);
+      // La fila propia muestra "kristian (tú)", no "kristian" solo.
+      expect(find.textContaining('kristian'), findsOneWidget);
+      expect(find.text('cero'), findsNothing);
     });
   });
 }

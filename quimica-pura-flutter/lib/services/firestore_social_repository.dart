@@ -63,6 +63,14 @@ class FirestoreSocialRepository implements SocialRepository {
   /// Latidos y re-evaluaciones activos por duelo suscrito.
   final Map<String, Timer> _duelTimers = {};
 
+  /// Último estado emitido de cada duelo suscrito (para el replay
+  /// al suscribirse: cada listener nuevo recibe el valor actual).
+  final Map<String, DuelState> _duelLastEmitted = {};
+
+  /// Uids a los que ya se les aseguró el edge de seguimiento en
+  /// esta sesión (reparación perezosa de amigos -> follows).
+  final Set<String> _followRepairDone = {};
+
   String get _me => AuthService.currentUid ?? '';
 
   // ---- Conexión ----
@@ -84,9 +92,19 @@ class FirestoreSocialRepository implements SocialRepository {
   @override
   Future<List<FriendEntry>> friends() async {
     final list = await fg.FriendsGroupsService.myFriends();
+    final blocked = await _myBlockedUids();
     final out = <FriendEntry>[];
     for (final f in list) {
+      if (blocked.contains(f.uid)) continue;
       out.add(await _toFriendEntry(f));
+    }
+    // Reparación perezosa: aseguro MIS edges hacia cada amigo
+    // actual (cada usuario solo escribe SUS propios edges; una vez
+    // por amigo en esta sesión).
+    for (final f in out) {
+      if (_followRepairDone.add(f.deviceId)) {
+        unawaited(_ensureFollowEdge(f.deviceId));
+      }
     }
     return out;
   }
@@ -122,9 +140,8 @@ class FirestoreSocialRepository implements SocialRepository {
     var trophiesWon = 0;
     var trophiesTotal = 0;
     final friendTrack = doc?['track']?.toString();
-    final friendTopics = friendTrack == ProgressService.trackBach
-        ? bachTopics
-        : uniTopics;
+    final friendTopics =
+        friendTrack == ProgressService.trackBach ? bachTopics : uniTopics;
     trophiesTotal = friendTopics.length;
     final rawTrophies = doc?['trophies'];
     if (rawTrophies is Map) {
@@ -132,9 +149,8 @@ class FirestoreSocialRepository implements SocialRepository {
           ? ProgressService.trackBach
           : ProgressService.trackUni];
       if (list is List) {
-        trophiesWon = list
-            .where((v) => v is String && friendTopics.contains(v))
-            .length;
+        trophiesWon =
+            list.where((v) => v is String && friendTopics.contains(v)).length;
       }
     }
     return FriendEntry(
@@ -152,10 +168,23 @@ class FirestoreSocialRepository implements SocialRepository {
     );
   }
 
+  /// Multi-escucha con replay (arreglo del bug gris 2026-11-16):
+  /// cada listener recibe la lista actual al suscribirse. Con
+  /// Stream.fromFuture (single-subscription) el segundo listen
+  /// sobre LA MISMA instancia lanzaba StateError y la pantalla
+  /// quedaba gris. Con Stream.multi broadcast no; tampoco vale
+  /// asBroadcastStream() a secas sobre un fromFuture, porque el
+  /// listener tardío pierde el valor ya emitido y vería 0 amigos.
   @override
   Stream<List<FriendEntry>> friendsStream() {
-    return Stream<List<FriendEntry>>.fromFuture(friends())
-        .handleError((_) => <FriendEntry>[]);
+    return Stream<List<FriendEntry>>.multi((ctrl) async {
+      try {
+        ctrl.add(await friends());
+      } catch (_) {
+        ctrl.add(<FriendEntry>[]);
+      }
+      await ctrl.close();
+    }, isBroadcast: true);
   }
 
   @override
@@ -163,13 +192,13 @@ class FirestoreSocialRepository implements SocialRepository {
     final name = username.trim();
     if (!OnlineCommon.allowed || _me.isEmpty || name.isEmpty) return null;
     if (name == UserPrefs.userName) return null;
-    final docs = await OnlineCommon.call(() =>
-        AnalyticsSync.repository.queryDocs(
-          'users',
-          whereField: 'username',
-          isEqualTo: name,
-          limit: 5,
-        ));
+    final docs =
+        await OnlineCommon.call(() => AnalyticsSync.repository.queryDocs(
+              'users',
+              whereField: 'username',
+              isEqualTo: name,
+              limit: 5,
+            ));
     if (docs == null) return null;
     for (final d in docs) {
       final f = fg.FriendProgress.fromUserDoc(d);
@@ -178,6 +207,52 @@ class FirestoreSocialRepository implements SocialRepository {
       return _toFriendEntry(f);
     }
     return null;
+  }
+
+  @override
+  Future<List<FriendEntry>> searchUsers(String query) async {
+    final q = query.trim();
+    if (q.isEmpty || !OnlineCommon.allowed || _me.isEmpty) return [];
+    // Sin correo: la búsqueda es SOLO por nombre de usuario
+    // (Kristian 2026-11-15: quitó la búsqueda por correo). Un
+    // texto con '@' no es un nombre válido: no devuelve nada.
+    // Prefijo de nombre sin mayúsculas: la colección 'usernames'
+    // tiene la clave en minúscula y da el uid (rango sobre el id,
+    // índice automático, sin índice compuesto). Solo usuarios que
+    // compartieron ('shared') y sin vetar (lo comprueba
+    // FriendProgress.fromUserDoc).
+    final prefix = q.toLowerCase();
+    // 1) Nombre de usuario exacto → solo ese perfil (Kristian
+    // 2026-11-15), aunque otros nombres compartan el prefijo.
+    final exactDoc = await OnlineCommon.call(
+        () => AnalyticsSync.repository.getDoc('usernames', prefix));
+    final exactUid = exactDoc?['uid']?.toString() ?? '';
+    if (exactUid.isNotEmpty && exactUid != _me) {
+      final userDoc = await OnlineCommon.call(
+          () => AnalyticsSync.repository.getDoc('users', exactUid));
+      final f = fg.FriendProgress.fromUserDoc(userDoc);
+      if (f != null) return [await _toFriendEntry(f)];
+      // El nombre exacto existe pero ese perfil no se comparte
+      // (en la búsqueda por prefijo tampoco saldría): nada que
+      // mostrar.
+      return [];
+    }
+    // 2) Sin coincidencia exacta: todos los prefijos relacionados.
+    final nameDocs = await OnlineCommon.call(() => AnalyticsSync.repository
+        .queryDocsByIdPrefix('usernames', prefix, limit: 10));
+    if (nameDocs == null) return [];
+    final out = <FriendEntry>[];
+    for (final d in nameDocs) {
+      final uid = d['uid']?.toString() ?? '';
+      if (uid.isEmpty || uid == _me) continue;
+      final userDoc = await OnlineCommon.call(
+          () => AnalyticsSync.repository.getDoc('users', uid));
+      final f = fg.FriendProgress.fromUserDoc(userDoc);
+      if (f == null) continue;
+      out.add(await _toFriendEntry(f));
+      if (out.length >= 10) break;
+    }
+    return out;
   }
 
   @override
@@ -192,8 +267,20 @@ class FirestoreSocialRepository implements SocialRepository {
   // --- Solicitudes de amistad (ronda 2d) ---
 
   @override
-  Future<FriendRequestResult> sendFriendRequest(String username) =>
-      fg.FriendsGroupsService.sendFriendRequest(username);
+  Future<FriendRequestResult> sendFriendRequest(String username) async {
+    final result =
+        await fg.FriendsGroupsService.sendFriendRequest(username);
+    if (result == FriendRequestResult.sent) {
+      // Al enviar la solicitud, el remitente SIGUE al destinatario
+      // (amigos = seguimiento mutuo, lote seguir). Best-effort: si
+      // el seguimiento falla, la solicitud ya quedó enviada.
+      try {
+        final target = await findUserByUsername(username);
+        if (target != null) await followUser(target.deviceId);
+      } catch (_) {}
+    }
+    return result;
+  }
 
   @override
   Future<List<FriendRequest>> incomingFriendRequests() =>
@@ -204,8 +291,29 @@ class FirestoreSocialRepository implements SocialRepository {
       fg.FriendsGroupsService.sentFriendRequests();
 
   @override
-  Future<bool> acceptFriendRequest(String requestId) =>
-      fg.FriendsGroupsService.acceptFriendRequest(requestId);
+  Future<bool> acceptFriendRequest(String requestId) async {
+    // El remitente de la solicitud, antes de aceptarla: al
+    // aceptar, el que acepta SIGUE de vuelta.
+    var senderUid = '';
+    try {
+      final incoming =
+          await fg.FriendsGroupsService.incomingFriendRequests();
+      for (final r in incoming) {
+        if (r.id == requestId) {
+          senderUid = r.senderUid;
+          break;
+        }
+      }
+    } catch (_) {}
+    final ok =
+        await fg.FriendsGroupsService.acceptFriendRequest(requestId);
+    if (ok && senderUid.isNotEmpty) {
+      try {
+        await followUser(senderUid);
+      } catch (_) {}
+    }
+    return ok;
+  }
 
   @override
   Future<void> rejectFriendRequest(String requestId) async {
@@ -239,8 +347,7 @@ class FirestoreSocialRepository implements SocialRepository {
         // entrada (sin lectura extra): si es REAL y no está en
         // línea, no se crea el duelo y la pantalla avisa. Los bots
         // quedan exentos (siempre disponibles).
-        if (!rival.isBot &&
-            !PresenceService.isOnline(rival.lastSeenMs)) {
+        if (!rival.isBot && !PresenceService.isOnline(rival.lastSeenMs)) {
           offlineName = rival.username;
         } else {
           duel = await DuelService.createDuel(
@@ -270,8 +377,7 @@ class FirestoreSocialRepository implements SocialRepository {
         questions: [],
       );
     }
-    _matchStartedAtMs[duel.id] =
-        DateTime.now().millisecondsSinceEpoch;
+    _matchStartedAtMs[duel.id] = DateTime.now().millisecondsSinceEpoch;
     return DuelState(
       matchId: duel.id,
       opponentName: duel.rivalName(_me),
@@ -283,60 +389,70 @@ class FirestoreSocialRepository implements SocialRepository {
   @override
   Stream<DuelState> duelStream(String matchId) {
     if (matchId.isEmpty) {
-      return Stream<DuelState>.value(const DuelState(
-        matchId: '',
-        opponentName: '',
-        phase: DuelPhase.searching,
-        questions: [],
-      ));
+      // También multi-escucha: Stream.value es single-subscription
+      // y el segundo listen lanzaría StateError igual.
+      return Stream<DuelState>.multi((ctrl) {
+        ctrl.add(const DuelState(
+          matchId: '',
+          opponentName: '',
+          phase: DuelPhase.searching,
+          questions: [],
+        ));
+        ctrl.close();
+      }, isBroadcast: true);
     }
     _matchStartedAtMs.putIfAbsent(
         matchId, () => DateTime.now().millisecondsSinceEpoch);
-    late final StreamController<DuelState> ctrl;
-    StreamSubscription<Duel?>? docSub;
-    var tick = 0;
-    DuelState? lastEmitted;
-    Future<void> emitFromDoc(Duel? duel) async {
-      if (duel == null || ctrl.isClosed) return;
-      // El ganador cobra sus puntos en SU teléfono cuando se entera
-      // de que ganó (no en el del rival que cerró el duelo).
-      if (duel.isFinished && duel.winnerUid == _me) {
-        unawaited(DuelService.claimWinnerPoints(duel.id));
+    // Multi-escucha con replay (arreglo del bug gris 2026-11-16):
+    // cada listener recibe el último estado al suscribirse y luego
+    // las actualizaciones. El callback corre por listener (su
+    // propio watch + latido); al cancelar se limpia lo suyo.
+    return Stream<DuelState>.multi((ctrl) {
+      StreamSubscription<Duel?>? docSub;
+      var tick = 0;
+      var closed = false;
+      DuelState? lastEmitted = _duelLastEmitted[matchId];
+      Future<void> emitFromDoc(Duel? duel) async {
+        if (duel == null || closed) return;
+        // El ganador cobra sus puntos en SU teléfono cuando se entera
+        // de que ganó (no en el del rival que cerró el duelo).
+        if (duel.isFinished && duel.winnerUid == _me) {
+          unawaited(DuelService.claimWinnerPoints(duel.id));
+        }
+        final next = _mapDuel(duel, lastEmitted);
+        if (next == null) return;
+        lastEmitted = next;
+        _duelLastEmitted[matchId] = next;
+        ctrl.add(next);
       }
-      final next = _mapDuel(duel, lastEmitted);
-      if (next == null) return;
-      lastEmitted = next;
-      ctrl.add(next);
-    }
 
-    ctrl = StreamController<DuelState>(
-      onListen: () {
-        docSub = DuelService.watchDuel(matchId).listen(
-          emitFromDoc,
-          onError: (_) {},
-        );
-        _duelTimers[matchId]?.cancel();
-        _duelTimers[matchId] = Timer.periodic(
-          const Duration(seconds: 15),
-          (_) async {
-            tick++;
-            // Latido cada 30 s: el rival sabe que sigo ahí.
-            if (tick.isEven) {
-              await DuelService.heartbeat(matchId);
-            }
-            // La desconexión depende del reloj, no del documento:
-            // se re-evalúa aunque nadie escriba.
-            final duel = await DuelService.getDuel(matchId);
-            await emitFromDoc(duel);
-          },
-        );
-      },
-      onCancel: () async {
+      // Replay: el estado actual, antes de que llegue el watch.
+      if (lastEmitted != null) ctrl.add(lastEmitted!);
+      docSub = DuelService.watchDuel(matchId).listen(
+        emitFromDoc,
+        onError: (_) {},
+      );
+      _duelTimers[matchId]?.cancel();
+      _duelTimers[matchId] = Timer.periodic(
+        const Duration(seconds: 15),
+        (_) async {
+          tick++;
+          // Latido cada 30 s: el rival sabe que sigo ahí.
+          if (tick.isEven) {
+            await DuelService.heartbeat(matchId);
+          }
+          // La desconexión depende del reloj, no del documento:
+          // se re-evalúa aunque nadie escriba.
+          final duel = await DuelService.getDuel(matchId);
+          await emitFromDoc(duel);
+        },
+      );
+      ctrl.onCancel = () async {
+        closed = true;
         _duelTimers.remove(matchId)?.cancel();
         await docSub?.cancel();
-      },
-    );
-    return ctrl.stream;
+      };
+    }, isBroadcast: true);
   }
 
   /// Mapea un duelo a DuelState. Devuelve null si no cambió nada
@@ -346,8 +462,7 @@ class FirestoreSocialRepository implements SocialRepository {
     final me = _me;
     final rival = duel.rivalUid(me);
     final myResult = duel.finishedResults[me];
-    final rivalResult =
-        rival == null ? null : duel.finishedResults[rival];
+    final rivalResult = rival == null ? null : duel.finishedResults[rival];
     final now = DateTime.now().millisecondsSinceEpoch;
     final connected = !duel.rivalDisconnected(me, nowMs: now);
     final phase = duel.isFinished
@@ -371,8 +486,7 @@ class FirestoreSocialRepository implements SocialRepository {
       opponentTimeMs: rivalResult?.timeMs ?? 0,
       // El ganador lo decide el servicio (por tiempo en empate):
       // winnerUid null con los dos terminados = empate exacto.
-      winnerIsMe:
-          duel.winnerUid == null ? null : duel.winnerUid == me,
+      winnerIsMe: duel.winnerUid == null ? null : duel.winnerUid == me,
     );
     if (last != null &&
         last.phase == next.phase &&
@@ -397,12 +511,10 @@ class FirestoreSocialRepository implements SocialRepository {
     // hasta terminar) y llega aquí; sin él se usa el tiempo desde
     // que se abrió el duelo.
     final started = _matchStartedAtMs[matchId];
-    final elapsed = started == null
-        ? 0
-        : DateTime.now().millisecondsSinceEpoch - started;
+    final elapsed =
+        started == null ? 0 : DateTime.now().millisecondsSinceEpoch - started;
     final realTime = timeMs > 0 ? timeMs : elapsed;
-    await DuelService.submitResult(
-        matchId, correct: score, timeMs: realTime);
+    await DuelService.submitResult(matchId, correct: score, timeMs: realTime);
   }
 
   @override
@@ -414,6 +526,7 @@ class FirestoreSocialRepository implements SocialRepository {
   @override
   Future<void> cancelDuel(String matchId) async {
     if (matchId.isEmpty) return;
+    _duelLastEmitted.remove(matchId);
     await DuelService.cancelDuel(matchId);
   }
 
@@ -427,8 +540,7 @@ class FirestoreSocialRepository implements SocialRepository {
     if (duel.rivalUid(me) == null) return null;
     final myResult = duel.finishedResults[me];
     final rival = duel.rivalUid(me);
-    final rivalResult =
-        rival == null ? null : duel.finishedResults[rival];
+    final rivalResult = rival == null ? null : duel.finishedResults[rival];
     final phase = duel.isFinished
         ? DuelPhase.finished
         : duel.isCancelled
@@ -471,14 +583,35 @@ class FirestoreSocialRepository implements SocialRepository {
   @override
   Future<List<TournamentInfo>> tournaments() => _loadTournamentInfos();
 
+  /// Multi-escucha con replay (arreglo del bug gris 2026-11-16):
+  /// cada listener recibe la lista actual al suscribirse y luego
+  /// un refresco cada 30 s. El generador async* anterior era
+  /// single-subscription: el segundo listen sobre LA MISMA
+  /// instancia lanzaba StateError.
   @override
-  Stream<List<TournamentInfo>> tournamentsStream() async* {
-    yield await _loadTournamentInfos();
-    // La clasificación se refresca sola cada 30 s mientras la
-    // pantalla está abierta.
-    await for (final _ in Stream.periodic(const Duration(seconds: 30))) {
-      yield await _loadTournamentInfos();
-    }
+  Stream<List<TournamentInfo>> tournamentsStream() {
+    return Stream<List<TournamentInfo>>.multi((ctrl) {
+      StreamSubscription<void>? tickSub;
+      var closed = false;
+      Future<void> load() async {
+        if (closed) return;
+        try {
+          ctrl.add(await _loadTournamentInfos());
+        } catch (_) {
+          // Sin red: no se emite nada nuevo (la pantalla conserva
+          // lo último que vio).
+        }
+      }
+
+      ctrl.onCancel = () async {
+        closed = true;
+        await tickSub?.cancel();
+      };
+      unawaited(load());
+      tickSub = Stream.periodic(const Duration(seconds: 30)).listen((_) {
+        unawaited(load());
+      });
+    }, isBroadcast: true);
   }
 
   Future<List<TournamentInfo>> _loadTournamentInfos() async {
@@ -532,8 +665,18 @@ class FirestoreSocialRepository implements SocialRepository {
 
   static String _dateRange(int startMs, int endMs) {
     const months = [
-      'ene', 'feb', 'mar', 'abr', 'may', 'jun',
-      'jul', 'ago', 'sep', 'oct', 'nov', 'dic',
+      'ene',
+      'feb',
+      'mar',
+      'abr',
+      'may',
+      'jun',
+      'jul',
+      'ago',
+      'sep',
+      'oct',
+      'nov',
+      'dic',
     ];
     final a = DateTime.fromMillisecondsSinceEpoch(startMs);
     final b = DateTime.fromMillisecondsSinceEpoch(endMs);
@@ -554,8 +697,8 @@ class FirestoreSocialRepository implements SocialRepository {
       // nuevo en el doc (el campo 'points' está permitido). Si esto
       // falla, no pasa nada grave: el próximo uploadProgress vuelve
       // a subir el saldo local.
-      await OnlineCommon.write(() => AnalyticsSync.repository.setDoc(
-          'users', _me, <String, dynamic>{'points': newPointsBalance}));
+      await OnlineCommon.write(() => AnalyticsSync.repository
+          .setDoc('users', _me, <String, dynamic>{'points': newPointsBalance}));
     }
     return true;
   }
@@ -610,8 +753,7 @@ class FirestoreSocialRepository implements SocialRepository {
   }
 
   Future<StudyGroup> _toStudyGroup(fg.StudyGroup g) async {
-    final members =
-        await fg.FriendsGroupsService.groupMembersProgress(g.id);
+    final members = await fg.FriendsGroupsService.groupMembersProgress(g.id);
     return StudyGroup(
       id: g.id,
       name: g.name,
@@ -659,7 +801,307 @@ class FirestoreSocialRepository implements SocialRepository {
 
   @override
   Future<void> reportQuestion(String questionId, String reason) async {
-    await ReportsService.reportQuestion(
-        questionId: questionId, note: reason);
+    await ReportsService.reportQuestion(questionId: questionId, note: reason);
+  }
+
+  // ---- Seguir / seguidores (lote seguir, 2026-11-16) ----
+  // Colección 'follows', doc '<seguidor>_<seguido>' con
+  // {followerUid, followingUid, createdAtMs}. Los contadores se
+  // calculan leyendo los edges (sin contadores guardados).
+
+  String _followDocId(String followerUid, String followingUid) =>
+      '${followerUid}_$followingUid';
+
+  /// Asegura MI edge hacia [uid] (reparación perezosa de amigos).
+  /// Best-effort, nunca lanza.
+  Future<void> _ensureFollowEdge(String uid) async {
+    if (!OnlineCommon.allowed || _me.isEmpty || uid.isEmpty || uid == _me) {
+      return;
+    }
+    await OnlineCommon.write(() => AnalyticsSync.repository.setDoc(
+          'follows',
+          _followDocId(_me, uid),
+          <String, dynamic>{
+            'followerUid': _me,
+            'followingUid': uid,
+            'createdAtMs': DateTime.now().millisecondsSinceEpoch,
+          },
+        ));
+  }
+
+  @override
+  Future<bool> followUser(String uid) async {
+    if (!OnlineCommon.allowed || _me.isEmpty || uid.isEmpty || uid == _me) {
+      return false;
+    }
+    final id = _followDocId(_me, uid);
+    final existing = await OnlineCommon.call(
+        () => AnalyticsSync.repository.getDoc('follows', id));
+    if (existing != null) return false;
+    return OnlineCommon.write(() => AnalyticsSync.repository.setDoc(
+          'follows',
+          id,
+          <String, dynamic>{
+            'followerUid': _me,
+            'followingUid': uid,
+            'createdAtMs': DateTime.now().millisecondsSinceEpoch,
+          },
+        ));
+  }
+
+  @override
+  Future<bool> unfollowUser(String uid) async {
+    if (!OnlineCommon.allowed || _me.isEmpty || uid.isEmpty || uid == _me) {
+      return false;
+    }
+    return OnlineCommon.write(() => AnalyticsSync.repository
+        .deleteDoc('follows', _followDocId(_me, uid)));
+  }
+
+  @override
+  Future<bool> isFollowing(String uid) async {
+    if (!OnlineCommon.allowed || _me.isEmpty || uid.isEmpty || uid == _me) {
+      return false;
+    }
+    final doc = await OnlineCommon.call(() =>
+        AnalyticsSync.repository.getDoc('follows', _followDocId(_me, uid)));
+    return doc != null;
+  }
+
+  @override
+  Future<bool> isFollowedBy(String uid) async {
+    if (!OnlineCommon.allowed || _me.isEmpty || uid.isEmpty || uid == _me) {
+      return false;
+    }
+    final doc = await OnlineCommon.call(() =>
+        AnalyticsSync.repository.getDoc('follows', _followDocId(uid, _me)));
+    return doc != null;
+  }
+
+  @override
+  Future<bool> isMutualFollow(String uid) async {
+    if (!OnlineCommon.allowed || _me.isEmpty || uid.isEmpty || uid == _me) {
+      return false;
+    }
+    final following = await isFollowing(uid);
+    if (!following) return false;
+    return isFollowedBy(uid);
+  }
+
+  @override
+  Future<int> followingCount(String uid) async {
+    if (!OnlineCommon.allowed || uid.isEmpty) return 0;
+    final docs = await OnlineCommon.call(() =>
+        AnalyticsSync.repository.queryDocs('follows',
+            whereField: 'followerUid', isEqualTo: uid));
+    return docs?.length ?? 0;
+  }
+
+  @override
+  Future<int> followersCount(String uid) async {
+    if (!OnlineCommon.allowed || uid.isEmpty) return 0;
+    final docs = await OnlineCommon.call(() =>
+        AnalyticsSync.repository.queryDocs('follows',
+            whereField: 'followingUid', isEqualTo: uid));
+    return docs?.length ?? 0;
+  }
+
+  @override
+  Future<List<FriendEntry>> followingList(String uid) async {
+    if (!OnlineCommon.allowed || uid.isEmpty) return <FriendEntry>[];
+    final docs = await OnlineCommon.call(() =>
+        AnalyticsSync.repository.queryDocs('follows',
+            whereField: 'followerUid', isEqualTo: uid, limit: 200));
+    if (docs == null) return <FriendEntry>[];
+    return _entriesForFollowDocs(docs, 'followingUid');
+  }
+
+  @override
+  Future<List<FriendEntry>> followersList(String uid) async {
+    if (!OnlineCommon.allowed || uid.isEmpty) return <FriendEntry>[];
+    final docs = await OnlineCommon.call(() =>
+        AnalyticsSync.repository.queryDocs('follows',
+            whereField: 'followingUid', isEqualTo: uid, limit: 200));
+    if (docs == null) return <FriendEntry>[];
+    return _entriesForFollowDocs(docs, 'followerUid');
+  }
+
+  /// Resuelve los uids del otro lado de los edges a FriendEntry
+  /// (con datos de perfil). Un usuario bloqueado por mí no sale.
+  Future<List<FriendEntry>> _entriesForFollowDocs(
+      List<Map<String, dynamic>> docs, String otherField) async {
+    final blocked = await _myBlockedUids();
+    final out = <FriendEntry>[];
+    for (final d in docs) {
+      final otherUid = d[otherField]?.toString() ?? '';
+      if (otherUid.isEmpty || blocked.contains(otherUid)) {
+        continue;
+      }
+      final userDoc = await OnlineCommon.call(
+          () => AnalyticsSync.repository.getDoc('users', otherUid));
+      final f = fg.FriendProgress.fromUserDoc(userDoc);
+      if (f == null) continue;
+      out.add(await _toFriendEntry(f));
+    }
+    out.sort((a, b) => b.points.compareTo(a.points));
+    return out;
+  }
+
+  // ---- Sugerencias (rotación diaria determinista) ----
+
+  @override
+  Future<List<FriendEntry>> friendSuggestions({DateTime? on}) async {
+    // Sugerencias SOLO con sesión (Kristian 2026-11-16): sin
+    // Google ni correo vinculados no hay nada que sugerir. La
+    // puerta es la misma que la de seguir (OnlineCommon.allowed
+    // = con sesión vinculada). Sin _me no hay ni siquiera sesión
+    // anónima: no hay nada que sugerir.
+    if (!OnlineCommon.allowed || _me.isEmpty) return <FriendEntry>[];
+    final day = on ?? DateTime.now();
+    final docs = await OnlineCommon.call(() =>
+        AnalyticsSync.repository.queryDocs('users',
+            whereField: 'shared', isEqualTo: true, limit: 100));
+    if (docs == null) return <FriendEntry>[];
+    final blocked = await _myBlockedUids();
+    final dismissed = await loadDismissedSuggestions(day);
+    final friendIds =
+        (await fg.FriendsGroupsService.myFriends()).map((f) => f.uid).toSet();
+    // Los ya seguidos tampoco se sugieren: al seguir, la tarjeta
+    // se desliza y la sustituye la siguiente (pulido 2026-11-16).
+    final followingIds =
+        (await followingList(_me)).map((f) => f.deviceId).toSet();
+    final pool = <FriendEntry>[];
+    for (final d in docs) {
+      final f = fg.FriendProgress.fromUserDoc(d);
+      if (f == null) continue;
+      if (f.uid == _me) continue;
+      if (friendIds.contains(f.uid)) continue;
+      if (followingIds.contains(f.uid)) continue;
+      if (blocked.contains(f.uid)) continue;
+      if (dismissed.contains(f.uid)) continue;
+      pool.add(await _toFriendEntry(f));
+    }
+    // Los bots tienen docs reales con shared: también salen.
+    return shuffleForDate(pool, day).take(2).toList();
+  }
+
+  @override
+  Future<void> dismissSuggestion(String uid, {DateTime? on}) async {
+    await dismissSuggestionLocal(uid, on ?? DateTime.now());
+  }
+
+  // ---- Perfil público (datos 100 % reales) ----
+
+  @override
+  Future<PublicProfile?> publicProfile(String uid) async {
+    if (!OnlineCommon.allowed || _me.isEmpty || uid.isEmpty) return null;
+    final doc = await OnlineCommon.call(
+        () => AnalyticsSync.repository.getDoc('users', uid));
+    if (doc == null) return null;
+    return PublicProfile.fromUserDoc(
+      doc,
+      viewerUid: _me,
+      followingCount: await followingCount(uid),
+      followersCount: await followersCount(uid),
+      isFollowing: await isFollowing(uid),
+      isFollowedBy: await isFollowedBy(uid),
+    );
+  }
+
+  // ---- Reportar y bloquear usuarios ----
+
+  @override
+  Future<bool> reportUser(String uid, String reason) async {
+    return ReportsService.reportUser(uid: uid, reason: reason);
+  }
+
+  /// Mis bloqueados: el campo 'blockedUids' de mi documento +
+  /// el espejo local (para filtrar sin internet). Antes de leer,
+  /// se aplican las operaciones de bloqueo pendientes sin internet
+  /// (ver [blockUser]): así el documento y el espejo convergen.
+  Future<Set<String>> _myBlockedUids() async {
+    await _syncPendingBlockOps();
+    final out = <String>{};
+    out.addAll(await loadBlockedMirror());
+    final doc = await OnlineCommon.call(
+        () => AnalyticsSync.repository.getDoc('users', _me));
+    final raw = doc?['blockedUids'];
+    if (raw is List) {
+      for (final v in raw) {
+        if (v is String && v.isNotEmpty) out.add(v);
+      }
+    }
+    return out;
+  }
+
+  /// Cola local de bloqueos/desbloqueos sin internet (JSON).
+  static const String _pendingBlockOpsKey = 'social_blocked_pending_ops';
+
+  /// Aplica las operaciones de bloqueo pendientes (al volver la
+  /// conexión). Best-effort, nunca lanza.
+  Future<void> _syncPendingBlockOps() async {
+    if (!OnlineCommon.allowed || _me.isEmpty) return;
+    try {
+      final items = await OnlineCommon.pending(_pendingBlockOpsKey);
+      for (var i = items.length - 1; i >= 0; i--) {
+        final item = items[i];
+        final op = item['op']?.toString() ?? '';
+        final uid = item['uid']?.toString() ?? '';
+        if (uid.isEmpty || (op != 'block' && op != 'unblock')) {
+          await OnlineCommon.removeAt(_pendingBlockOpsKey, i);
+          continue;
+        }
+        final ok = op == 'block'
+            ? await OnlineCommon.write(() => AnalyticsSync.repository
+                .addToArray('users', _me, 'blockedUids', uid))
+            : await OnlineCommon.write(() => AnalyticsSync.repository
+                .removeFromArray('users', _me, 'blockedUids', uid));
+        if (ok) await OnlineCommon.removeAt(_pendingBlockOpsKey, i);
+      }
+    } catch (_) {}
+  }
+
+  @override
+  Future<bool> blockUser(String uid) async {
+    if (uid.isEmpty || uid == _me) return false;
+    final mirror = await loadBlockedMirror()..add(uid);
+    await saveBlockedMirror(mirror);
+    if (!OnlineCommon.allowed || _me.isEmpty) {
+      // Sin internet: queda en el espejo y en la cola; al volver
+      // la conexión se escribe en el documento (_syncPendingBlockOps).
+      await OnlineCommon.enqueue(
+          _pendingBlockOpsKey, {'op': 'block', 'uid': uid});
+      return true;
+    }
+    await OnlineCommon.write(() => AnalyticsSync.repository
+        .addToArray('users', _me, 'blockedUids', uid));
+    return true;
+  }
+
+  @override
+  Future<bool> unblockUser(String uid) async {
+    if (uid.isEmpty) return false;
+    final mirror = await loadBlockedMirror()..remove(uid);
+    await saveBlockedMirror(mirror);
+    if (!OnlineCommon.allowed || _me.isEmpty) {
+      await OnlineCommon.enqueue(
+          _pendingBlockOpsKey, {'op': 'unblock', 'uid': uid});
+      return true;
+    }
+    await OnlineCommon.write(() => AnalyticsSync.repository
+        .removeFromArray('users', _me, 'blockedUids', uid));
+    return true;
+  }
+
+  @override
+  Future<bool> isBlocked(String uid) async {
+    if (uid.isEmpty) return false;
+    return (await _myBlockedUids()).contains(uid);
+  }
+
+  @override
+  Future<List<String>> blockedUids() async {
+    final out = (await _myBlockedUids()).toList()..sort();
+    return out;
   }
 }

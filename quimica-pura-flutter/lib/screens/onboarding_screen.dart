@@ -11,10 +11,13 @@ import '../widgets/duo_button.dart';
 import '../widgets/google_sign_in_button.dart';
 import '../widgets/icon_animations.dart';
 import '../widgets/lucide_icons.dart';
+import '../widgets/password_rules.dart';
 import '../widgets/play_once_lottie.dart';
+import '../widgets/quemia_field.dart';
 import '../services/accent.dart';
 import '../services/analytics_sync.dart';
 import '../services/auth_service.dart';
+import '../services/email_index.dart';
 import '../services/localization.dart';
 import '../services/otp_service.dart';
 import '../services/platform_check.dart';
@@ -22,6 +25,8 @@ import 'loading_screen.dart';
 import '../services/referral_service.dart';
 import '../services/user_prefs.dart';
 import 'onboarding_notifications_page.dart';
+import 'otp_code_page.dart';
+import 'set_password_page.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({
@@ -50,13 +55,14 @@ class OnboardingScreen extends StatefulWidget {
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
   late final PageController _pageController;
-  // Nombre de usuario del perfil (Quemia 7.7, Kristian 2026-11-13:
-  // "el nombre de usuario lo coja del nombre... del correo sin
-  // apellido y sin nada"): NO se pregunta — se coge del correo de
-  // Google (primer nombre de la cuenta) o del correo que se escribe
-  // en la pantalla de registro (prefijo del correo). Sin género:
-  // ya no se pregunta (el saludo usa "Bienvenido/a" si no hay
-  // género guardado).
+  // Nombre de usuario del perfil (Quemia 7.7, Kristian 2026-11-13):
+  // se SUGIERE del correo de Google (primer nombre de la cuenta) o
+  // del correo que se escribe en la pantalla de registro (prefijo
+  // del correo), pero se ELIGE DESPUÉS, en el perfil ("¡Completa tu
+  // perfil!"), no en el registro (Kristian 2026-11-16: la pantalla
+  // de elegir usuario salió del registro). Sin género: ya no se
+  // pregunta (el saludo usa "Bienvenido/a" si no hay género
+  // guardado).
   String? _profileName;
   // Código de referido (Quemia 7.6, Kristian): va en la pantalla
   // de género, con y sin Google, y se guarda en local aunque no
@@ -112,14 +118,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   bool get _profileOk => (_profileName ?? '').trim().isNotEmpty;
 
   Future<void> _next() async {
-    // Tras entrar con la cuenta (Kristian 2026-11-13: que pida lo
-    // mismo que al registrarse): en Notificaciones (6) se termina
-    // (a la principal), no se sigue a la racha nueva.
-    if (_afterSignIn && _page == 6) {
-      _afterSignIn = false;
-      await _finishWithLoading();
-      return;
-    }
     if (_page == 9 && !_profileOk) return;
     // 11 páginas (Quemia 7.7, Kristian 2026-11-13): 0 bienvenida,
     // 1 elección (empezar / tengo cuenta / sin conexión), 2 la
@@ -138,40 +136,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
   }
 
-  /// Tras entrar con la cuenta (Kristian 2026-11-13: que pida lo
-  /// mismo que al registrarse): fuente → nivel → meta →
-  /// notificaciones, y de ahí a la principal. Sin mascota, sin
-  /// racha nueva ("1 día" no va: ya tiene cuenta), sin aviso
-  /// ("crear tu perfil" no va: ya tiene cuenta) y sin referido
-  /// (se canjea después en Cuenta → Canjear código).
-  var _afterSignIn = false;
-
   /// Google enlazado desde la pantalla de entrar (no desde el
   /// registro): el flujo corto de Google salta el referido y las
-  /// notificaciones — las preguntas 3–6 las hacen después.
+  /// notificaciones — tras entrar va directo a la principal, sin
+  /// preguntas (Kristian 2026-11-15). Las preguntas (fuente,
+  /// nivel, meta, notificaciones, racha, aviso) quedan solo en
+  /// crear cuenta.
   var _googleFromSignIn = false;
-
-  /// Entra a las preguntas tras iniciar sesión: cierra el flujo
-  /// de entrar y salta a "¿Cómo supiste de Quemia?" (página 3).
-  Future<void> _enterSignInQuestions() async {
-    if (!mounted) return;
-    setState(() {
-      _signInFlow = false;
-      _googleFlow = false;
-      _googleFromSignIn = false;
-      _afterSignIn = true;
-    });
-    // El flujo de entrar sustituye TODA la pantalla (no hay
-    // PageView montada): al volver, el PageController crea su
-    // posición desde initialPage y se perdería la página — igual
-    // que en el flujo del correo.
-    await WidgetsBinding.instance.endOfFrame;
-    if (!mounted) return;
-    if (_pageController.hasClients) {
-      _pageController.jumpToPage(3);
-      setState(() => _page = 3);
-    }
-  }
 
   /// "Sin conexión" (Quemia 7.7, Kristian 2026-11-13): ya NO entra
   /// directo sin más — pide solo el nombre y la meta diaria
@@ -181,6 +152,39 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   /// el usuario podrá vincular Google o crear su perfil después
   /// desde Cuenta.
   var _offlineFlow = false;
+
+  /// Correo ya tomado (Kristian 2026-11-15): PANTALLA ENTERA, no
+  /// un cuadradito. El correo y si la cuenta ya tiene contraseña
+  /// (del índice de correos): con contraseña no se ofrece ponerle
+  /// una (sería pedirlo de nuevo).
+  var _emailTakenFlow = false;
+  String _emailTakenEmail = '';
+
+  /// ¿Tiene contraseña la cuenta del correo tomado? null = no se
+  /// sabe (el índice no lo tenía).
+  bool? _emailTakenHasPassword;
+
+  /// Ponerle una contraseña al correo tomado (Kristian 2026-11-16):
+  /// OTP → entrar con Google (para ser dueño de la cuenta) →
+  /// CREA TU CONTRASEÑA dentro de la app. SIN el correo de
+  /// restablecer de Firebase. Solo uno de estos tres está activo
+  /// a la vez; `_emailTakenFlow` queda en false mientras tanto.
+  String? _setPasswordOtpEmail;
+  var _setPasswordGoogleStep = false;
+  String? _setPasswordEmail;
+
+  /// Aviso en la pantalla de correo tomado (p. ej. la cuenta de
+  /// Google elegida no es la del correo tomado).
+  String? _takenEmailNotice;
+
+  /// true mientras el Google del paso de crear contraseña está en
+  /// marcha: al enlazar bien, en vez de abrir el flujo corto de
+  /// Google se abre la pantalla de crear la contraseña.
+  var _googleForSetPassword = false;
+
+  /// Correo con el que entrar (pantalla de correo tomado → inicio
+  /// de sesión con el correo ya puesto).
+  String _signInEmail = '';
 
   /// Crear cuenta (Quemia 7.7): confirmar "¿Cómo supiste de
   /// Quemia?" — guarda la respuesta y avanza. Sin elegir no se
@@ -215,16 +219,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     // canjea solo en segundo plano cuando hay conexión.
     await ReferralService.saveOnboardingCode(_referralController.text);
     unawaited(ReferralService.redeemOnboardingCode());
-    // Reclama el nombre de usuario (Quemia 7.7, Kristian
-    // 2026-11-13): del CORREO (prefijo, sin apellido), nunca del
-    // nombre que se escribió; si está ocupado, se cae a uno con
-    // sufijo. Sin internet se guarda en local y se reclama después.
+    // El nombre de usuario YA NO se reclama aquí (Kristian
+    // 2026-11-16: la pantalla de elegir usuario salió del
+    // registro): quien no tenga nombre lo pone después en su
+    // perfil, con la tarjeta "¡Completa tu perfil!". Nada
+    // reclama un nombre en silencio.
     // El nombre que se escribió se guarda como perfil (el saludo
     // usa su primer nombre).
-    final username = _profileEmail != null
-        ? ReferralService.usernameBaseFromGoogle(null, _profileEmail)
-        : name;
-    unawaited(ReferralService.claimUsername(username));
     await UserPrefs.saveProfile(name);
     await _finishWithLoading();
   }
@@ -232,13 +233,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   /// Registro con correo (Quemia 7.7, Kristian 2026-11-13: como
   /// Duolingo, "Continuar con correo electrónico"): el flujo del
   /// correo es correo → contraseña → nombre → código OTP. Al
-  /// verificar el código se ENLAZA la cuenta (linkWithEmail) y el
-  /// nombre de usuario se coge del correo (prefijo, limpio, sin
-  /// apellido — su orden); el nombre que se escribe en la pantalla
-  /// "¿Cómo te llamas?" es el que saluda la app ("Bienvenido/a
-  /// [primer nombre]"). Al terminar se avanza al código de
-  /// referido. [_emailFlow] cambia TODA la pantalla por el flujo
-  /// del correo (igual que [_googleFlow] con Google).
+  /// verificar el código se ENLAZA la cuenta (linkWithEmail) y se
+  /// avanza al código de referido (Kristian 2026-11-16: SIN la
+  /// pantalla de elegir usuario, que salió del registro; el nombre
+  /// se pone después en el perfil). El nombre que se escribe en la
+  /// pantalla "¿Cómo te llamas?" es el que saluda la app
+  /// ("Bienvenido/a [primer nombre]"). [_emailFlow] cambia TODA la
+  /// pantalla por el flujo del correo (igual que [_googleFlow]
+  /// con Google).
   var _emailFlow = false;
 
   /// "Ya tengo una cuenta" (Quemia 7.7, Kristian 2026-11-13: la
@@ -249,30 +251,59 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   var _signInFlow = false;
 
   /// Registro con correo verificado: enlaza la cuenta, guarda el
-  /// correo (de ahí sale el nombre de usuario, su orden) y el
-  /// nombre que se escribió (ese es el que saluda la app), y
-  /// avanza al código de referido.
-  String? _profileEmail;
-
+  /// nombre que se escribió (ese es el que saluda la app) y avanza
+  /// al código de referido. (El correo ya no se guarda aparte:
+  /// el nombre de usuario sale del correo solo si el usuario lo
+  /// pone después en su perfil.)
   Future<void> _registerWithEmail(
       String email, String password, String fullName) async {
     final ok = await AuthService.linkWithEmail(email, password);
     if (!mounted) return;
     if (!ok) {
-      // El correo ya tiene cuenta con otra contraseña: el enlace
-      // no pudo entrar en ella. Se vuelve al registro con el
-      // mensaje claro (la pantalla del correo lo enseña).
+      // El correo ya tiene cuenta: el enlace no pudo entrar en
+      // ella (la contraseña escrita no es la de esa cuenta). Si el
+      // motivo real es que el correo ya está tomado, se abre la
+      // PANTALLA de correo tomado (Kristian 2026-11-15: pantalla
+      // entera, no un cuadradito), que antes verifica en el índice
+      // si la cuenta ya tiene contraseña. Sin internet o con otro
+      // fallo, solo queda la línea en el registro (la pantalla
+      // mentiría).
+      // La comprobación del índice se hace ANTES de cerrar el
+      // flujo del correo: mientras tanto la pantalla del OTP sigue
+      // con su carga y no se salta a otra pantalla sin explicación.
+      if (AuthService.lastEmailError == 'firebase_auth:email-already-in-use') {
+        final entry = await EmailIndex.lookup(email);
+        if (!mounted) return;
+        setState(() {
+          _emailFlow = false;
+          _emailTakenEmail = email;
+          _emailTakenHasPassword = entry?.hasPassword;
+          _takenEmailNotice = null;
+          _emailTakenFlow = true;
+        });
+        return;
+      }
       setState(() {
         _emailFlow = false;
         _googleError = tr('obEmailInUse');
       });
+      // Volver a la página del registro (igual que al terminar
+      // bien): sin esto, el PageView se remonta en la Bienvenida
+      // y la línea del error no se ve nunca.
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+      if (_pageController.hasClients) {
+        _pageController.jumpToPage(_page);
+      }
       return;
     }
     setState(() {
-      _profileEmail = email;
       _profileName = fullName.trim().isNotEmpty ? fullName.trim() : email;
       _emailFlow = false;
     });
+    // Sin pantalla de elegir usuario (Kristian 2026-11-16): tras
+    // enlazar el correo se sigue de largo al código de referido.
+    // El nombre de usuario se pone después, en el perfil.
     // El flujo del correo sustituye TODA la pantalla (no hay
     // PageView montada): al volver, el PageController crea su
     // posición desde initialPage (0, Bienvenida) y se perdería la
@@ -290,8 +321,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   /// sesión anónima con Google (mismo uid, sin cambiarlo) y trae
   /// el respaldo de la nube si esa cuenta ya tenía progreso en
   /// otro teléfono. El nombre ya viene de la cuenta de Google, no
-  /// se escribe a mano (Kristian 2026-11-13: el nombre de usuario
-  /// se coge del correo, solo el primer nombre, sin apellido).
+  /// se escribe a mano; el nombre de usuario se pone DESPUÉS, en
+  /// el perfil ("¡Completa tu perfil!", Kristian 2026-11-16: la
+  /// pantalla de elegir usuario salió del registro).
   ///
   /// Tras enlazar NO se entra directo (Quemia 7.5, Kristian): se
   /// abre el flujo corto de Google — 1) "Ya has iniciado sesión",
@@ -351,6 +383,41 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final name = googleName.trim().isNotEmpty
         ? googleName.trim()
         : ReferralService.usernameBaseFromGoogle(null, googleEmail);
+    // Crear contraseña (Kristian 2026-11-16): el OTP ya comprobó
+    // que el correo es suyo; ahora Google confirma que la cuenta
+    // es suya, porque Firebase solo deja ponerle contraseña a
+    // quien tenga la sesión abierta como dueño. Si la cuenta de
+    // Google elegida NO es la del correo tomado, se vuelve a la
+    // pantalla de correo tomado con el aviso — nunca se le pone
+    // la contraseña a otra cuenta.
+    if (_googleForSetPassword) {
+      _googleForSetPassword = false;
+      final signedEmail = AuthService.accountEmail;
+      if (signedEmail == null ||
+          signedEmail.toLowerCase() != _emailTakenEmail.toLowerCase()) {
+        if (mounted) {
+          setState(() {
+            _googleBusy = false;
+            _setPasswordGoogleStep = false;
+            _emailTakenFlow = true;
+            _takenEmailNotice = tr('obSetPasswordGoogleMismatch')
+                .replaceFirst('%s', _emailTakenEmail);
+          });
+        }
+        return;
+      }
+      if (mounted) {
+        setState(() {
+          _googleBusy = false;
+          _setPasswordGoogleStep = false;
+          _setPasswordEmail = signedEmail;
+          _googleName = name;
+          _googleEmail = googleEmail;
+        });
+      }
+      unawaited(AnalyticsSync.restoreFromCloud().then((_) {}));
+      return;
+    }
     if (mounted) {
       setState(() {
         _googleBusy = false;
@@ -387,15 +454,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         fromSignIn: _googleFromSignIn,
         onFinish: (name) async {
           await UserPrefs.saveProfile(name);
-          if (_googleFromSignIn) {
-            // Entrar con Google (Kristian 2026-11-13): tras
-            // "Ya has iniciado sesión" pide lo mismo que al
-            // registrarse (fuente → nivel → meta →
-            // notificaciones), no va directo a la principal.
-            await _enterSignInQuestions();
-          } else {
-            await _finishWithLoading();
-          }
+          // Entrar con Google (Kristian 2026-11-15): tras
+          // "Ya has iniciado sesión" va directo a la principal,
+          // sin preguntas. Las preguntas quedan solo en crear
+          // cuenta.
+          await _finishWithLoading();
         },
       );
     }
@@ -407,7 +470,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         onGoogleSignIn: _linkGoogle,
         googleBusy: _googleBusy,
         googleError: _googleError,
-        onBack: () => setState(() => _signInFlow = false),
+        initialEmail: _signInEmail,
+        onBack: () async {
+          setState(() => _signInFlow = false);
+          // Al volver, el PageView se remonta desde initialPage:
+          // saltar de vuelta a la elección para no perder la página.
+          await WidgetsBinding.instance.endOfFrame;
+          if (!mounted) return;
+          if (_pageController.hasClients) {
+            _pageController.jumpToPage(_page);
+          }
+        },
         onSignedIn: () async {
           // Tras entrar, el perfil local: el nombre de Google si
           // lo hay; si no, el nombre de usuario del correo (así
@@ -422,11 +495,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   : '');
           if (name.isNotEmpty) await UserPrefs.saveProfile(name);
           unawaited(AnalyticsSync.restoreFromCloud().then((_) {}));
-          // Entrar con la cuenta (Kristian 2026-11-13): NO va
-          // directo a la principal — pide lo mismo que al
-          // registrarse (fuente → nivel → meta →
-          // notificaciones).
-          await _enterSignInQuestions();
+          // Entrar con la cuenta (Kristian 2026-11-15): va
+          // directo a la principal, sin preguntas. Las preguntas
+          // quedan solo en crear cuenta.
+          await _finishWithLoading();
         },
       );
     }
@@ -446,6 +518,118 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           }
         },
         onVerified: _registerWithEmail,
+        onEmailTaken: (email, hasPassword) {
+          setState(() {
+            _emailFlow = false;
+            _emailTakenEmail = email;
+            _emailTakenHasPassword = hasPassword;
+            _takenEmailNotice = null;
+            _emailTakenFlow = true;
+          });
+        },
+      );
+    }
+    // Ponerle una contraseña al correo tomado (Kristian
+    // 2026-11-16): OTP → entrar con Google → CREA TU
+    // CONTRASEÑA dentro de la app. Sin correo de restablecer.
+    if (_setPasswordOtpEmail != null) {
+      final email = _setPasswordOtpEmail!;
+      return OtpCodePage(
+        email: email,
+        purpose: OtpPurpose.setPassword,
+        title: tr('obSetPasswordOtpTitle'),
+        body: tr('obSetPasswordOtpBody'),
+        onBack: () {
+          setState(() {
+            _setPasswordOtpEmail = null;
+            _emailTakenFlow = true;
+          });
+        },
+        onVerified: () async {
+          setState(() {
+            _setPasswordOtpEmail = null;
+            _setPasswordGoogleStep = true;
+          });
+        },
+      );
+    }
+    if (_setPasswordGoogleStep) {
+      return _SetPasswordGoogleStep(
+        email: _emailTakenEmail,
+        busy: _googleBusy,
+        error: _googleError,
+        onBack: () {
+          _googleForSetPassword = false;
+          setState(() {
+            _setPasswordGoogleStep = false;
+            _emailTakenFlow = true;
+          });
+        },
+        onGoogle: () async {
+          _googleForSetPassword = true;
+          await _linkGoogle();
+        },
+      );
+    }
+    if (_setPasswordEmail != null) {
+      final email = _setPasswordEmail!;
+      return SetPasswordPage(
+        email: email,
+        onBack: () {
+          setState(() {
+            _setPasswordEmail = null;
+            _emailTakenFlow = true;
+          });
+        },
+        onSaved: () async {
+          // Contraseña puesta: seguir como si se hubiera entrado
+          // con Google (flujo corto: "Ya has iniciado sesión" →
+          // usuario → referido → notificaciones).
+          setState(() {
+            _setPasswordEmail = null;
+            _googleFlow = true;
+          });
+        },
+      );
+    }
+    // Correo ya tomado (Kristian 2026-11-15): pantalla entera, no
+    // un cuadradito. Con contraseña ofrece entrar con el correo;
+    // sin ella, entrar con Google o ponerle una contraseña.
+    if (_emailTakenFlow) {
+      return EmailTakenPage(
+        email: _emailTakenEmail,
+        hasPassword: _emailTakenHasPassword,
+        notice: _takenEmailNotice,
+        onBack: () async {
+          setState(() {
+            _emailTakenFlow = false;
+            _takenEmailNotice = null;
+          });
+          await WidgetsBinding.instance.endOfFrame;
+          if (!mounted) return;
+          if (_pageController.hasClients) {
+            _pageController.jumpToPage(_page);
+          }
+        },
+        onSignIn: () {
+          setState(() {
+            _emailTakenFlow = false;
+            _signInEmail = _emailTakenEmail;
+            _signInFlow = true;
+          });
+        },
+        onGoogle: () async {
+          _googleForSetPassword = false;
+          setState(() => _emailTakenFlow = false);
+          await _linkGoogle();
+        },
+        onSetPassword: () {
+          setState(() {
+            _emailTakenFlow = false;
+            _takenEmailNotice = null;
+            _setPasswordOtpEmail = _emailTakenEmail;
+          });
+        },
       );
     }
     // Sin conexión (Quemia 7.7, Kristian 2026-11-13): solo el
@@ -472,138 +656,170 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     // SIN barra de progreso arriba (Quemia 7.7, Kristian 2026-11-13):
     // el inicio es tarjeta de bienvenida → elección → flujo, sin
     // barra. La clase _ProgressBar se borró con su último uso.
-    return Scaffold(
-      resizeToAvoidBottomInset: false,
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: PageView(
-                controller: _pageController,
-                onPageChanged: (i) => setState(() => _page = i),
-                children: [
-                  // Bienvenida (Quemia 7.7, Kristian): SIN botón de
-                  // Google — lo de Google va en la pantalla de
-                  // elección ("Entrar con mi cuenta"), no aquí.
-                  // Las 3 explicaciones (Resolver, Estudiar,
-                  // Practicar) las QUITÓ Kristian: ya no salen.
-                  _WelcomePage(),
-                  // Elección (Quemia 7.7, Kristian 2026-11-13,
-                  // estilo Duolingo pero con Quemia): crear perfil,
-                  // entrar con la cuenta o sin conexión. "Entrar
-                  // con mi cuenta" abre el inicio de sesión
-                  // ("Ingresa tus datos": correo+contraseña,
-                  // olvidar contraseña por OTP y Google), no
-                  // enlaza con Google directo.
-                  _ChoicePage(
-                    onStart: _next,
-                    onSignIn: () => setState(() => _signInFlow = true),
-                    onOffline: () => setState(() => _offlineFlow = true),
-                    showOffline: !widget.fromAccount,
-                    onBack: widget.onCancel,
-                  ),
-                  // La gemela que se presenta (Quemia 7.7, Kristian
-                  // 2026-11-13, vídeo de Duolingo): Brenda se
-                  // presenta en su bocadillo; atrás vuelve a la
-                  // elección y "Vamos" sigue a las preguntas.
-                  _MascotIntroPage(
-                    onBack: () => _pageController.previousPage(
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeInOut,
+    // Sin deslizar (Kristian 2026-11-15: el inicio solo cambia
+    // con los botones, nunca deslizando): el PageView no admite
+    // gestos; el atrás del teléfono vuelve un paso con PopScope.
+    return PopScope(
+      // Solo se sale de la app con el atrás en la Bienvenida de
+      // la primera instalación: en el resto, el atrás vuelve un
+      // paso dentro del inicio.
+      canPop: !widget.fromAccount && _page == 0,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        // Desde Cuenta, la elección es la primera pantalla: el
+        // atrás vuelve a Cuenta, no a la Bienvenida.
+        if (widget.fromAccount && _page <= 1) {
+          widget.onCancel?.call();
+          return;
+        }
+        if (_page > 0 && _pageController.hasClients) {
+          _pageController.previousPage(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+        }
+      },
+      child: Scaffold(
+        resizeToAvoidBottomInset: false,
+        body: SafeArea(
+          child: Column(
+            children: [
+              Expanded(
+                child: PageView(
+                  controller: _pageController,
+                  physics: const NeverScrollableScrollPhysics(),
+                  onPageChanged: (i) => setState(() => _page = i),
+                  children: [
+                    // Bienvenida (Quemia 7.7, Kristian): SIN botón de
+                    // Google — lo de Google va en la pantalla de
+                    // elección ("Entrar con mi cuenta"), no aquí.
+                    // Las 3 explicaciones (Resolver, Estudiar,
+                    // Practicar) las QUITÓ Kristian: ya no salen.
+                    _WelcomePage(),
+                    // Elección (Quemia 7.7, Kristian 2026-11-13,
+                    // estilo Duolingo pero con Quemia): crear perfil,
+                    // entrar con la cuenta o sin conexión. "Entrar
+                    // con mi cuenta" abre el inicio de sesión
+                    // ("Ingresa tus datos": correo+contraseña,
+                    // olvidar contraseña por OTP y Google), no
+                    // enlaza con Google directo.
+                    _ChoicePage(
+                      onStart: _next,
+                      onSignIn: () => setState(() => _signInFlow = true),
+                      onOffline: () => setState(() => _offlineFlow = true),
+                      showOffline: !widget.fromAccount,
+                      onBack: widget.onCancel,
                     ),
-                    onVamos: _next,
-                  ),
-                  // Crear cuenta (Quemia 7.7, Kristian 2026-11-13,
-                  // flujo de Duolingo con contenido de Quemia): 3)
-                  // "¿Cómo supiste de Quemia?" — sin la pantalla
-                  // de elegir idioma de Duolingo, que no va.
-                  _SourcePage(
-                    selected: _source,
-                    onSelected: (v) => setState(() => _source = v),
-                    onConfirm: _confirmSource,
-                  ),
-                  // 4) "¿Cuánta química sabes?" (en vez de "¿Cuánto
-                  // inglés sabes?"): 5 niveles con barritas.
-                  _LevelPage(
-                    selected: _level,
-                    onSelected: (v) => setState(() => _level = v),
-                    onConfirm: _confirmLevel,
-                  ),
-                  // 5) Meta diaria (3/10/15/30 min): Quemia tiene
-                  // racha y días de práctica, así que encaja.
-                  _GoalPage(
-                    selected: _goalMinutes,
-                    onSelected: (v) => setState(() => _goalMinutes = v),
-                    onConfirm: _confirmGoal,
-                  ),
-                  // 6) Permiso de notificaciones: la MISMA página
-                  // del onboarding (no otra inventada). Aquí NO
-                  // termina el flujo: al continuar va a la racha.
-                  OnboardingNotificationsPage(onNext: _next),
-                  // 7) "¡Una nueva racha!": 1 día, la semana con
-                  // hoy marcado. Sin edad (Duolingo pide la edad;
-                  // Quemia no la pide).
-                  _StreakPage(onNext: _next),
-                  // 8) Aviso antes del registro (Quemia 7.7,
-                  // Kristian 2026-11-13, la pantalla de Duolingo
-                  // "¡No pierdas tu progreso! Vamos a crear tu
-                  // perfil."): Brenda con su bocadillo y
-                  // CONTINUAR. Sin flecha atrás (como Duolingo):
-                  // se vuelve deslizando.
-                  _ProfileNudgePage(onNext: _next),
-                  // 9) Registro (Quemia 7.7, Kristian 2026-11-13,
-                  // como la pantalla de Duolingo: "Elige una opción
-                  // para registrarte y continuar" — Google y correo,
-                  // sin pedir nombre ni género. El nombre de usuario
-                  // se coge del correo).
-                  _RegisterPage(
-                    onGoogleSignIn: _linkGoogle,
-                    googleBusy: _googleBusy,
-                    googleError: _googleError,
-                    onEmail: () => setState(() => _emailFlow = true),
-                    onBack: () => _pageController.previousPage(
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeInOut,
-                    ),
-                  ),
-                  // Código de referido (Quemia 7.6, Kristian):
-                  // PÁGINA APARTE, después del registro. Como la de
-                  // canjear de la app de Muse (regalo + 6
-                  // casillas). Opcional: se puede seguir con las
-                  // casillas vacías. Es la ÚLTIMA página (Quemia
-                  // 7.7): su botón termina el onboarding (guarda
-                  // el perfil) y se entra a la principal ya con
-                  // la cuenta puesta.
-                  _ReferralPage(
-                    referralController: _referralController,
-                    onNext: _finish,
-                  ),
-                ],
-              ),
-            ),
-            // Botón fijado abajo (diseño Duolingo §1.4): sólido teal
-            // + labio. Solo en la Bienvenida ("Continuar"): la
-            // Elección, la gemela, el registro y las demás tienen
-            // sus propios botones. Entra deslizándose desde abajo
-            // con opacidad (animación simple, como el botón del
-            // vídeo de Duolingo).
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-              child: _page == 0
-                  ? FadeSlideIn(
-                      key: const ValueKey('onb-bottom-0'),
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: DuoButton.primary(
-                          label: tr('obContinue').toUpperCase(),
-                          onPressed: _next,
-                          fontSize: 17,
-                        ),
+                    // La gemela que se presenta (Quemia 7.7, Kristian
+                    // 2026-11-13, vídeo de Duolingo): Brenda se
+                    // presenta en su bocadillo; atrás vuelve a la
+                    // elección y "Vamos" sigue a las preguntas.
+                    _MascotIntroPage(
+                      onBack: () => _pageController.previousPage(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
                       ),
-                    )
-                  : const SizedBox.shrink(),
-            ),
-          ],
+                      onVamos: _next,
+                    ),
+                    // Crear cuenta (Quemia 7.7, Kristian 2026-11-13,
+                    // flujo de Duolingo con contenido de Quemia): 3)
+                    // "¿Cómo supiste de Quemia?" — sin la pantalla
+                    // de elegir idioma de Duolingo, que no va.
+                    _SourcePage(
+                      selected: _source,
+                      onSelected: (v) => setState(() => _source = v),
+                      onConfirm: _confirmSource,
+                    ),
+                    // 4) "¿Cuánta química sabes?" (en vez de "¿Cuánto
+                    // inglés sabes?"): 5 niveles con barritas.
+                    _LevelPage(
+                      selected: _level,
+                      onSelected: (v) => setState(() => _level = v),
+                      onConfirm: _confirmLevel,
+                    ),
+                    // 5) Meta diaria (3/10/15/30 min): Quemia tiene
+                    // racha y días de práctica, así que encaja.
+                    _GoalPage(
+                      selected: _goalMinutes,
+                      onSelected: (v) => setState(() => _goalMinutes = v),
+                      onConfirm: _confirmGoal,
+                    ),
+                    // 6) Permiso de notificaciones: la MISMA página
+                    // del onboarding (no otra inventada). Aquí NO
+                    // termina el flujo: al continuar va a la racha.
+                    OnboardingNotificationsPage(onNext: _next),
+                    // 7) "¡Una nueva racha!": 1 día, la semana con
+                    // hoy marcado. Sin edad (Duolingo pide la edad;
+                    // Quemia no la pide).
+                    _StreakPage(onNext: _next),
+                    // 8) Aviso antes del registro (Quemia 7.7,
+                    // Kristian 2026-11-13, la pantalla de Duolingo
+                    // "¡No pierdas tu progreso! Vamos a crear tu
+                    // perfil."): Brenda con su bocadillo y
+                    // CONTINUAR. Con flecha atrás (Kristian
+                    // 2026-11-15: sin deslizar, también vuelve con
+                    // botón): vuelve a la racha.
+                    _ProfileNudgePage(
+                      onBack: () => _pageController.previousPage(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                      ),
+                      onNext: _next,
+                    ),
+                    // 9) Registro (Quemia 7.7, Kristian 2026-11-13,
+                    // como la pantalla de Duolingo: "Elige una opción
+                    // para registrarte y continuar" — Google y correo,
+                    // sin pedir nombre ni género. El nombre de usuario
+                    // se coge del correo).
+                    _RegisterPage(
+                      onGoogleSignIn: _linkGoogle,
+                      googleBusy: _googleBusy,
+                      googleError: _googleError,
+                      onEmail: () => setState(() => _emailFlow = true),
+                      onBack: () => _pageController.previousPage(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                      ),
+                    ),
+                    // Código de referido (Quemia 7.6, Kristian):
+                    // PÁGINA APARTE, después del registro. Como la de
+                    // canjear de la app de Muse (regalo + 6
+                    // casillas). Opcional: se puede seguir con las
+                    // casillas vacías. Es la ÚLTIMA página (Quemia
+                    // 7.7): su botón termina el onboarding (guarda
+                    // el perfil) y se entra a la principal ya con
+                    // la cuenta puesta.
+                    _ReferralPage(
+                      referralController: _referralController,
+                      onNext: _finish,
+                    ),
+                  ],
+                ),
+              ),
+              // Botón fijado abajo (diseño Duolingo §1.4): sólido teal
+              // + labio. Solo en la Bienvenida ("Continuar"): la
+              // Elección, la gemela, el registro y las demás tienen
+              // sus propios botones. Entra deslizándose desde abajo
+              // con opacidad (animación simple, como el botón del
+              // vídeo de Duolingo).
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+                child: _page == 0
+                    ? FadeSlideIn(
+                        key: const ValueKey('onb-bottom-0'),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: DuoButton.primary(
+                            label: tr('obContinue').toUpperCase(),
+                            onPressed: _next,
+                            fontSize: 17,
+                          ),
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -642,33 +858,37 @@ class _GoogleOnboardingFlow extends StatefulWidget {
 
 class _GoogleOnboardingFlowState extends State<_GoogleOnboardingFlow> {
   /// 0 = "Ya has iniciado sesión", 1 = código de referido,
-  /// 2 = notificaciones.
+  /// 2 = notificaciones. (Kristian 2026-11-16: el paso de elegir
+  /// nombre de usuario salió del registro; el nombre se pone
+  /// después en el perfil.)
   var _step = 0;
 
   /// Código de referido (Quemia 7.6, Kristian): tiene su propia
   /// pantalla aparte, igual que en el onboarding normal.
   final _referralController = TextEditingController();
 
-  /// Nombre de usuario (Quemia 7.7): del correo de Google.
-  String get _usernameBase =>
-      ReferralService.usernameBaseFromGoogle(widget.name, widget.email);
+  /// Tras "Ya has iniciado sesión": desde entrar se va directo a
+  /// la principal; desde registro, al referido (paso 1).
+  void _afterSignedIn() {
+    if (widget.fromSignIn) {
+      unawaited(widget.onFinish(widget.name));
+    } else {
+      setState(() => _step = 1);
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     // "Ya has iniciado sesión" avanza SOLO (Quemia 7.6, Kristian:
     // al iniciar sesión con Google, salta automáticamente): a los
-    // ~1,5 s pasa al código de referido sin tocar nada. Si el
+    // ~1,5 s pasa al referido sin tocar nada. Si el
     // usuario ya avanzó (no debería), no se toca. Desde la
     // pantalla de entrar no hay referido: termina y el padre
     // lleva a las preguntas.
     Future.delayed(const Duration(milliseconds: 1500), () {
       if (!mounted || _step != 0) return;
-      if (widget.fromSignIn) {
-        unawaited(widget.onFinish(widget.name));
-      } else {
-        setState(() => _step = 1);
-      }
+      _afterSignedIn();
     });
   }
 
@@ -679,10 +899,10 @@ class _GoogleOnboardingFlowState extends State<_GoogleOnboardingFlow> {
   }
 
   Future<void> _finish() async {
-    // Nombre de usuario (Quemia 7.7, Kristian 2026-11-13): se
-    // coge del correo y se reclama solo; si está ocupado, se cae
-    // a uno con sufijo. No se pregunta.
-    await ReferralService.claimUsername(_usernameBase);
+    // Sin reclamar nombre de usuario (Kristian 2026-11-16: la
+    // pantalla de elegir usuario salió del registro; el nombre se
+    // pone después en el perfil, con la tarjeta "¡Completa tu
+    // perfil!").
     // Código de referido (Quemia 7.6): se guarda en local y se
     // canjea solo en segundo plano cuando hay conexión.
     await ReferralService.saveOnboardingCode(_referralController.text);
@@ -696,97 +916,843 @@ class _GoogleOnboardingFlowState extends State<_GoogleOnboardingFlow> {
     final ink = isDark ? Colors.white : const Color(0xFF4B4B4B);
     final sub =
         isDark ? Colors.white.withValues(alpha: 0.7) : const Color(0xFF6B7280);
-    return Scaffold(
-      resizeToAvoidBottomInset: false,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // SIN barra de progreso (Quemia 7.7, Kristian
-            // 2026-11-13): el inicio no lleva barra arriba.
-            Expanded(
-              child: switch (_step) {
-                // 1) "Ya has iniciado sesión": la cuenta de Google.
-                0 => SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Center(
-                          child: Container(
-                            width: 96,
-                            height: 96,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF14B8A6),
-                              shape: BoxShape.circle,
+    // El atrás del teléfono hace lo mismo que la flecha de
+    // la pantalla (Kristian 2026-11-15: el atrás no sale
+    // de la app en el inicio).
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        if (_step > 0) setState(() => _step--);
+      },
+      child: Scaffold(
+        resizeToAvoidBottomInset: false,
+        body: SafeArea(
+          child: Column(
+            children: [
+              // SIN barra de progreso (Quemia 7.7, Kristian
+              // 2026-11-13): el inicio no lleva barra arriba.
+              Expanded(
+                child: switch (_step) {
+                  // 1) "Ya has iniciado sesión": la cuenta de Google.
+                  0 => SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Center(
+                            child: Container(
+                              width: 96,
+                              height: 96,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF14B8A6),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const LucideIcon(
+                                LucideIcons.check,
+                                size: 56,
+                                color: Colors.white,
+                              ),
                             ),
-                            child: const LucideIcon(
-                              LucideIcons.check,
-                              size: 56,
-                              color: Colors.white,
-                            ),
                           ),
-                        ),
-                        const SizedBox(height: 24),
-                        Text(
-                          tr('obGoogleSignedIn'),
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w800,
-                            color: ink,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          widget.name,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: ink,
-                          ),
-                        ),
-                        if (widget.email != null &&
-                            widget.email!.isNotEmpty) ...[
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 24),
                           Text(
-                            widget.email!,
+                            tr('obGoogleSignedIn'),
                             textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 15, color: sub),
+                            style: TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.w800,
+                              color: ink,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            widget.name,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: ink,
+                            ),
+                          ),
+                          if (widget.email != null &&
+                              widget.email!.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              widget.email!,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontSize: 15, color: sub),
+                            ),
+                          ],
+                          const SizedBox(height: 32),
+                          DuoButton.primary(
+                            label: tr('obNext').toUpperCase(),
+                            onPressed: _afterSignedIn,
+                            fontSize: 17,
                           ),
                         ],
-                        const SizedBox(height: 32),
-                        DuoButton.primary(
-                          label: tr('obNext').toUpperCase(),
-                          onPressed: () {
-                            if (widget.fromSignIn) {
-                              unawaited(widget.onFinish(widget.name));
-                            } else {
-                              setState(() => _step = 1);
-                            }
-                          },
-                          fontSize: 17,
+                      ),
+                    ),
+                  // 1) Código de referido: página aparte (regalo + 6
+                  // casillas), como la de canjear de la app de Muse.
+                  // Opcional: se puede saltar. Al continuar, a
+                  // notificaciones.
+                  1 => _ReferralPage(
+                      referralController: _referralController,
+                      onNext: () => setState(() => _step = 2),
+                    ),
+                  // 2) Notificaciones: la misma página del onboarding
+                  // normal; al continuar se guarda el perfil y se
+                  // entra a la app.
+                  _ => OnboardingNotificationsPage(onNext: _finish),
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Pantalla de elegir nombre de usuario (Kristian 2026-11-15:
+/// vuelve tras haberse quitado el 2026-11-13; 2026-11-16 SALIÓ
+/// del registro y ahora vive en el PERFIL, tras la tarjeta
+/// "¡Completa tu perfil!"). Muestra el nombre sugerido (primer
+/// nombre de la cuenta de Google o prefijo del correo, sin
+/// apellido) con dos caminos claros: dejarlo como está
+/// ("NO CAMBIAR") o escribir otro. Al escribir otro se comprueba
+/// en vivo si está cogido ([isTaken]); si lo está, salen
+/// sugerencias parecidas disponibles ([suggest]) para tocar una.
+/// Solo al confirmar se reclama el nombre (lo hace [onConfirm],
+/// con [ReferralService.claimUsername]); sin internet se guarda en
+/// local y se reclama después, como siempre. El inicio de sesión
+/// ("Ya tengo una cuenta") NO pasa por aquí: esos usuarios ya
+/// tienen nombre.
+///
+/// Modo perfil ([prefillField] = true, "Personaliza tu nombre de
+/// usuario"): el campo ya trae el sugerido escrito, no se enseña
+/// el bloque del sugerido ni el botón NO CAMBIAR (el campo ES la
+/// elección), y con [onSkip] sale el enlace "QUIZÁ MÁS TARDE" y
+/// con [onBack] la flecha para volver.
+class UsernameChoicePage extends StatefulWidget {
+  const UsernameChoicePage({
+    super.key,
+    required this.base,
+    required this.onConfirm,
+    this.isTaken,
+    this.suggest,
+    this.titleText,
+    this.bodyText,
+    this.prefillField = false,
+    this.onSkip,
+    this.onBack,
+  });
+
+  /// Nombre sugerido (ya limpio, sin apellido).
+  final String base;
+
+  /// Se llama SOLO al confirmar, con el nombre elegido.
+  final Future<void> Function(String chosen) onConfirm;
+
+  /// Comprueba si un nombre está cogido (por defecto
+  /// [ReferralService.isUsernameTaken]). Inyectable en tests.
+  final Future<bool> Function(String candidate)? isTaken;
+
+  /// Sugerencias parecidas disponibles (por defecto
+  /// [ReferralService.suggestUsernames]). Inyectable en tests.
+  final Future<List<String>> Function(String base)? suggest;
+
+  /// Título propio (por defecto el del registro). En el perfil:
+  /// "Personaliza tu nombre de usuario".
+  final String? titleText;
+
+  /// Texto propio bajo el título (por defecto el del registro).
+  final String? bodyText;
+
+  /// true en el perfil: el campo trae el sugerido ya escrito y
+  /// no se enseña el bloque del sugerido ni NO CAMBIAR.
+  final bool prefillField;
+
+  /// Si se pasa, sale el enlace "QUIZÁ MÁS TARDE" al final.
+  final VoidCallback? onSkip;
+
+  /// Si se pasa, sale la flecha de atrás y el atrás del teléfono
+  /// vuelve (si no, la pantalla no se puede cerrar sin elegir).
+  final VoidCallback? onBack;
+
+  @override
+  State<UsernameChoicePage> createState() => _UsernameChoicePageState();
+}
+
+class _UsernameChoicePageState extends State<UsernameChoicePage> {
+  final _customController = TextEditingController();
+  Timer? _debounce;
+
+  /// ¿Está cogido el nombre sugerido? null = aún comprobando.
+  bool? _baseTaken;
+
+  /// Estado del nombre escrito: null = vacío/sin comprobar,
+  /// true = libre, false = cogido.
+  bool? _customFree;
+
+  /// ¿Se está comprobando el nombre escrito ahora mismo?
+  var _checkingCustom = false;
+
+  /// Sugerencias para el nombre que está cogido (base o escrito).
+  var _suggestions = <String>[];
+
+  /// Confirmando (reclamando el nombre).
+  var _busy = false;
+
+  static String _clean(String value) {
+    final clean = value.replaceAll(RegExp(r'[^A-Za-zÀ-ÿ0-9]'), '');
+    return clean.length > 20 ? clean.substring(0, 20) : clean;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // En el perfil el campo ya trae el sugerido escrito (el
+    // usuario lo edita si quiere); la comprobación del sugerido
+    // dirá si ese nombre está libre o cogido.
+    if (widget.prefillField) {
+      _customController.text = widget.base;
+    }
+    // El sugerido también se comprueba: si está cogido, "NO
+    // CAMBIAR" no se puede usar y salen las sugerencias.
+    unawaited(_checkBase());
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _customController.dispose();
+    super.dispose();
+  }
+
+  Future<bool> _isTaken(String candidate) async {
+    final check = widget.isTaken ?? ReferralService.isUsernameTaken;
+    try {
+      return await check(candidate);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<List<String>> _suggest(String base) async {
+    final suggest = widget.suggest ?? ReferralService.suggestUsernames;
+    try {
+      return await suggest(base);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<void> _checkBase() async {
+    final taken = await _isTaken(widget.base);
+    if (!mounted) return;
+    List<String> suggestions = const [];
+    if (taken) suggestions = await _suggest(widget.base);
+    if (!mounted) return;
+    setState(() {
+      _baseTaken = taken;
+      if (taken) _suggestions = suggestions;
+      // En el perfil el campo trae el sugerido: su estado libre /
+      // cogido es el del campo (el botón de guardar se activa con
+      // él). Si el usuario ya escribió otra cosa, no se toca.
+      if (widget.prefillField &&
+          _clean(_customController.text) == _clean(widget.base)) {
+        _customFree = !taken;
+        _checkingCustom = false;
+      }
+    });
+  }
+
+  void _onCustomChanged(String value) {
+    final clean = _clean(value);
+    _debounce?.cancel();
+    if (clean.isEmpty) {
+      _customFree = null;
+      _checkingCustom = false;
+      _suggestions = const [];
+      return;
+    }
+    // En pruebas no hay temporizador: pumpAndSettle no termina
+    // nunca con un Timer vivo (igual que el reenvío del OTP).
+    if (isFlutterTest) {
+      unawaited(_checkCustom(clean));
+      return;
+    }
+    _checkingCustom = true;
+    _debounce = Timer(const Duration(milliseconds: 400), () {
+      unawaited(_checkCustom(clean));
+    });
+  }
+
+  Future<void> _checkCustom(String clean) async {
+    final taken = await _isTaken(clean);
+    if (!mounted) return;
+    // Si mientras tanto se borró el campo o se escribió otro
+    // nombre, este resultado ya no vale.
+    if (_clean(_customController.text) != clean) return;
+    List<String> suggestions = const [];
+    if (taken) suggestions = await _suggest(clean);
+    if (!mounted) return;
+    if (_clean(_customController.text) != clean) return;
+    setState(() {
+      _checkingCustom = false;
+      _customFree = !taken;
+      _suggestions = suggestions;
+    });
+  }
+
+  Future<void> _confirm(String chosen) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    await widget.onConfirm(chosen);
+    if (mounted) setState(() => _busy = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final ink = isDark ? Colors.white : const Color(0xFF4B4B4B);
+    final sub =
+        isDark ? Colors.white.withValues(alpha: 0.7) : const Color(0xFF6B7280);
+    final okColor = isDark ? const Color(0xFF5EEAD4) : const Color(0xFF0F9D58);
+    final errorColor = const Color(0xFFFF4B4B);
+    final customClean = _clean(_customController.text);
+    final baseFree = _baseTaken == false;
+    return PopScope(
+      // En el perfil se puede volver con el atrás del teléfono
+      // (onBack); en el registro no se salía sin elegir.
+      canPop: widget.onBack != null,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) widget.onBack?.call();
+      },
+      child: Scaffold(
+        resizeToAvoidBottomInset: false,
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+              24,
+              32,
+              24,
+              24 + MediaQuery.of(context).viewInsets.bottom,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (widget.onBack != null)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: IconButton(
+                      icon: const LucideIcon(LucideIcons.arrowLeft),
+                      tooltip: tr('closeWord'),
+                      onPressed: widget.onBack,
+                    ),
+                  ),
+                Text(
+                  widget.titleText ?? tr('obUsernameTitle'),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w800,
+                    color: ink,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  widget.bodyText ?? tr('obUsernameBody'),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 16, height: 1.4, color: sub),
+                ),
+                // En el perfil el campo ya trae el sugerido: no se
+                // enseña el bloque del sugerido ni NO CAMBIAR.
+                if (!widget.prefillField) ...[
+                  const SizedBox(height: 24),
+                  Text(
+                    tr('obUsernameSuggested'),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 15, color: sub),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    widget.base,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
+                      color: ink,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  if (_baseTaken == true) ...[
+                    Text(
+                      tr('obUsernameTaken'),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: errorColor,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _SuggestionChips(
+                      suggestions: _suggestions,
+                      onPick: _confirm,
+                      busy: _busy,
+                    ),
+                  ] else if (baseFree) ...[
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        LucideIcon(
+                          LucideIcons.check,
+                          size: 20,
+                          color: okColor,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          tr('obUsernameFree'),
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: okColor,
+                          ),
                         ),
                       ],
                     ),
+                  ],
+                  const SizedBox(height: 24),
+                  DuoButton.primary(
+                    label: tr('obUsernameKeep').toUpperCase(),
+                    onPressed:
+                        baseFree && !_busy ? () => _confirm(widget.base) : null,
+                    fontSize: 17,
                   ),
-                // 1) Código de referido: página aparte (regalo + 6
-                // casillas), como la de canjear de la app de Muse.
-                // Opcional: se puede saltar. Al continuar, a
-                // notificaciones.
-                1 => _ReferralPage(
-                    referralController: _referralController,
-                    onNext: () => setState(() => _step = 2),
+                  const SizedBox(height: 24),
+                  Text(
+                    tr('obUsernameOrWrite'),
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: ink,
+                    ),
                   ),
-                // 2) Notificaciones: la misma página del onboarding
-                // normal; al continuar se guarda el perfil y se
-                // entra a la app.
-                _ => OnboardingNotificationsPage(onNext: _finish),
-              },
+                  const SizedBox(height: 12),
+                ] else ...[
+                  const SizedBox(height: 24),
+                ],
+                QuemiaField(
+                  controller: _customController,
+                  hint: tr('obUsernameHint'),
+                  textCapitalization: TextCapitalization.none,
+                  textInputAction: TextInputAction.done,
+                  onChanged: (v) => setState(() => _onCustomChanged(v)),
+                ),
+                const SizedBox(height: 12),
+                if (_checkingCustom)
+                  Text(
+                    tr('obUsernameChecking'),
+                    style: TextStyle(fontSize: 15, color: sub),
+                  )
+                else if (_customFree == true)
+                  Row(
+                    children: [
+                      LucideIcon(
+                        LucideIcons.check,
+                        size: 20,
+                        color: okColor,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        tr('obUsernameFree'),
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: okColor,
+                        ),
+                      ),
+                    ],
+                  )
+                else if (_customFree == false) ...[
+                  Text(
+                    tr('obUsernameTaken'),
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: errorColor,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _SuggestionChips(
+                    suggestions: _suggestions,
+                    onPick: _confirm,
+                    busy: _busy,
+                  ),
+                ],
+                const SizedBox(height: 16),
+                DuoButton.secondary(
+                  label: tr('obUsernameUseThis').toUpperCase(),
+                  onPressed: _customFree == true && !_busy
+                      ? () => _confirm(customClean)
+                      : null,
+                  fontSize: 17,
+                ),
+                if (_busy) ...[
+                  const SizedBox(height: 16),
+                  const Center(
+                    child: SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2.5),
+                    ),
+                  ),
+                ],
+                // En el perfil se puede saltar ("QUIZÁ MÁS TARDE"):
+                // la tarjeta de completar perfil seguirá ahí hasta
+                // que ponga su nombre.
+                if (widget.onSkip != null) ...[
+                  const SizedBox(height: 16),
+                  Center(
+                    child: TextButton(
+                      onPressed: widget.onSkip,
+                      child: Text(
+                        tr('usernameSkip').toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: sub,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
-          ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+/// Pantalla de correo ya tomado (Quemia 7.7, Kristian 2026-11-15):
+/// PANTALLA ENTERA, no un cuadradito. Antes de mostrarse, el padre
+/// ya comprobó en el índice de correos si la cuenta tiene
+/// contraseña:
+///   - con contraseña (o sin saberlo): entrar con el correo o con
+///     Google; NUNCA se ofrece ponerle una contraseña, porque sería
+///     pedirlo de nuevo;
+///   - sin contraseña: entrar con Google o ponerle una contraseña
+///     (enlace de Firebase, como antes).
+/// Sale tanto desde la comprobación temprana (antes de la
+/// contraseña) como desde el fallo tardío del enlace (red de
+/// seguridad). "Ponerle una contraseña" manda el enlace y se queda
+/// en la pantalla con la confirmación.
+class EmailTakenPage extends StatefulWidget {
+  const EmailTakenPage({
+    super.key,
+    required this.email,
+    required this.hasPassword,
+    this.notice,
+    required this.onBack,
+    required this.onSignIn,
+    required this.onGoogle,
+    required this.onSetPassword,
+  });
+
+  /// El correo que ya tiene cuenta.
+  final String email;
+
+  /// ¿Tiene contraseña la cuenta? null = no se sabe.
+  final bool? hasPassword;
+
+  /// Aviso bajo el texto (p. ej. la cuenta de Google elegida no
+  /// era la de este correo). null = sin aviso.
+  final String? notice;
+
+  /// Volver al registro.
+  final VoidCallback onBack;
+
+  /// Entrar con el correo (abre el inicio de sesión con el correo
+  /// ya puesto).
+  final VoidCallback onSignIn;
+
+  /// Entrar con Google.
+  final Future<void> Function() onGoogle;
+
+  /// Ponerle una contraseña: OTP → Google → CREA TU CONTRASEÑA
+  /// dentro de la app (Kristian 2026-11-16). SIN el correo de
+  /// restablecer de Firebase: ese enlace ya no se manda en este
+  /// flujo. Solo se ofrece cuando la cuenta NO tiene contraseña.
+  final VoidCallback onSetPassword;
+
+  @override
+  State<EmailTakenPage> createState() => _EmailTakenPageState();
+}
+
+class _EmailTakenPageState extends State<EmailTakenPage> {
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final ink = isDark ? Colors.white : const Color(0xFF4B4B4B);
+    final sub =
+        isDark ? Colors.white.withValues(alpha: 0.7) : const Color(0xFF6B7280);
+    final body = switch (widget.hasPassword) {
+      true => tr('obTakenHasPasswordBody'),
+      false => tr('obTakenNoPasswordBody'),
+      null => tr('obTakenUnknownBody'),
+    };
+    // Con contraseña (o sin saberlo): entrar, nunca ponerle una.
+    final withPassword = widget.hasPassword != false;
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
+        resizeToAvoidBottomInset: false,
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: IconButton(
+                    onPressed: widget.onBack,
+                    icon: const LucideIcon(LucideIcons.arrowLeft, size: 28),
+                    color: ink,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  tr('obTakenTitle'),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w800,
+                    color: ink,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  widget.email,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: ink,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  body,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 16, height: 1.4, color: sub),
+                ),
+                if (widget.notice != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    widget.notice!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFFFF4B4B),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 24),
+                if (withPassword) ...[
+                  DuoButton.primary(
+                    label: tr('obTakenSignIn').toUpperCase(),
+                    onPressed: widget.onSignIn,
+                    fontSize: 17,
+                  ),
+                  const SizedBox(height: 16),
+                  DuoButton.secondary(
+                    label: tr('obEmailTakenGoogle').toUpperCase(),
+                    onPressed: () => widget.onGoogle(),
+                    fontSize: 17,
+                  ),
+                ] else ...[
+                  DuoButton.primary(
+                    label: tr('obEmailTakenGoogle').toUpperCase(),
+                    onPressed: () => widget.onGoogle(),
+                    fontSize: 17,
+                  ),
+                  const SizedBox(height: 16),
+                  DuoButton.secondary(
+                    label: tr('obTakenSetPassword').toUpperCase(),
+                    onPressed: widget.onSetPassword,
+                    fontSize: 17,
+                  ),
+                ],
+                const SizedBox(height: 24),
+                Center(
+                  child: TextButton(
+                    onPressed: widget.onBack,
+                    child: Text(
+                      tr('obBack'),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF3B82F6),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Paso "entra con Google" del flujo de crear contraseña
+/// (Kristian 2026-11-16): el OTP ya comprobó que el correo es
+/// suyo; ahora Google confirma que la cuenta es suya, porque
+/// Firebase solo deja ponerle contraseña a quien tenga la sesión
+/// abierta como dueño. El botón es el mismo ENTRAR CON GOOGLE
+/// de la pantalla de correo tomado.
+class _SetPasswordGoogleStep extends StatelessWidget {
+  const _SetPasswordGoogleStep({
+    required this.email,
+    required this.busy,
+    required this.error,
+    required this.onBack,
+    required this.onGoogle,
+  });
+
+  /// Correo tomado al que se le va a poner la contraseña.
+  final String email;
+
+  /// true mientras el enlace con Google está en marcha.
+  final bool busy;
+
+  /// Error del enlace con Google (null = sin error).
+  final String? error;
+
+  /// Volver a la pantalla de correo tomado.
+  final VoidCallback onBack;
+
+  /// Entrar con Google con esa misma cuenta.
+  final Future<void> Function() onGoogle;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final ink = isDark ? Colors.white : const Color(0xFF4B4B4B);
+    final sub =
+        isDark ? Colors.white.withValues(alpha: 0.7) : const Color(0xFF6B7280);
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        onBack();
+      },
+      child: Scaffold(
+        key: const ValueKey('setPasswordGoogleStep'),
+        resizeToAvoidBottomInset: false,
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: IconButton(
+                    onPressed: onBack,
+                    icon: const LucideIcon(LucideIcons.arrowLeft, size: 28),
+                    color: ink,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  tr('obSetPasswordGoogleTitle'),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w800,
+                    color: ink,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  tr('obSetPasswordGoogleBody').replaceFirst('%s', email),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 16, height: 1.4, color: sub),
+                ),
+                const SizedBox(height: 24),
+                DuoButton.primary(
+                  label: tr('obEmailTakenGoogle').toUpperCase(),
+                  onPressed: busy ? null : onGoogle,
+                  fontSize: 17,
+                ),
+                if (busy) ...[
+                  const SizedBox(height: 16),
+                  const Center(
+                    child: SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2.5),
+                    ),
+                  ),
+                ],
+                if (error != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    error!,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Sugerencias de nombre de usuario parecidas al que está cogido:
+/// una por línea, como botones secundarios. Tocar una la confirma
+/// directamente (ya se comprobó que está libre).
+class _SuggestionChips extends StatelessWidget {
+  const _SuggestionChips({
+    required this.suggestions,
+    required this.onPick,
+    required this.busy,
+  });
+
+  final List<String> suggestions;
+  final Future<void> Function(String chosen) onPick;
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context) {
+    if (suggestions.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final suggestion in suggestions) ...[
+          DuoButton.secondary(
+            label: suggestion,
+            onPressed: busy ? null : () => onPick(suggestion),
+            fontSize: 17,
+          ),
+          const SizedBox(height: 8),
+        ],
+      ],
     );
   }
 }
@@ -1633,167 +2599,6 @@ class _RegisterPage extends StatelessWidget {
   }
 }
 
-/// Campo de texto de las pantallas de correo (Quemia 7.7): el mismo
-/// estilo del campo de correo del registro — fondo blanco, radio 16,
-/// borde gris 2, foco teal claro — para que el correo, la contraseña
-/// y el nombre se vean iguales en claro y en oscuro.
-/// Contraseña segura (Kristian 2026-11-13: que no se pongan
-/// contraseñas fáciles): 8 caracteres como mínimo, una mayúscula,
-/// una minúscula, un número y un carácter especial. Solo se exige
-/// al CREAR la contraseña (registro por correo y olvidar
-/// contraseña); al entrar con una cuenta vieja no se pide nada
-/// (esa contraseña ya existe).
-bool _isStrongPassword(String password) {
-  if (password.length < 8) return false;
-  return password.contains(RegExp(r'[A-Z]')) &&
-      password.contains(RegExp(r'[a-z]')) &&
-      password.contains(RegExp(r'[0-9]')) &&
-      password.contains(RegExp(r'[^A-Za-z0-9]'));
-}
-
-/// Lista de reglas de la contraseña segura: cada regla con su
-/// check en teal cuando se cumple, gris cuando falta. Se enseña
-/// debajo del campo de contraseña (registro y olvidar contraseña)
-/// para que se vea qué falta sin adivinar.
-class _PasswordRules extends StatelessWidget {
-  const _PasswordRules({required this.password});
-
-  final String password;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final ink = isDark ? Colors.white : const Color(0xFF4B4B4B);
-    final sub =
-        isDark ? Colors.white.withValues(alpha: 0.7) : const Color(0xFF757575);
-    final rules = <(String, bool)>[
-      (tr('obPasswordReqLength'), password.length >= 8),
-      (tr('obPasswordReqUpper'), password.contains(RegExp(r'[A-Z]'))),
-      (tr('obPasswordReqLower'), password.contains(RegExp(r'[a-z]'))),
-      (tr('obPasswordReqNumber'), password.contains(RegExp(r'[0-9]'))),
-      (tr('obPasswordReqSpecial'), password.contains(RegExp(r'[^A-Za-z0-9]'))),
-    ];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final (label, met) in rules) ...[
-          Row(
-            children: [
-              Icon(
-                met ? Icons.check_circle : Icons.radio_button_unchecked,
-                size: 20,
-                color: met ? AppAccent.primary : sub,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: met ? FontWeight.w700 : FontWeight.normal,
-                    color: met ? ink : sub,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-        ],
-      ],
-    );
-  }
-}
-
-class _QuemiaField extends StatelessWidget {
-  const _QuemiaField({
-    required this.controller,
-    required this.hint,
-    this.keyboardType,
-    this.obscureText = false,
-    this.suffixIcon,
-    this.onChanged,
-    this.onSubmitted,
-    this.textInputAction,
-    this.textCapitalization = TextCapitalization.none,
-  });
-
-  final TextEditingController controller;
-  final String hint;
-  final TextInputType? keyboardType;
-  final bool obscureText;
-  final Widget? suffixIcon;
-  final ValueChanged<String>? onChanged;
-  final ValueChanged<String>? onSubmitted;
-  final TextInputAction? textInputAction;
-  final TextCapitalization textCapitalization;
-
-  @override
-  Widget build(BuildContext context) {
-    // En modo oscuro la casilla es OSCURA como en Duolingo
-    // (Kristian 2026-11-13: en Duolingo no son blancas). Antes el
-    // blanco estaba fijo y en oscuro se veía una caja blanca.
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return SizedBox(
-      height: 56,
-      child: TextField(
-        controller: controller,
-        keyboardType: keyboardType,
-        obscureText: obscureText,
-        textInputAction: textInputAction,
-        textCapitalization: textCapitalization,
-        onChanged: onChanged,
-        onSubmitted: onSubmitted,
-        style: TextStyle(
-          fontSize: 17,
-          fontWeight: FontWeight.w700,
-          color: isDark ? Colors.white : const Color(0xFF4B4B4B),
-        ),
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: TextStyle(
-            fontSize: 17,
-            fontWeight: FontWeight.normal,
-            color: isDark ? const Color(0xFFAFAFAF) : const Color(0xFF757575),
-          ),
-          suffixIcon: suffixIcon,
-          contentPadding: const EdgeInsets.symmetric(
-            vertical: 14,
-            horizontal: 16,
-          ),
-          filled: true,
-          fillColor: isDark ? AppAccent.darkCard : Colors.white,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            // Borde más marcado (Kristian 2026-11-13: las pantallas
-            // de correo se veían "opacas", sin contraste): el gris
-            // claro #E5E5E5 casi no se veía sobre blanco.
-            borderSide: BorderSide(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.2)
-                  : const Color(0xFFC7CBD1),
-              width: 2,
-            ),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: BorderSide(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.2)
-                  : const Color(0xFFC7CBD1),
-              width: 2,
-            ),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            // Enfocado: teal Quemia fuerte, no el menta pálido.
-            borderSide: BorderSide(color: AppAccent.primary, width: 2),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// Aviso antes del registro (Quemia 7.7, Kristian 2026-11-13: la
 /// pantalla de Duolingo "¡No pierdas tu progreso! Vamos a crear tu
 /// perfil."): el avatar arriba, el bocadillo debajo y CONTINUAR
@@ -1801,8 +2606,9 @@ class _QuemiaField extends StatelessWidget {
 /// el avatar"). Sin flecha atrás (como Duolingo): se vuelve
 /// deslizando.
 class _ProfileNudgePage extends StatelessWidget {
-  const _ProfileNudgePage({required this.onNext});
+  const _ProfileNudgePage({required this.onBack, required this.onNext});
 
+  final VoidCallback onBack;
   final VoidCallback onNext;
 
   @override
@@ -1814,10 +2620,20 @@ class _ProfileNudgePage extends StatelessWidget {
     final bubbleBorder =
         isDark ? Colors.white.withValues(alpha: 0.2) : const Color(0xFFE5E5E5);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 48, 24, 24),
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Flecha atrás arriba a la izquierda (Kristian
+          // 2026-11-15: sin deslizar, el aviso también vuelve
+          // con botón): vuelve a la racha.
+          Align(
+            alignment: Alignment.centerLeft,
+            child: IconButton(
+              onPressed: onBack,
+              icon: LucideIcon(LucideIcons.arrowLeft, color: ink),
+            ),
+          ),
           Expanded(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -1939,63 +2755,77 @@ class _OfflineFlowState extends State<_OfflineFlow> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final ink = isDark ? Colors.white : const Color(0xFF4B4B4B);
-    return Scaffold(
-      resizeToAvoidBottomInset: false,
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Align(
-              alignment: Alignment.centerLeft,
-              child: IconButton(
-                icon: const LucideIcon(LucideIcons.arrowLeft, size: 28),
-                onPressed: _step == 0
-                    ? widget.onBack
-                    : () => setState(() => _step = 0),
+    // El atrás del teléfono hace lo mismo que la flecha de
+    // la pantalla (Kristian 2026-11-15: el atrás no sale
+    // de la app en el inicio).
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        if (_step == 0) {
+          widget.onBack();
+        } else {
+          setState(() => _step = 0);
+        }
+      },
+      child: Scaffold(
+        resizeToAvoidBottomInset: false,
+        body: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: IconButton(
+                  icon: const LucideIcon(LucideIcons.arrowLeft, size: 28),
+                  onPressed: _step == 0
+                      ? widget.onBack
+                      : () => setState(() => _step = 0),
+                ),
               ),
-            ),
-            Expanded(
-              child: _step == 0
-                  ? Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Text(
-                            tr('obNameTitle'),
-                            style: TextStyle(
-                              fontSize: 28,
-                              fontWeight: FontWeight.w800,
-                              color: ink,
+              Expanded(
+                child: _step == 0
+                    ? Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              tr('obNameTitle'),
+                              style: TextStyle(
+                                fontSize: 28,
+                                fontWeight: FontWeight.w800,
+                                color: ink,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 24),
-                          _QuemiaField(
-                            controller: _nameController,
-                            hint: tr('obFirstNameHint'),
-                            textCapitalization: TextCapitalization.words,
-                            textInputAction: TextInputAction.done,
-                            onChanged: (_) => setState(() {}),
-                          ),
-                          const SizedBox(height: 16),
-                          DuoButton.primary(
-                            label: tr('obContinue').toUpperCase(),
-                            onPressed: _nameController.text.trim().isNotEmpty
-                                ? () => setState(() => _step = 1)
-                                : null,
-                            fontSize: 17,
-                          ),
-                        ],
+                            const SizedBox(height: 24),
+                            QuemiaField(
+                              controller: _nameController,
+                              hint: tr('obFirstNameHint'),
+                              textCapitalization: TextCapitalization.words,
+                              textInputAction: TextInputAction.done,
+                              onChanged: (_) => setState(() {}),
+                            ),
+                            const SizedBox(height: 16),
+                            DuoButton.primary(
+                              label: tr('obContinue').toUpperCase(),
+                              onPressed: _nameController.text.trim().isNotEmpty
+                                  ? () => setState(() => _step = 1)
+                                  : null,
+                              fontSize: 17,
+                            ),
+                          ],
+                        ),
+                      )
+                    : _GoalPage(
+                        selected: _goalMinutes,
+                        onSelected: (m) => setState(() => _goalMinutes = m),
+                        onConfirm: _finish,
+                        confirmLabel: 'obOfflineStart',
                       ),
-                    )
-                  : _GoalPage(
-                      selected: _goalMinutes,
-                      onSelected: (m) => setState(() => _goalMinutes = m),
-                      onConfirm: _finish,
-                      confirmLabel: 'obOfflineStart',
-                    ),
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -2017,6 +2847,7 @@ class _EmailOnboardingFlow extends StatefulWidget {
   const _EmailOnboardingFlow({
     required this.onBack,
     required this.onVerified,
+    required this.onEmailTaken,
   });
 
   /// Volver al registro (Google / correo).
@@ -2025,6 +2856,11 @@ class _EmailOnboardingFlow extends StatefulWidget {
   /// (correo, contraseña, nombre completo) tras verificar el OTP.
   final Future<void> Function(String email, String password, String fullName)
       onVerified;
+
+  /// El correo ya está cogido (comprobación temprana, antes de la
+  /// contraseña): el padre abre la pantalla de correo tomado con
+  /// (correo, ¿tiene contraseña?).
+  final void Function(String email, bool? hasPassword) onEmailTaken;
 
   @override
   State<_EmailOnboardingFlow> createState() => _EmailOnboardingFlowState();
@@ -2101,6 +2937,26 @@ class _EmailOnboardingFlowState extends State<_EmailOnboardingFlow> {
     });
   }
 
+  /// Comprobación temprana del correo (Kristian 2026-11-15):
+  /// ANTES de pedir la contraseña, se mira en el índice de correos
+  /// si ya está cogido y se dice ahí mismo. Si está cogido, se abre
+  /// la pantalla de correo tomado (el padre); si está libre o no se
+  /// pudo comprobar (sin internet, permiso, timeout), se sigue a la
+  /// contraseña como antes — el enlace al final lo dirá, como red
+  /// de seguridad.
+  Future<void> _checkEmailAndContinue() async {
+    if (!_validEmail(_email) || _busy) return;
+    setState(() => _busy = true);
+    final entry = await EmailIndex.lookup(_email);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (entry != null) {
+      widget.onEmailTaken(_email, entry.hasPassword);
+      return;
+    }
+    setState(() => _step = 1);
+  }
+
   Future<void> _sendOtp() async {
     setState(() {
       _busy = true;
@@ -2132,7 +2988,10 @@ class _EmailOnboardingFlowState extends State<_EmailOnboardingFlow> {
     } else if (clean.isEmpty && index > 0) {
       _otpNodes[index - 1].requestFocus();
     }
-    setState(() {});
+    // El error de un código viejo se limpia en cuanto se escribe
+    // uno nuevo: si no, el "incorrecto" se queda pegado aunque el
+    // código nuevo sea bueno.
+    setState(() => _error = null);
   }
 
   Future<void> _verifyOtp() async {
@@ -2141,15 +3000,34 @@ class _EmailOnboardingFlowState extends State<_EmailOnboardingFlow> {
       _busy = true;
       _error = null;
     });
-    final ok =
+    final result =
         await OtpService.verifyCode(_email, _otpCode, OtpPurpose.register);
     if (!mounted) return;
-    setState(() => _busy = false);
-    if (!ok) {
-      setState(() => _error = tr('obOtpInvalid'));
+    if (result != OtpVerifyResult.valid) {
+      setState(
+        () {
+          _busy = false;
+          _error = tr(switch (result) {
+            OtpVerifyResult.expired => 'obOtpExpired',
+            OtpVerifyResult.exhausted => 'obOtpAttemptsOut',
+            _ => 'obOtpInvalid',
+          });
+        },
+      );
       return;
     }
+    // CAUSA RAÍZ del bug "error y luego avanza" (Kristian
+    // 2026-11-15): antes _busy se soltaba AQUÍ, antes de enlazar
+    // la cuenta, así que mientras el enlace iba por la red el botón
+    // CONTINUAR volvía a estar activo; un segundo toque volvía a
+    // comprobar el código — que ya se había consumido — y salía
+    // "incorrecto", y de momento la primera comprobación terminaba
+    // y la pantalla avanzaba. Ahora _busy se mantiene hasta que el
+    // padre avanza de pantalla (o el enlace falla): un código
+    // correcto nunca muestra error y un segundo toque no hace nada.
     await widget.onVerified(_email, _password, _fullName);
+    if (!mounted) return;
+    setState(() => _busy = false);
   }
 
   Future<void> _resendOtp() async {
@@ -2187,279 +3065,302 @@ class _EmailOnboardingFlowState extends State<_EmailOnboardingFlow> {
     final sub = isDark
         ? scheme.onSurface.withValues(alpha: 0.75)
         : const Color(0xFF777777);
-    return Scaffold(
-      resizeToAvoidBottomInset: false,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(
-            24,
-            8,
-            24,
-            8 + MediaQuery.of(context).viewInsets.bottom,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: IconButton(
-                  onPressed: _back,
-                  icon: const LucideIcon(LucideIcons.arrowLeft, size: 28),
-                  color: ink,
-                ),
-              ),
-              const SizedBox(height: 8),
-              if (_step == 0) ...[
-                Text(
-                  tr('obEmailTitle'),
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w800,
+    // El atrás del teléfono hace lo mismo que la flecha de
+    // la pantalla (Kristian 2026-11-15: el atrás no sale
+    // de la app en el inicio).
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _back();
+      },
+      child: Scaffold(
+        resizeToAvoidBottomInset: false,
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+              24,
+              8,
+              24,
+              8 + MediaQuery.of(context).viewInsets.bottom,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: IconButton(
+                    onPressed: _back,
+                    icon: const LucideIcon(LucideIcons.arrowLeft, size: 28),
                     color: ink,
                   ),
                 ),
-                const SizedBox(height: 24),
-                _QuemiaField(
-                  controller: _emailController,
-                  hint: tr('obEmailFieldHint'),
-                  keyboardType: TextInputType.emailAddress,
-                  textInputAction: TextInputAction.done,
-                  onChanged: (_) => setState(() {}),
-                  onSubmitted: (_) {
-                    if (_validEmail(_email)) setState(() => _step = 1);
-                  },
-                ),
-                const SizedBox(height: 16),
-                DuoButton.primary(
-                  label: tr('obContinue').toUpperCase(),
-                  onPressed: _validEmail(_email)
-                      ? () => setState(() => _step = 1)
-                      : null,
-                  fontSize: 17,
-                ),
-              ] else if (_step == 1) ...[
-                Text(
-                  tr('obPasswordTitle'),
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w800,
-                    color: ink,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                _QuemiaField(
-                  controller: _passwordController,
-                  hint: tr('obPasswordHint'),
-                  obscureText: !_showPassword,
-                  textInputAction: TextInputAction.done,
-                  suffixIcon: IconButton(
-                    onPressed: () =>
-                        setState(() => _showPassword = !_showPassword),
-                    icon: LucideIcon(
-                      _showPassword ? LucideIcons.eyeOff : LucideIcons.eye,
-                      size: 24,
-                      color: const Color(0xFF3B82F6),
+                const SizedBox(height: 8),
+                if (_step == 0) ...[
+                  Text(
+                    tr('obEmailTitle'),
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
+                      color: ink,
                     ),
                   ),
-                  onChanged: (_) => setState(() {}),
-                  onSubmitted: (_) {
-                    if (_isStrongPassword(_password)) {
-                      setState(() => _step = 2);
-                    }
-                  },
-                ),
-                // Contraseña segura (Kristian 2026-11-13: nada de
-                // fáciles): la lista dice qué falta; CONTINUAR
-                // solo se activa con las 5 reglas cumplidas.
-                const SizedBox(height: 12),
-                _PasswordRules(password: _password),
-                const SizedBox(height: 16),
-                DuoButton.primary(
-                  label: tr('obContinue').toUpperCase(),
-                  onPressed: _isStrongPassword(_password)
-                      ? () => setState(() => _step = 2)
-                      : null,
-                  fontSize: 17,
-                ),
-              ] else if (_step == 2) ...[
-                Text(
-                  tr('obNameTitle'),
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w800,
-                    color: ink,
+                  const SizedBox(height: 24),
+                  QuemiaField(
+                    controller: _emailController,
+                    hint: tr('obEmailFieldHint'),
+                    keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.done,
+                    onChanged: (_) => setState(() {}),
+                    onSubmitted: (_) => _checkEmailAndContinue(),
                   ),
-                ),
-                const SizedBox(height: 24),
-                // Nombre y Apellido en DOS cajas separadas (Kristian
-                // 2026-11-13: "están demasiado unidas y feas" — la
-                // caja única de Duolingo con divisor no le gustó):
-                // cada campo con su propio borde y 12 px entre ellos.
-                _QuemiaField(
-                  controller: _firstNameController,
-                  hint: tr('obFirstNameHint'),
-                  textCapitalization: TextCapitalization.words,
-                  textInputAction: TextInputAction.next,
-                  onChanged: (_) => setState(() {}),
-                ),
-                const SizedBox(height: 12),
-                _QuemiaField(
-                  controller: _lastNameController,
-                  hint: tr('obLastNameHint'),
-                  textCapitalization: TextCapitalization.words,
-                  textInputAction: TextInputAction.done,
-                  onChanged: (_) => setState(() {}),
-                ),
-                const SizedBox(height: 16),
-                DuoButton.primary(
-                  label: tr('obCreateProfile').toUpperCase(),
-                  onPressed:
-                      _firstNameController.text.trim().isNotEmpty && !_busy
-                          ? _sendOtp
-                          : null,
-                  fontSize: 17,
-                ),
-                if (_busy) ...[
                   const SizedBox(height: 16),
-                  const Center(
-                    child: SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(strokeWidth: 2.5),
+                  DuoButton.primary(
+                    label: tr('obContinue').toUpperCase(),
+                    onPressed: _validEmail(_email) && !_busy
+                        ? _checkEmailAndContinue
+                        : null,
+                    fontSize: 17,
+                  ),
+                  if (_busy) ...[
+                    const SizedBox(height: 16),
+                    const Center(
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2.5),
+                      ),
+                    ),
+                  ],
+                ] else if (_step == 1) ...[
+                  Text(
+                    tr('obPasswordTitle'),
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
+                      color: ink,
                     ),
                   ),
-                ],
-              ] else ...[
-                Text(
-                  tr('obOtpTitle'),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w800,
-                    color: ink,
+                  const SizedBox(height: 24),
+                  QuemiaField(
+                    controller: _passwordController,
+                    hint: tr('obPasswordHint'),
+                    obscureText: !_showPassword,
+                    textInputAction: TextInputAction.done,
+                    suffixIcon: IconButton(
+                      onPressed: () =>
+                          setState(() => _showPassword = !_showPassword),
+                      icon: LucideIcon(
+                        _showPassword ? LucideIcons.eyeOff : LucideIcons.eye,
+                        size: 24,
+                        color: const Color(0xFF3B82F6),
+                      ),
+                    ),
+                    onChanged: (_) => setState(() {}),
+                    onSubmitted: (_) {
+                      if (isStrongPassword(_password)) {
+                        setState(() => _step = 2);
+                      }
+                    },
                   ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  tr('obOtpBody'),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 16, height: 1.4, color: sub),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  _email,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: ink,
+                  // Contraseña segura (Kristian 2026-11-13: nada de
+                  // fáciles): la lista dice qué falta; CONTINUAR
+                  // solo se activa con las 5 reglas cumplidas.
+                  const SizedBox(height: 12),
+                  PasswordRules(password: _password),
+                  const SizedBox(height: 16),
+                  DuoButton.primary(
+                    label: tr('obContinue').toUpperCase(),
+                    onPressed: isStrongPassword(_password)
+                        ? () => setState(() => _step = 2)
+                        : null,
+                    fontSize: 17,
                   ),
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    for (var i = 0; i < 6; i++)
-                      SizedBox(
-                        width: 48,
-                        height: 56,
-                        child: TextField(
-                          controller: _otpControllers[i],
-                          focusNode: _otpNodes[i],
-                          textAlign: TextAlign.center,
-                          cursorHeight: 28,
-                          textAlignVertical: TextAlignVertical.center,
-                          keyboardType: TextInputType.number,
-                          maxLength: 1,
-                          buildCounter: (context,
-                                  {required currentLength,
-                                  required isFocused,
-                                  maxLength}) =>
-                              null,
-                          onChanged: (v) => _onOtpBoxChanged(i, v),
-                          style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w800,
-                            color: AppAccent.primary,
-                          ),
-                          decoration: InputDecoration(
-                            counterText: '',
-                            contentPadding: EdgeInsets.zero,
-                            filled: true,
-                            fillColor:
-                                isDark ? AppAccent.darkCard : Colors.white,
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(16),
-                              borderSide: BorderSide(
-                                color: isDark
-                                    ? Colors.white.withValues(alpha: 0.2)
-                                    : const Color(0xFFC7CBD1),
-                                width: 2,
-                              ),
+                ] else if (_step == 2) ...[
+                  Text(
+                    tr('obNameTitle'),
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
+                      color: ink,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  // Nombre y Apellido en DOS cajas separadas (Kristian
+                  // 2026-11-13: "están demasiado unidas y feas" — la
+                  // caja única de Duolingo con divisor no le gustó):
+                  // cada campo con su propio borde y 12 px entre ellos.
+                  QuemiaField(
+                    controller: _firstNameController,
+                    hint: tr('obFirstNameHint'),
+                    textCapitalization: TextCapitalization.words,
+                    textInputAction: TextInputAction.next,
+                    onChanged: (_) => setState(() {}),
+                  ),
+                  const SizedBox(height: 12),
+                  QuemiaField(
+                    controller: _lastNameController,
+                    hint: tr('obLastNameHint'),
+                    textCapitalization: TextCapitalization.words,
+                    textInputAction: TextInputAction.done,
+                    onChanged: (_) => setState(() {}),
+                  ),
+                  const SizedBox(height: 16),
+                  DuoButton.primary(
+                    label: tr('obCreateProfile').toUpperCase(),
+                    // Apellido OBLIGATORIO (Kristian 2026-11-15): sin
+                    // apellido no se puede crear el perfil; antes
+                    // bastaba solo el nombre.
+                    onPressed: _firstNameController.text.trim().isNotEmpty &&
+                            _lastNameController.text.trim().isNotEmpty &&
+                            !_busy
+                        ? _sendOtp
+                        : null,
+                    fontSize: 17,
+                  ),
+                  if (_busy) ...[
+                    const SizedBox(height: 16),
+                    const Center(
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2.5),
+                      ),
+                    ),
+                  ],
+                ] else ...[
+                  Text(
+                    tr('obOtpTitle'),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
+                      color: ink,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    tr('obOtpBody'),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 16, height: 1.4, color: sub),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _email,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: ink,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      for (var i = 0; i < 6; i++)
+                        SizedBox(
+                          width: 48,
+                          height: 56,
+                          child: TextField(
+                            controller: _otpControllers[i],
+                            focusNode: _otpNodes[i],
+                            textAlign: TextAlign.center,
+                            cursorHeight: 28,
+                            textAlignVertical: TextAlignVertical.center,
+                            keyboardType: TextInputType.number,
+                            maxLength: 1,
+                            buildCounter: (context,
+                                    {required currentLength,
+                                    required isFocused,
+                                    maxLength}) =>
+                                null,
+                            onChanged: (v) => _onOtpBoxChanged(i, v),
+                            style: TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.w800,
+                              color: AppAccent.primary,
                             ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(16),
-                              borderSide: BorderSide(
-                                  color: AppAccent.primary, width: 2),
+                            decoration: InputDecoration(
+                              counterText: '',
+                              contentPadding: EdgeInsets.zero,
+                              filled: true,
+                              fillColor:
+                                  isDark ? AppAccent.darkCard : Colors.white,
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(16),
+                                borderSide: BorderSide(
+                                  color: isDark
+                                      ? Colors.white.withValues(alpha: 0.2)
+                                      : const Color(0xFFC7CBD1),
+                                  width: 2,
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(16),
+                                borderSide: BorderSide(
+                                    color: AppAccent.primary, width: 2),
+                              ),
                             ),
                           ),
                         ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  DuoButton.primary(
+                    label: tr('obContinue').toUpperCase(),
+                    onPressed:
+                        _otpCode.length == 6 && !_busy ? _verifyOtp : null,
+                    fontSize: 17,
+                  ),
+                  if (_busy) ...[
+                    const SizedBox(height: 16),
+                    const Center(
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2.5),
                       ),
+                    ),
                   ],
-                ),
-                const SizedBox(height: 24),
-                DuoButton.primary(
-                  label: tr('obContinue').toUpperCase(),
-                  onPressed: _otpCode.length == 6 && !_busy ? _verifyOtp : null,
-                  fontSize: 17,
-                ),
-                if (_busy) ...[
                   const SizedBox(height: 16),
-                  const Center(
-                    child: SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(strokeWidth: 2.5),
+                  Center(
+                    child: TextButton(
+                      onPressed: _resendIn > 0 || _busy ? null : _resendOtp,
+                      child: Text(
+                        _resendIn > 0
+                            ? '${tr('obOtpResend')} ($_resendIn)'
+                            : tr('obOtpResend'),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF3B82F6),
+                        ),
+                      ),
                     ),
                   ),
                 ],
-                const SizedBox(height: 16),
-                Center(
-                  child: TextButton(
-                    onPressed: _resendIn > 0 || _busy ? null : _resendOtp,
-                    child: Text(
-                      _resendIn > 0
-                          ? '${tr('obOtpResend')} ($_resendIn)'
-                          : tr('obOtpResend'),
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF3B82F6),
-                      ),
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    _error!,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
-                ),
-              ],
-              if (_error != null) ...[
-                const SizedBox(height: 12),
+                ],
+                const SizedBox(height: 24),
                 Text(
-                  _error!,
+                  tr('obRegisterTerms'),
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+                  style: TextStyle(fontSize: 14, height: 1.4, color: sub),
                 ),
+                const SizedBox(height: 8),
               ],
-              const SizedBox(height: 24),
-              Text(
-                tr('obRegisterTerms'),
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, height: 1.4, color: sub),
-              ),
-              const SizedBox(height: 8),
-            ],
+            ),
           ),
         ),
       ),
@@ -2480,6 +3381,7 @@ class _SignInPage extends StatefulWidget {
     this.googleError,
     required this.onBack,
     required this.onSignedIn,
+    this.initialEmail = '',
   });
 
   /// "Ingresa con Google": enlaza con Google (flujo corto).
@@ -2498,6 +3400,10 @@ class _SignInPage extends StatefulWidget {
   /// el progreso y entra a la principal.
   final Future<void> Function() onSignedIn;
 
+  /// Correo ya puesto (pantalla de correo tomado → entrar con el
+  /// correo que ya se escribió).
+  final String initialEmail;
+
   @override
   State<_SignInPage> createState() => _SignInPageState();
 }
@@ -2510,6 +3416,12 @@ class _SignInPageState extends State<_SignInPage> {
   String? _error;
   var _forgot = false;
   String? _resetDone;
+
+  @override
+  void initState() {
+    super.initState();
+    _emailController.text = widget.initialEmail;
+  }
 
   @override
   void dispose() {
@@ -2555,198 +3467,209 @@ class _SignInPageState extends State<_SignInPage> {
         }),
       );
     }
-    return Scaffold(
-      resizeToAvoidBottomInset: false,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(
-            24,
-            8,
-            24,
-            8 + MediaQuery.of(context).viewInsets.bottom,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: IconButton(
-                  onPressed: widget.onBack,
-                  icon: const LucideIcon(LucideIcons.arrowLeft, size: 28),
-                  color: ink,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                tr('obSignInTitle'),
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w800,
-                  color: ink,
-                ),
-              ),
-              const SizedBox(height: 24),
-              _QuemiaField(
-                controller: _emailController,
-                hint: tr('obEmailHint'),
-                keyboardType: TextInputType.emailAddress,
-                textInputAction: TextInputAction.next,
-                onChanged: (_) => setState(() {}),
-              ),
-              const SizedBox(height: 12),
-              _QuemiaField(
-                controller: _passwordController,
-                hint: tr('obPasswordHint'),
-                obscureText: !_showPassword,
-                textInputAction: TextInputAction.done,
-                suffixIcon: IconButton(
-                  onPressed: () =>
-                      setState(() => _showPassword = !_showPassword),
-                  icon: LucideIcon(
-                    _showPassword ? LucideIcons.eyeOff : LucideIcons.eye,
-                    size: 24,
-                    color: blue,
+    // El atrás del teléfono hace lo mismo que la flecha: vuelve
+    // a la elección (Kristian 2026-11-15: el atrás no sale de la
+    // app en el inicio). El flujo de olvidar contraseña lleva su
+    // propio PopScope dentro, así que aquí solo está el formulario.
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        widget.onBack();
+      },
+      child: Scaffold(
+        resizeToAvoidBottomInset: false,
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+              24,
+              8,
+              24,
+              8 + MediaQuery.of(context).viewInsets.bottom,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: IconButton(
+                    onPressed: widget.onBack,
+                    icon: const LucideIcon(LucideIcons.arrowLeft, size: 28),
+                    color: ink,
                   ),
                 ),
-                onChanged: (_) => setState(() {}),
-                onSubmitted: (_) => _signIn(),
-              ),
-              if (_error != null) ...[
                 const SizedBox(height: 8),
                 Text(
-                  _error!,
-                  textAlign: TextAlign.center,
+                  tr('obSignInTitle'),
                   style: TextStyle(
-                    fontSize: 15,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontSize: 28,
+                    fontWeight: FontWeight.w800,
+                    color: ink,
                   ),
                 ),
-              ],
-              if (_resetDone != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  _resetDone!,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: AppAccent.primary,
-                  ),
+                const SizedBox(height: 24),
+                QuemiaField(
+                  controller: _emailController,
+                  hint: tr('obEmailHint'),
+                  keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.next,
+                  onChanged: (_) => setState(() {}),
                 ),
-              ],
-              const SizedBox(height: 16),
-              DuoButton.primary(
-                label: tr('obSignInButton').toUpperCase(),
-                onPressed: _emailController.text.trim().isNotEmpty &&
-                        _passwordController.text.isNotEmpty &&
-                        !_busy
-                    ? _signIn
-                    : null,
-                fontSize: 17,
-              ),
-              if (_busy) ...[
-                const SizedBox(height: 16),
-                const Center(
-                  child: SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2.5),
-                  ),
-                ),
-              ],
-              const SizedBox(height: 8),
-              Center(
-                child: TextButton(
-                  onPressed: () => setState(() => _forgot = true),
-                  child: Text(
-                    tr('obForgotPassword').toUpperCase(),
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: blueText,
+                const SizedBox(height: 12),
+                QuemiaField(
+                  controller: _passwordController,
+                  hint: tr('obPasswordHint'),
+                  obscureText: !_showPassword,
+                  textInputAction: TextInputAction.done,
+                  suffixIcon: IconButton(
+                    onPressed: () =>
+                        setState(() => _showPassword = !_showPassword),
+                    icon: LucideIcon(
+                      _showPassword ? LucideIcons.eyeOff : LucideIcons.eye,
+                      size: 24,
+                      color: blue,
                     ),
                   ),
+                  onChanged: (_) => setState(() {}),
+                  onSubmitted: (_) => _signIn(),
                 ),
-              ),
-              const SizedBox(height: 16),
-              // Google (Duolingo: "INGRESA CON GOOGLE", G real +
-              // texto azul, botón secundario con labio).
-              SizedBox(
-                width: double.infinity,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    SizedBox(
-                      width: double.infinity,
-                      child: DuoButton.secondary(
-                        label: '',
-                        onPressed:
-                            widget.googleBusy || widget.onGoogleSignIn == null
-                                ? null
-                                : () => widget.onGoogleSignIn!(),
-                        textColor: blue,
-                        edgeColor: const Color(0xFFBFDBFE),
-                        fontSize: 17,
+                if (_error != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    _error!,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+                if (_resetDone != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    _resetDone!,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppAccent.primary,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                DuoButton.primary(
+                  label: tr('obSignInButton').toUpperCase(),
+                  onPressed: _emailController.text.trim().isNotEmpty &&
+                          _passwordController.text.isNotEmpty &&
+                          !_busy
+                      ? _signIn
+                      : null,
+                  fontSize: 17,
+                ),
+                if (_busy) ...[
+                  const SizedBox(height: 16),
+                  const Center(
+                    child: SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2.5),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 8),
+                Center(
+                  child: TextButton(
+                    onPressed: () => setState(() => _forgot = true),
+                    child: Text(
+                      tr('obForgotPassword').toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: blueText,
                       ),
                     ),
-                    IgnorePointer(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            widget.googleBusy
-                                ? const SizedBox(
-                                    width: 22,
-                                    height: 22,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2.5),
-                                  )
-                                : const GoogleGIcon(size: 24),
-                            const SizedBox(width: 8),
-                            Flexible(
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Text(
-                                  tr('obSignInWithGoogle').toUpperCase(),
-                                  maxLines: 1,
-                                  style: TextStyle(
-                                    fontSize: 17,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 0.6,
-                                    color: widget.googleBusy
-                                        ? const Color(0xFFAFAFAF)
-                                        : blueText,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                // Google (Duolingo: "INGRESA CON GOOGLE", G real +
+                // texto azul, botón secundario con labio).
+                SizedBox(
+                  width: double.infinity,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      SizedBox(
+                        width: double.infinity,
+                        child: DuoButton.secondary(
+                          label: '',
+                          onPressed:
+                              widget.googleBusy || widget.onGoogleSignIn == null
+                                  ? null
+                                  : () => widget.onGoogleSignIn!(),
+                          textColor: blue,
+                          edgeColor: const Color(0xFFBFDBFE),
+                          fontSize: 17,
+                        ),
+                      ),
+                      IgnorePointer(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              widget.googleBusy
+                                  ? const SizedBox(
+                                      width: 22,
+                                      height: 22,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2.5),
+                                    )
+                                  : const GoogleGIcon(size: 24),
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    tr('obSignInWithGoogle').toUpperCase(),
+                                    maxLines: 1,
+                                    style: TextStyle(
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.6,
+                                      color: widget.googleBusy
+                                          ? const Color(0xFFAFAFAF)
+                                          : blueText,
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-              if (widget.googleError != null) ...[
-                const SizedBox(height: 12),
-                Text(
-                  widget.googleError!,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ],
                   ),
                 ),
+                if (widget.googleError != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    widget.googleError!,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 24),
+                Text(
+                  tr('obRegisterTerms'),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 14, height: 1.4, color: sub),
+                ),
+                const SizedBox(height: 8),
               ],
-              const SizedBox(height: 24),
-              Text(
-                tr('obRegisterTerms'),
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, height: 1.4, color: sub),
-              ),
-              const SizedBox(height: 8),
-            ],
+            ),
           ),
         ),
       ),
@@ -2828,116 +3751,126 @@ class _ForgotPasswordFlowState extends State<_ForgotPasswordFlow> {
     final sub = isDark
         ? scheme.onSurface.withValues(alpha: 0.75)
         : const Color(0xFF777777);
-    return Scaffold(
-      resizeToAvoidBottomInset: false,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(
-            24,
-            8,
-            24,
-            8 + MediaQuery.of(context).viewInsets.bottom,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: IconButton(
-                  onPressed: _back,
-                  icon: const LucideIcon(LucideIcons.arrowLeft, size: 28),
-                  color: ink,
-                ),
-              ),
-              const SizedBox(height: 8),
-              if (_step == 0) ...[
-                Text(
-                  tr('obResetTitle'),
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w800,
+    // El atrás del teléfono hace lo mismo que la flecha de
+    // la pantalla (Kristian 2026-11-15: el atrás no sale
+    // de la app en el inicio).
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _back();
+      },
+      child: Scaffold(
+        resizeToAvoidBottomInset: false,
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+              24,
+              8,
+              24,
+              8 + MediaQuery.of(context).viewInsets.bottom,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: IconButton(
+                    onPressed: _back,
+                    icon: const LucideIcon(LucideIcons.arrowLeft, size: 28),
                     color: ink,
                   ),
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  tr('obResetBody'),
-                  style: TextStyle(fontSize: 16, height: 1.4, color: sub),
-                ),
-                const SizedBox(height: 24),
-                _QuemiaField(
-                  controller: _emailController,
-                  hint: tr('obEmailFieldHint'),
-                  keyboardType: TextInputType.emailAddress,
-                  textInputAction: TextInputAction.done,
-                  onChanged: (_) => setState(() {}),
-                  onSubmitted: (_) {
-                    if (_validEmail(_email)) _sendLink();
-                  },
-                ),
-                const SizedBox(height: 16),
-                DuoButton.primary(
-                  label: tr('obContinue').toUpperCase(),
-                  onPressed: _validEmail(_email) && !_busy ? _sendLink : null,
-                  fontSize: 17,
-                ),
-              ] else ...[
-                Center(
-                  child: Container(
-                    width: 72,
-                    height: 72,
-                    decoration: BoxDecoration(
-                      color: AppAccent.primary.withValues(alpha: 0.12),
-                      shape: BoxShape.circle,
-                    ),
-                    child: LucideIcon(
-                      LucideIcons.mail,
-                      size: 36,
-                      color: AppAccent.primary,
+                const SizedBox(height: 8),
+                if (_step == 0) ...[
+                  Text(
+                    tr('obResetTitle'),
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
+                      color: ink,
                     ),
                   ),
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  tr('obResetLinkSent'),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    color: ink,
-                    height: 1.3,
+                  const SizedBox(height: 12),
+                  Text(
+                    tr('obResetBody'),
+                    style: TextStyle(fontSize: 16, height: 1.4, color: sub),
                   ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  _email,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: ink,
+                  const SizedBox(height: 24),
+                  QuemiaField(
+                    controller: _emailController,
+                    hint: tr('obEmailFieldHint'),
+                    keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.done,
+                    onChanged: (_) => setState(() {}),
+                    onSubmitted: (_) {
+                      if (_validEmail(_email)) _sendLink();
+                    },
                   ),
-                ),
-                const SizedBox(height: 24),
-                DuoButton.primary(
-                  label: tr('obContinue').toUpperCase(),
-                  onPressed: widget.onDone,
-                  fontSize: 17,
-                ),
+                  const SizedBox(height: 16),
+                  DuoButton.primary(
+                    label: tr('obContinue').toUpperCase(),
+                    onPressed: _validEmail(_email) && !_busy ? _sendLink : null,
+                    fontSize: 17,
+                  ),
+                ] else ...[
+                  Center(
+                    child: Container(
+                      width: 72,
+                      height: 72,
+                      decoration: BoxDecoration(
+                        color: AppAccent.primary.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: LucideIcon(
+                        LucideIcons.mail,
+                        size: 36,
+                        color: AppAccent.primary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    tr('obResetLinkSent'),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: ink,
+                      height: 1.3,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    _email,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: ink,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  DuoButton.primary(
+                    label: tr('obContinue').toUpperCase(),
+                    onPressed: widget.onDone,
+                    fontSize: 17,
+                  ),
+                ],
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    _error!,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 8),
               ],
-              if (_error != null) ...[
-                const SizedBox(height: 12),
-                Text(
-                  _error!,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-              const SizedBox(height: 8),
-            ],
+            ),
           ),
         ),
       ),
@@ -3665,25 +4598,30 @@ class _StreakPage extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // En pantallas cortas (p. ej. 600 pt de alto en
+              // pruebas) el contenido no cabe y desbordaba 45 pt:
+              // con scroll no se corta nada; en el teléfono (852+)
+              // todo cabe y no se nota el cambio.
               Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // Llama de Lottie (Kristian 2026-11-13: "usa
-                    // esto de Lottie, quita a la chica y ese fuego,
-                    // y pon este en movimiento"; 2026-11-14 mandó
-                    // la llama nueva "fireeeeee" y pidió que suene
-                    // una sola vez al abrir la página y luego quede
-                    // quieta): la animación "streak-fire" de
-                    // LottieFiles, sin Brenda y sin la llama
-                    // vectorial dibujada.
-                    _PopIn(
-                      child: const PlayOnceLottie(
-                        asset: 'assets/streak_fire.json',
-                        width: 260,
-                        height: 220,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // Llama de Lottie (Kristian 2026-11-13: "usa
+                      // esto de Lottie, quita a la chica y ese fuego,
+                      // y pon este en movimiento"; 2026-11-14 mandó
+                      // la llama nueva "fireeeeee" y pidió que suene
+                      // una sola vez al abrir la página y luego quede
+                      // quieta): la animación "streak-fire" de
+                      // LottieFiles, sin Brenda y sin la llama
+                      // vectorial dibujada.
+                      _PopIn(
+                        child: const PlayOnceLottie(
+                          asset: 'assets/streak_fire.json',
+                          width: 260,
+                          height: 220,
+                        ),
                       ),
-                    ),
                     const SizedBox(height: 16),
                     FadeSlideIn(
                       delay: const Duration(milliseconds: 100),
@@ -3775,6 +4713,7 @@ class _StreakPage extends StatelessWidget {
                       ],
                     ),
                   ],
+                  ),
                 ),
               ),
               FadeSlideIn(

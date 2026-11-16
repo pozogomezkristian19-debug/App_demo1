@@ -133,30 +133,35 @@ void main() {
   });
 
   group('Trofeos en la cabecera de Cuenta', () {
-    testWidgets('sin trofeos: 0/10 en la cabecera, sin tarjeta',
+    testWidgets('sin trofeos: 0/10 en el RESUMEN, sin tarjeta',
         (tester) async {
       await pumpCuenta(tester);
-      // Sin "Mis trofeos": el contador vive en la cabecera, junto
-      // al título "Cuenta" (Kristian, 2026-11-14).
+      // Sin "Mis trofeos": el contador vive en el RESUMEN del
+      // perfil (Kristian, 2026-11-14). 2026-11-16 (perfil estilo
+      // Duolingo): "0/10" sale dos veces en el RESUMEN — Trofeos
+      // (0/10 trofeos de tema) y Logros (0/10 logros) — los dos a
+      // 16 pt (el valor del RESUMEN).
       expect(find.text(tr('trophiesTitle')), findsNothing);
-      // "0/10" sale dos veces: Logros (0/10 logros) y el trofeíto
-      // de la cabecera. Se distingue por su tamaño (15 pt).
       expect(find.text('0/10'), findsNWidgets(2));
       expect(
           find.byWidgetPredicate((w) =>
               w is Text &&
               w.data == '0/10' &&
-              w.style?.fontSize == 15),
-          findsOneWidget);
+              w.style?.fontSize == 16),
+          findsNWidgets(2));
     });
 
-    testWidgets('con un trofeo ganado: 1/10 en la cabecera',
+    testWidgets('con un trofeo ganado: 1/10 en el RESUMEN',
         (tester) async {
       ProgressService.instance.recordScore(
           ProgressService.topicExamTestId('estequiometria'), 85);
       await pumpCuenta(tester);
       expect(find.text(tr('trophiesTitle')), findsNothing);
+      // Trofeos 1/10 (el examen del tema da el trofeo); Logros
+      // sigue 0/10 (el logro "Tema completado" pide el tema
+      // completo, no solo el examen).
       expect(find.text('1/10'), findsOneWidget);
+      expect(find.text('0/10'), findsOneWidget);
     });
   });
 }

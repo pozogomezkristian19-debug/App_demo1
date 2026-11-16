@@ -214,13 +214,15 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: ThemeData(useMaterial3: true),
-          home: Scaffold(
-            body: AccountScreen(
-              onOpenScreen: opened.add,
-              onShowAbout: () {},
-              onShowShareApp: () {},
-              trackTopics: const [],
-            ),
+          // 2026-11-16: la pantalla COMPLETA (AccountProfilePage),
+          // no solo el cuerpo: el nombre vive SOLO en el título
+          // de la AppBar (el nombre bajo la foto se quitó en el
+          // lote de 11 puntos: el nombre aparece UNA vez).
+          home: AccountProfilePage(
+            onOpenScreen: opened.add,
+            onShowAbout: () {},
+            onShowShareApp: () {},
+            trackTopics: const [],
           ),
         ),
       );
@@ -273,11 +275,13 @@ void main() {
       UserPrefs.userName = 'Kristian';
       UserPrefs.userGender = 'Masculino';
       await pumpAccount(tester);
-      // (revert saludo 2026-11-13: el saludo de la app principal
-      // volvió a "Bienvenido [primer nombre]" — el nombre solo
-      // ("Kristian") era del cambio de las 00:35, que era para el
-      // Admin. El saludo es un solo Text, así que se busca entero.)
-      expect(find.text('Bienvenido Kristian'), findsOneWidget);
+      // 2026-11-16 (perfil estilo Duolingo): el saludo "Bienvenido
+      // Kristian" ya no existe — el nombre vive SOLO en el título
+      // de la AppBar (el nombre bajo la foto se quitó: aparece UNA
+      // vez). El género sigue sin mostrarse escrito en ningún
+      // sitio de Cuenta.
+      expect(find.text('Bienvenido Kristian'), findsNothing);
+      expect(find.text('Kristian'), findsWidgets);
       expect(find.text('Masculino'), findsNothing);
       expect(find.text('Femenino'), findsNothing);
       // Tampoco en Estadísticas: no hay ninguna píldora ni fila

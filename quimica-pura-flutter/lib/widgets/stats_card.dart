@@ -5,7 +5,7 @@
 // vez: la cabecera de Cuenta ya no tiene su propia fila de
 // estadísticas.
 //
-// Las vidas usan el chip de corazón + número (nunca la fila de 5
+// Las vidas usan el chip de corazón + número (nunca la fila de 10
 // corazones); los Puntos usan la ESTRELLA DORADA de Lucide (como
 // la app predeterminada; Kristian, 2026-11-14 ~13:45: "Puntos,
 // vidas ponlo como la app preterminada, no estos cambios que lo
@@ -34,6 +34,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/localization.dart';
+import '../services/premium_service.dart';
 import '../services/progress.dart';
 import 'animated_number.dart';
 import 'lives_chip.dart';
@@ -112,9 +113,19 @@ class StatsCard extends StatelessWidget {
         children: [
           cell(
             const LivesHeart(size: 22),
-            AnimatedNumber(
-              value: p.livesLeft,
-              style: valueStyle,
+            // Corazones ilimitados (SOLO Premium PAGADO): ∞ en vez
+            // del número, igual que en la píldora
+            // de la barra superior y en Mis estadísticas. La
+            // prueba NO da ∞ (Kristian 2026-11-16). El corazón
+            // sigue siendo el mismo; solo el número pasa a ∞.
+            ValueListenableBuilder<bool>(
+              valueListenable: PremiumService.paidPremiumNotifier,
+              builder: (context, isPaidPremium, _) => isPaidPremium
+                  ? Text('∞', style: valueStyle)
+                  : AnimatedNumber(
+                      value: p.livesLeft,
+                      style: valueStyle,
+                    ),
             ),
             tr('livesTitle'),
           ),

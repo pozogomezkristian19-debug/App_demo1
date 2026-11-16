@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Contenido del aviso de la cuenta atrás EN VIVO (Kristian
+     2026-11-16): IGUAL que la notificación de Duolingo de su
+     captura: icono de la melliza a la izquierda, título a la
+     derecha y la cuenta atrás en ROJO debajo del título. El
+     Chronometer va bajando solo, segundo a segundo, sin que la app
+     tenga que re-publicar el aviso (es un RemoteViews, el sistema
+     lo actualiza). Sin cabecera de sistema ni texto de cuerpo:
+     solo icono + título + cuenta atrás, como Duolingo. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:padding="12dp"
+    android:gravity="center_vertical">
+
+    <ImageView
+        android:id="@+id/live_icon"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:scaleType="centerCrop" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_marginStart="12dp"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/live_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#FFFFFF"
+            android:textSize="17sp"
+            android:maxLines="2" />
+
+        <Chronometer
+            android:id="@+id/live_countdown"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#FF453A"
+            android:textSize="16sp" />
+    </LinearLayout>
+</LinearLayout>

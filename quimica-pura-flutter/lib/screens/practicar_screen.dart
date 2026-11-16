@@ -17,6 +17,8 @@ import '../services/localization.dart';
 import '../services/nav_requests.dart';
 import '../services/numeric_answer.dart';
 import '../services/points.dart';
+import '../services/premium.dart';
+import '../services/premium_service.dart';
 import '../services/progress.dart';
 import '../services/question_generator.dart';
 import '../services/referral_service.dart';
@@ -24,6 +26,7 @@ import '../services/sound_service.dart';
 import '../services/user_prefs.dart';
 import '../widgets/brand_logo.dart';
 import '../widgets/celebration.dart';
+import '../widgets/trial_banner.dart';
 import '../widgets/report_question.dart';
 import '../widgets/simple_quiz.dart';
 import '../screens/calculator_screen.dart';
@@ -44,7 +47,7 @@ import '../widgets/twin_avatars.dart';
 //   Cada respuesta suma o resta puntos del saldo total (ver points.dart).
 // - Abandonar un nivel en curso (Salir o atrás) cuesta 1 vida; hay 5 al
 //   día y se reponen cada día nuevo. Con 0 vidas no se puede empezar.
-//   Ganar un nivel completo devuelve 1 vida (hasta 5). Las reglas
+//   Ganar un nivel completo devuelve 1 vida (hasta 10). Las reglas
 //   ("¿Cómo se juega?") viven como PANTALLA COMPLETA en Cuenta
 //   (ronda fix5, punto 1): el auto-show de la primera entrada a
 //   Niveles ya no existe, al abrir la app lo primero que se ve son
@@ -142,6 +145,15 @@ class PracticarScreen extends StatefulWidget {
   @visibleForTesting
   static Random Function() randomFactory = Random.new;
 
+  /// Tiempo transcurrido fijo para los goldens (solo tests): con
+  /// valor, la pantalla de resultado muestra ese tiempo en vez del
+  /// cronómetro real. El cronómetro mide tiempo real y el dígito de
+  /// segundos cambia entre pasadas (0-4 s según la carga de la
+  /// máquina), así que sin esto el golden del resultado no es
+  /// determinista. null = comportamiento normal.
+  @visibleForTesting
+  static int? debugElapsedMsOverride;
+
   /// Avisa a HomeScreen cuando empieza/termina una sesión de juego
   /// (quiz de nivel, repaso o examen mixto en línea): mientras hay
   /// sesión activa, la barra inferior y la barra de arriba se
@@ -184,8 +196,7 @@ class _PracticarScreenState extends State<PracticarScreen> {
   }
 
   void _onScroll() {
-    final show = _scrollController.hasClients &&
-        _scrollController.offset > 600;
+    final show = _scrollController.hasClients && _scrollController.offset > 600;
     if (show != _showTopButton) {
       setState(() => _showTopButton = show);
     }
@@ -228,6 +239,21 @@ class _PracticarScreenState extends State<PracticarScreen> {
     // Petición del menú ("Repasar mis errores"): empieza el repaso.
     if (NavRequests.startReview) {
       NavRequests.startReview = false;
+      // Mis errores es Premium: el usuario gratis ve el
+      // candado (el paywall) en vez del repaso.
+      if (premiumSectionLocked(
+        isPremium: PremiumService.isPremiumNow,
+        section: PremiumLockedSection.misErrores,
+      )) {
+        // 2026-11-16: NO se pide el paywall en seco desde aquí —
+        // esto corre en didChangeDependencies/didUpdateWidget (EN
+        // PLENO BUILD) y requestPaywall empuja el Navigator en el
+        // acto ("setState() called during build" en el Overlay).
+        // Se difiere al final del frame, como el _start de abajo.
+        WidgetsBinding.instance.addPostFrameCallback(
+            (_) => PremiumService.requestPaywall());
+        return;
+      }
       if (ProgressService.instance.failedCount > 0) {
         WidgetsBinding.instance.addPostFrameCallback(
             (_) => _start(const _QuizSpec(kind: 'review')));
@@ -552,8 +578,19 @@ class _PracticarScreenState extends State<PracticarScreen> {
   }
 
   void _start(_QuizSpec spec) {
+    // Mis errores es Premium (cinturón y tirantes: el
+    // candado principal vive en _consumeNavRequests y en la barra
+    // superior de main.dart; esto cubre cualquier otra entrada).
+    if (spec.kind == 'review' &&
+        premiumSectionLocked(
+          isPremium: PremiumService.isPremiumNow,
+          section: PremiumLockedSection.misErrores,
+        )) {
+      PremiumService.requestPaywall();
+      return;
+    }
     // Sin vidas no se puede empezar un nivel (v6): hay que esperar a
-    // mañana, cuando se reponen las 5.
+    // mañana, cuando se reponen las 10.
     if (spec.kind == 'level' && !ProgressService.instance.canStartLevel) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -745,8 +782,7 @@ class _PracticarScreenState extends State<PracticarScreen> {
     Widget topicExamSection(int i) {
       final topic = topics[i];
       final unlocked = ProgressService.instance.isTopicComplete(topic);
-      final done =
-          ProgressService.instance.unlockedLevel(topic) - 1;
+      final done = ProgressService.instance.unlockedLevel(topic) - 1;
       final count = _levelCount(topic);
       return _TopicExamSection(
         topic: topic,
@@ -771,109 +807,121 @@ class _PracticarScreenState extends State<PracticarScreen> {
           controller: _scrollController,
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
           child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Cabecera compacta (fix2, item 3): solo el título, sin
-          // el párrafo de introducción y sin el "Superado: 0 / 55"
-          // (rediseño Duolingo §3.2.5: ese dato vive en Estadísticas
-          // y en el HUD). El camino va justo debajo (fix5, punto 2).
-          Text(tr('levelsTitle'),
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis),
-          const SizedBox(height: 10),
-          // El recordatorio ("es hora de practicar") sigue aquí arriba
-          // cuando toca; la tarjeta de estadísticas (vidas/puntos/
-          // racha/meta) ya NO está en Niveles: vive en Cuenta (fix 3),
-          // así el camino empieza más arriba y se ve más.
-          const _ReminderCard(),
-          // EL CAMINO PRIMERO (fix5, punto 2): el primer tema con su
-          // nodo 1 va justo debajo de la cabecera. Así, al abrir
-          // Niveles, el camino domina la primera pantalla y el nodo
-          // 1 se ve sin deslizar (a 393x852 el nodo 1 queda a
-          // ~215 dp, con los nodos 1-5 visibles). (fix6, ronda #6:
-          // Niveles es SOLO el camino: la pregunta del día se
-          // eliminó por completo de la app y "Practicar de otra
-          // forma" ya no está aquí.)
-          topicSection(0),
-          topicExamSection(0),
-          const SizedBox(height: 20),
-          // Repaso inteligente: errores de días anteriores que resurgen.
-          // Tarjeta 3D (ronda de diseño 7.0): sombra suave tintada y
-          // radio 16 en vez de la Card plana de antes.
-          if (progress.dueFailed().isNotEmpty)
-            Card(
-              elevation: 3,
-              shadowColor:
-                  Theme.of(context).colorScheme.primary.withValues(alpha: 0.20),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20)),
-              child: ListTile(
-                // Icono 3D (fix3, punto 6): ámbar con degradado +
-                // brillito, como el corazón de las vidas.
-                leading: const LucideIcon(LucideIcons.sparkles,
-                    size: 32, color: BrandColors.amber, threeD: true),
-                title: Text(tr('smartReviewTitle'),
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text(
-                    '${progress.dueFailed().length} ${tr('reviewQuestions')} de días anteriores'),
-                trailing: const LucideIcon(LucideIcons.chevronRight),
-                onTap: () => _start(_QuizSpec(
-                    kind: 'review', reviewOnly: progress.dueFailed())),
-              ),
-            ),
-          if (progress.dueFailed().isNotEmpty) const SizedBox(height: 8),
-          // La tarjeta "Repasar mis errores" POR NIVEL ya NO está en
-          // Niveles (fix4, punto 4): con un solo error empujaba el
-          // camino de niveles muy abajo. El repaso sigue en el chip
-          // de la barra superior y en "Mis errores" de Cuenta (los
-          // dos abren el repaso general, sin grupos por nivel).
-          // (fix6, ronda #6): Niveles es SOLO el camino. La
-          // "Pregunta del día" se eliminó por completo de la app;
-          // "Practicar de otra forma" (Examen con tiempo)
-          // sigue existiendo y se abre desde la búsqueda.
-          // El resto de temas del camino, cada uno con su examen.
-          for (var i = 1; i < topics.length; i++) ...[
-            topicSection(i),
-            topicExamSection(i),
-          ],
-          // Examen mixto: trofeo final del camino, bloqueado hasta pasar
-          // el Nivel 1 de todos los temas de la pista.
-          _FinalExamSection(
-            unlocked: mixedUnlocked,
-            level1Done: level1Done,
-            topicCount: topics.length,
-            mixedSize: mixedSize,
-            isCurrent: current == null,
-            currentKey: current == null ? _currentKey : null,
-            onTap: () {
-              if (mixedUnlocked) {
-                _start(const _QuizSpec(kind: 'mixto'));
-              } else {
-                final missing = _missingLevel1Topics()
-                    .map((t) => localizedTopicName(t))
-                    .join(', ');
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('${tr('mixedLocked')}: $missing.'),
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Cabecera compacta (fix2, item 3): solo el título, sin
+              // el párrafo de introducción y sin el "Superado: 0 / 55"
+              // (rediseño Duolingo §3.2.5: ese dato vive en Estadísticas
+              // y en el HUD). El camino va justo debajo (fix5, punto 2).
+              Text(tr('levelsTitle'),
+                  style: const TextStyle(
+                      fontSize: 20, fontWeight: FontWeight.bold),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
+              const SizedBox(height: 10),
+              // Aviso de la versión de prueba (Kristian 2026-11-15):
+              // banner con los días que quedan, debajo del título.
+              // Sin prueba no ocupa nada.
+              // Sin const a propósito: el banner lee el acento y el
+              // brillo dentro de sus ValueListenableBuilder; con const,
+              // al cambiar de tema o de acento el widget es idéntico y
+              // el framework no lo reconstruye (se quedaba con los
+              // colores viejos: texto gris oscuro sobre fondo oscuro).
+              TrialBanner(),
+              // El recordatorio ("es hora de practicar") sigue aquí arriba
+              // cuando toca; la tarjeta de estadísticas (vidas/puntos/
+              // racha/meta) ya NO está en Niveles: vive en Cuenta (fix 3),
+              // así el camino empieza más arriba y se ve más.
+              const _ReminderCard(),
+              // EL CAMINO PRIMERO (fix5, punto 2): el primer tema con su
+              // nodo 1 va justo debajo de la cabecera. Así, al abrir
+              // Niveles, el camino domina la primera pantalla y el nodo
+              // 1 se ve sin deslizar (a 393x852 el nodo 1 queda a
+              // ~215 dp, con los nodos 1-5 visibles). (fix6, ronda #6:
+              // Niveles es SOLO el camino: la pregunta del día se
+              // eliminó por completo de la app y "Practicar de otra
+              // forma" ya no está aquí.)
+              topicSection(0),
+              topicExamSection(0),
+              const SizedBox(height: 20),
+              // Repaso inteligente: errores de días anteriores que resurgen.
+              // Tarjeta 3D (ronda de diseño 7.0): sombra suave tintada y
+              // radio 16 en vez de la Card plana de antes.
+              if (progress.dueFailed().isNotEmpty)
+                Card(
+                  elevation: 3,
+                  shadowColor: Theme.of(context)
+                      .colorScheme
+                      .primary
+                      .withValues(alpha: 0.20),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20)),
+                  child: ListTile(
+                    // Icono 3D (fix3, punto 6): ámbar con degradado +
+                    // brillito, como el corazón de las vidas.
+                    leading: const LucideIcon(LucideIcons.sparkles,
+                        size: 32, color: BrandColors.amber, threeD: true),
+                    title: Text(tr('smartReviewTitle'),
+                        style: const TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: Text(
+                        '${progress.dueFailed().length} ${tr('reviewQuestions')} de días anteriores'),
+                    trailing: const LucideIcon(LucideIcons.chevronRight),
+                    onTap: () => _start(_QuizSpec(
+                        kind: 'review', reviewOnly: progress.dueFailed())),
                   ),
-                );
-              }
-            },
+                ),
+              if (progress.dueFailed().isNotEmpty) const SizedBox(height: 8),
+              // La tarjeta "Repasar mis errores" POR NIVEL ya NO está en
+              // Niveles (fix4, punto 4): con un solo error empujaba el
+              // camino de niveles muy abajo. El repaso sigue en el chip
+              // de la barra superior y en "Mis errores" de Cuenta (los
+              // dos abren el repaso general, sin grupos por nivel).
+              // (fix6, ronda #6): Niveles es SOLO el camino. La
+              // "Pregunta del día" se eliminó por completo de la app;
+              // "Practicar de otra forma" (Examen con tiempo)
+              // sigue existiendo y se abre desde la búsqueda.
+              // El resto de temas del camino, cada uno con su examen.
+              for (var i = 1; i < topics.length; i++) ...[
+                topicSection(i),
+                topicExamSection(i),
+              ],
+              // Examen mixto: trofeo final del camino, bloqueado hasta pasar
+              // el Nivel 1 de todos los temas de la pista.
+              _FinalExamSection(
+                unlocked: mixedUnlocked,
+                level1Done: level1Done,
+                topicCount: topics.length,
+                mixedSize: mixedSize,
+                isCurrent: current == null,
+                currentKey: current == null ? _currentKey : null,
+                onTap: () {
+                  if (mixedUnlocked) {
+                    _start(const _QuizSpec(kind: 'mixto'));
+                  } else {
+                    final missing = _missingLevel1Topics()
+                        .map((t) => localizedTopicName(t))
+                        .join(', ');
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('${tr('mixedLocked')}: $missing.'),
+                      ),
+                    );
+                  }
+                },
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '$bankTotal ${tr('questionsWord')} ${tr('bankWord')} + ${tr('newWord')}',
+                style: TextStyle(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(alpha: 0.7),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
-          Text(
-            '$bankTotal ${tr('questionsWord')} ${tr('bankWord')} + ${tr('newWord')}',
-            style: TextStyle(
-              color: Theme.of(context)
-                  .colorScheme
-                  .onSurface
-                  .withValues(alpha: 0.7),
-            ),
-          ),
-        ],
-      ),
-    ),
+        ),
         // Flechita para subir (Niveles con vida, 2026-11-14): solo
         // aparece al bajar más de 600 dp; toca y el camino vuelve
         // arriba con animación suave. Círculo teal sólido + labio
@@ -1856,6 +1904,13 @@ class _QuizRunnerState extends State<_QuizRunner> {
     // los puntos ganados hasta ahí (en los niveles, salir a mitad
     // sigue costando 1 vida, pero los puntos se quedan igual).
     _correct.add(correct);
+    // Corazones (Kristian 2026-11-16: 10, −1 por fallo en un nivel):
+    // fallar una respuesta en un nivel cuesta 1 corazón; en 0 el
+    // nivel termina al avanzar (lo comprueba _next). Repasos,
+    // exámenes y quizzes no tocan las vidas.
+    if (widget.spec.kind == 'level' && !correct) {
+      progress.loseLifeOnWrongAnswer();
+    }
     final delta = correct
         ? pointsForCorrect(_q.difficulty)
         : pointsForWrong(_q.difficulty);
@@ -1983,10 +2038,18 @@ class _QuizRunnerState extends State<_QuizRunner> {
   }
 
   void _next() {
-    if (_index + 1 >= widget.quiz.items.length) {
+    // Sin corazones a mitad de un nivel, el nivel termina aquí
+    // (regla de Duolingo web; Kristian 2026-11-16): el resultado
+    // sale como fallo, con las preguntas contestadas hasta ahí.
+    final outOfLives = widget.spec.kind == 'level' &&
+        ProgressService.instance.livesLeft <= 0;
+    if (_index + 1 >= widget.quiz.items.length || outOfLives) {
       // Fin del quiz: se para el cronómetro (tarjeta TIEMPO, §3.4).
+      // En tests de goldens, debugElapsedMsOverride fija el tiempo
+      // para que la captura sea determinista (ver PracticarScreen).
       _stopwatch.stop();
-      _elapsedMs = _stopwatch.elapsedMilliseconds;
+      _elapsedMs = PracticarScreen.debugElapsedMsOverride ??
+          _stopwatch.elapsedMilliseconds;
       // Los puntos ya se sumaron al saldo total al contestar cada
       // pregunta (fix4, punto 5): aquí no se añade nada más.
       final progress = ProgressService.instance;

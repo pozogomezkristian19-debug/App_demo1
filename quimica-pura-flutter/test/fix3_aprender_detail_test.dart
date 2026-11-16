@@ -14,6 +14,7 @@ import 'package:quimica_pura/models.dart';
 import 'package:quimica_pura/screens/aprender_screen.dart';
 import 'package:quimica_pura/screens/topic_detail_screen.dart';
 import 'package:quimica_pura/services/localization.dart';
+import 'package:quimica_pura/services/premium_service.dart';
 import 'package:quimica_pura/services/progress.dart';
 import 'package:quimica_pura/widgets/molecule_diagrams.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -32,6 +33,11 @@ StudyTopic firstLearnTopic() => localizedTopic(topics.firstWhere(
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await ProgressService.load();
+    // 2026-11-16: Aprender lleva candado Premium (el contenido se
+    // atenúa y AbsorbPointer traga los toques sin Premium ni
+    // prueba). El test toca temas, así que se desbloquea.
+    PremiumService.premiumNotifier.value = true;
+    addTearDown(PremiumService.resetForTests);
   });
 
   Future<void> pumpScreen(WidgetTester tester, Widget child) async {

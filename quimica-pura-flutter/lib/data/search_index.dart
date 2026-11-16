@@ -44,7 +44,6 @@ const List<(String, String, String, String)> appScreens = [
   ('friends', 'Amigos', 'Tus amigos y sus duelos', 'friends'),
   ('tournaments', 'Torneos', 'Compite y gana puntos', 'tournament'),
   ('shop', 'Tienda', 'Gasta tus puntos en cosméticos', 'shop'),
-  ('groups', 'Grupos de estudio', 'Estudia con tu grupo', 'groups'),
   ('glossary', 'Glosario', 'Términos de química explicados', 'book'),
   ('compare', 'Comparar elementos', 'Dos elementos lado a lado', 'compare_arrows'),
   ('notes', 'Mi cuaderno', 'Tus notas por tema', 'note'),

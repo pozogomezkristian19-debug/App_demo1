@@ -19,6 +19,7 @@ import 'package:quimica_pura/screens/theme_screen.dart';
 import 'package:quimica_pura/screens/timed_exam_screen.dart';
 import 'package:quimica_pura/services/accent.dart';
 import 'package:quimica_pura/services/localization.dart';
+import 'package:quimica_pura/services/premium_service.dart';
 import 'package:quimica_pura/services/progress.dart';
 import 'package:quimica_pura/services/user_prefs.dart';
 import 'package:quimica_pura/widgets/avatar.dart';
@@ -146,6 +147,11 @@ void main() {
 
     testWidgets('sin errores, el repaso avisa; con errores, el número sube',
         (tester) async {
+      // Mis errores es Premium (Kristian 2026-11-16): sin Premium
+      // el toque abre el paywall y el aviso no sale. Con Premium
+      // el repaso avisa como antes.
+      PremiumService.premiumNotifier.value = true;
+      addTearDown(() => PremiumService.premiumNotifier.value = false);
       await pumpHome(tester);
       await tester.tap(lucide(LucideIcons.rotateCcw));
       await tester.pump();
@@ -317,7 +323,10 @@ void main() {
             (w.image as AssetImage).assetName == 'assets/twins.png',
       );
       expect(twinsImage, findsNothing);
-      expect(find.byType(BrandLogo), findsOneWidget);
+      // La Bienvenida ya no lleva el BrandLogo (rediseño
+      // 2026-11-14: "Bienvenidos, Químic@, animación y lo de tu
+      // app de química"): título + Químic@ + la animación de
+      // los matraces.
       expect(find.text(tr('obWelcome')), findsOneWidget);
       await tester.tap(find.text(tr('obContinue').toUpperCase()));
       await tester.pumpAndSettle();
@@ -359,7 +368,11 @@ void main() {
       await tester.tap(find.text(tr('obStreakStart').toUpperCase()));
       await tester.pumpAndSettle();
       expect(twinsImage, findsNothing);
-      expect(find.text(tr('obProfileTitle')), findsOneWidget);
+      // Aviso antes del registro (Quemia 7.7): "¡No pierdas tu
+      // progreso!" con el bocadillo; la pantalla "¿Cómo te llamas?"
+      // ya no existe en el registro (el nombre se pone después,
+      // en el perfil).
+      expect(find.text(tr('obNudgeTitle')), findsOneWidget);
     });
   });
 
@@ -395,11 +408,12 @@ void main() {
       // rechazado) ni del selector viejo.
       expect(find.byType(MelliAvatar), findsNothing);
       expect(find.text(tr('accountAvatarTitle')), findsNothing);
-      // Alcance 9: el CÍRCULO GRANDE (96 dp) es el avatar del
+      // Alcance 9: el CÍRCULO GRANDE (160 dp, perfil estilo
+      // Duolingo 2026-11-16; antes 96 dp) es el avatar del
       // USUARIO (SocialAvatar, con su lápiz), no la compañera.
       // Tocar ahí abre la galería (clave 'avatar').
       expect(find.byType(SocialAvatar), findsOneWidget);
-      expect(tester.getSize(find.byType(SocialAvatar)), const Size(96, 96));
+      expect(tester.getSize(find.byType(SocialAvatar)), const Size(160, 160));
       await tester.tap(find.byType(SocialAvatar));
       await tester.pump();
       expect(opened, ['avatar']);
@@ -411,12 +425,18 @@ void main() {
       expect(tester.getSize(find.byType(CompanionAvatar)), const Size(22, 22));
       expect(find.byType(TwinAvatarA), findsNothing);
       expect(find.byType(TwinAvatarB), findsNothing);
-      expect(find.text(tr('accountTitle')), findsOneWidget);
+      // 2026-11-16 (perfil estilo Duolingo, como en la captura de
+      // Kristian): el nombre ya NO va en el cuerpo — vive en la
+      // cabecera de AccountProfilePage. Aquí no sale ni el nombre
+      // ni el título "Cuenta"; el saludo "Bienvenido Kristian" ya
+      // no existe.
+      expect(find.text('Kristian'), findsNothing);
+      expect(find.text(tr('accountTitle')), findsNothing);
       expect(find.text(tr(companionOfDayKey(companionOfTheDay()))),
           findsOneWidget);
-      // Alcance 10: el saludo dice "Bienvenido Kristian" y el
-      // género NO se muestra escrito en ningún sitio de Cuenta.
-      expect(find.text('Bienvenido Kristian'), findsOneWidget);
+      // Alcance 10: el género NO se muestra escrito en ningún
+      // sitio de Cuenta.
+      expect(find.text('Bienvenido Kristian'), findsNothing);
       expect(find.text('Masculino'), findsNothing);
       expect(find.text('Femenino'), findsNothing);
       // Alcance 6: la fila Tema ya NO está en Cuenta; vive en
@@ -802,7 +822,7 @@ void main() {
     /// muestra el aviso nuevo, quedarse no sale, y salir NO quita
     /// vidas (los puntos ganados hasta ahí se quedan).
     Future<void> checkBackWarningNoLives(WidgetTester tester) async {
-      expect(ProgressService.instance.livesLeft, 5);
+      expect(ProgressService.instance.livesLeft, 10);
       await tester.pageBack();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
@@ -825,7 +845,7 @@ void main() {
       ));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      expect(ProgressService.instance.livesLeft, 5);
+      expect(ProgressService.instance.livesLeft, 10);
       expect(find.text('Abrir pantalla'), findsOneWidget);
     }
 
@@ -833,7 +853,7 @@ void main() {
     /// La sesión de quiz no tiene AppBar ni botón atrás del sistema
     /// (ronda 2): la única salida es la X del quiz (§3.3.1).
     Future<void> checkBackWarningLevel(WidgetTester tester) async {
-      expect(ProgressService.instance.livesLeft, 5);
+      expect(ProgressService.instance.livesLeft, 10);
       await tester.tap(find.byIcon(Icons.close));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
@@ -851,7 +871,7 @@ void main() {
       await tester.tap(find.text(tr('exitLevelLeave')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      expect(ProgressService.instance.livesLeft, 4);
+      expect(ProgressService.instance.livesLeft, 9);
       // De vuelta en Niveles (el título aparece 2 veces: cabecera
       // de la pantalla y etiqueta de la barra inferior).
       expect(find.text(tr('levelsTitle')), findsWidgets);
@@ -874,6 +894,10 @@ void main() {
 
     testWidgets('en un repaso se ocultan AppBar y navbar; las opciones se leen',
         (tester) async {
+      // Mis errores es Premium (Kristian 2026-11-16): sin Premium
+      // el toque abre el paywall y el repaso no arranca.
+      PremiumService.premiumNotifier.value = true;
+      addTearDown(() => PremiumService.premiumNotifier.value = false);
       await pumpHomeScreen(tester);
       // Un error real del banco, para que el repaso tenga variantes.
       final q = allQuestions

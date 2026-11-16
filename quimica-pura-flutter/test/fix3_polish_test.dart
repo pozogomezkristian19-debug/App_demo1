@@ -89,7 +89,7 @@ void main() {
       }
       // El contenido es el mismo: vidas, puntos con signo, 4 de 5
       // aciertos para pasar y 3 aciertos seguidos para borrar el error.
-      expect(AppLang.t('howToPlayLives'), contains('5 vidas'));
+      expect(AppLang.t('howToPlayLives'), contains('10 vidas'));
       expect(AppLang.t('howToPlayPoints'), contains('+3'));
       expect(AppLang.t('howToPlayPoints'), contains('−12'));
       expect(AppLang.t('howToPlayPass'), contains('4 de 5'));

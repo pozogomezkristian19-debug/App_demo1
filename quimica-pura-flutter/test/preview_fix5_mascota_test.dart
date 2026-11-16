@@ -26,6 +26,10 @@ void main() {
   setUpAll(() async {
     await loadRobotoFonts();
     await loadMaterialIcons();
+    // Nunito: el botón Calculadora fija fontFamily 'Nunito' en su
+    // styleFrom; sin cargarla, su etiqueta se dibuja con la fuente
+    // cuadrada de pruebas (una barra sólida) y el dorado no vale.
+    await loadNunitoFonts();
   });
 
   setUp(() async {

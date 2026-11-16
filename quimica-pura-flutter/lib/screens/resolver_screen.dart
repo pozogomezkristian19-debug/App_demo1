@@ -7,9 +7,12 @@ import '../services/accent.dart';
 import '../services/chemistry.dart';
 import '../services/localization.dart';
 import '../services/nav_requests.dart';
+import '../services/premium.dart';
 import '../services/sound_service.dart';
 import '../widgets/brand_logo.dart';
+import '../widgets/premium_lock.dart';
 import '../widgets/solver_widgets.dart';
+import 'constants_screen.dart';
 import 'resolver_extra.dart';
 
 /// Un solucionador de la lista: su grupo, su título, su descripción,
@@ -260,9 +263,15 @@ class _ResolverScreenState extends State<ResolverScreen> {
     for (var i = 0; i < solverEntries.length; i++) {
       entriesByGroup[solverEntries[i].group]?.add(i);
     }
-    return ListView(
-      controller: _scroll,
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+    // Candado Premium (SOLO WEB): igual que Aprender — el usuario
+    // gratis entra, pero el contenido queda desvanecido con candado
+    // y nada dentro se puede abrir. En móvil o con Premium, la
+    // pantalla es la misma de siempre, sin tocarla.
+    return PremiumLockedContent(
+      section: PremiumLockedSection.resolver,
+      child: ListView(
+        controller: _scroll,
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       children: [
         // Logo de las gemelas + nombre de la app.
         const Center(child: BrandLogo(size: 112)),
@@ -303,6 +312,33 @@ class _ResolverScreenState extends State<ResolverScreen> {
               ],
             ),
           ),
+        ),
+        const SizedBox(height: 12),
+        // Conversor de unidades PRIMERO (Kristian 2026-11-16): la
+        // herramienta que más se usa va antes que los chips y que
+        // los grupos, en su propia tarjeta como un solucionador
+        // más. Abre ConstantsScreen DIRECTO (esa pantalla ya trae
+        // su AppBar): por _openSolver saldría con doble AppBar.
+        // solverEntries sigue con 14: el texto de la intro no
+        // cambia y el conversor no es un solucionador más.
+        _SolverRow(
+          entry: const SolverEntry(
+            id: 'unit-converter',
+            group: '',
+            title: 'Conversor de unidades',
+            subtitle:
+                'Longitud, masa, volumen, presión, energía y temperatura',
+            icon: LucideIcons.arrowLeftRight,
+            page: SizedBox.shrink(),
+          ),
+          onTap: () {
+            SoundService.tap();
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const ConstantsScreen(),
+              ),
+            );
+          },
         ),
         const SizedBox(height: 12),
         // Chips de sección: saltar a cada grupo sin desplazar.
@@ -360,6 +396,7 @@ class _ResolverScreenState extends State<ResolverScreen> {
         ],
         const SizedBox(height: 16),
       ],
+    ),
     );
   }
 }

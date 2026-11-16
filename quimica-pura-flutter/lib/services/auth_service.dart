@@ -55,6 +55,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import 'email_index.dart';
+
 /// Datos mínimos del usuario actual (anónimo y/o con Google).
 class AuthUserInfo {
   const AuthUserInfo({
@@ -98,6 +100,17 @@ abstract class AuthProvider {
   /// queda verificado por el código OTP que la app pide ANTES de
   /// llamar aquí (ver OtpService).
   Future<bool> linkWithEmail(String email, String password);
+
+  /// Enlaza correo+contraseña a la sesión ACTUAL, sin cambiar de
+  /// cuenta (Kristian 2026-11-15: cuentas de Google que quieren
+  /// ponerle una contraseña para entrar con correo). A diferencia
+  /// de [linkWithEmail], aquí NO hay fallback a entrar en otra
+  /// cuenta: si el correo ya vive en otro uid
+  /// ('email-already-in-use'), devuelve false y el uid NO cambia.
+  /// 'provider-already-linked' (la contraseña ya está puesta) vale
+  /// como éxito. NUNCA lanza: false + el motivo en
+  /// [lastEmailError].
+  Future<bool> linkPassword(String email, String password);
 
   /// Entra con correo+contraseña (teléfono nuevo o cuenta ya
   /// creada). true si se entró; false con el motivo en
@@ -268,8 +281,43 @@ class FirebaseAuthProvider implements AuthProvider {
     }
   }
 
+  /// Inicio con Google EN WEB (2026-11-15): el plugin google_sign_in
+  /// NO tiene authenticate() en web — su código lanza
+  /// UnimplementedError siempre ('authenticate is not supported on
+  /// the web. Instead, use renderButton...'), así que ningún arreglo
+  /// de meta tag ni de orígenes autorizados podía hacer funcionar el
+  /// selector. En web se usa el popup de Firebase Auth, que abre la
+  /// ventana de Google en el dominio de autenticación del proyecto.
+  /// En móvil esta rama no existe (kIsWeb es false) y el flujo del
+  /// plugin no cambia. El popup REEMPLAZA la sesión anónima por la
+  /// de Google: la fachada (_runGoogleAuth) ve el cambio de uid y
+  /// migra el progreso del anónimo, igual que en el fallback 7.3.
+  Future<bool> _googlePopupWeb() async {
+    try {
+      final cred = await _auth
+          .signInWithPopup(GoogleAuthProvider())
+          .timeout(kGoogleLinkTimeout);
+      if (cred.user == null) return false;
+      _lastGoogleError = null;
+      return true;
+    } on FirebaseAuthException catch (e) {
+      _lastGoogleError = 'google_popup:${e.code}';
+      debugPrint('[Google] signInWithPopup falló: ${e.code}');
+      return false;
+    } on TimeoutException {
+      _lastGoogleError = 'google_popup:timeout';
+      debugPrint('[Google] signInWithPopup agotó 20 s.');
+      return false;
+    } catch (e) {
+      _lastGoogleError = 'google_popup:unknown';
+      debugPrint('[Google] signInWithPopup falló: $e');
+      return false;
+    }
+  }
+
   @override
   Future<bool> linkWithGoogle() async {
+    if (kIsWeb) return _googlePopupWeb();
     try {
       var user = _auth.currentUser;
       if (user == null) {
@@ -370,6 +418,7 @@ class FirebaseAuthProvider implements AuthProvider {
 
   @override
   Future<bool> signInWithGoogle() async {
+    if (kIsWeb) return _googlePopupWeb();
     try {
       final credential = await _nativeGoogleCredential();
       if (credential == null) return false;
@@ -475,7 +524,19 @@ class FirebaseAuthProvider implements AuthProvider {
             _lastEmailError = null;
             return true;
           } on FirebaseAuthException catch (e2) {
-            _lastEmailError = 'firebase_auth:${e2.code}';
+            // La causa raíz es que el correo ya vive en otra cuenta
+            // y la contraseña que se escribió no es la de esa
+            // cuenta: se guarda ESE motivo, no el del fallback,
+            // para que la UI sepa que el correo ya está tomado
+            // (Kristian 2026-11-15: el diálogo del correo ya
+            // tomado). Otros códigos del fallback se guardan tal
+            // cual (sin internet, etc.).
+            if (e2.code == 'wrong-password' ||
+                e2.code == 'invalid-credential') {
+              _lastEmailError = 'firebase_auth:email-already-in-use';
+            } else {
+              _lastEmailError = 'firebase_auth:${e2.code}';
+            }
             debugPrint('[Correo] fallback signInWithCredential '
                 'falló: ${e2.code}');
             return false;
@@ -501,6 +562,49 @@ class FirebaseAuthProvider implements AuthProvider {
         _lastEmailError = 'email:${e.runtimeType}';
       }
       debugPrint('[Correo] linkWithEmail falló: $e');
+      return false;
+    }
+  }
+
+  /// Enlaza correo+contraseña a la sesión actual SIN cambiar de
+  /// cuenta (Kristian 2026-11-15: ponerle contraseña a una cuenta
+  /// de Google). Sin fallback a entrar en otra cuenta y sin crear
+  /// anónimo: sin sesión actual, false. 'provider-already-linked'
+  /// (la contraseña ya está puesta) vale como éxito. NUNCA lanza:
+  /// false + [_lastEmailError] con el motivo real.
+  @override
+  Future<bool> linkPassword(String email, String password) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) {
+        _lastEmailError = 'email:no-user';
+        return false;
+      }
+      final credential = EmailAuthProvider.credential(
+        email: email,
+        password: password,
+      );
+      try {
+        await user.linkWithCredential(credential).timeout(kEmailLinkTimeout);
+        _lastEmailError = null;
+        return true;
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'provider-already-linked') {
+          _lastEmailError = null;
+          return true;
+        }
+        _lastEmailError = 'firebase_auth:${e.code}';
+        debugPrint('[Correo] linkPassword falló: ${e.code}');
+        return false;
+      } on TimeoutException {
+        _lastEmailError = 'email:timeout_link';
+        debugPrint('[Correo] linkPassword agotó 20 s.');
+        return false;
+      }
+    } catch (e) {
+      _lastEmailError =
+          e is FirebaseAuthException ? 'email:${e.code}' : 'email:unknown';
+      debugPrint('[Correo] linkPassword falló: $e');
       return false;
     }
   }
@@ -651,6 +755,11 @@ class FakeAuthProvider implements AuthProvider {
   bool simulateEmailAlreadyInUse = false;
   String emailUid = 'fake-email-uid';
 
+  /// Retraso artificial en linkWithEmail (para reproducir el bug
+  /// del doble toque en el OTP: mientras el enlace va por la red,
+  /// el botón CONTINUAR debe seguir deshabilitado).
+  Duration linkEmailDelay = Duration.zero;
+
   /// Si es true y googleUid es otro uid, linkWithGoogle simula el
   /// fallo 'credential-already-in-use' Y EL FALLBACK de la 7.3: se
   /// entra en la cuenta de Google (el uid pasa a ser googleUid) y
@@ -723,6 +832,9 @@ class FakeAuthProvider implements AuthProvider {
 
   @override
   Future<bool> linkWithEmail(String email, String password) async {
+    if (linkEmailDelay > Duration.zero) {
+      await Future.delayed(linkEmailDelay);
+    }
     if (failLink) {
       lastEmailError = 'firebase_auth:unknown';
       return false;
@@ -732,13 +844,41 @@ class FakeAuthProvider implements AuthProvider {
       if (anon == null) return false;
     }
     if (simulateEmailAlreadyInUse && emailAccounts.containsKey(email)) {
-      // La cuenta de correo ya vive en otro uid + FALLBACK: se
-      // entra en ella (el uid pasa a ser emailUid).
+      // La cuenta de correo ya vive en otro uid + FALLBACK: si la
+      // contraseña que se escribió no es la de esa cuenta, el
+      // fallback falla y el motivo que queda es que el correo ya
+      // está tomado (el diálogo del correo ya tomado); si es la
+      // suya, se entra en ella (el uid pasa a ser emailUid).
+      if (emailAccounts[email] != password) {
+        lastEmailError = 'firebase_auth:email-already-in-use';
+        return false;
+      }
       lastEmailError = 'firebase_auth:email-already-in-use';
       uid = emailUid;
       emailLinked = true;
       this.email = email;
       return true;
+    }
+    emailAccounts[email] = password;
+    emailLinked = true;
+    lastEmailError = null;
+    this.email = email;
+    return true;
+  }
+
+  /// Enlaza correo+contraseña a la sesión actual SIN cambiar de
+  /// cuenta (igual que el real): si el correo ya vive en otra
+  /// cuenta ([simulateEmailAlreadyInUse] y registrado), devuelve
+  /// false y el uid NO cambia. Sin sesión, false.
+  @override
+  Future<bool> linkPassword(String email, String password) async {
+    if (uid == null) {
+      lastEmailError = 'email:no-user';
+      return false;
+    }
+    if (simulateEmailAlreadyInUse && emailAccounts.containsKey(email)) {
+      lastEmailError = 'firebase_auth:email-already-in-use';
+      return false;
     }
     emailAccounts[email] = password;
     emailLinked = true;
@@ -846,11 +986,19 @@ class AuthService {
     }
   }
 
+  /// Aviso de cambio de sesión (link / inicio / unlink): la UI
+  /// Premium (diamante flotante) lo escucha para aparecer o
+  /// desaparecer sin tener que cambiar de pestaña. Solo sube; el
+  /// valor de verdad se lee en [isGoogleLinked]/[isEmailLinked].
+  /// Cambio 6 (2026-11-15): el diamante solo le sale a quien
+  /// inició sesión.
+  static final ValueNotifier<int> authVersion = ValueNotifier<int>(0);
+
+  static void _bumpAuthVersion() => authVersion.value++;
+
   /// Código del último fallo de Google (o null si el último intento
-  /// salió bien): lo pone el proveedor ('google_sign_in:…' /
-  /// 'firebase_auth:…') o la migración ('migration_failed'). La UI
-  /// lo enseña junto al mensaje genérico para diagnosticar por qué
-  /// ni siquiera salió el selector (Quemia 7.3).
+  /// salió bien). La UI lo enseña junto al mensaje genérico para
+  /// diagnosticar por qué ni siquiera salió el selector (Quemia 7.3).
   static String? _lastGoogleError;
 
   static String? get lastGoogleError => _lastGoogleError;
@@ -921,14 +1069,38 @@ class AuthService {
   /// = falló. La UI muestra el mensaje genérico + [lastEmailError]
   /// cuando devuelve false.
   static Future<bool> linkWithEmail(String email, String password) {
-    return _runEmailAuth(() => _provider.linkWithEmail(email, password));
+    return _runEmailAuth(() => _provider.linkWithEmail(email, password),
+        email: email);
+  }
+
+  /// Enlaza correo+contraseña a la sesión actual SIN cambiar de
+  /// cuenta (Kristian 2026-11-15: ponerle contraseña a una cuenta
+  /// de Google). NUNCA lanza: true = OK, false = falló (ver
+  /// [lastEmailError]). A diferencia de [linkWithEmail], aquí no
+  /// hay fallback ni migración: el uid no se toca.
+  static Future<bool> linkPassword(String email, String password) async {
+    try {
+      final ok = await _provider.linkPassword(email, password);
+      _lastEmailError = _provider.lastEmailError;
+      if (ok) {
+        _bumpAuthVersion();
+        // Índice de correos: ponerle contraseña a una cuenta prueba
+        // que ya la tiene.
+        _recordEmailIndex(email, hasPassword: true);
+      }
+      return ok;
+    } catch (_) {
+      _lastEmailError = 'unknown';
+      return false;
+    }
   }
 
   /// Entra con correo+contraseña. NUNCA lanza: true = OK, false =
   /// falló (ver [lastEmailError]). Si había progreso anónimo en
   /// este teléfono, también se migra al uid de la cuenta.
   static Future<bool> signInWithEmail(String email, String password) {
-    return _runEmailAuth(() => _provider.signInWithEmail(email, password));
+    return _runEmailAuth(() => _provider.signInWithEmail(email, password),
+        email: email);
   }
 
   /// Manda el enlace de Firebase para cambiar la contraseña.
@@ -945,11 +1117,26 @@ class AuthService {
     }
   }
 
+  /// Registra el correo en el índice de correos (Kristian
+  /// 2026-11-15): para avisar "correo ya tomado" antes de pedir la
+  /// contraseña. En segundo plano, nunca bloquea el inicio ni
+  /// lanza: si no hay internet, la entrada se escribe la próxima
+  /// vez que se entre. [hasPassword] solo se pasa cuando se sabe
+  /// (entrar con correo prueba que la tiene); con Google lo anota
+  /// [EmailIndex.recordGoogle] (false, sin bajar de true).
+  static void _recordEmailIndex(String email, {bool? hasPassword}) {
+    final uid = currentUid;
+    if (uid == null || uid.isEmpty) return;
+    unawaited(EmailIndex.record(
+        email: email, uid: uid, hasPassword: hasPassword));
+  }
+
   /// Núcleo común de link/signIn con correo: igual que
   /// [_runGoogleAuth] (recoge el error real del proveedor y, si el
   /// uid cambió, migra el progreso del anónimo al uid nuevo antes
   /// de dar el inicio por bueno).
-  static Future<bool> _runEmailAuth(Future<bool> Function() attempt) async {
+  static Future<bool> _runEmailAuth(Future<bool> Function() attempt,
+      {String? email}) async {
     final uidBefore = currentUid;
     bool ok;
     try {
@@ -972,6 +1159,10 @@ class AuthService {
         return false;
       }
     }
+    _bumpAuthVersion();
+    // Índice de correos: entrar con correo prueba que la cuenta
+    // tiene contraseña.
+    if (email != null) _recordEmailIndex(email, hasPassword: true);
     return true;
   }
 
@@ -1005,13 +1196,24 @@ class AuthService {
         return false;
       }
     }
+    _bumpAuthVersion();
+    // Índice de correos: una cuenta de Google no tiene contraseña
+    // (salvo que ya la tuviera de antes: recordGoogle no baja de
+    // true a false).
+    final googleEmail = accountEmail;
+    final uid = currentUid;
+    if (googleEmail != null && uid != null && uid.isNotEmpty) {
+      unawaited(EmailIndex.recordGoogle(email: googleEmail, uid: uid));
+    }
     return true;
   }
 
   /// Desvincula Google de la sesión actual. Tampoco lanza nunca.
   static Future<bool> unlinkGoogle() async {
     try {
-      return await _provider.unlinkGoogle();
+      final ok = await _provider.unlinkGoogle();
+      if (ok) _bumpAuthVersion();
+      return ok;
     } catch (_) {
       return false;
     }
@@ -1029,5 +1231,6 @@ class AuthService {
     _providerOverride = null;
     _lastGoogleError = null;
     migrateProgressOnUidChange = null;
+    authVersion.value = 0;
   }
 }

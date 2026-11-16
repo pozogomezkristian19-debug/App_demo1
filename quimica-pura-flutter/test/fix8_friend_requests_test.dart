@@ -236,12 +236,25 @@ void main() {
     testWidgets('enviar desde la pantalla: aviso tranquilo, sin diálogo',
         (tester) async {
       await pumpScreen(tester, const FriendsScreen(isGoogleLinked: true));
+      // Se busca en la única casilla y se toca la imagen de
+      // agregar amigo a la derecha del nombre (Kristian
+      // 2026-11-15: sin segunda casilla ni botón AGREGAR).
+      // Prefijo 'valer': la casilla muestra 'valer' y el
+      // resultado 'valeria' (buscar 'valeria' exacto hace que el
+      // texto salga dos veces: casilla + resultado).
       await tester.enterText(
-          find.widgetWithText(TextField, tr('friendsAddHint')), 'valeria');
-      await tester.tap(find.text(tr('friendsAddButton').toUpperCase()));
+          find.widgetWithText(TextField, tr('friendsSearchHint')),
+          'valer');
+      // Debounce de 300 ms + búsqueda (patrón de fix9).
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('valeria'), findsOneWidget);
+      await tester
+          .tap(find.byKey(const ValueKey('addFriendImage-valeria')));
       await _settle(tester);
       expect(find.text(tr('friendsRequestSentOk')), findsOneWidget);
-      expect(find.text('valeria'), findsOneWidget);
+      expect(find.text('valeria'), findsWidgets);
       expect(find.text(tr('friendsRequestSentLabel')), findsOneWidget);
       expect(find.byType(AlertDialog), findsNothing);
       expect(find.byType(SnackBar), findsNothing);

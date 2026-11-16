@@ -123,6 +123,24 @@ void main() {
       expect(find.text('Tus notas por tema'), findsNothing);
     });
 
+    testWidgets('invitado: Tabla, Amigos y Torneos NO salen en el '
+        'menú', (tester) async {
+      await openDrawer(tester);
+      // Un invitado no ve lo de buscar otra gente (Kristian
+      // 2026-11-16): ni Tabla de posiciones, ni Amigos, ni
+      // Torneos. Se baja hasta el último ítem para que el
+      // ListView construya todo lo que hay — si esas entradas
+      // existieran, aparecerían al bajar.
+      await reveal(tester, tr('compareTitle'));
+      expect(find.text(tr('accountLeaderboard')), findsNothing);
+      expect(find.text(tr('accountFriends')), findsNothing);
+      expect(find.text(tr('accountTournaments')), findsNothing);
+      // Lo propio sí sale: el examen con tiempo y las ramas.
+      expect(find.text(tr('timedTitle')), findsOneWidget);
+      expect(find.text(tr('menuBranches')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('los subtítulos se ven completos, sin ellipsis',
         (tester) async {
       await openDrawer(tester);

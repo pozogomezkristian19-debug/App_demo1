@@ -1,0 +1,1 @@
+{"fieldOverrides":[],"indexes":[{"collectionGroup":"tournament_scores","fields":[{"fieldPath":"tournamentId","order":"ASCENDING"},{"fieldPath":"bestScore","order":"DESCENDING"}],"queryScope":"COLLECTION"},{"collectionGroup":"paymentRequests","fields":[{"fieldPath":"status","order":"ASCENDING"},{"fieldPath":"amount","order":"ASCENDING"}],"queryScope":"COLLECTION"}]}

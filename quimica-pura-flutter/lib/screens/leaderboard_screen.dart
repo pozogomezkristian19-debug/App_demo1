@@ -205,7 +205,10 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
               if (_loadTimedOut) return _calmMessage(tr('lbOffline'));
               return const Center(child: CircularProgressIndicator());
             }
+            // 2026-11-16 (Kristian): en la tabla no salen los
+            // usuarios con 0 puntos — solo quien ya tiene puntos.
             final entries = List<LeaderboardEntry>.of(snapshot.data ?? [])
+              ..removeWhere((e) => e.points <= 0)
               ..sort((a, b) => b.points.compareTo(a.points));
             // Quemia 7.0: subida de puesto — si mi puesto mejoró
             // respecto a la última vez, salta el aviso (y se oculta

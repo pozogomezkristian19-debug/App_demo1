@@ -146,5 +146,62 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+        // Cuenta atrás EN VIVO de la racha (Kristian 2026-11-16):
+        // el aviso del recordatorio muestra la cuenta atrás TICKING
+        // hasta medianoche, como Duolingo, y se queda hasta que se
+        // hace la lección o llega medianoche. Canal
+        // "com.melliqui/live_countdown", métodos:
+        //  - show: publica la cuenta atrás AHORA.
+        //  - schedule: la programa con una alarma exacta para las
+        //    atMs (la app puede estar cerrada).
+        //  - cancel: quita el aviso y su alarma.
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "com.melliqui/live_countdown"
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "show" -> {
+                    val title = call.argument<String>("title") ?: "Quemia"
+                    val body = call.argument<String>("body") ?: ""
+                    val endAtMs = call.argument<Number>("endAtMs")?.toLong() ?: 0L
+                    val startAtMs = call.argument<Number>("startAtMs")?.toLong()
+                        ?: System.currentTimeMillis()
+                    val largeIconPath = call.argument<String>("largeIconPath")
+                    try {
+                        LiveCountdown.show(
+                            this, title, body, endAtMs, startAtMs, largeIconPath,
+                        )
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.success(false)
+                    }
+                }
+                "schedule" -> {
+                    val atMs = call.argument<Number>("atMs")?.toLong() ?: 0L
+                    val title = call.argument<String>("title") ?: "Quemia"
+                    val body = call.argument<String>("body") ?: ""
+                    val endAtMs = call.argument<Number>("endAtMs")?.toLong() ?: 0L
+                    val largeIconPath = call.argument<String>("largeIconPath")
+                    try {
+                        result.success(
+                            LiveCountdown.schedule(
+                                this, atMs, title, body, endAtMs, largeIconPath,
+                            ),
+                        )
+                    } catch (e: Exception) {
+                        result.success(false)
+                    }
+                }
+                "cancel" -> {
+                    try {
+                        LiveCountdown.cancel(this)
+                    } catch (e: Exception) {
+                        // Quitar un aviso que no existe no es un error.
+                    }
+                    result.success(true)
+                }
+                else -> result.notImplemented()
+            }
+        }
     }
 }

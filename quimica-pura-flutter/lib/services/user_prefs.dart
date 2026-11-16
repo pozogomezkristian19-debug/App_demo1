@@ -25,6 +25,7 @@ class UserPrefs {
   static const _kAvatar = 'melli_avatar'; // 'm0'..'m2' | 'f0'..'f2'
   static const _kThemeAccent = 'melli_theme_accent'; // 'verde' | 'violeta'
   static const _kRulesSeenV6 = 'melli_rules_seen_v6';
+  static const _kTrialEndedShown = 'quemia_trial_ended_shown';
   static const _kMetBrenda = 'melli_met_brenda';
   static const _kMetBritany = 'melli_met_britany';
   static const _kMetKristian = 'melli_met_kristian';
@@ -46,6 +47,13 @@ class UserPrefs {
   static int dailyGoalMinutes = 10;
 
   static bool onboardingDone = false;
+
+  // Vista previa web REAL (2026-11-15): la entrada
+  // main_preview_real.dart pone esto en true para saltar directo a
+  // Niveles SIN depender del almacenamiento local (en algunos
+  // navegadores integrados el SharedPreferences web no persiste).
+  // Solo la vista previa lo usa; la app de Android nunca lo toca.
+  static bool previewSkipOnboarding = false;
   static String userName = '';
   static String userGender = '';
   static bool isDark = false; // Valor EFECTIVO ahora (con 'sistema',
@@ -100,6 +108,12 @@ class UserPrefs {
   // (fuera del ámbito de esta ronda): quitarlo exige tocarlos
   // todos. La próxima limpieza lo puede borrar junto con ellos.
   static bool rulesSeenV6 = false; // ¿Ya vio la ventanita de reglas v6?
+  // ¿Ya vio la pantalla "Se acabó tu prueba"? Se enseña UNA vez
+  // al vencerse la prueba (Kristian 2026-11-16): al abrir la app
+  // o al acabarse con la app abierta. Borrar la caché lo resetea
+  // (solo es un aviso, no un candado: la prueba en sí la guarda
+  // el teléfono y no se borra).
+  static bool trialEndedShown = false;
   // Tema de acento (fix2 2026-11-10): 'verde' (teal de siempre) o
   // 'violeta' (el acento actual). Se guarda en el teléfono y la app
   // se reconstruye al cambiar gracias a themeAccentNotifier.
@@ -145,6 +159,7 @@ class UserPrefs {
     if (themeAccent != 'violeta') themeAccent = 'verde';
     themeAccentNotifier.value = themeAccent;
     rulesSeenV6 = prefs.getBool(_kRulesSeenV6) ?? false;
+    trialEndedShown = prefs.getBool(_kTrialEndedShown) ?? false;
     metBrenda = prefs.getBool(_kMetBrenda) ?? false;
     metBritany = prefs.getBool(_kMetBritany) ?? false;
     metKristian = prefs.getBool(_kMetKristian) ?? false;
@@ -287,6 +302,14 @@ class UserPrefs {
     final prefs = await SharedPreferences.getInstance();
     rulesSeenV6 = true;
     await prefs.setBool(_kRulesSeenV6, true);
+  }
+
+  /// La pantalla "Se acabó tu prueba" ya se enseñó (una sola vez
+  /// por vencimiento).
+  static Future<void> saveTrialEndedShown() async {
+    final prefs = await SharedPreferences.getInstance();
+    trialEndedShown = true;
+    await prefs.setBool(_kTrialEndedShown, true);
   }
 
   /// La gemela se acaba de presentar por primera vez.

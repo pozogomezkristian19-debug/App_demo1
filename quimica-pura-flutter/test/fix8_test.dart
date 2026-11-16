@@ -7,6 +7,10 @@
 //
 // La recuperación por nombre de usuario se ELIMINÓ (cambio 09:08):
 // estos tests comprueban que no queda rastro de esa fila.
+// (2026-11-16, perfil estilo Duolingo) Cuenta es ahora una
+// pantalla aparte (AccountProfilePage) y "Vincular con Google"
+// vive en Ajustes, sección CUENTA: los tests de Google montan
+// SettingsScreen (pumpSettings); los de Cuenta montan el perfil.
 // El inicio con Google va NATIVO con google_sign_in (7.1): el
 // selector de cuentas vive dentro de la app y la credencial (idToken)
 // se entrega a Firebase Auth con linkWithCredential /
@@ -24,12 +28,14 @@ import 'package:quimica_pura/screens/loading_screen.dart';
 import 'package:quimica_pura/screens/onboarding_screen.dart';
 import 'package:quimica_pura/screens/practicar_screen.dart';
 import 'package:quimica_pura/screens/resolver_screen.dart';
+import 'package:quimica_pura/screens/settings_screen.dart';
 import 'package:quimica_pura/screens/tabla_screen.dart';
 import 'package:quimica_pura/services/analytics_sync.dart';
 import 'package:quimica_pura/services/auth_service.dart';
 import 'package:quimica_pura/services/localization.dart';
 import 'package:quimica_pura/services/otp_service.dart';
 import 'package:quimica_pura/services/progress.dart';
+import 'package:quimica_pura/services/social_service.dart';
 import 'package:quimica_pura/services/user_prefs.dart';
 import 'package:quimica_pura/widgets/duo_button.dart';
 import 'package:quimica_pura/widgets/google_sign_in_button.dart';
@@ -79,14 +85,24 @@ void main() {
     UserPrefs.isDark = false;
     UserPrefs.onboardingDone = true;
     UserPrefs.userName = 'kristian';
+    // Sin esto, el nombre reclamado por un test anterior sobrevive
+    // en el estático y la pantalla de elegir usuario se salta en
+    // los tests siguientes (Kristian 2026-11-15).
+    UserPrefs.publicUsername = '';
     fakeAuth = FakeAuthProvider();
     AuthService.setProviderForTests(fakeAuth);
     fakeRepo = InMemoryAnalyticsRepository();
     AnalyticsSync.setRepositoryForTests(fakeRepo);
+    // La Cuenta carga sugerencias y conteos de seguir desde el
+    // servicio social: repo en memoria con demo (si no, iría al
+    // Firestore real y los conteos no serían deterministas).
+    SocialService.setRepositoryForTests(
+        InMemorySocialRepository(seedDemo: true));
   });
 
   tearDown(() {
     AnalyticsSync.resetForTests();
+    SocialService.resetForTests();
     AuthService.resetForTests();
     UserPrefs.rulesSeenV6 = false;
     UserPrefs.themeAccent = 'verde';
@@ -94,6 +110,7 @@ void main() {
     UserPrefs.onboardingDone = false;
     UserPrefs.isDark = false;
     UserPrefs.userName = '';
+    UserPrefs.publicUsername = '';
   });
 
   const tabColors = [
@@ -161,11 +178,13 @@ void main() {
   }
 
   Future<List<String>> pumpAccount(WidgetTester tester) async {
-    // Ventana alta (360x1200): la lista de Cuenta es perezosa
-    // (ListView) y las filas nuevas solo se construyen si caben
-    // en pantalla; con 600 px de alto quedarían fuera y los
-    // finders no las verían.
-    tester.view.physicalSize = const Size(360 * 2, 1200 * 2);
+    // Ventana alta (360x3000): la lista de Cuenta es perezosa
+    // (ListView) y las filas solo se construyen si caben en
+    // pantalla; con 1200 px de alto las filas quedaban fuera y los
+    // finders no las veían (la pantalla creció con la zona del
+    // avatar, el banner, la tarjeta de completar perfil, las
+    // sugerencias, el RESUMEN y los LOGROS).
+    tester.view.physicalSize = const Size(360 * 2, 3000 * 2);
     tester.view.devicePixelRatio = 2.0;
     addTearDown(() {
       tester.view.resetPhysicalSize();
@@ -182,6 +201,31 @@ void main() {
             onShowShareApp: () {},
             trackTopics: const ['estequiometria'],
           ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    return opened;
+  }
+
+  Future<List<String>> pumpSettings(WidgetTester tester) async {
+    // Ajustes (2026-11-16, perfil estilo Duolingo): la fila
+    // "Vincular con Google" vive aquí, en la sección CUENTA.
+    // Ventana alta como pumpAccount: la lista es perezosa y las
+    // filas solo se construyen si caben en pantalla.
+    tester.view.physicalSize = const Size(360 * 2, 1200 * 2);
+    tester.view.devicePixelRatio = 2.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    final opened = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(useMaterial3: true),
+        home: Scaffold(
+          body: SettingsScreen(onOpenScreen: opened.add),
         ),
       ),
     );
@@ -503,35 +547,64 @@ void main() {
         (tester) async {
       // (Diseño 7.0) La fila "Compartir mi progreso" ya no existe:
       // compartir es automático con Google vinculada.
+      // (2026-11-16, perfil estilo Duolingo) "Vincular con Google"
+      // ya NO está en Cuenta: vive en Ajustes, sección CUENTA.
+      // (2026-11-16) En Cuenta quedan 7 filas: Estadísticas,
+      // Amigos, Tabla de posiciones, Torneo, Tienda, Premium y
+      // Canjear código. Tienda y Premium volvieron de Ajustes
+      // (Kristian 2026-11-16). Se bombea CON sesión: Amigos,
+      // Tabla y Torneo solo salen con sesión (un invitado no ve
+      // lo de buscar otra gente). El falso necesita uid (si no,
+      // currentUser es null y no hay sesión aunque googleLinked
+      // sea true).
+      fakeAuth.uid = 'fake-uid';
+      fakeAuth.googleLinked = true;
       await pumpAccount(tester);
       expect(find.text(tr('accountLeaderboard')), findsOneWidget);
-      expect(find.text(tr('accountLinkGoogle')), findsOneWidget);
+      expect(find.text(tr('accountLinkGoogle')), findsNothing);
       expect(find.text('Recuperar mi progreso'), findsNothing);
-      // Orden 7.1: Amigos va antes que la tabla, y la tabla antes
-      // que Torneo. Idioma ya no está en Cuenta: vive en Ajustes.
+      // Orden: Estadísticas, Amigos, Tabla, Torneo, Tienda,
+      // Premium, Canjear. Idioma ya no está en Cuenta: vive en
+      // Ajustes.
+      final yStats = tester.getCenter(find.text(tr('accountStats'))).dy;
       final yFriends = tester.getCenter(find.text(tr('accountFriends'))).dy;
       final yLeaderboard =
           tester.getCenter(find.text(tr('accountLeaderboard'))).dy;
       final yTournaments =
           tester.getCenter(find.text(tr('accountTournaments'))).dy;
+      final yShop = tester.getCenter(find.text(tr('accountShop'))).dy;
+      final yPremium = tester.getCenter(find.text(tr('accountPremium'))).dy;
+      final yRedeem = tester.getCenter(find.text(tr('accountRedeem'))).dy;
+      expect(yStats, lessThan(yFriends));
       expect(yFriends, lessThan(yLeaderboard));
       expect(yLeaderboard, lessThan(yTournaments));
+      expect(yTournaments, lessThan(yShop));
+      expect(yShop, lessThan(yPremium));
+      expect(yPremium, lessThan(yRedeem));
       expect(find.text(tr('accountLanguage')), findsNothing);
+      // Referidos sigue en Ajustes (no volvió con Tienda/Premium).
+      expect(find.text(tr('accountReferrals')), findsNothing);
     });
 
     testWidgets('"Tabla de posiciones" abre la pantalla de leaderboard',
         (tester) async {
+      // La fila solo sale con sesión (un invitado no ve lo de
+      // buscar otra gente).
+      fakeAuth.uid = 'fake-uid';
+      fakeAuth.googleLinked = true;
       final opened = await pumpAccount(tester);
       await tester.tap(find.text(tr('accountLeaderboard')));
       await tester.pump();
       expect(opened, ['leaderboard']);
     });
 
-    testWidgets('"Vincular con Google" sin vincular enlaza y muestra el correo',
+    testWidgets(
+        '"Vincular con Google" sin vincular enlaza y muestra el correo',
         (tester) async {
+      // 2026-11-16: la fila vive en Ajustes (sección CUENTA).
       fakeAuth.email = 'kristian@example.com';
       fakeAuth.displayName = 'Kristian';
-      await pumpAccount(tester);
+      await pumpSettings(tester);
       expect(find.text(tr('accountLinkGoogleSub')), findsOneWidget);
       await tester.tap(find.text(tr('accountLinkGoogle')));
       await tester.pump();
@@ -543,13 +616,14 @@ void main() {
 
     testWidgets('vinculada: la fila muestra el correo y ofrece desvincular',
         (tester) async {
+      // 2026-11-16: la fila vive en Ajustes (sección CUENTA).
       fakeAuth.googleLinked = true;
       // Sin uid no hay sesión (currentUser == null) y la fila no
       // muestra nada: la cuenta vinculada es una sesión.
       fakeAuth.uid = 'fake-google-uid';
       fakeAuth.email = 'kristian@example.com';
       fakeAuth.displayName = 'Kristian';
-      await pumpAccount(tester);
+      await pumpSettings(tester);
       await tester.pump();
       expect(find.text('kristian@example.com'), findsOneWidget);
       await tester.tap(find.text(tr('accountLinkGoogle')));
@@ -580,7 +654,17 @@ void main() {
       await tester.tap(find.text(tr('accountTitle')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
+      // 2026-11-16 (perfil estilo Duolingo): tocar Cuenta ABRE
+      // OTRA PANTALLA (AccountProfilePage), sin navbar; la pestaña
+      // de abajo se queda en la anterior (Tabla).
+      expect(find.byType(AccountProfilePage), findsOneWidget);
       expect(find.byType(AccountScreen), findsOneWidget);
+      expect(find.byType(MainBottomNav), findsNothing);
+      // La X cierra el perfil y vuelve a la app.
+      await tester.tap(find.byKey(const ValueKey('accountCloseButton')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byType(AccountProfilePage), findsNothing);
       // Volver a Niveles por el círculo central.
       await tester.tap(find.byKey(const ValueKey('nav-center-levels')));
       await tester.pump();
@@ -589,6 +673,16 @@ void main() {
     });
 
     testWidgets('el menú tiene la tabla y la abre', (tester) async {
+      // El menú solo enseña la tabla con sesión (un invitado no
+      // ve lo de buscar otra gente). Con contraseña puesta
+      // (emailLinked): si no, HomeScreen programa el
+      // recordatorio de contraseña y su timeout de 3 s para
+      // copiar el icono queda pendiente en la zona falsa y el
+      // test falla por temporizador (no por la app: en el
+      // teléfono real ese timeout se resuelve solo).
+      fakeAuth.uid = 'fake-uid';
+      fakeAuth.googleLinked = true;
+      fakeAuth.emailLinked = true;
       await pumpApp(tester);
       tester.state<ScaffoldState>(find.byType(Scaffold).first).openDrawer();
       await tester.pump();
@@ -621,8 +715,13 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('al tocar Google, el usuario viene del correo sin preguntar',
-        (tester) async {
+    testWidgets('al tocar Google, va directo al referido sin pantalla '
+        'de usuario', (tester) async {
+      // (2026-11-16, lote de perfil: Kristian REVIRTIÓ su orden del
+      // 2026-11-15) La pantalla "Elige tu nombre de usuario" YA NO
+      // está en el registro: tras Google se va directo al referido
+      // y el nombre se pone después, en Cuenta ("¡Completa tu
+      // perfil!"). El nombre NO se reclama aquí.
       fakeAuth.displayName = 'Kristian';
       fakeAuth.email = 'kristian@example.com';
       await goToRegisterPage(tester);
@@ -639,14 +738,14 @@ void main() {
       // Flujo de Google, paso 0 ("Ya has iniciado sesión"): el
       // nombre de Google se muestra como texto.
       expect(find.text('Kristian'), findsOneWidget);
-      // Avance automático al código de referido (paso 1, 7.7): se
-      // adelanta el reloj 1,6 s (el temporizador es de 1,5 s). Ni
-      // nombre de usuario ni género se preguntan: el usuario se
-      // coge del correo (Kristian 2026-11-13).
+      // Avance automático al referido (paso 1): se adelanta el
+      // reloj 1,6 s (el temporizador es de 1,5 s). SIN pantalla de
+      // usuario de por medio; el género no se pregunta.
       await tester.pump(const Duration(milliseconds: 1600));
-      expect(find.text(tr('obReferralTitle')), findsOneWidget);
+      await tester.pumpAndSettle();
       expect(find.text(tr('obUsernameTitle')), findsNothing);
-      expect(find.text(tr('obGoogleChooseGender')), findsNothing);
+      expect(find.text(tr('obReferralTitle')), findsOneWidget);
+      expect(UserPrefs.publicUsername, '');
       expect(tester.takeException(), isNull);
     });
   });
@@ -713,9 +812,13 @@ void main() {
       await enterOtp(tester, '123456');
       await tester.tap(find.text(tr('obContinue').toUpperCase()));
       await tester.pumpAndSettle();
-      // La cuenta quedó enlazada y se avanza al referido.
+      // La cuenta quedó enlazada y se va DIRECTO al referido
+      // (2026-11-16: la pantalla de elegir usuario ya no está en
+      // el registro; el nombre se pone después, en Cuenta).
       expect(AuthService.isEmailLinked, isTrue);
+      expect(find.text(tr('obUsernameTitle')), findsNothing);
       expect(find.text(tr('obReferralTitle')), findsOneWidget);
+      expect(UserPrefs.publicUsername, '');
       expect(tester.takeException(), isNull);
     });
 
@@ -727,6 +830,63 @@ void main() {
       expect(find.text(tr('obOtpInvalid')), findsOneWidget);
       expect(find.text(tr('obOtpTitle')), findsOneWidget);
       expect(AuthService.isEmailLinked, isFalse);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+        'correo ya tomado (enlace tardío): pantalla entera y "Entrar" abre el inicio con el correo puesto',
+        (tester) async {
+      // La cuenta ya existe con OTRA contraseña: el enlace falla y
+      // el motivo que queda es que el correo ya está tomado. El
+      // índice no tiene ese correo, así que no se sabe si tiene
+      // contraseña: lo seguro es ofrecer entrar, nunca ponerle una.
+      fakeAuth.simulateEmailAlreadyInUse = true;
+      fakeAuth.emailAccounts['jorge@example.com'] = 'OtraClave9!';
+      await goToOtpStep(tester);
+      await enterOtp(tester, '123456');
+      await tester.tap(find.text(tr('obContinue').toUpperCase()));
+      await tester.pumpAndSettle();
+      // Pantalla entera (Kristian 2026-11-15), no un cuadradito.
+      expect(find.text(tr('obTakenTitle')), findsOneWidget);
+      expect(find.text(tr('obTakenUnknownBody')), findsOneWidget);
+      expect(find.text('jorge@example.com'), findsOneWidget);
+      expect(find.text(tr('obTakenSetPassword').toUpperCase()), findsNothing);
+      expect(find.text(tr('obTakenSignIn').toUpperCase()), findsOneWidget);
+      expect(find.text(tr('obEmailTakenGoogle').toUpperCase()), findsOneWidget);
+      expect(AuthService.isEmailLinked, isFalse);
+      await tester.tap(find.text(tr('obTakenSignIn').toUpperCase()));
+      await tester.pumpAndSettle();
+      // El inicio de sesión trae el correo ya puesto.
+      expect(find.text(tr('obSignInTitle')), findsOneWidget);
+      expect(find.text('jorge@example.com'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('correo ya tomado: "Entrar con Google" entra con esa cuenta',
+        (tester) async {
+      fakeAuth.simulateEmailAlreadyInUse = true;
+      fakeAuth.emailAccounts['jorge@example.com'] = 'OtraClave9!';
+      fakeAuth.displayName = 'Jorge';
+      await goToOtpStep(tester);
+      await enterOtp(tester, '123456');
+      await tester.tap(find.text(tr('obContinue').toUpperCase()));
+      await tester.pumpAndSettle();
+      expect(find.text(tr('obTakenTitle')), findsOneWidget);
+      await tester.tap(find.text(tr('obEmailTakenGoogle').toUpperCase()));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+      // Se entró con Google: el flujo corto muestra el nombre.
+      expect(AuthService.isGoogleLinked, isTrue);
+      expect(find.text('Jorge'), findsOneWidget);
+      // El avance automático de 1,5 s del flujo de Google: se
+      // adelanta el reloj para que no quede un temporizador
+      // pendiente y se avanza DIRECTO al referido (2026-11-16:
+      // sin pantalla de usuario en el registro).
+      await tester.pump(const Duration(milliseconds: 1600));
+      await tester.pumpAndSettle();
+      expect(find.text(tr('obUsernameTitle')), findsNothing);
+      expect(find.text(tr('obReferralTitle')), findsOneWidget);
+      expect(UserPrefs.publicUsername, '');
       expect(tester.takeException(), isNull);
     });
 
@@ -743,6 +903,7 @@ void main() {
       await tester.tap(find.text(tr('obContinue').toUpperCase()));
       await tester.pumpAndSettle();
       await enterHint(tester, tr('obFirstNameHint'), 'Jorge');
+      await enterHint(tester, tr('obLastNameHint'), 'Pozo');
       await tester.tap(find.text(tr('obCreateProfile').toUpperCase()));
       await tester.pumpAndSettle();
       // Sigue en el nombre, con el error (la función OTP no está
@@ -791,7 +952,8 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('inicio de sesión con correo pregunta lo mismo que el registro',
+    testWidgets(
+        'inicio de sesión con correo va directo a la principal sin preguntas',
         (tester) async {
       fakeAuth.emailAccounts['jorge@example.com'] = 'Secreto123!';
       var finished = false;
@@ -808,38 +970,20 @@ void main() {
       await enterHint(tester, tr('obPasswordHint'), 'Secreto123!');
       await tester.tap(find.text(tr('obSignInButton').toUpperCase()));
       await tester.pumpAndSettle();
-      // Tras entrar NO se va directo a la principal (Kristian
-      // 2026-11-13): pregunta lo mismo que al registrarse.
-      expect(finished, isFalse);
-      expect(find.text(tr('obSourceTitle')), findsOneWidget);
-      await tester.tap(find.text(tr('obSourceInstagram')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text(tr('obContinue').toUpperCase()));
-      await tester.pumpAndSettle();
-      expect(find.text(tr('obLevelTitle')), findsOneWidget);
-      await tester.tap(find.text(tr('obLevel1')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text(tr('obContinue').toUpperCase()));
-      await tester.pumpAndSettle();
-      expect(find.text(tr('obGoalTitle')), findsOneWidget);
-      await tester.tap(find.text(tr('obGoal10')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text(tr('obGoalSave').toUpperCase()));
-      await tester.pumpAndSettle();
-      expect(find.text(tr('obNotifTitle')), findsOneWidget);
-      await tester.tap(find.text(tr('obNotifEnable').toUpperCase()));
-      await tester.pumpAndSettle();
-      expect(find.text('Ir a Ajustes'), findsOneWidget);
-      await tester.tap(find.text('Cerrar'));
-      await tester.pumpAndSettle();
-      // Sin racha ni aviso: tras las notificaciones, a la principal.
-      expect(find.text(tr('obStreakTitle')), findsNothing);
+      // Entrar con la cuenta (Kristian 2026-11-15): va directo
+      // a la principal, sin preguntas. Las preguntas quedan
+      // solo en crear cuenta.
       expect(finished, isTrue);
+      expect(find.text(tr('obSourceTitle')), findsNothing);
+      expect(find.text(tr('obLevelTitle')), findsNothing);
+      expect(find.text(tr('obGoalTitle')), findsNothing);
+      expect(find.text(tr('obNotifTitle')), findsNothing);
       expect(UserPrefs.userName, 'Jorge');
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('inicio de sesión con Google también pregunta lo mismo',
+    testWidgets(
+        'inicio de sesión con Google va directo a la principal sin preguntas',
         (tester) async {
       fakeAuth.displayName = 'Kristian';
       fakeAuth.email = 'kristian@example.com';
@@ -862,12 +1006,12 @@ void main() {
       // "Ya has iniciado sesión" con el nombre de Google.
       expect(find.text('Kristian'), findsOneWidget);
       // Avance automático (1,5 s): desde entrar NO pide referido
-      // — va directo a las preguntas (fuente primero).
+      // ni preguntas — va directo a la principal.
       await tester.pump(const Duration(milliseconds: 1600));
       await tester.pumpAndSettle();
-      expect(finished, isFalse);
+      expect(finished, isTrue);
       expect(find.text(tr('obReferralTitle')), findsNothing);
-      expect(find.text(tr('obSourceTitle')), findsOneWidget);
+      expect(find.text(tr('obSourceTitle')), findsNothing);
       expect(tester.takeException(), isNull);
     });
 
@@ -972,8 +1116,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('invitado: nombre + meta diaria -> principal',
-        (tester) async {
+    testWidgets('invitado: nombre + meta diaria -> principal', (tester) async {
       var finished = false;
       await tester.pumpWidget(
         MaterialApp(home: OnboardingScreen(onFinished: () => finished = true)),
@@ -1241,11 +1384,13 @@ void main() {
   });
 
   group('Google sin internet y con fallo (09:13 + regla 2)', () {
-    testWidgets('Cuenta sin internet: una sola línea, sin diálogo',
+    testWidgets('Ajustes sin internet: una sola línea, sin diálogo',
         (tester) async {
       // El enlace falla (sin red) y Firebase no está listo.
+      // 2026-11-16: la fila "Vincular con Google" vive en
+      // Ajustes, sección CUENTA (antes en Cuenta).
       fakeAuth.failAnonymous = true;
-      final opened = await pumpAccount(tester);
+      final opened = await pumpSettings(tester);
       expect(opened, isEmpty);
       await tester.tap(find.text(tr('accountLinkGoogle')));
       await tester.pump();
@@ -1258,11 +1403,12 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('Cuenta con Firebase listo y fallo: mensaje de sesión',
+    testWidgets('Ajustes con Firebase listo y fallo: mensaje de sesión',
         (tester) async {
+      // 2026-11-16: la fila "Vincular con Google" vive en Ajustes.
       fakeAuth.failAnonymous = true;
       AnalyticsSync.markFirebaseReady();
-      await pumpAccount(tester);
+      await pumpSettings(tester);
       await tester.tap(find.text(tr('accountLinkGoogle')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
@@ -1334,13 +1480,16 @@ void main() {
           warnIfMissed: false);
       expect(slow.linkCalls, 1);
       // Completa con éxito: entra al flujo de Google y avanza solo
-      // al código de referido (el paso 0 "Ya has iniciado sesión"
-      // dura 1,5 s); de ahí a notificaciones con Continuar (7.7:
-      // ni usuario ni género se preguntan).
+      // al referido (el paso 0 "Ya has iniciado sesión" dura
+      // 1,5 s); de ahí a notificaciones con Continuar (2026-11-16:
+      // sin pantalla de usuario en el registro; el género no se
+      // pregunta).
       slow.googleLinked = true;
       slow.linkCompleter.complete(true);
       await tester.pump(const Duration(milliseconds: 100));
       await tester.pump(const Duration(milliseconds: 1600));
+      await tester.pumpAndSettle();
+      expect(find.text(tr('obUsernameTitle')), findsNothing);
       expect(find.text(tr('obReferralTitle')), findsOneWidget);
       await tester.tap(find.text(tr('obNext').toUpperCase()));
       await tester.pumpAndSettle();
@@ -1349,11 +1498,12 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('Cuenta en carga: "Vinculando…" y un solo intento',
+    testWidgets('Ajustes en carga: "Vinculando…" y un solo intento',
         (tester) async {
+      // 2026-11-16: la fila "Vincular con Google" vive en Ajustes.
       final slow = _SlowFakeAuth();
       AuthService.setProviderForTests(slow);
-      await pumpAccount(tester);
+      await pumpSettings(tester);
       await tester.tap(find.text(tr('accountLinkGoogle')));
       await tester.pump();
       expect(find.text(tr('googleLinking')), findsOneWidget);
@@ -1369,14 +1519,15 @@ void main() {
     });
 
     testWidgets(
-        'Cuenta sin perfil: la fila de Google abre el mismo '
+        'Ajustes sin perfil: la fila de Google abre el mismo '
         'flujo de inicio (elección, sin "sin conexión")', (tester) async {
       // Sin perfil local (entró "sin conexión"): el setUp de fix8
       // pone userName='kristian', así que se limpia aquí para
       // simular que no hay perfil guardado.
+      // 2026-11-16: la fila "Vincular con Google" vive en Ajustes.
       UserPrefs.userName = '';
       UserPrefs.publicUsername = '';
-      await pumpAccount(tester);
+      await pumpSettings(tester);
       await tester.tap(find.text(tr('accountLinkGoogle')));
       await tester.pumpAndSettle();
       // Empieza en la elección (crear perfil / entrar con Google).
@@ -1386,9 +1537,9 @@ void main() {
       // "Sin conexión" no sale (ya está sin conexión): sale Volver.
       expect(find.text(tr('obOffline').toUpperCase()), findsNothing);
       expect(find.text(tr('obBack').toUpperCase()), findsOneWidget);
-      // Volver cierra el flujo y vuelve a Cuenta. Pumps explícitos
+      // Volver cierra el flujo y vuelve a Ajustes. Pumps explícitos
       // (no pumpAndSettle): tras el pop de ruta, pumpAndSettle no
-      // termina en este árbol (como en el resto de tests de Cuenta,
+      // termina en este árbol (como en el resto de tests de Ajustes,
       // que usan pump con duración).
       await tester.tap(find.text(tr('obBack').toUpperCase()));
       await tester.pump();
@@ -1464,6 +1615,9 @@ class _SlowFakeAuth implements AuthProvider {
 
   @override
   Future<bool> linkWithEmail(String email, String password) async => false;
+
+  @override
+  Future<bool> linkPassword(String email, String password) async => false;
 
   @override
   Future<bool> signInWithEmail(String email, String password) async => false;

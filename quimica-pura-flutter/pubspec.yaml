@@ -13,6 +13,7 @@ environment:
 dependencies:
   audioplayers: ^6.8.1
   cloud_firestore: ^5.6.0
+  device_info_plus: ^13.3.0
   firebase_auth: ^5.7.0
   firebase_core: ^3.13.0
   firebase_messaging: ^15.2.10
@@ -20,11 +21,16 @@ dependencies:
     sdk: flutter
   flutter_local_notifications: ^23.0.0
   flutter_timezone: ^5.1.1
+  gal: ^3.0.1
   google_sign_in: ^7.2.0
   home_widget: ^0.10.0
   http: ^1.6.0
+  image: ^4.13.1
+  image_picker: ^1.2.4
   lottie: ^3.8.2
+  mobile_scanner: ^7.5.0
   path_provider: ^2.1.6
+  qr_flutter: ^4.1.0
   share_plus: ^13.3.1
   shared_preferences: ^2.5.6
   timezone: ^0.11.2
@@ -67,6 +73,16 @@ flutter:
     - assets/facebook_logo.png
     - assets/tiktok_logo.png
     - assets/tiktok_logo_white.png
+    # Imagen de agregar amigo en los resultados de la búsqueda
+    # (Kristian 2026-11-15: en vez de botón, un logo real buscado
+    # en Google que coordine con el diseño): icono "add user" de
+    # Flaticon (gratis, con atribución), descargado de
+    # https://cdn-icons-png.flaticon.com/512/15336/15336957.png
+    # (página: https://www.flaticon.com/free-icon/add-user_15336957).
+    # Persona con camisa verde menta + distintivo verde con "+" en
+    # círculo blanco: se ve en claro y en oscuro. Guardado en el
+    # proyecto para que funcione sin internet.
+    - assets/add_friend.png
     - assets/flags/es.png
     - assets/flags/us.png
     - assets/flags/fr.png

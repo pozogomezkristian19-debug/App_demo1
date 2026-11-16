@@ -76,6 +76,12 @@ const List<Achievement> allAchievements = [
     icon: LucideIcons.circleCheck,
   ),
   Achievement(
+    id: 'points1500',
+    title: 'Super científico',
+    body: 'Consigue 1500 puntos.',
+    icon: LucideIcons.flaskConical,
+  ),
+  Achievement(
     id: 'reviewClear',
     title: 'Repaso al día',
     body: 'Deja la lista de errores en cero.',
@@ -111,6 +117,12 @@ bool achievementUnlocked(
       return p.totalCorrect >= 500;
     case 'correct1000':
       return p.totalCorrect >= 1000;
+    case 'points1500':
+      // 2026-11-16 (Kristian): "Super científico" a los 1500
+      // puntos. p.points es el SALDO (sube y baja con aciertos y
+      // fallos), no un total de por vida: igual que reviewClear,
+      // el logro se puede perder si el saldo baja de 1500.
+      return p.points >= 1500;
     case 'reviewClear':
       return p.everFailed && p.failedCount == 0;
     default:

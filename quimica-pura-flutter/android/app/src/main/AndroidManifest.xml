@@ -24,6 +24,11 @@
          siempre dice "No se pudo comprobar: revisa tu conexión".
          Las apps Flutter lo llevan por defecto; aquí faltaba. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Cámara (2026-11-16, perfil: escanear el QR de otro
+         usuario): solo la usa la acción "Escanear" de la pantalla
+         del QR; el sistema pide el permiso al tocarla. En web no
+         se escanea (la pantalla lo dice claro). -->
+    <uses-permission android:name="android.permission.CAMERA" />
     <application
         android:label="Quemia"
         android:name="${applicationName}"
@@ -73,6 +78,17 @@
         <!-- Sin este receiver, la acción "Repasar ahora" de la
              notificación no hace nada (README del plugin). -->
         <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver" />
+        <!-- Cuenta atrás EN VIVO de la racha (Kristian 2026-11-16):
+             la alarma de la hora del recordatorio la dispara este
+             receiver, que publica el aviso sin necesidad de Dart.
+             BootReceiver reprograma la alarma tras un reinicio (las
+             alarmas de AlarmManager se pierden al apagar). -->
+        <receiver android:exported="false" android:name=".LiveCountdownReceiver" />
+        <receiver android:exported="false" android:name=".BootReceiver">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+            </intent-filter>
+        </receiver>
         <!-- Widget de la pantalla de inicio (v6): tarjeta con el
              tip del día, la racha, las vidas y los puntos.
              Lo pinta MelliQuiWidgetProvider (Kotlin, RemoteViews). -->

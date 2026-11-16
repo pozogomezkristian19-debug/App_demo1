@@ -504,9 +504,9 @@ class ReferralService {
       if (used.length >= kReferralMaxUses) {
         return RedeemResult.exhausted;
       }
-      // Nombre público único antes de escribir el referido (el
-      // aviso del invitador enseña este nombre).
-      await ensureUniqueUsername();
+      // Nombre del invitado para el aviso del invitador (Kristian
+      // 2026-11-16: ya NADA reclama un nombre solo; si no tiene
+      // nombre de usuario, el aviso usa su primer nombre).
       final inviteeName = UserPrefs.publicUsername.isNotEmpty
           ? UserPrefs.publicUsername
           : UserPrefs.firstName;
@@ -777,13 +777,14 @@ class ReferralService {
     }
     var offline = false;
     try {
-      // Lote 1 (independientes): reintentos, nombre y código.
+      // Lote 1 (independientes): reintentos y código. (Kristian
+      // 2026-11-16: el nombre ya NO se reclama aquí; se pone en
+      // el perfil con la tarjeta "¡Completa tu perfil!".)
       final first = await Future.wait([
         retryPending(),
-        ensureUniqueUsername(),
         ensureMyCode(),
       ]);
-      final code = first[2] as String;
+      final code = first[1] as String;
       if (code.isEmpty) offline = true;
       // Lote 2 (independientes con el código ya en mano): cobrar,
       // documento propio, usos restantes y tabla.

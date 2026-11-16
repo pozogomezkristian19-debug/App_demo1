@@ -197,6 +197,19 @@ abstract class AnalyticsRepository {
     bool descending = false,
     int? limit,
   });
+
+  /// Documentos cuyo id empieza por [prefix], ordenados por id.
+  /// La búsqueda de amigos lo usa sobre 'usernames' (claves en
+  /// minúscula, sin distinción de mayúsculas): Firestore lo resuelve
+  /// con el índice automático de ids, sin índice compuesto. Por
+  /// defecto no implementado: los repositorios viejos de tests no
+  /// lo usan y la búsqueda devuelve vacío en vez de romper.
+  Future<List<Map<String, dynamic>>> queryDocsByIdPrefix(
+    String collection,
+    String prefix, {
+    int? limit,
+  }) =>
+      throw UnimplementedError();
   Stream<Map<String, dynamic>?> watchDoc(String collection, String docId);
 
   /// Añade [value] a la lista [field] del documento (sin duplicados)
@@ -298,6 +311,26 @@ class FirestoreAnalyticsRepository implements AnalyticsRepository {
     if (orderByField != null) {
       q = q.orderBy(orderByField, descending: descending);
     }
+    if (limit != null) q = q.limit(limit);
+    final snap = await q.get();
+    return snap.docs
+        .map((d) => <String, dynamic>{'id': d.id, ...d.data()})
+        .toList();
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> queryDocsByIdPrefix(
+    String collection,
+    String prefix, {
+    int? limit,
+  }) async {
+    // Rango sobre el id del documento ('bre' → ['bre', 'bre\uf8ff')):
+    // el índice es el automático de ids, sin índice compuesto.
+    Query<Map<String, dynamic>> q = _db.collection(collection);
+    q = q
+        .where(FieldPath.documentId, isGreaterThanOrEqualTo: prefix)
+        .where(FieldPath.documentId, isLessThan: '$prefix\uf8ff')
+        .orderBy(FieldPath.documentId);
     if (limit != null) q = q.limit(limit);
     final snap = await q.get();
     return snap.docs
@@ -516,6 +549,25 @@ class InMemoryAnalyticsRepository implements AnalyticsRepository {
   }
 
   @override
+  Future<List<Map<String, dynamic>>> queryDocsByIdPrefix(
+    String collection,
+    String prefix, {
+    int? limit,
+  }) async {
+    if (failAll) throw StateError('fake offline');
+    final end = '$prefix\uf8ff';
+    var rows = _collection(collection)
+        .entries
+        .where((e) =>
+            e.key.compareTo(prefix) >= 0 && e.key.compareTo(end) < 0)
+        .map((e) => <String, dynamic>{'id': e.key, ...e.value})
+        .toList();
+    rows.sort((a, b) => (a['id'] as String).compareTo(b['id'] as String));
+    if (limit != null) rows = rows.take(limit).toList();
+    return rows;
+  }
+
+  @override
   Stream<Map<String, dynamic>?> watchDoc(String collection, String docId) {
     final key = '$collection/$docId';
     var c = _watchers[key];
@@ -577,6 +629,16 @@ class AnalyticsSync {
   static const _kDeviceIdKey = 'melli_analytics_device_id';
   static const _kJoinedAtKey = 'melli_analytics_joined_at_ms';
   static const _kMigratedKey = 'melli_analytics_migrated_to_uid';
+
+  /// Año en que se unió, para el perfil estilo Duolingo ("SE UNIÓ
+  /// EN 2026", Kristian 2026-11-16): el ms guardado en local por
+  /// la subida del progreso, leído SIN escribir nada. null = el
+  /// progreso aún no se subió nunca (entonces el perfil no enseña
+  /// el año, en vez de inventarlo).
+  static Future<int?> joinedAtMs() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_kJoinedAtKey);
+  }
 
   /// Subida pendiente de reintento (Regla 2): true cuando una subida
   /// o respaldo falló (sin internet, timeout). Se reintenta al abrir
@@ -748,6 +810,13 @@ class AnalyticsSync {
         'track': UserPrefs.track,
         'appVersion': kAppVersion,
         'shared': true,
+        // Perfil público (lote seguir, 2026-11-16): puntos por día
+        // (solo hacia adelante: los días pasados sin registro no
+        // existen), aciertos totales y mejor nota del examen mixto.
+        'dailyPoints':
+            Map<String, int>.from(ProgressService.instance.dailyPoints),
+        'correctTotal': ProgressService.instance.totalCorrect,
+        'mixedBest': ProgressService.instance.mixedBest,
       };
     } catch (_) {
       return null;
@@ -801,6 +870,19 @@ class AnalyticsSync {
         // se pierde porque el otro teléfono aún no lo tenga.
         data['trophies'] =
             _mergeTrophies(data['trophies'], existing['trophies']);
+        // Puntos por día (perfil público, lote seguir): unión con
+        // el mayor por fecha, solo los últimos 14 días.
+        data['dailyPoints'] =
+            _mergeDailyPoints(data['dailyPoints'], existing['dailyPoints']);
+        // Aciertos totales y mejor nota del mixto: queda el mayor.
+        final remoteCorrect = _asInt(existing['correctTotal']);
+        final localCorrect = _asInt(data['correctTotal']);
+        if (remoteCorrect > localCorrect) {
+          data['correctTotal'] = remoteCorrect;
+        }
+        final remoteMixed = _asInt(existing['mixedBest']);
+        final localMixed = _asInt(data['mixedBest']);
+        if (remoteMixed > localMixed) data['mixedBest'] = remoteMixed;
       }
     } catch (_) {
       // Sin lectura previa: se escribe la foto local tal cual.
@@ -841,6 +923,36 @@ class AnalyticsSync {
         if (level > (m[topic] ?? 1)) m[topic] = level;
       });
     });
+    return out;
+  }
+
+  /// Puntos por día como mapa tipado, desde cualquier mapa (foto
+  /// local o documento remoto). Las claves son 'yyyy-MM-dd'.
+  static Map<String, int> _asDailyPointsMap(Object? raw) {
+    final out = <String, int>{};
+    if (raw is Map) {
+      raw.forEach((day, pts) {
+        if (pts is num) out[day.toString()] = pts.toInt();
+      });
+    }
+    return out;
+  }
+
+  /// Fusión de puntos por día: unión con el mayor por fecha, solo
+  /// los últimos 14 días (las claves son 'yyyy-MM-dd', así que el
+  /// orden alfabético es el cronológico).
+  static Map<String, int> _mergeDailyPoints(Object? local, Object? remote) {
+    final out = _asDailyPointsMap(local);
+    _asDailyPointsMap(remote).forEach((day, pts) {
+      if (pts > (out[day] ?? 0)) out[day] = pts;
+    });
+    if (out.length > ProgressService.dailyPointsKeepDays) {
+      final keys = out.keys.toList()..sort();
+      for (final k in keys.take(
+          keys.length - ProgressService.dailyPointsKeepDays)) {
+        out.remove(k);
+      }
+    }
     return out;
   }
 
@@ -1092,6 +1204,14 @@ class AnalyticsSync {
       'streak': ProgressService.currentStreak(days, now),
       'track': google['track'] ?? anon['track'] ?? UserPrefs.track,
       'shared': true,
+      'dailyPoints':
+          _mergeDailyPoints(anon['dailyPoints'], google['dailyPoints']),
+      'correctTotal': _asInt(anon['correctTotal']) > _asInt(google['correctTotal'])
+          ? _asInt(anon['correctTotal'])
+          : _asInt(google['correctTotal']),
+      'mixedBest': _asInt(anon['mixedBest']) > _asInt(google['mixedBest'])
+          ? _asInt(anon['mixedBest'])
+          : _asInt(google['mixedBest']),
     };
   }
 
@@ -1145,11 +1265,13 @@ class AnalyticsSync {
           }
         });
       }
+      final dailyPoints = _asDailyPointsMap(data['dailyPoints']);
       await ProgressService.applyRecoveredData(
         levelsByTrack: levelsByTrack,
         trophiesByTrack: trophiesByTrack,
         points: points,
         practiceDays: days,
+        dailyPoints: dailyPoints,
       );
     } catch (_) {
       // Datos rotos: no se aplica nada, el progreso local sigue.

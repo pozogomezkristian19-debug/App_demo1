@@ -19,6 +19,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/questions.dart';
 import 'points.dart';
+import 'premium.dart';
 import 'question_generator.dart';
 
 /// Una pregunta fallada, guardada para repasarla después.
@@ -111,6 +112,19 @@ class ProgressService {
   /// Búsquedas recientes (v6): las últimas 5 consultas, en orden.
   static const _kRecentSearches = 'melli_progress_recent_searches';
 
+  /// Puntos ganados por día ('yyyy-MM-dd' -> puntos), para el
+  /// progreso semanal del perfil público (lote seguir 2026-11-16):
+  /// solo se registran las GANANCIAS (delta > 0); gastar puntos en
+  /// la tienda o en un torneo no resta del día. Sin pista: los
+  /// puntos son de la persona. Se guardan los últimos 14 días.
+  static const _kDailyPoints = 'melli_progress_daily_points';
+  static const int dailyPointsKeepDays = 14;
+
+  /// Puntos ganados por día ('yyyy-MM-dd' -> puntos). Solo hacia
+  /// adelante: los días pasados sin registro quedan vacíos (no se
+  /// inventa historial).
+  final Map<String, int> dailyPoints = <String, int>{};
+
 
   SharedPreferences? _prefs;
 
@@ -143,9 +157,27 @@ class ProgressService {
   int get points => _pointsBalance;
 
   /// Suma (o resta, si delta es negativo) puntos al saldo total.
+  /// Es el embudo único de puntos: si se GANAN puntos (delta > 0)
+  /// se registran en el día de hoy ([dailyPoints]), para el
+  /// progreso semanal del perfil público. Gastar puntos no resta
+  /// del día.
   void addPoints(int delta) {
     _pointsBalance += delta;
+    if (delta > 0) {
+      final today = dateKey(DateTime.now());
+      dailyPoints[today] = (dailyPoints[today] ?? 0) + delta;
+      _pruneDailyPoints();
+    }
     _save();
+  }
+
+  /// Se queda solo con los últimos [dailyPointsKeepDays] días.
+  void _pruneDailyPoints() {
+    if (dailyPoints.length <= dailyPointsKeepDays) return;
+    final keys = dailyPoints.keys.toList()..sort();
+    for (final k in keys.take(keys.length - dailyPointsKeepDays)) {
+      dailyPoints.remove(k);
+    }
   }
 
   // ---- Vidas (v6) ----
@@ -165,23 +197,36 @@ class ProgressService {
 
   static void _bumpFailed() => failedNotifier.value++;
 
-  int _livesLeft = 5;
+  int _livesLeft = 10;
   String? _livesDate;
 
-  /// Vidas que quedan hoy (5 al empezar cada día nuevo).
+  /// Corazones ilimitados (Premium PAGADO): con Premium pagado
+  /// vigente las vidas no se gastan ni se acaban. La prueba de
+  /// 3 días NO da ∞: abre el contenido pero los corazones siguen
+  /// siendo 10 al día, como gratis (Kristian 2026-11-16).
+  /// PremiumFlags lo pone PremiumService con el vencimiento en
+  /// vivo de Firestore.
+  bool get _premiumUnlimited => PremiumFlags.hasPaidPremium;
+
+  /// Vidas que quedan hoy (10 al empezar cada día nuevo).
+  /// Con Premium pagado en web: siempre llenas (ilimitadas).
   int get livesLeft {
+    if (_premiumUnlimited) return maxLives;
     if (_livesDate != dateKey(DateTime.now())) return maxLives;
     return _livesLeft.clamp(0, maxLives);
   }
 
   /// ¿Se puede empezar un nivel hoy?
-  bool get canStartLevel => livesLeft > 0;
+  /// Con Premium pagado en web: siempre (corazones ilimitados).
+  bool get canStartLevel => _premiumUnlimited || livesLeft > 0;
 
   /// Cuándo se reponen las vidas (mañana), para el mensaje de 0 vidas.
   String get livesRefillLabel => 'mañana';
 
   /// Abandonar un nivel en curso cuesta 1 vida.
+  /// Con Premium PAGADO en web: no cuesta nada (ilimitadas).
   void loseLifeOnAbandon() {
+    if (_premiumUnlimited) return;
     final today = dateKey(DateTime.now());
     if (_livesDate != today) {
       _livesDate = today;
@@ -192,11 +237,31 @@ class ProgressService {
     _bumpLives();
   }
 
-  /// Ganar un nivel COMPLETO restaura 1 vida, hasta el máximo de 5.
-  /// Devuelve true si se restauró una vida (si ya tenía 5, no suma
+  /// Fallar una respuesta en un NIVEL cuesta 1 corazón (Kristian
+  /// 2026-11-16: 10 corazones, −1 por fallo; regla de Duolingo web).
+  /// Solo en niveles: repasar errores, exámenes y quizzes no tocan
+  /// las vidas. Con Premium PAGADO en web: no cuesta nada. Cuando
+  /// llega a 0, el nivel termina en la pantalla de resultado
+  /// (PracticarScreen lo comprueba al avanzar).
+  void loseLifeOnWrongAnswer() {
+    if (_premiumUnlimited) return;
+    final today = dateKey(DateTime.now());
+    if (_livesDate != today) {
+      _livesDate = today;
+      _livesLeft = maxLives;
+    }
+    if (_livesLeft > 0) _livesLeft--;
+    _save();
+    _bumpLives();
+  }
+
+  /// Ganar un nivel COMPLETO restaura 1 vida, hasta el máximo de 10.
+  /// Devuelve true si se restauró una vida (si ya tenía 10, no suma
   /// nada). Fallar un nivel terminado no quita ni devuelve vida: solo
   /// se llama cuando el nivel se aprueba.
+  /// Con Premium PAGADO en web: no hace falta restaurar nada (ilimitadas).
   bool restoreLifeOnPass() {
+    if (_premiumUnlimited) return false;
     final today = dateKey(DateTime.now());
     if (_livesDate != today) {
       _livesDate = today;
@@ -283,6 +348,10 @@ class ProgressService {
       ..addAll(prefs.getStringList(_kLevelPassDays) ?? <String>[]);
     everFailed = prefs.getBool(_kEverFailed) ?? false;
     _pointsBalance = prefs.getInt(_kPoints) ?? 0;
+    dailyPoints
+      ..clear()
+      ..addAll(_readIntMap(prefs.getString(_kDailyPoints)));
+    _pruneDailyPoints();
     _livesLeft = prefs.getInt(_kLives) ?? maxLives;
     _livesDate = prefs.getString(_kLivesDate);
     _recentSearches
@@ -360,6 +429,7 @@ class ProgressService {
     prefs.setStringList(_kLevelPassDays, levelPassDays.toList());
     prefs.setBool(_kEverFailed, everFailed);
     prefs.setInt(_kPoints, _pointsBalance);
+    prefs.setString(_kDailyPoints, jsonEncode(dailyPoints));
     prefs.setInt(_kLives, _livesLeft);
     if (_livesDate != null) prefs.setString(_kLivesDate, _livesDate!);
     prefs.setStringList(_kRecentSearches, _recentSearches);
@@ -432,6 +502,12 @@ class ProgressService {
   // ---- Mejor puntuación por test / nivel ----
 
   int bestScore(String testId) => bestScores[testId] ?? 0;
+
+  /// Mejor nota del examen mixto (0 si nunca se hizo): el dato
+  /// local que hay detrás de 'mixedBest' en el perfil público (el
+  /// logro 'mixedPass' es bestScore('mixto') >= 80, ver
+  /// achievements.dart). No se inventa: es el 'mixto' de bestScores.
+  int get mixedBest => bestScore('mixto');
 
   // ---- Examen por tema y trofeos (Kristian, 2026-11-14) ----
 
@@ -528,6 +604,7 @@ class ProgressService {
     Map<String, List<String>> trophiesByTrack = const {},
     int? points,
     Iterable<String> practiceDays = const [],
+    Map<String, int> dailyPoints = const {},
   }) async {
     final prefs = instance._prefs ?? await SharedPreferences.getInstance();
     instance._prefs = prefs;
@@ -568,6 +645,27 @@ class ProgressService {
         }
       }
       if (changed) await prefs.setString(key, jsonEncode(current));
+    }
+    // Puntos por día (perfil público, lote seguir 2026-11-16):
+    // unión con el mayor por fecha, solo los últimos 14 días.
+    if (dailyPoints.isNotEmpty) {
+      final current = _readIntMap(prefs.getString(_kDailyPoints));
+      var changed = false;
+      dailyPoints.forEach((day, pts) {
+        if (pts > (current[day] ?? 0)) {
+          current[day] = pts;
+          changed = true;
+        }
+      });
+      if (changed) {
+        final keys = current.keys.toList()..sort();
+        if (keys.length > dailyPointsKeepDays) {
+          for (final k in keys.take(keys.length - dailyPointsKeepDays)) {
+            current.remove(k);
+          }
+        }
+        await prefs.setString(_kDailyPoints, jsonEncode(current));
+      }
     }
     // Releer (la pista actual refleja la mezcla) y luego puntos/racha.
     instance._readAll(prefs);

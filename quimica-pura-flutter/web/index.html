@@ -20,6 +20,12 @@
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="A new Flutter project.">
 
+  <!-- Google Sign-In en web (2026-11-15): sin este meta el plugin
+       google_sign_in_web no encuentra el client ID y authenticate()
+       falla con [google_sign_in:unknown] sin abrir la ventana de
+       Google. Cliente OAuth web (tipo 3) del proyecto quemia-8410a. -->
+  <meta name="google-signin-client_id" content="898001909401-o2ins4m72vvgb5hg6v5rgsl0llgu9glj.apps.googleusercontent.com">
+
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">

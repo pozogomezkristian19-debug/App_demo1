@@ -7,8 +7,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:quimica_pura/services/otp_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  // Cada prueba empieza sin códigos guardados en el teléfono.
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
   group('AppsScriptOtpTransport', () {
     late String capturedCode;
     late AppsScriptOtpTransport transport;
@@ -39,7 +45,7 @@ void main() {
           capturedCode,
           OtpPurpose.register,
         ),
-        isTrue,
+        OtpVerifyResult.valid,
       );
       // Un código ya usado no vale otra vez.
       expect(
@@ -48,7 +54,7 @@ void main() {
           capturedCode,
           OtpPurpose.register,
         ),
-        isFalse,
+        OtpVerifyResult.missing,
       );
     });
 
@@ -60,7 +66,7 @@ void main() {
           '000000',
           OtpPurpose.register,
         ),
-        isFalse,
+        OtpVerifyResult.wrong,
       );
       // El bueno sigue valiendo después de un fallo.
       expect(
@@ -69,29 +75,38 @@ void main() {
           capturedCode,
           OtpPurpose.register,
         ),
-        isTrue,
+        OtpVerifyResult.valid,
       );
     });
 
     test('5 intentos fallidos borran el código', () async {
       await transport.sendCode('jorge@example.com', OtpPurpose.register);
-      for (var i = 0; i < 5; i++) {
+      for (var i = 0; i < 4; i++) {
         expect(
           await transport.verifyCode(
             'jorge@example.com',
             '000000',
             OtpPurpose.register,
           ),
-          isFalse,
+          OtpVerifyResult.wrong,
         );
       }
+      // El 5.º intento fallido agota el código.
+      expect(
+        await transport.verifyCode(
+          'jorge@example.com',
+          '000000',
+          OtpPurpose.register,
+        ),
+        OtpVerifyResult.exhausted,
+      );
       expect(
         await transport.verifyCode(
           'jorge@example.com',
           capturedCode,
           OtpPurpose.register,
         ),
-        isFalse,
+        OtpVerifyResult.missing,
       );
     });
 
@@ -103,7 +118,7 @@ void main() {
           capturedCode,
           OtpPurpose.register,
         ),
-        isFalse,
+        OtpVerifyResult.missing,
       );
     });
 
@@ -125,7 +140,7 @@ void main() {
           '123456',
           OtpPurpose.register,
         ),
-        isFalse,
+        OtpVerifyResult.missing,
       );
     });
 
@@ -180,39 +195,96 @@ void main() {
       });
       final t = AppsScriptOtpTransport(
         endpoint: endpoint,
-token: 'test-token',
+        token: 'test-token',
         client: client,
       );
-      expect(await t.sendCode('jorge@example.com', OtpPurpose.register),
-          isTrue);
+      expect(
+          await t.sendCode('jorge@example.com', OtpPurpose.register), isTrue);
       expect(
           await t.verifyCode('jorge@example.com', code!, OtpPurpose.register),
-          isTrue);
+          OtpVerifyResult.valid);
     });
 
     test('302 + GET {"ok": false} → no se guarda el código', () async {
       final transport = AppsScriptOtpTransport(
         endpoint: endpoint,
-token: 'test-token',
+        token: 'test-token',
         client: redirectClient(getBody: '{"ok": false, "error": "cooldown"}'),
       );
-      expect(
-          await transport.sendCode(
-              'jorge@example.com', OtpPurpose.register),
+      expect(await transport.sendCode('jorge@example.com', OtpPurpose.register),
           isFalse);
     });
 
     test('302 sin dirección → se toma como enviado', () async {
       final transport = AppsScriptOtpTransport(
         endpoint: endpoint,
-token: 'test-token',
-        client: MockClient(
-            (_) async => http.Response('', 302)),
+        token: 'test-token',
+        client: MockClient((_) async => http.Response('', 302)),
+      );
+      expect(await transport.sendCode('jorge@example.com', OtpPurpose.register),
+          isTrue);
+    });
+  });
+
+  group('AppsScriptOtpTransport: el código sobrevive a cerrar la app', () {
+    MockClient okClient(void Function(String code) onCode) {
+      return MockClient((request) async {
+        if (request.method == 'POST') {
+          onCode((jsonDecode(request.body) as Map)['code'] as String);
+        }
+        return http.Response('{"ok": true}', 200);
+      });
+    }
+
+    test('el código vale en otra instancia del transporte (reinicio)',
+        () async {
+      String code = '';
+      final a = AppsScriptOtpTransport(
+        endpoint: 'https://script.google.com/macros/s/falso/exec',
+        token: 'token-prueba',
+        client: okClient((c) => code = c),
       );
       expect(
-          await transport.sendCode(
-              'jorge@example.com', OtpPurpose.register),
-          isTrue);
+        await a.sendCode('jorge@example.com', OtpPurpose.register),
+        isTrue,
+      );
+      // Otra instancia (como tras cerrar y abrir la app): el
+      // código sigue valiendo porque está guardado en el teléfono.
+      final b = AppsScriptOtpTransport(
+        endpoint: 'https://script.google.com/macros/s/falso/exec',
+        token: 'token-prueba',
+        client: okClient((_) {}),
+      );
+      expect(
+        await b.verifyCode('jorge@example.com', code, OtpPurpose.register),
+        OtpVerifyResult.valid,
+      );
+    });
+
+    test('el código caducado dice que caducó', () async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+          'otp_pending_codes_v1',
+          jsonEncode({
+            'jorge@example.com|register': {
+              'code': '654321',
+              'expiresAtMs': DateTime.now().millisecondsSinceEpoch - 1000,
+              'attempts': 0,
+            },
+          }));
+      final transport = AppsScriptOtpTransport(
+        endpoint: 'https://script.google.com/macros/s/falso/exec',
+        token: 'token-prueba',
+        client: okClient((_) {}),
+      );
+      expect(
+        await transport.verifyCode(
+          'jorge@example.com',
+          '654321',
+          OtpPurpose.register,
+        ),
+        OtpVerifyResult.expired,
+      );
     });
   });
 }

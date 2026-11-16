@@ -1013,6 +1013,14 @@ class LucideIcons {
         'M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5'),
   ]);
 
+  /// Medalla (2026-11-16, perfil: RESUMEN "Logros"): la cinta de
+  /// Lucide arriba y el medallón abajo, en el mismo trazo fino.
+  static const LucideIconData medal = LucideIconData([
+    _SvgPath(
+        'M7.21 15 2.66 7.14a2 2 0 0 1 .13-2.2L4.4 2.8A2 2 0 0 1 6 2h12a2 2 0 0 1 1.6.8l1.6 2.14a2 2 0 0 1 .14 2.2L16.79 15'),
+    _SvgCircle(12, 17, 4.5),
+  ]);
+
   static const LucideIconData hexagon = LucideIconData([
     _SvgPath(
         'M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z'),
@@ -1292,6 +1300,32 @@ class LucideIcons {
     _SvgCircle(11, 11, 8),
   ]);
 
+  /// Código QR (2026-11-16, perfil: botón QR): los tres
+  /// cuadrados de esquina de Lucide + los módulos y puntos.
+  static const LucideIconData qrCode = LucideIconData([
+    _SvgRect(3, 3, 5, 5, 1, 1),
+    _SvgRect(16, 3, 5, 5, 1, 1),
+    _SvgRect(3, 16, 5, 5, 1, 1),
+    _SvgPath('M21 16h-3a2 2 0 0 0-2 2v3'),
+    _SvgPath('M21 21v.01'),
+    _SvgPath('M12 7v3a2 2 0 0 1-2 2H7'),
+    _SvgPath('M3 12h.01'),
+    _SvgPath('M12 3v.01'),
+    _SvgPath('M12 16v.01'),
+    _SvgPath('M16 12h1'),
+    _SvgPath('M21 12v.01'),
+    _SvgPath('M12 21v-1'),
+  ]);
+
+  /// Escanear (2026-11-16, pantalla QR): esquinas + línea central.
+  static const LucideIconData scanLine = LucideIconData([
+    _SvgPath('M3 7V5a2 2 0 0 1 2-2h2'),
+    _SvgPath('M17 3h2a2 2 0 0 1 2 2v2'),
+    _SvgPath('M21 17v2a2 2 0 0 1-2 2h-2'),
+    _SvgPath('M7 21H5a2 2 0 0 1-2-2v-2'),
+    _SvgPath('M7 12h10'),
+  ]);
+
   static const LucideIconData settings = LucideIconData([
     _SvgPath(
         'M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915'),
@@ -1411,6 +1445,14 @@ class LucideIcons {
   static const LucideIconData userRound = LucideIconData([
     _SvgCircle(12, 8, 5),
     _SvgPath('M20 21a8 8 0 0 0-16 0'),
+  ]);
+
+  /// Usuarios (2026-11-16, sugerencias de amigos).
+  static const LucideIconData users = LucideIconData([
+    _SvgPath('M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2'),
+    _SvgCircle(9, 7, 4),
+    _SvgPath('M22 21v-2a4 4 0 0 0-3-3.87'),
+    _SvgPath('M16 3.13a4 4 0 0 1 0 7.75'),
   ]);
 
   static const LucideIconData volume2 = LucideIconData([

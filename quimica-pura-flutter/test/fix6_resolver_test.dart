@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:quimica_pura/data/i18n/content_i18n.dart';
 import 'package:quimica_pura/screens/resolver_screen.dart';
 import 'package:quimica_pura/services/localization.dart';
+import 'package:quimica_pura/services/premium_service.dart';
 import 'package:quimica_pura/services/progress.dart';
 import 'package:quimica_pura/services/user_prefs.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -22,6 +23,11 @@ void main() {
     SharedPreferences.setMockInitialValues({'melli_rules_seen_v6': true});
     await UserPrefs.load();
     await ProgressService.load();
+    // 2026-11-16: Resolver lleva candado Premium (AbsorbPointer
+    // traga los toques sin Premium ni prueba). El test toca un
+    // solver, así que se desbloquea.
+    PremiumService.premiumNotifier.value = true;
+    addTearDown(PremiumService.resetForTests);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
             const MethodChannel('xyz.luan/audioplayers.global/events'),
@@ -105,5 +111,22 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     // El solver de masa molar se abre con su campo de fórmula.
     expect(find.text('Fórmula química'), findsOneWidget);
+  });
+
+  testWidgets('el conversor va primero y abre las constantes',
+      (tester) async {
+    // 2026-11-16 (Kristian): el Conversor de unidades es la
+    // primera tarjeta de Resolver, antes que los chips y los
+    // grupos, y al tocarlo abre ConstantsScreen con su AppBar
+    // (sin doble AppBar: se empuja directo, no por _openSolver).
+    await pumpResolver(tester);
+    final card = solverCardTitle('Conversor de unidades');
+    expect(card, findsOneWidget);
+    await tester.tap(card);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text(tr('menuConstants')), findsOneWidget);
+    // Una sola AppBar en la pantalla abierta.
+    expect(find.byType(AppBar), findsOneWidget);
   });
 }

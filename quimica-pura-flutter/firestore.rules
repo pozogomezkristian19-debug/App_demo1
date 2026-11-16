@@ -4,9 +4,14 @@ rules_version = '2';
 //  Reglas de Firestore — Quemia (Melli-Qui) v7.0
 //  Proyecto Firebase: "Quemia" (id: quemia-8410a, plan Spark gratuito)
 //  ----------------------------------------------------------------------------
-//  ESTAS REGLAS NO SE APLICAN SOLAS: las aplica el agente principal copiándolas
-//  en la consola de Firebase → Firestore Database → pestaña "Reglas" → "Publicar".
-//  Este archivo es solo el texto oficial de las reglas, versionado junto al código.
+//  DESPLIEGUE: desde ~/workspace/quimica-pura-flutter con el CLI de Firebase
+//  (/home/hatch/.fbtest/node_modules/.bin/firebase):
+//    firebase deploy --only firestore:rules --project quemia-8410a
+//  Verificado 2026-11-15: el CLI compila y publica las reglas (antes solo
+//  se hacía a mano desde la consola). Si el CLI falla, el plan B sigue
+//  siendo copiar este archivo en la consola de Firebase → Firestore
+//  Database → pestaña "Reglas" → "Publicar".
+//  Este archivo es el texto oficial de las reglas, versionado junto al código.
 //
 //  Novedades 7.0: colecciones 'duels', 'tournaments', 'reports',
 //  'announcements', 'groups', 'friends', 'levels' y 'support_messages',
@@ -15,11 +20,16 @@ rules_version = '2';
 //  Ronda 2d: colección 'friend_requests' (solicitudes de amistad) y la
 //  excepción estrecha en 'users' para que al confirmar una solicitud el
 //  destinatario añada solo su propio uid a la 'friends' del remitente.
+//  Premium: colección 'paymentRequests' (solicitudes de pago por
+//  transferencia, con captura en base64 porque el bucket de Storage NO
+//  está habilitado), campos 'premiumExpiresAt' (timestamp) y
+//  'premiumPlan' ('1m' | '3m' | '12m') en 'users' solo escribibles por
+//  admins, y campos nuevos en 'settings/app' (planPrices,
+//  transfermovilCard, transfermovilNumber, paymentDetails).
 //  Ver FIREBASE_SETUP.md para el modelo de datos y las decisiones de seguridad.
 //  ----------------------------------------------------------------------------
-//  ESTAS REGLAS NO SE APLICAN SOLAS: las aplica el agente principal copiándolas
-//  en la consola de Firebase → Firestore Database → pestaña "Reglas" → "Publicar".
-//  Este archivo es solo el texto oficial de las reglas, versionado junto al código.
+//  DESPLIEGUE: CLI (ver arriba) o, si falla, a mano desde la consola de
+//  Firebase → Firestore Database → pestaña "Reglas" → pegar → "Publicar".
 // ============================================================================
 
 service cloud.firestore {
@@ -88,7 +98,19 @@ service cloud.firestore {
               'fcmToken', 'fcmTokenUpdatedAt',
               'referralCode', 'referredBy', 'referredByUid',
               'referralRewarded', 'referralsCount', 'referralMilestones',
-              'referralLastInvitee'];
+              'referralLastInvitee',
+              // Lote seguir (2026-11-16): bloqueados (array de uids
+              // en mi propio documento), puntos por día
+              // ('yyyy-MM-dd' -> puntos), aciertos totales y mejor
+              // nota del examen mixto (perfil público).
+              'blockedUids', 'dailyPoints', 'correctTotal', 'mixedBest',
+              // Inicio de la prueba GRATIS de 3 días (Kristian
+              // 2026-11-15): milisegundos desde epoch. Solo el
+              // propio usuario lo escribe (para que la prueba no
+              // se reinicie al reinstalar); nadie puede regalarse
+              // Premium con esto: el Premium lo decide
+              // premiumExpiresAt (solo admins), no este campo.
+              'trialStartedAt'];
     }
 
     // -------------------------------------------------------------------------
@@ -99,7 +121,8 @@ service cloud.firestore {
     //  teléfono nuevo. Campos: username, joinedAt, lastActive,
     //  levelsPassed (map {bach, uni}), points, streak, track, appVersion,
     //  purchases, friends, tournamentMedals, bestTournamentScores,
-    //  banned (bool), bannedReason.
+    //  banned (bool), bannedReason, premiumExpiresAt (timestamp, solo
+    //  admins), premiumPlan ('1m' | '3m' | '12m', solo admins).
     // -------------------------------------------------------------------------
     match /users/{uid} {
 
@@ -127,6 +150,12 @@ service cloud.firestore {
       // vetado lo sigue viendo todo en local, pero su progreso deja de
       // contar (la app principal y la app de admin lo comprueban al leer
       // 'banned').
+      // PREMIUM: solo un admin puede escribir 'premiumExpiresAt'
+      // (timestamp: cuándo caduca el Premium) y 'premiumPlan' ('1m' |
+      // '3m' | '12m'): el usuario normal NO puede escribirlos (no están
+      // en userWritableFields()), así que nadie puede regalarse Premium.
+      // La app de admin los escribe al aprobar una solicitud de pago
+      // (ver 'paymentRequests') y al revocarlo.
       //
       // EXCEPCIÓN ESTRECHA (ronda 2d, amistad por solicitud): al confirmar
       // una solicitud, el destinatario añade SOLO su propio uid a la
@@ -157,11 +186,16 @@ service cloud.firestore {
             ['username', 'joinedAt', 'lastActive', 'levelsPassed',
              'points', 'streak', 'track', 'appVersion',
              'purchases', 'friends', 'tournamentMedals',
-             'bestTournamentScores', 'banned', 'bannedReason'])
+             'bestTournamentScores', 'banned', 'bannedReason',
+             'premiumExpiresAt', 'premiumPlan'])
           && (!('banned' in request.resource.data)
               || request.resource.data.banned is bool)
           && (!('bannedReason' in request.resource.data)
-              || request.resource.data.bannedReason is string));
+              || request.resource.data.bannedReason is string)
+          && (!('premiumExpiresAt' in request.resource.data)
+              || request.resource.data.premiumExpiresAt is timestamp)
+          && (!('premiumPlan' in request.resource.data)
+              || request.resource.data.premiumPlan in ['1m', '3m', '12m']));
 
       // BORRAR: nadie desde un cliente. Si hay que borrar un documento de
       // usuario, se hace a mano desde la consola de Firebase.
@@ -233,6 +267,67 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    //  Colección 'emails' — índice de correos registrados (Quemia 7.7,
+    //  Kristian 2026-11-15): Firebase Auth no dice si un correo existe
+    //  (protección de enumeración), así que la app guarda su propio
+    //  índice para avisar "correo ya tomado" ANTES de pedir la
+    //  contraseña: 'emails/<correo en minúsculas>': {uid,
+    //  hasPassword?}. Solo lo necesario para la comprobación (ni
+    //  nombres ni datos personales). PRECIO HONESTO: quien adivine
+    //  un correo puede saber si está registrado — la lectura es con
+    //  sesión (hasta anónima), como 'usernames' y 'referral_codes'.
+    //  Se escribe al enlazar/entrar con correo (hasPassword true),
+    //  con Google (solo uid) o al ponerle contraseña; al abrir la
+    //  app con sesión y correo se auto-repara si falta. Nadie
+    //  puede escribir el correo de otro (el uid del documento tiene
+    //  que ser el suyo, o ser admin) ni borrar.
+    // -------------------------------------------------------------------------
+    match /emails/{email} {
+      allow read: if isSignedIn();
+      allow create, update: if request.resource.data.keys()
+            .hasOnly(['uid', 'hasPassword'])
+          && (!('hasPassword' in request.resource.data)
+            || request.resource.data.hasPassword is bool)
+          && ((isSignedIn()
+            && request.resource.data.uid == request.auth.uid
+            && (resource == null
+              || resource.data.uid == request.auth.uid))
+            || isAdmin());
+      allow delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    //  Colección 'device_trials' — inicio de la prueba POR TELÉFONO
+    //  (Kristian 2026-11-16: la prueba no se puede borrar ni
+    //  reinstalar). Un documento por aparato, id = id estable del
+    //  teléfono (ANDROID_ID / identifierForVendor, con prefijo
+    //  'android:' / 'ios:'). Campos: trialStartedAt (ms), createdAt
+    //  (ms). Solo se puede CREAR una vez: ni reescribir ni borrar,
+    //  así que borrar la caché o reinstalar NO da otra prueba. La
+    //  app lee el documento al arrancar y vale el inicio más
+    //  antiguo entre local, nube y teléfono.
+    // -------------------------------------------------------------------------
+    match /device_trials/{deviceId} {
+      // LECTURA: cualquiera con sesión (incluida anónima, que es
+      // la que usa la app al abrir): solo lee SU propio inicio.
+      allow read: if isSignedIn();
+
+      // CREACIÓN: solo si el documento NO existe ya, y solo con
+      // los dos campos en milisegundos. Un segundo intento (otro
+      // arranque, otro teléfono con el mismo id) falla y la app
+      // lee el inicio que ya hay.
+      allow create: if isSignedIn()
+          && !exists(/databases/$(database)/documents/device_trials/$(deviceId))
+          && request.resource.data.keys()
+            .hasOnly(['trialStartedAt', 'createdAt'])
+          && request.resource.data.trialStartedAt is int
+          && request.resource.data.createdAt is int;
+
+      // Sin reescrituras ni borrados: el inicio es para siempre.
+      allow update, delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
     //  Colección 'admins' — un documento por administrador (id = uid de
     //  Firebase Auth). Campos: email, displayName, role ('owner' | 'admin'),
     //  permissions {viewUsers, viewProgress, banUsers, manageAdmins},
@@ -273,6 +368,12 @@ service cloud.firestore {
     //  passThreshold, pointsEasyGain, pointsEasyLoss, pointsMediumGain,
     //  pointsMediumLoss, pointsHardGain, pointsHardLoss, maxLives,
     //  supportNumber, showWhatsApp.
+    //  PREMIUM (la regla NO cambia: escritura solo admins, sin
+    //  restricción de campos, así que ya cubre estos campos nuevos):
+    //  planPrices (map {1m, 3m, 12m} con el precio en CUP de cada plan),
+    //  transfermovilCard (string: tarjeta a la que se paga),
+    //  transfermovilNumber (string: número de Transfermóvil) y
+    //  paymentDetails (string: instrucciones de pago que ve el usuario).
     //  'supportNumber' (string: número de soporte en formato internacional,
     //  p. ej. '5356519431', sin '+' ni espacios) y 'showWhatsApp' (bool:
     //  muestra o no la opción de WhatsApp en la ventanita de Soporte) son
@@ -303,16 +404,21 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
     match /duels/{duelId} {
 
-      // LECTURA: solo los 2 participantes. Nadie más (ni siquiera otros
-      // usuarios autenticados) puede ver un duelo ajeno: ni las preguntas,
+      // LECTURA: los 2 participantes, y los admins (la app de admin
+      // muestra los duelos en su pantalla de Duelos: sin rama de admin
+      // la lectura siempre se denegaba y la pantalla quedaba en
+      // "sin acceso"). Nadie más (ni siquiera otros usuarios
+      // autenticados) puede ver un duelo ajeno: ni las preguntas,
       // ni las respuestas, ni los tiempos.
       // CORREGIDO 2026-11-13: la app escribe playerA/playerB (no
       // 'participants'), así que la lectura se comprueba contra esos
       // dos campos. Antes esta regla pedía 'participants' y ningún
       // duelo se podía crear ni leer (0 duelos en Firestore).
-      allow read: if isSignedIn()
-        && (request.auth.uid == resource.data.playerA
-          || request.auth.uid == resource.data.playerB);
+      // AÑADIDO 2026-11-15: rama isAdmin() para la app de admin.
+      allow read: if isAdmin()
+        || (isSignedIn()
+          && (request.auth.uid == resource.data.playerA
+            || request.auth.uid == resource.data.playerB));
 
       // CREAR: solo un participante, y tiene que incluirse a sí mismo.
       // playerA y playerB tienen que ser 2 uid distintos, uno de
@@ -416,27 +522,106 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
-    //  Colección 'reports' — reportes de preguntas. Campos: questionId,
-    //  authorUid (uid del usuario que reporta), note (nota del usuario),
-    //  createdAt (fecha), status ('pendiente' | 'en revisión' |
-    //  'arreglado' | 'rechazado').
+    //  Colección 'tournament_scores' — puntajes de torneo por jugador.
+    //  AÑADIDO 2026-11-15: no tenía bloque y caía en el comodín final
+    //  (denegado siempre): ni la app podía guardar/leer puntajes ni la
+    //  app de admin podía mostrar la clasificación de un torneo.
+    //  Un documento por jugador y torneo, id '<torneo>_<uid>'. Campos:
+    //  tournamentId, uid, username, bestScore, bestCorrect, bestTimeMs,
+    //  updatedAtMs, lastActivityMs, y opcionales medalPlace, prizePoints
+    //  (medalla/premio al cobrar si quedó entre los 3 primeros).
+    //  NOTA ÍNDICE: la clasificación consulta where tournamentId ==
+    //  X orderBy bestScore desc: necesita el índice compuesto
+    //  (tournamentId ASC, bestScore DESC) de firestore.indexes.json.
+    // -------------------------------------------------------------------------
+    match /tournament_scores/{scoreId} {
+
+      // LECTURA: cualquier usuario con sesión. Es la clasificación
+      // pública del torneo (nombre + puntaje + tiempo, como la tabla
+      // de posiciones de 'users', que también es pública). Sin esto
+      // la app no puede mostrar la clasificación ni su propio puntaje.
+      allow read: if isSignedIn();
+
+      // CREAR / ACTUALIZAR: solo el propio jugador (uid del documento
+      // igual al uid de la sesión, y el id del documento tiene que ser
+      // '<torneo>_<uid>'). Solo los 10 campos del contrato, con el tipo
+      // correcto; nadie escribe el puntaje de otro ni inventa campos.
+      // setDoc con merge escribe parcial (medalla, latido), pero en
+      // reglas request.resource.data es el documento RESULTANTE, así
+      // que la comprobación vale igual para crear y para actualizar.
+      allow create, update: if isSignedIn()
+        && scoreId == request.resource.data.tournamentId + '_'
+            + request.auth.uid
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['tournamentId', 'uid',
+            'username', 'bestScore', 'bestCorrect', 'bestTimeMs',
+            'updatedAtMs', 'lastActivityMs', 'medalPlace', 'prizePoints'])
+        && request.resource.data.tournamentId is string
+        && request.resource.data.uid is string
+        && request.resource.data.username is string
+        && request.resource.data.bestScore is int
+        && request.resource.data.bestCorrect is int
+        && request.resource.data.bestTimeMs is int
+        && request.resource.data.updatedAtMs is int
+        && request.resource.data.lastActivityMs is int
+        && (!('medalPlace' in request.resource.data)
+            || request.resource.data.medalPlace is int)
+        && (!('prizePoints' in request.resource.data)
+            || request.resource.data.prizePoints is int);
+
+      // BORRAR: nadie desde un cliente; el historial de puntajes se
+      // conserva.
+      allow delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    //  Colección 'reports' — reportes de preguntas y de usuarios.
+    //  Campos (pregunta): questionId, authorUid (uid del usuario que
+    //  reporta), note (nota del usuario), createdAt (fecha), status
+    //  ('pendiente' | 'en revisión' | 'arreglado' | 'rechazado').
+    //  Campos (usuario, lote seguir 2026-11-16): type 'user',
+    //  reportedUid, reportedUsername, questionId '' (vacío), note
+    //  (motivo), uid (quien reporta), username, status 'open',
+    //  createdAt (Timestamp: el Admin lee con orderBy('createdAt')
+    //  y sin él el reporte NO aparece en la cola) y createdAtMs.
     // -------------------------------------------------------------------------
     match /reports/{reportId} {
 
       // LECTURA: solo los admins y el propio autor. Un usuario NO puede
-      // leer los reportes de otros usuarios.
+      // leer los reportes de otros usuarios. (El autor es 'authorUid'
+      // en los de pregunta y 'uid' en los de usuario.)
       allow read: if isAdmin()
-        || (isSignedIn() && resource.data.authorUid == request.auth.uid);
+        || (isSignedIn() && resource.data.authorUid == request.auth.uid)
+        || (isSignedIn() && resource.data.uid == request.auth.uid);
 
       // CREAR: cualquier usuario autenticado, pero solo como autor de su
       // propio reporte: authorUid tiene que ser su uid, el estado inicial
       // tiene que ser 'pendiente' y questionId, un texto. La app debe
       // rellenar authorUid con el uid de la sesión; si escribe otro uid,
       // la creación se rechaza.
-      allow create: if isSignedIn()
+      // Rama de usuario (lote seguir): type 'user', uid propio, estado
+      // inicial 'open', reportedUid distinto de uno mismo, createdAt
+      // Timestamp obligatorio (si no, el Admin no lo ve en su cola) y
+      // solo los 10 campos del contrato.
+      allow create: if (isSignedIn()
         && request.resource.data.authorUid == request.auth.uid
         && request.resource.data.status == 'pendiente'
-        && request.resource.data.questionId is string;
+        && request.resource.data.questionId is string)
+        || (isSignedIn()
+          && request.resource.data.type == 'user'
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.status == 'open'
+          && request.resource.data.reportedUid is string
+          && request.resource.data.reportedUid != request.auth.uid
+          && request.resource.data.reportedUsername is string
+          && request.resource.data.questionId == ''
+          && request.resource.data.note is string
+          && request.resource.data.username is string
+          && request.resource.data.createdAt is timestamp
+          && request.resource.data.createdAtMs is int
+          && request.resource.data.keys().hasOnly(['type', 'reportedUid',
+              'reportedUsername', 'questionId', 'note', 'uid', 'username',
+              'status', 'createdAt', 'createdAtMs']));
 
       // ACTUALIZAR: solo los admins, y SOLO el estado. Ningún otro campo
       // (pregunta, autor, nota, fecha) se puede tocar después de creado:
@@ -450,6 +635,176 @@ service cloud.firestore {
       // historial (cerrados quedan con status 'arreglado' o 'rechazado').
       allow delete: if false;
     }
+
+    // -------------------------------------------------------------------------
+    //  Colección 'paymentRequests' — solicitudes de pago Premium (el usuario
+    //  paga por Transfermóvil y envía la captura del comprobante).
+    //  Campos: uid, username, plan ('1m' | '3m' | '12m'), amount (int,
+    //  precio en CUP), screenshotUrl (string: URL de la captura si algún
+    //  día se guarda en Storage; hoy queda '' porque el bucket NO está
+    //  habilitado), screenshotPath (string: ruta futura en Storage, hoy
+    //  ''), screenshotData (string base64 de la captura comprimida a
+    //  max 1024 px / calidad ~75, típicamente 100-300 KB, dentro del
+    //  límite de 1 MB por documento; puede ser '' si no hay captura),
+    //  status ('pending' | 'approved' | 'denied'), reason (motivo del
+    //  rechazo, '' mientras está pendiente), createdAt (timestamp),
+    //  reviewedAt (timestamp o null), reviewedBy (uid del admin o null).
+    //  Al aprobarla, el admin escribe 'premiumExpiresAt' y 'premiumPlan'
+    //  en el documento del usuario (ver 'users'); al denegarla, solo
+    //  cambia el estado y el motivo. La captura viaja en Firestore
+    //  porque Firebase Storage no está habilitado en este proyecto
+    //  (bucket quemia-8410a.firebasestorage.app inexistente, verificado
+    //  2026-11-15): NO se añade la dependencia firebase_storage.
+    // -------------------------------------------------------------------------
+    match /paymentRequests/{requestId} {
+
+      // LECTURA: solo los admins y el propio autor (uid del documento
+      // igual al uid de la sesión). Nadie más ve las solicitudes de
+      // pago de otros: llevan captura del comprobante.
+      allow read: if isAdmin()
+        || (isSignedIn() && resource.data.uid == request.auth.uid);
+
+      // CREAR: cualquier usuario autenticado, pero solo como autor de su
+      // propia solicitud: uid tiene que ser su uid, el estado inicial
+      // tiene que ser 'pending', el plan uno de los tres y amount un
+      // entero (precio en CUP). Solo los 12 campos del contrato.
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.plan in ['1m', '3m', '12m']
+        && request.resource.data.amount is int
+        && request.resource.data.keys().hasOnly(['uid', 'username',
+            'plan', 'amount', 'screenshotUrl', 'screenshotPath',
+            'screenshotData', 'status', 'reason', 'createdAt',
+            'reviewedAt', 'reviewedBy'])
+        && request.resource.data.uid is string
+        && request.resource.data.username is string
+        && request.resource.data.screenshotUrl is string
+        && request.resource.data.screenshotPath is string
+        && request.resource.data.screenshotData is string
+        && request.resource.data.reason is string
+        && request.resource.data.createdAt is timestamp
+        && (!('reviewedAt' in request.resource.data)
+            || request.resource.data.reviewedAt == null
+            || request.resource.data.reviewedAt is timestamp)
+        && (!('reviewedBy' in request.resource.data)
+            || request.resource.data.reviewedBy == null
+            || request.resource.data.reviewedBy is string);
+
+      // ACTUALIZAR: SOLO los admins, y SOLO la revisión: estado, motivo,
+      // fecha de revisión y quién revisó. Ningún otro campo (usuario,
+      // plan, importe, captura, fecha de creación) se puede tocar
+      // después de creado. Un usuario no puede aprobarse su propio pago.
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'reason', 'reviewedAt', 'reviewedBy'])
+        && request.resource.data.status in ['pending', 'approved', 'denied'];
+
+      // BORRAR: nadie desde un cliente; las solicitudes se conservan
+      // como historial (aprobadas o denegadas).
+      allow delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    //  Colección 'support_messages' — mensajes de soporte. AÑADIDO
+    //  2026-11-15: la cabecera decía que estaba cubierta pero el bloque
+    //  nunca se escribió y caía en el comodín final (denegado siempre):
+    //  por eso el Panel del Admin mostraba "Sin conexión" (cargaba
+    //  users → reports → support_messages en serie). Campos: authorUid,
+    //  username, message, createdAt, status ('abierto' | 'respondido'),
+    //  reply, replyAt. La ventanita de Soporte de la app principal se
+    //  quitó por orden de Kristian, así que hoy ningún cliente crea
+    //  mensajes nuevos; la regla de creación queda por el contrato
+    //  documentado (nota 5f) por si vuelve. La pantalla de Soporte del
+    //  Admin sigue existiendo y responde con replyTo().
+    // -------------------------------------------------------------------------
+    match /support_messages/{messageId} {
+
+      // LECTURA: solo los admins y el propio autor. Nadie más ve los
+      // mensajes de soporte de otros.
+      allow read: if isAdmin()
+        || (isSignedIn()
+          && resource.data.authorUid == request.auth.uid);
+
+      // CREAR: solo el autor, con estado inicial 'abierto'. Solo los 7
+      // campos del contrato (replyAt solo si viene: nulo o timestamp).
+      allow create: if isSignedIn()
+        && request.resource.data.authorUid == request.auth.uid
+        && request.resource.data.status == 'abierto'
+        && request.resource.data.keys().hasOnly(['authorUid', 'username',
+            'message', 'createdAt', 'status', 'reply', 'replyAt'])
+        && request.resource.data.authorUid is string
+        && request.resource.data.username is string
+        && request.resource.data.message is string
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.reply is string
+        && (!('replyAt' in request.resource.data)
+            || request.resource.data.replyAt == null
+            || request.resource.data.replyAt is timestamp);
+
+      // ACTUALIZAR: SOLO los admins, y SOLO la respuesta: reply +
+      // replyAt + estado 'respondido'. El usuario nunca edita su
+      // mensaje ni cambia el estado.
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['reply', 'replyAt', 'status'])
+        && request.resource.data.status == 'respondido';
+
+      // BORRAR: nadie desde un cliente; los mensajes se conservan.
+      allow delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    //  Colección 'support_auto_replies' — respuestas automáticas de
+    //  soporte (ronda Admin 2026-11-13). AÑADIDO 2026-11-15: no tenía
+    //  bloque y caía en el comodín final. Solo la usa la app de admin
+    //  (crear, editar, activar/desactivar y borrar respuestas). Campos:
+    //  keywords (lista), reply, createdBy, createdAt, active.
+    // -------------------------------------------------------------------------
+    match /support_auto_replies/{replyId} {
+
+      // LECTURA y ESCRITURA: solo administradores.
+      allow read: if isAdmin();
+
+      allow create, update: if isAdmin()
+        && request.resource.data.keys().hasOnly(['keywords', 'reply',
+            'createdBy', 'createdAt', 'active'])
+        && request.resource.data.keywords is list
+        && request.resource.data.reply is string
+        && request.resource.data.createdBy is string
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.active is bool;
+
+      allow delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    //  Colección 'admin_history' — registro de acciones de los admins
+    //  (ronda Admin 2026-11-13). AÑADIDO 2026-11-15: no tenía bloque y
+    //  caía en el comodín final: el historial no se podía leer ni
+    //  registrar. Solo la usa la app de admin. Campos: at, by, action,
+    //  target, detail. Solo se añade (nunca se edita ni se borra: es
+    //  un registro).
+    // -------------------------------------------------------------------------
+    match /admin_history/{entryId} {
+
+      // LECTURA: solo administradores.
+      allow read: if isAdmin();
+
+      // CREAR: solo administradores, con los 5 campos del contrato.
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasOnly(['at', 'by', 'action',
+            'target', 'detail'])
+        && request.resource.data.at is timestamp
+        && request.resource.data.by is string
+        && request.resource.data.action is string
+        && request.resource.data.target is string
+        && request.resource.data.detail is string;
+
+      // ACTUALIZAR / BORRAR: nunca (el historial es solo de añadido).
+      allow update, delete: if false;
+    }
+
     // -------------------------------------------------------------------------
     //  Colección 'announcements' — anuncios para todos los usuarios.
     //  Campos: title, body (texto), createdAt (fecha).
@@ -462,6 +817,67 @@ service cloud.firestore {
       // ESCRITURA: solo administradores (el dueño incluido).
       allow create, update, delete: if isAdmin();
     }
+    // -------------------------------------------------------------------------
+    //  Colección 'groups' — grupos de estudio. AÑADIDO 2026-11-15: no
+    //  tenía bloque y caía en el comodín final (denegado siempre): ni
+    //  crear grupo, ni unirse por código, ni ver los grupos propios.
+    //  Un documento por grupo (id generado). Campos: name, code (código
+    //  de invitación de 6 caracteres), ownerUid, memberUids, createdAtMs.
+    //  La lectura es para cualquier usuario con sesión (no solo
+    //  miembros): unirse por código consulta where code == X, y esa
+    //  consulta solo funciona si la lectura no depende de ser miembro
+    //  (ver nota 5b al final). El código es la única llave: quien lo
+    //  conoce puede unirse. El contenido del documento es solo nombre,
+    //  código, dueño y uids de miembros (sin datos sensibles: la
+    //  lectura de 'users' ya es pública).
+    // -------------------------------------------------------------------------
+    match /groups/{groupId} {
+
+      // LECTURA: cualquier usuario con sesión (buscar por código para
+      // unirse, ver mis grupos por id, ver el progreso de los miembros).
+      allow read: if isSignedIn();
+
+      // CREAR: solo el creador, como dueño y único miembro inicial.
+      // Solo los 5 campos del contrato.
+      allow create: if isSignedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.memberUids == [request.auth.uid]
+        && request.resource.data.keys().hasOnly(['name', 'code',
+            'ownerUid', 'memberUids', 'createdAtMs'])
+        && request.resource.data.name is string
+        && request.resource.data.code is string
+        && request.resource.data.createdAtMs is int;
+
+      // ACTUALIZAR: solo la lista de miembros, y solo el propio uid:
+      // unirse (añadir solo mi uid) o salir (quitar solo mi uid).
+      // Nada más cambia: ni nombre, ni código, ni dueño, ni fecha.
+      allow update: if isSignedIn()
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['memberUids'])
+        && (
+          // Unirse: la lista nueva contiene la vieja entera más mi uid.
+          (request.resource.data.memberUids.hasAll(
+                resource.data.get('memberUids', []))
+            && request.resource.data.memberUids.hasAll([request.auth.uid])
+            && request.resource.data.memberUids.size()
+                == resource.data.get('memberUids', []).size() + 1)
+          ||
+          // Salir: la lista nueva es la vieja sin mi uid.
+          (resource.data.get('memberUids', []).hasAll(
+                request.resource.data.memberUids)
+            && resource.data.get('memberUids', []).hasAll(
+                [request.auth.uid])
+            && !(request.auth.uid in request.resource.data.memberUids)
+            && request.resource.data.memberUids.size()
+                == resource.data.get('memberUids', []).size() - 1)
+        );
+
+      // BORRAR: nadie desde un cliente (salir del grupo es quitarse
+      // de memberUids; si sale el dueño, el grupo queda sin dueño y
+      // los demás siguen dentro).
+      allow delete: if false;
+    }
+
     // -------------------------------------------------------------------------
     //  Colección 'friends' — lista de amigos por usuario. Un documento
     //  por usuario, con el mismo id que su uid. Campos: friends (lista
@@ -541,6 +957,46 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    //  Colección 'follows' — seguimiento (lote seguir, 2026-11-16).
+    //  Un documento por seguimiento, id '<seguidor>_<seguido>'.
+    //  Campos: followerUid, followingUid, createdAtMs. Amigos =
+    //  seguimiento mutuo: al enviar una solicitud se sigue al
+    //  destinatario y al aceptarla se sigue de vuelta. Los
+    //  contadores se calculan leyendo los edges (sin contadores
+    //  guardados). Cada usuario solo escribe SUS propios edges.
+    // -------------------------------------------------------------------------
+    match /follows/{followId} {
+
+      // LECTURA: cualquier usuario con sesión (para contar
+      // seguidores/seguidos y listar las listas de otros). Solo
+      // uids y fecha: nada sensible.
+      allow read: if isSignedIn();
+
+      // CREAR: solo el seguidor, con su propio uid como
+      // followerUid, el id del documento tiene que ser
+      // '<seguidor>_<seguido>' y no puede seguirse a sí mismo.
+      // Solo los 3 campos del contrato.
+      allow create: if isSignedIn()
+        && request.resource.data.followerUid == request.auth.uid
+        && followId == request.resource.data.followerUid + '_'
+            + request.resource.data.followingUid
+        && request.resource.data.followingUid != request.auth.uid
+        && request.resource.data.keys().hasOnly(['followerUid',
+            'followingUid', 'createdAtMs'])
+        && request.resource.data.followerUid is string
+        && request.resource.data.followingUid is string
+        && request.resource.data.createdAtMs is int;
+
+      // ACTUALIZAR: nunca (el edge se escribe una vez; para volver
+      // a seguir se borra y se crea de nuevo).
+      allow update: if false;
+
+      // BORRAR: solo el seguidor (dejar de seguir).
+      allow delete: if isSignedIn()
+        && resource.data.followerUid == request.auth.uid;
+    }
+
+    // -------------------------------------------------------------------------
     //  Colección 'levels' — contenido remoto de preguntas (editor de
     //  contenido de la app de admin). Campos: text (texto de la pregunta),
     //  options (opciones), answer (respuesta correcta), difficulty
@@ -563,8 +1019,10 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
     //  Todo lo demás: denegado por defecto. Cualquier colección o documento
     //  que no esté en el contrato (users, admins, settings/app, duels,
-    //  tournaments, reports, announcements, groups, friends, friend_requests,
-    //  levels, support_messages) no se puede leer ni escribir desde ningún cliente.
+    //  duel_queue, tournaments, tournament_scores, reports,
+    //  paymentRequests, announcements, groups, friends, friend_requests,
+    //  levels, support_messages, support_auto_replies, admin_history)
+    //  no se puede leer ni escribir desde ningún cliente.
     //  HUECO FUTURO: el modelo admite ampliaciones (p. ej. más colecciones
     //  de la 7.0 o de versiones posteriores), pero cada colección nueva
     //  tiene que añadirse aquí con su propio bloque 'match' y volver a
@@ -582,12 +1040,14 @@ service cloud.firestore {
 // ============================================================================
 //  NOTA IMPORTANTE — leer antes de publicar estas reglas
 //  ----------------------------------------------------------------------------
-//  1. QUIÉN LAS APLICA: estas reglas NO se aplican solas ni las aplica ningún
-//     agente desde el código. Las aplica el agente principal a mano en la
-//     consola de Firebase → Firestore Database → pestaña "Reglas" → pegar el
-//     contenido de este archivo → "Publicar". Hasta que no se publiquen, la
-//     base de datos sigue con las reglas que tenga ahora (modo producción:
-//     denegado por defecto).
+//  1. QUIÉN LAS APLICA: desde 2026-11-15 se publican con el CLI de
+//     Firebase desde ~/workspace/quimica-pura-flutter:
+//     firebase deploy --only firestore:rules --project quemia-8410a
+//     (el CLI compila y publica; verificado). Si el CLI falla, el plan B
+//     es a mano en la consola de Firebase → Firestore Database →
+//     pestaña "Reglas" → pegar el contenido de este archivo → "Publicar".
+//     Hasta que no se publiquen, la base de datos sigue con las reglas
+//     que tenga ahora (modo producción: denegado por defecto).
 //
 //  2. LECTURA PÚBLICA DE 'users' ES INTENCIONADA: la tabla de posiciones de la
 //     app principal necesita leer el progreso de todos los usuarios que
@@ -624,10 +1084,12 @@ service cloud.firestore {
 //        questions son inmutables. Lo que las reglas NO pueden impedir es
 //        que un participante infle sus propios tiempos/respuestas en su
 //        duelo: eso se detecta en la app de admin.
-//     b) 'groups': unirse con el código solo funciona si la app usa el
-//        código como id del documento (o comparte el id con el código),
-//        porque la lectura es solo para miembros y no se puede buscar por
-//        código. El código es la única llave: quien lo conoce puede unirse.
+//     b) 'groups': la lectura es para cualquier usuario con sesión (no
+//        solo miembros), porque unirse por código consulta where code ==
+//        X y esa consulta solo funciona si la lectura no depende de ser
+//        miembro. El código es la única llave: quien lo conoce puede
+//        unirse. Escribir solo puede tocar memberUids y solo el propio
+//        uid (unirse o salir): ni nombre, ni código, ni dueño.
 //     c) 'reports': el autor es authorUid (tiene que ser el uid de la
 //        sesión); los admins solo cambian 'status'.
 //     d) 'users' sigue siendo de lectura pública: los campos nuevos
@@ -643,6 +1105,29 @@ service cloud.firestore {
 //        y los admins leen cada mensaje, y SOLO los admins responden
 //        ('reply' + 'replyAt' + status 'respondido'). El usuario nunca
 //        edita su mensaje ni cambia el estado. Borrado prohibido.
+//        CORREGIDO 2026-11-15: el bloque no existía (la cabecera decía
+//        que estaba cubierto) y todo caía en el comodín final: por eso
+//        el Panel del Admin mostraba "Sin conexión". Ya tiene bloque.
+//        'support_auto_replies' y 'admin_history' tampoco tenían bloque
+//        y también se añadieron el 2026-11-15 (solo admins). 'duels'
+//        ganó rama isAdmin() para la pantalla de Duelos del Admin, y
+//        'tournament_scores' tiene bloque propio (lectura con sesión,
+//        escritura solo el propio jugador).
 //     g) 'settings/app' suma 'supportNumber' y 'showWhatsApp' (Soporte);
 //        sus reglas NO cambian: lectura pública, escritura solo admins.
+//     h) PREMIUM: 'paymentRequests' (solicitudes de pago por
+//        Transfermóvil) solo las leen los admins y el propio autor; el
+//        usuario crea la suya en 'pending' y SOLO el admin cambia el
+//        estado/motivo/revisión. 'premiumExpiresAt' (timestamp) y
+//        'premiumPlan' ('1m' | '3m' | '12m') en 'users' solo los
+//        escriben admins: el usuario normal no puede regalárselos. La
+//        captura del comprobante viaja en base64 dentro de la solicitud
+//        ('screenshotData', max 1024 px / calidad ~75) porque Firebase
+//        Storage NO está habilitado en este proyecto (bucket
+//        quemia-8410a.firebasestorage.app inexistente, verificado
+//        2026-11-15): no hay storage.rules ni dependencia
+//        firebase_storage. 'settings/app' suma planPrices,
+//        transfermovilCard, transfermovilNumber y paymentDetails; su
+//        regla (escritura solo admins, sin restricción de campos) ya
+//        los cubre y NO cambió.
 // ============================================================================

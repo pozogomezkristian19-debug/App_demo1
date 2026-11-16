@@ -23,11 +23,24 @@
 // identidad); sin internet, lista vacía / false, nunca un error.
 import 'dart:math';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+import '../data/topics.dart';
 import 'analytics_sync.dart';
 import 'auth_service.dart';
 import 'online_common.dart';
+import 'progress.dart';
 import 'social_service.dart';
 import 'user_prefs.dart';
+
+/// Milisegundos desde epoch: INT en ms, Timestamp, o null si no
+/// hay. (joinedAt/lastActive son INT en la mayoría de los
+/// documentos, pero se tolera Timestamp o ausencia.)
+int? _toMs(Object? v) {
+  if (v is num) return v.toInt();
+  if (v is Timestamp) return v.millisecondsSinceEpoch;
+  return null;
+}
 
 /// Progreso de un amigo (o de un miembro de un grupo) para
 /// mostrarlo en la lista.
@@ -40,6 +53,15 @@ class FriendProgress {
     required this.streak,
     this.lastSeenMs,
     this.isBot = false,
+    this.joinedAtMs = 0,
+    this.practiceDays = const [],
+    this.trophiesWon = 0,
+    this.trophiesTotal = 0,
+    this.track,
+    this.dailyPoints = const {},
+    this.correctTotal,
+    this.mixedBest,
+    this.avatarId,
   });
 
   final String uid;
@@ -56,12 +78,42 @@ class FriendProgress {
   /// del control de en línea (siempre disponibles para retar).
   final bool isBot;
 
+  /// Cuándo se creó la cuenta (ms desde epoch, 0 si no hay).
+  /// (Lote seguir 2026-11-16: lo necesita el perfil público.)
+  final int joinedAtMs;
+
+  /// Días ('yyyy-MM-dd') con al menos una respuesta contestada.
+  final List<String> practiceDays;
+
+  /// Trofeos de exámenes por tema: ganados y temas de su pista.
+  final int trophiesWon;
+  final int trophiesTotal;
+
+  /// Pista del usuario ('uni' | 'bach'), o null si no se sabe.
+  final String? track;
+
+  /// Puntos por día ('yyyy-MM-dd' -> puntos), últimos días con
+  /// registro. Vacío si no hay historial.
+  final Map<String, int> dailyPoints;
+
+  /// Aciertos totales guardados (null si no hay dato).
+  final int? correctTotal;
+
+  /// Mejor nota del examen mixto guardada (null si no hay dato).
+  final int? mixedBest;
+
+  /// Avatar equipado ('avatar_...'), o null.
+  final String? avatarId;
+
   static FriendProgress? fromUserDoc(Map<String, dynamic>? raw) {
     if (raw == null) return null;
     final uid = raw['id']?.toString() ?? raw['deviceId']?.toString() ?? '';
     if (uid.isEmpty) return null;
     if (raw['banned'] == true) return null;
     if (raw['shared'] != true) return null;
+    // levelsPassed es MAPA {bach, uni} en usuarios reales pero INT
+    // en los 50 bots: se toleran los dos (y cualquier otro valor
+    // vale 0).
     final levels = raw['levelsPassed'];
     var total = 0;
     if (levels is Map) {
@@ -71,14 +123,50 @@ class FriendProgress {
     } else if (levels is num) {
       total = levels.toInt();
     }
+    // Trofeos: 'trophies' es un mapa por pista con la lista de
+    // temas con trofeo; el total es el nº de temas de su pista.
+    var trophiesWon = 0;
+    final rawTrophies = raw['trophies'];
+    if (rawTrophies is Map) {
+      rawTrophies.forEach((_, v) {
+        if (v is List) trophiesWon += v.length;
+      });
+    }
+    final track = raw['track']?.toString();
+    final trophiesTotal =
+        track == ProgressService.trackBach ? bachTopics.length : uniTopics.length;
+    final practiceDays = <String>[];
+    final rawDays = raw['practiceDays'];
+    if (rawDays is List) {
+      for (final d in rawDays) {
+        if (d is String && d.isNotEmpty) practiceDays.add(d);
+      }
+    }
+    final dailyPoints = <String, int>{};
+    final rawDaily = raw['dailyPoints'];
+    if (rawDaily is Map) {
+      rawDaily.forEach((k, v) {
+        if (v is num) dailyPoints[k.toString()] = v.toInt();
+      });
+    }
+    final avatarRaw = raw['equippedAvatar']?.toString();
     return FriendProgress(
       uid: uid,
       username: raw['username']?.toString() ?? '',
       points: (raw['points'] as num?)?.toInt() ?? 0,
       levelsPassedTotal: total,
       streak: (raw['streak'] as num?)?.toInt() ?? 0,
-      lastSeenMs: (raw['lastSeenMs'] as num?)?.toInt(),
+      lastSeenMs: _toMs(raw['lastSeenMs']),
       isBot: raw['isBot'] == true,
+      joinedAtMs: _toMs(raw['joinedAt']) ?? 0,
+      practiceDays: practiceDays,
+      trophiesWon: trophiesWon,
+      trophiesTotal: trophiesTotal,
+      track: track,
+      dailyPoints: dailyPoints,
+      correctTotal: (raw['correctTotal'] as num?)?.toInt(),
+      mixedBest: (raw['mixedBest'] as num?)?.toInt(),
+      avatarId: avatarRaw == null || avatarRaw.isEmpty ? null : avatarRaw,
     );
   }
 }

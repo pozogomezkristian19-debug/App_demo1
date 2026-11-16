@@ -162,6 +162,14 @@ class _Q73FakeRepo implements AnalyticsRepository {
       [];
 
   @override
+  Future<List<Map<String, dynamic>>> queryDocsByIdPrefix(
+    String collection,
+    String prefix, {
+    int? limit,
+  }) async =>
+      [];
+
+  @override
   Stream<Map<String, dynamic>?> watchDoc(
           String collection, String docId) =>
       const Stream.empty();
@@ -501,6 +509,15 @@ void main() {
             body: SettingsScreen(onOpenScreen: (_) {}),
           ),
         ),
+      );
+      await tester.pump();
+      // La fila "Buscar actualización" es la última de SOPORTE:
+      // con las 14 filas (Referidos en CUENTA + TIENDA) queda
+      // debajo del pliegue en 393×852 y el ListView la construye
+      // perezoso; se desplaza hasta ella antes de buscarla.
+      await tester.scrollUntilVisible(
+        find.textContaining('Versión instalada: 1.0'),
+        200,
       );
       await tester.pump();
       expect(find.textContaining('Versión instalada: 1.0'),
