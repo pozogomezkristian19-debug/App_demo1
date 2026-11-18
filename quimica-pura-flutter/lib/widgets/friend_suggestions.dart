@@ -267,6 +267,7 @@ class FriendSuggestionCard extends StatelessWidget {
                       username: entry.username,
                       avatarAsset: entry.avatarAsset,
                       badgeId: entry.badgeId,
+                      frameItem: entry.frameItem,
                       size: 56,
                     ),
                     const SizedBox(height: 8),

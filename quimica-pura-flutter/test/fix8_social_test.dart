@@ -150,6 +150,9 @@ void main() {
       await pumpScreen(tester, const ShopScreen(isGoogleLinked: false),
           size: const Size(360, 1200));
       expect(find.text(tr('onlineNeedGoogle')), findsNothing);
+      // Coral vive dentro de la casilla Temas (rejilla 7.9).
+      await tester.tap(find.text('Temas'));
+      await _settle(tester);
       expect(find.text('Coral'), findsOneWidget);
     });
 
@@ -734,6 +737,9 @@ void main() {
       final before = ProgressService.instance.points;
       await pumpScreen(tester, const ShopScreen(isGoogleLinked: true),
           size: const Size(360, 1200));
+      // Coral vive dentro de la casilla Temas (rejilla 7.9).
+      await tester.tap(find.text('Temas'));
+      await _settle(tester);
       expect(find.text('Coral'), findsOneWidget);
       // Coral cuesta 300: tras comprar, el saldo baja 300.
       // El botón dice "COMPRAR · 300": el ' · 300' excluye el
@@ -760,6 +766,9 @@ void main() {
       expect(ProgressService.instance.points, 0);
       await pumpScreen(tester, const ShopScreen(isGoogleLinked: true),
           size: const Size(360, 1200));
+      // Coral vive dentro de la casilla Temas (rejilla 7.9).
+      await tester.tap(find.text('Temas'));
+      await _settle(tester);
       // Coral cuesta 300: su precio aparece como chip, sin botón
       // de compra ni texto de "faltan".
       expect(find.text('300'), findsWidgets);
@@ -774,6 +783,9 @@ void main() {
       ProgressService.instance.addPoints(1000);
       await pumpScreen(tester, const ShopScreen(isGoogleLinked: true),
           size: const Size(360, 1200));
+      // Coral vive dentro de la casilla Temas (rejilla 7.9).
+      await tester.tap(find.text('Temas'));
+      await _settle(tester);
       // "COMPRAR · 300" = Coral (sortOrder 1); excluye el botón
       // "COMPRAR PUNTOS" de la tarjeta de arriba (2026-11-17).
       await tester.tap(find

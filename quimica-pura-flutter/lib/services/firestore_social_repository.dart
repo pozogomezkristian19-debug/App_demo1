@@ -134,6 +134,15 @@ class FirestoreSocialRepository implements SocialRepository {
       orElse: () => '',
     );
     if (avatarIdRaw.isNotEmpty) avatarId = avatarIdRaw;
+    // Marco y animación equipados (7.9): les salen a todos igual
+    // que el avatar. SIN el respaldo de "lo primero comprado"
+    // de la insignia: comprar no es equipar, y si el usuario lo
+    // quitó (campo vacío) no se le ve. El campo equipado se
+    // sincroniza desde la 7.3, así que es la fuente de verdad.
+    var frameId = doc?['equippedFrame']?.toString();
+    if (frameId != null && frameId.isEmpty) frameId = null;
+    var animationId = doc?['equippedAnimation']?.toString();
+    if (animationId != null && animationId.isEmpty) animationId = null;
     // Trofeos (examen por tema, Kristian 2026-11-14): los demás ven
     // cuántos trofeos lleva el amigo, de los temas de SU pista.
     var trophiesWon = 0;
@@ -160,6 +169,8 @@ class FirestoreSocialRepository implements SocialRepository {
       streak: f.streak,
       badgeId: badgeId,
       avatarId: avatarId,
+      frameId: frameId,
+      animationId: animationId,
       lastSeenMs: f.lastSeenMs,
       isBot: f.isBot,
       trophiesWon: trophiesWon,

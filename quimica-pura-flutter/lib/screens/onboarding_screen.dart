@@ -25,6 +25,7 @@ import 'loading_screen.dart';
 import '../services/referral_service.dart';
 import '../services/user_prefs.dart';
 import 'onboarding_notifications_page.dart';
+import 'onboarding_widget_page.dart';
 import 'otp_code_page.dart';
 import 'set_password_page.dart';
 
@@ -111,24 +112,25 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     _page = widget.fromAccount ? 1 : 0;
   }
 
-  /// En la página de registro (9) no se avanza sin nombre de
+  /// En la página de registro (10) no se avanza sin nombre de
   /// usuario: el nombre lo pone Google o el correo, nunca se
   /// escribe a mano (Kristian 2026-11-13). La pantalla de registro
   /// solo llama a [_next] cuando ya tiene el nombre.
   bool get _profileOk => (_profileName ?? '').trim().isNotEmpty;
 
   Future<void> _next() async {
-    if (_page == 9 && !_profileOk) return;
-    // 11 páginas (Quemia 7.7, Kristian 2026-11-13): 0 bienvenida,
+    if (_page == 10 && !_profileOk) return;
+    // 12 páginas (Quemia 7.7, Kristian 2026-11-13): 0 bienvenida,
     // 1 elección (empezar / tengo cuenta / sin conexión), 2 la
     // gemela que se presenta, 3 cómo supo de Quemia, 4 cuánta
-    // química sabe, 5 meta diaria, 6 notificaciones, 7 la racha
-    // nueva, 8 aviso "¡No pierdas tu progreso!" (Duolingo, antes
-    // del registro), 9 registro (Google / correo, como Duolingo —
-    // sin nombre ni género), 10 código de referido. El idioma ya
-    // NO se pide aquí: la app coge el del sistema al instalar y
-    // solo se cambia en Ajustes.
-    if (_page < 10) {
+    // química sabe, 5 meta diaria, 6 notificaciones, 7 el widget
+    // (2026-11-18, diseño v3 aprobado: pedirlo no es obligatorio),
+    // 8 la racha nueva, 9 aviso "¡No pierdas tu progreso!"
+    // (Duolingo, antes del registro), 10 registro (Google / correo,
+    // como Duolingo — sin nombre ni género), 11 código de referido.
+    // El idioma ya NO se pide aquí: la app coge el del sistema al
+    // instalar y solo se cambia en Ajustes.
+    if (_page < 11) {
       await _pageController.nextPage(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
@@ -249,6 +251,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   /// OTP) y Google. [_signInFlow] cambia TODA la pantalla por el
   /// inicio de sesión (igual que [_googleFlow]).
   var _signInFlow = false;
+
+  /// Pedir el widget tras entrar con correo (2026-11-18, diseño
+  /// v3 aprobado): al entrar se enseña la pantalla del widget
+  /// antes de la principal; con MÁS TARDE se entra igual.
+  var _widgetAfterSignIn = false;
 
   /// Registro con correo verificado: enlaza la cuenta, guarda el
   /// nombre que se escribió (ese es el que saluda la app) y avanza
@@ -462,6 +469,21 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         },
       );
     }
+    // Pedir el widget tras entrar con correo (2026-11-18): antes
+    // de la principal sale la pantalla del widget; sin atrás del
+    // teléfono (como el flujo de Google), se sale con AGREGAR
+    // WIDGET o con MÁS TARDE.
+    if (_widgetAfterSignIn) {
+      return PopScope(
+        canPop: false,
+        child: Scaffold(
+          resizeToAvoidBottomInset: false,
+          body: SafeArea(
+            child: OnboardingWidgetPage(onNext: _finishWithLoading),
+          ),
+        ),
+      );
+    }
     // Inicio de sesión (Quemia 7.7, Kristian 2026-11-13: la
     // pantalla de Duolingo "Ingresa tus datos"): correo +
     // contraseña, "¿Has olvidado tu contraseña?" y Google.
@@ -495,10 +517,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   : '');
           if (name.isNotEmpty) await UserPrefs.saveProfile(name);
           unawaited(AnalyticsSync.restoreFromCloud().then((_) {}));
-          // Entrar con la cuenta (Kristian 2026-11-15): va
-          // directo a la principal, sin preguntas. Las preguntas
-          // quedan solo en crear cuenta.
-          await _finishWithLoading();
+          // Entrar con la cuenta (Kristian 2026-11-15): antes de
+          // la principal sale la pantalla del widget (2026-11-18,
+          // diseño v3 aprobado); con MÁS TARDE se entra igual.
+          // Las preguntas quedan solo en crear cuenta.
+          setState(() => _widgetAfterSignIn = true);
         },
       );
     }
@@ -746,13 +769,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     ),
                     // 6) Permiso de notificaciones: la MISMA página
                     // del onboarding (no otra inventada). Aquí NO
-                    // termina el flujo: al continuar va a la racha.
+                    // termina el flujo: al continuar va al widget.
                     OnboardingNotificationsPage(onNext: _next),
-                    // 7) "¡Una nueva racha!": 1 día, la semana con
+                    // 7) Pedir el widget (2026-11-18, diseño v3
+                    // aprobado por Kristian): justo después de las
+                    // notificaciones, las dos son avisos del
+                    // sistema. NO es obligatorio: con MÁS TARDE se
+                    // avanza igual a la racha.
+                    OnboardingWidgetPage(onNext: _next),
+                    // 8) "¡Una nueva racha!": 1 día, la semana con
                     // hoy marcado. Sin edad (Duolingo pide la edad;
                     // Quemia no la pide).
                     _StreakPage(onNext: _next),
-                    // 8) Aviso antes del registro (Quemia 7.7,
+                    // 9) Aviso antes del registro (Quemia 7.7,
                     // Kristian 2026-11-13, la pantalla de Duolingo
                     // "¡No pierdas tu progreso! Vamos a crear tu
                     // perfil."): Brenda con su bocadillo y
@@ -766,7 +795,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       ),
                       onNext: _next,
                     ),
-                    // 9) Registro (Quemia 7.7, Kristian 2026-11-13,
+                    // 10) Registro (Quemia 7.7, Kristian 2026-11-13,
                     // como la pantalla de Duolingo: "Elige una opción
                     // para registrarte y continuar" — Google y correo,
                     // sin pedir nombre ni género. El nombre de usuario
@@ -830,6 +859,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 /// 1) "Ya has iniciado sesión" (la cuenta de Google),
 /// 2) código de referido (página aparte, Quemia 7.6),
 /// 3) notificaciones,
+/// 4) el widget (2026-11-18, diseño v3 aprobado: pedirlo no es
+/// obligatorio),
 /// y de ahí a la pantalla principal. El nombre de usuario se coge
 /// del correo (primer nombre, sin apellido — Kristian 2026-11-13)
 /// y se reclama solo; NO se pregunta el nombre ni el género.
@@ -858,9 +889,9 @@ class _GoogleOnboardingFlow extends StatefulWidget {
 
 class _GoogleOnboardingFlowState extends State<_GoogleOnboardingFlow> {
   /// 0 = "Ya has iniciado sesión", 1 = código de referido,
-  /// 2 = notificaciones. (Kristian 2026-11-16: el paso de elegir
-  /// nombre de usuario salió del registro; el nombre se pone
-  /// después en el perfil.)
+  /// 2 = notificaciones, 3 = el widget. (Kristian 2026-11-16: el
+  /// paso de elegir nombre de usuario salió del registro; el nombre
+  /// se pone después en el perfil.)
   var _step = 0;
 
   /// Código de referido (Quemia 7.6, Kristian): tiene su propia
@@ -1002,9 +1033,15 @@ class _GoogleOnboardingFlowState extends State<_GoogleOnboardingFlow> {
                       onNext: () => setState(() => _step = 2),
                     ),
                   // 2) Notificaciones: la misma página del onboarding
-                  // normal; al continuar se guarda el perfil y se
-                  // entra a la app.
-                  _ => OnboardingNotificationsPage(onNext: _finish),
+                  // normal; al continuar va al widget.
+                  2 => OnboardingNotificationsPage(
+                      onNext: () => setState(() => _step = 3),
+                    ),
+                  // 3) El widget (2026-11-18, diseño v3 aprobado):
+                  // al continuar se guarda el perfil y se entra a
+                  // la app. No es obligatorio: con MÁS TARDE se
+                  // avanza igual.
+                  _ => OnboardingWidgetPage(onNext: _finish),
                 },
               ),
             ],

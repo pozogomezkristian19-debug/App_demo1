@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:quimica_pura/screens/shop_screen.dart';
 import 'package:quimica_pura/services/progress.dart';
 import 'package:quimica_pura/services/remote_shop_catalog.dart';
+import 'package:quimica_pura/services/remote_tuning.dart';
 import 'package:quimica_pura/services/social_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -180,6 +181,19 @@ List<Map<String, dynamic>> kRemoteCatalogDocs = [
     'active': true,
     'sortOrder': 24,
   },
+  // Animación de perfil (7.9): Lottie remota; el catálogo real
+  // empieza vacío, pero el flujo se prueba con este dragón.
+  {
+    'id': 'anim_dragon',
+    'name': 'Dragón dorado',
+    'kind': 'animation',
+    'price': 800,
+    'color': 0xFFFFC800,
+    'imageUrl': 'https://example.com/tienda/anim_dragon.json',
+    'description': 'Un dragón dorado a tu lado.',
+    'active': true,
+    'sortOrder': 30,
+  },
 ];
 
 void main() {
@@ -195,6 +209,7 @@ void main() {
   tearDown(() {
     SocialService.resetForTests();
     RemoteShopCatalog.instance.resetForTests();
+    RemoteTuning.resetForTests();
   });
 
   group('ShopItem.fromMap', () {
@@ -276,6 +291,27 @@ void main() {
           isNull);
     });
 
+    test('tipo animation: Lottie remota en imageUrl, ida y vuelta', () {
+      final item = ShopItem.fromMap({
+        'name': 'Dragón dorado',
+        'kind': 'animation',
+        'price': 800,
+        'color': 0xFFFFC800,
+        'imageUrl': 'https://example.com/tienda/anim_dragon.json',
+        'description': 'Un dragón dorado a tu lado.',
+        'active': true,
+        'sortOrder': 30,
+      }, 'anim_dragon');
+      expect(item, isNotNull);
+      expect(item!.kind, 'animation');
+      expect(item.imageUrl, 'https://example.com/tienda/anim_dragon.json');
+      // Ida y vuelta sin perder el tipo ni la URL.
+      final back = ShopItem.fromMap(item.toMap(), item.id);
+      expect(back, isNotNull);
+      expect(back!.kind, 'animation');
+      expect(back.imageUrl, item.imageUrl);
+    });
+
     test('el id del documento manda sobre el campo id', () {
       final item = ShopItem.fromMap({
         'id': 'dentro',
@@ -349,7 +385,7 @@ void main() {
       RemoteShopCatalog.instance.setFetcherForTests(
           () async => kRemoteCatalogDocs);
       final first = await RemoteShopCatalog.instance.loadCatalog();
-      expect(first.length, 24);
+      expect(first.length, 25);
       // Sin memoria (como al reabrir la app) y sin red: la caché
       // local responde.
       RemoteShopCatalog.instance.resetForTests();
@@ -397,7 +433,7 @@ void main() {
       RemoteShopCatalog.instance.setFetcherForTests(
           () async => kRemoteCatalogDocs);
       final items = await SocialService.shopItems();
-      expect(items.length, 24);
+      expect(items.length, 25);
       expect(items.any((i) => i.id == 'frame_dorado'), isTrue);
       expect(items.any((i) => i.id == 'avatar_gato'), isTrue);
       expect(items.any((i) => i.id == 'avatar_supercientifico'), isTrue);
@@ -453,6 +489,65 @@ void main() {
       expect(SocialService.equippedThemeColor, const Color(0xFF34D399));
       expect(SocialService.equippedThemeName, 'Verde menta');
     });
+
+    test('comprar y equipar una animación: se sincroniza como animation',
+        () async {
+      RemoteShopCatalog.instance.setFetcherForTests(
+          () async => kRemoteCatalogDocs);
+      final items = await SocialService.shopItems();
+      final dragon = items.firstWhere((i) => i.id == 'anim_dragon');
+      expect(dragon.kind, 'animation');
+      ProgressService.instance.addPoints(800);
+      expect(await SocialService.buyItem(dragon), isTrue);
+      await SocialService.equipItem(dragon);
+      expect(await SocialService.equippedItemId('animation'), 'anim_dragon');
+      expect(SocialService.equippedAnimationId, 'anim_dragon');
+      expect(SocialService.equippedAnimationItem?.name, 'Dragón dorado');
+      expect(repo.syncedEquipped['animation'], 'anim_dragon');
+    });
+
+    test('quitar la animación: se desequipa y la compra NO se pierde',
+        () async {
+      RemoteShopCatalog.instance.setFetcherForTests(
+          () async => kRemoteCatalogDocs);
+      final items = await SocialService.shopItems();
+      final dragon = items.firstWhere((i) => i.id == 'anim_dragon');
+      ProgressService.instance.addPoints(800);
+      await SocialService.buyItem(dragon);
+      await SocialService.equipItem(dragon);
+      expect(SocialService.equippedAnimationId, 'anim_dragon');
+
+      await SocialService.unequipItem('animation');
+      expect(SocialService.equippedAnimationId, isNull);
+      expect(await SocialService.equippedItemId('animation'), isNull);
+      expect(SocialService.equippedAnimationItem, isNull);
+      expect(repo.syncedEquipped['animation'], isNull);
+      // La compra sigue: se puede volver a equipar sin pagar.
+      expect(await SocialService.isOwned(dragon.id), isTrue);
+      await SocialService.equipItem(dragon);
+      expect(SocialService.equippedAnimationId, 'anim_dragon');
+    });
+
+    test('kill-switch: con profileAnimationsEnabled=false la animación '
+        'desaparece de los perfiles (sin compilar)', () async {
+      RemoteShopCatalog.instance.setFetcherForTests(
+          () async => kRemoteCatalogDocs);
+      final items = await SocialService.shopItems();
+      final dragon = items.firstWhere((i) => i.id == 'anim_dragon');
+      ProgressService.instance.addPoints(800);
+      await SocialService.buyItem(dragon);
+      await SocialService.equipItem(dragon);
+      expect(SocialService.equippedAnimationItem, isNotNull);
+
+      RemoteTuning.apply({'profileAnimationsEnabled': false});
+      expect(SocialService.profileAnimationsEnabled, isFalse);
+      expect(SocialService.equippedAnimationItem, isNull);
+      // La animación sigue equipada (la compra y el equipado no se
+      // borran): al volver a encenderla, reaparece sola.
+      expect(SocialService.equippedAnimationId, 'anim_dragon');
+      RemoteTuning.apply({'profileAnimationsEnabled': true});
+      expect(SocialService.equippedAnimationItem?.id, 'anim_dragon');
+    });
   });
 
   group('ShopImageCache', () {
@@ -472,8 +567,8 @@ void main() {
 
   group('pantalla Tienda con catálogo remoto', () {
     Future<void> pumpShop(WidgetTester tester) async {
-      // Viewport alto (6000 pt): el catálogo remoto tiene 24
-      // tarjetas y la lista las construye solo si caben.
+      // Viewport alto (6000 pt): la sección remota tiene 25
+      // artículos y la lista los construye solo si caben.
       tester.view.physicalSize = const Size(786, 12000);
       tester.view.devicePixelRatio = 2.0;
       addTearDown(() {
@@ -491,7 +586,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
     }
 
-    testWidgets('secciones Temas/Avatares/Insignias/Marcos y 4 estados',
+    testWidgets(
+        'casillas: 5 tarjetas de sección; cada una abre sus artículos',
         (tester) async {
       RemoteShopCatalog.instance.setFetcherForTests(
           () async => kRemoteCatalogDocs);
@@ -509,33 +605,74 @@ void main() {
 
       await pumpShop(tester);
 
+      // Pantalla principal: chip de puntos + 5 casillas, y NINGÚN
+      // artículo listado (cada sección se abre al tocarla).
       expect(find.text('320'), findsOneWidget);
       expect(find.text('Temas'), findsOneWidget);
       expect(find.text('Avatares'), findsOneWidget);
       expect(find.text('Insignias'), findsOneWidget);
       expect(find.text('Marcos'), findsOneWidget);
+      expect(find.text('Animación en el perfil'), findsOneWidget);
+      expect(find.text('Verde menta'), findsNothing);
+      expect(find.text('Gato científico'), findsNothing);
+
+      // Temas: menta 300 comprable (saldo 320), galaxia 350 no.
+      await tester.tap(find.text('Temas'));
+      await tester.pumpAndSettle();
       expect(find.text('Verde menta'), findsOneWidget);
+      expect(find.textContaining('COMPRAR · 300'), findsWidgets);
+      expect(find.text('350'), findsWidgets);
+      await tester.tap(find.byKey(const ValueKey('shopSectionBack')));
+      await tester.pumpAndSettle();
+
+      // Avatares: dorado equipado, violeta comprado (EQUIPAR).
+      await tester.tap(find.text('Avatares'));
+      await tester.pumpAndSettle();
       expect(find.text('Gato científico'), findsOneWidget);
-      expect(find.text('Exploradora'), findsOneWidget);
-      expect(find.text('Científico loco'), findsOneWidget);
-      expect(find.text('Robot Químico'), findsOneWidget);
-      expect(find.text('Astronauta'), findsOneWidget);
-      expect(find.text('Superquímica'), findsOneWidget);
-      expect(find.text('Súper científico'), findsOneWidget);
-      expect(find.text('ADN'), findsOneWidget);
-      expect(find.text('Marco dorado'), findsOneWidget);
-      expect(find.text('Marco arcoíris'), findsOneWidget);
-      // Los 4 estados visibles a la vez (Quemia 7.7: sin puntos ya
-      // no dice "Te faltan X puntos", solo muestra el precio).
       expect(find.text('Equipado'), findsOneWidget);
       expect(find.text('EQUIPAR'), findsOneWidget);
-      expect(find.textContaining('COMPRAR'), findsWidgets);
-      // Precios del mockup: menta 300 comprable, galaxia 350.
-      expect(find.textContaining('COMPRAR · 300'), findsWidgets);
-      // Galaxia 350 (30 puntos más que el saldo 320): solo el precio.
-      expect(find.text('350'), findsWidgets);
-      // El de 500 (180 más que el saldo): solo el precio.
-      expect(find.text('500'), findsWidgets);
+      await tester.tap(find.byKey(const ValueKey('shopSectionBack')));
+      await tester.pumpAndSettle();
+
+      // Marcos e Insignias: sus artículos.
+      await tester.tap(find.text('Marcos'));
+      await tester.pumpAndSettle();
+      expect(find.text('Marco dorado'), findsOneWidget);
+      expect(find.text('Marco arcoíris'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('shopSectionBack')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Insignias'));
+      await tester.pumpAndSettle();
+      expect(find.text('Estrella'), findsOneWidget);
+      expect(find.text('ADN'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('shopSectionBack')));
+      await tester.pumpAndSettle();
+
+      // Animación en el perfil: el dragón remoto (800 > 320: solo
+      // el precio, sin COMPRAR).
+      await tester.tap(find.text('Animación en el perfil'));
+      await tester.pumpAndSettle();
+      expect(find.text('Dragón dorado'), findsOneWidget);
+      expect(find.text('800'), findsWidgets);
+    });
+
+    testWidgets(
+        'animaciones: sin animaciones en el catálogo la casilla no sale',
+        (tester) async {
+      // Solo los 9 de siempre: sin animaciones en el catálogo.
+      // (2026-11-18, Kristian): la opción Animación queda
+      // oculta hasta que se suba una animación; al subir una,
+      // la casilla aparece sola.
+      RemoteShopCatalog.instance.setFetcherForTests(
+          () async => kShopCatalog.map((i) => i.toMap()).toList());
+      await pumpShop(tester);
+
+      expect(find.text('Temas'), findsOneWidget);
+      expect(find.text('Avatares'), findsOneWidget);
+      expect(find.text('Insignias'), findsOneWidget);
+      expect(find.text('Marcos'), findsOneWidget);
+      expect(find.text('Animación en el perfil'), findsNothing);
     });
   });
 }

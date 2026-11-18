@@ -1,5 +1,6 @@
 package com.melliqui.quimica_pura
 
+import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Intent
 import android.net.Uri
@@ -141,6 +142,43 @@ class MainActivity : FlutterActivity() {
                         } catch (e2: Exception) {
                             result.success(false)
                         }
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+        // Pedir el widget en la pantalla principal (2026-11-18,
+        // pantalla "Pon Quemia en tu pantalla principal"): abre el
+        // diálogo del sistema para fijar el widget
+        // (AppWidgetManager.requestPinAppWidget, Android 8+).
+        // Canal "com.melliqui/app_widget", método:
+        //  - requestPin: true si el sistema mostró el diálogo para
+        //    fijarlo; false si no se puede (Android viejo, sin
+        //    soporte o error). No es obligatorio: si no se puede,
+        //    la pantalla avanza igual.
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "com.melliqui/app_widget"
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "requestPin" -> {
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+                        result.success(false)
+                        return@setMethodCallHandler
+                    }
+                    try {
+                        val appWidgetManager =
+                            getSystemService(AppWidgetManager::class.java)
+                        val provider = ComponentName(
+                            this, MelliQuiWidgetProvider::class.java,
+                        )
+                        result.success(
+                            appWidgetManager.requestPinAppWidget(
+                                provider, null, null,
+                            ),
+                        )
+                    } catch (e: Exception) {
+                        result.success(false)
                     }
                 }
                 else -> result.notImplemented()

@@ -24,10 +24,13 @@
 // badgeId, rank, uniformTeal) para no romper a las demás zonas.
 
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import '../services/accent.dart';
+import '../services/shop_item.dart';
 
+import 'avatar_frame_ring.dart';
 import 'lucide_icons.dart';
 
 class SocialAvatar extends StatelessWidget {
@@ -40,6 +43,9 @@ class SocialAvatar extends StatelessWidget {
     this.badgeId,
     this.rank,
     this.uniformTeal = false,
+    this.frameItem,
+    this.frameRingWidth = 3,
+    this.framePadding,
   });
 
   final String username;
@@ -56,7 +62,9 @@ class SocialAvatar extends StatelessWidget {
   final File? avatarImageFile;
 
   /// 'badge_star' | 'badge_trophy' | 'badge_flame' | 'badge_adn' |
-  /// 'badge_atomo' | 'badge_cohete', o null sin insignia.
+  /// 'badge_atomo' | 'badge_cohete' | 'badge_corona' |
+  /// 'badge_gema' | 'badge_rayo' | 'badge_corazon' |
+  /// 'badge_medalla', o null sin insignia.
   final String? badgeId;
 
   /// Puesto en la tabla (1 = oro...): null o > 10 = sin marco de rango.
@@ -65,6 +73,24 @@ class SocialAvatar extends StatelessWidget {
   /// Conservado por compatibilidad con la API: ya no cambia el
   /// disco (sin foto, todos usan la misma cara por defecto).
   final bool uniformTeal;
+
+  /// Marco de la tienda equipado (7.9): se dibuja como anillo 3D
+  /// alrededor de la foto, POR FUERA del marco de rango si lo
+  /// hay. Null = sin marco. Es el marco que los demás ven: les
+  /// sale a todo el mundo igual que el avatar.
+  final ShopItem? frameItem;
+
+  /// Grosor del anillo del marco (3 dp en las listas, para que no
+  /// se coma el hueco de la fila).
+  final double frameRingWidth;
+
+  /// Aire que un marco dibujado FUERA de este widget añade
+  /// alrededor de la foto (en dp): solo sirve para colocar la
+  /// insignia sobre el borde exterior del disco. En Cuenta el
+  /// marco lo dibuja el AvatarFrameRing de fuera, así que aquí
+  /// no se vuelve a dibujar (no se pasa [frameItem]), solo se
+  /// pasa su aire por aquí. Null = sin marco fuera.
+  final double? framePadding;
 
   /// Color SÓLIDO del marco de rango: oro, plata, bronce o acento.
   Color? get _rankColor => switch (rank ?? 0) {
@@ -89,6 +115,12 @@ class SocialAvatar extends StatelessWidget {
         'badge_adn' => LucideIcons.dna,
         'badge_atomo' => LucideIcons.atom,
         'badge_cohete' => LucideIcons.rocket,
+        // Insignias nuevas (2026-11-18).
+        'badge_corona' => LucideIcons.crown,
+        'badge_gema' => LucideIcons.gem,
+        'badge_rayo' => LucideIcons.zap,
+        'badge_corazon' => LucideIcons.heart,
+        'badge_medalla' => LucideIcons.medal,
         _ => null,
       };
 
@@ -133,7 +165,28 @@ class SocialAvatar extends StatelessWidget {
         child: avatar,
       );
     }
-    final badgeSize = size * 0.55;
+    // Marco de la tienda (7.9): anillo 3D alrededor de todo (el
+    // marco de rango, si lo hay, queda dentro). Les sale a todos.
+    final frame = frameItem;
+    var extra = 0.0;
+    // La foto que envuelve el marco: el avatar con el marco de
+    // rango dentro, si lo hay.
+    final framedPhotoSize = size + (rankColor != null ? 6 : 0);
+    if (frame != null) {
+      avatar = AvatarFrameRing(
+        frame: frame,
+        ringWidth: frameRingWidth,
+        photoSize: framedPhotoSize,
+        child: avatar,
+      );
+      // El fuego ocupa más aire que el grosor del anillo; el
+      // marco-imagen, una fracción de la foto.
+      extra = AvatarFrameRing.paddingFor(frame, frameRingWidth,
+              photoSize: framedPhotoSize) *
+          2;
+    }
+    final base = size + (rankColor != null ? 6 : 0) + extra;
+    final badgeSize = size * 0.38;
     // Insignia de rango (arriba a la derecha): corona o medalla en
     // su mini-círculo con el color sólido del marco.
     final rankBadge = rankBadgeIcon == null
@@ -156,12 +209,26 @@ class SocialAvatar extends StatelessWidget {
             ),
           );
     if (badge == null && rankBadge == null) return avatar;
+    // La foto va CENTRADA en la caja (2026-11-18: antes quedaba
+    // en la esquina y, con marco dibujado fuera, se veía
+    // desplazada hacia arriba a la izquierda dentro del disco,
+    // con el brillo dorado asomando abajo: el avatar se veía
+    // chiquito). El centro del círculo es el centro de la caja.
+    final boxSize = base + (badge != null ? badgeSize * 0.4 : 0);
+    final circleCenter = boxSize / 2;
+    // Radio del borde exterior: sin marco es la foto (base/2);
+    // con marco dibujado fuera es la caja/2 + su aire, y con
+    // marco dibujado aquí es base/2 (el anillo es la caja).
+    final outerRadius = framePadding != null
+        ? circleCenter + framePadding!
+        : base / 2;
+    final badgeCx = circleCenter - outerRadius / math.sqrt(2);
+    final badgeCy = circleCenter + outerRadius / math.sqrt(2);
     return SizedBox(
-      width: (rankColor != null ? size + 6 : size) +
-          (badge != null ? badgeSize * 0.4 : 0),
-      height: (rankColor != null ? size + 6 : size) +
-          (badge != null ? badgeSize * 0.4 : 0),
+      width: boxSize,
+      height: boxSize,
       child: Stack(
+        alignment: Alignment.center,
         clipBehavior: Clip.none,
         children: [
           avatar,
@@ -172,9 +239,13 @@ class SocialAvatar extends StatelessWidget {
               child: rankBadge,
             ),
           if (badge != null)
+            // Insignia abajo a la IZQUIERDA (7:30, espejo del
+            // lapicito a las 4:30): el CENTRO del chip queda sobre
+            // el borde exterior del círculo, mitad fuera y mitad
+            // dentro, con el marco pasando por detrás.
             Positioned(
-              right: -2,
-              bottom: -2,
+              left: badgeCx - badgeSize / 2,
+              top: badgeCy - badgeSize / 2,
               child: Container(
                 width: badgeSize,
                 height: badgeSize,

@@ -42,6 +42,7 @@
 
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -68,6 +69,7 @@ import '../services/user_prefs.dart';
 import '../services/notification_service.dart';
 import '../widgets/brand_logo.dart';
 import '../widgets/duo_button.dart';
+import '../widgets/profile_animation.dart';
 import '../widgets/set_password_form.dart';
 import '../widgets/social_avatar.dart';
 import '../widgets/trial_banner.dart';
@@ -573,9 +575,18 @@ class _AccountScreenState extends State<AccountScreen> {
           // NOMBRE vive en la cabecera, no debajo del avatar.
           // Debajo del avatar: @usuario · año y la compañera del
           // día, a la izquierda como en Duolingo.
-          Center(
-            child: _UserAvatarSection(
-              size: 160,
+          // Cabecera DINÁMICA (7.9): sin animación equipada, el
+          // avatar con su marco va CENTRADO (perfil normal); con
+          // animación, avatar+marco a la IZQUIERDA y la animación
+          // a la DERECHA. Al quitar la animación, el avatar vuelve
+          // a centrarse enseguida.
+          ProfileHeaderAvatar(
+            size: 160,
+            resolveAnimation: () => SocialService.equippedAnimationItem,
+            animationListenable:
+                SocialService.equippedAnimationIdNotifier,
+            avatar: (s) => _UserAvatarSection(
+              size: s,
               onTap: () => widget.onOpenScreen('avatar'),
             ),
           ),
@@ -610,23 +621,10 @@ class _AccountScreenState extends State<AccountScreen> {
                       ),
                     ),
                   ),
-                // El lapicito junto al @usuario se QUEDA como
-                // estaba (Kristian 2026-11-17: «deja ese lapicito
-                // como estaba ahí para cambiar el avatar» — él lo
-                // lee como el lápiz del avatar). Abre el mismo
-                // editor de nombre que la fila de abajo.
-                if (_myUsername.isNotEmpty)
-                  GestureDetector(
-                    onTap: _openChangeUsername,
-                    child: Padding(
-                      padding: const EdgeInsets.all(4),
-                      child: LucideIcon(
-                        LucideIcons.pencil,
-                        size: 16,
-                        color: c.inkSoft,
-                      ),
-                    ),
-                  ),
+                // Sin lapicito junto al @usuario (Kristian
+                // 2026-11-17: hay 3 botones para cambiar el nombre
+                // y sobra este: quedan el del avatar y la fila
+                // "Cambiar nombre de usuario" de abajo).
               ],
             ),
           ],
@@ -939,14 +937,15 @@ class _SummaryGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = _CuentaColors.of(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final scheme = Theme.of(context).colorScheme;
     // Iconos del RESUMEN (Kristian 2026-11-16, punto 5): Racha =
     // llama (como está), Puntos = RAYO, Trofeos = trofeo, Logros =
     // MEDALLA. Estilo Duolingo, colores de Quemia.
-    final boltColor = isDark ? scheme.primary : const Color(0xFFF59E0B);
-    final trophyColor = isDark ? scheme.primary : const Color(0xFF8B5CF6);
-    final medalColor = isDark ? scheme.primary : AppAccent.primary;
+    // Colores FIJOS por icono (Kristian 2026-11-17): cada uno con su
+    // colorcito como la llama, sin importar el tema claro/oscuro —
+    // en oscuro ya no salen todos en verde.
+    const boltColor = Color(0xFFF59E0B); // rayo ámbar
+    const trophyColor = Color(0xFFFFC800); // trofeo dorado
+    const medalColor = Color(0xFF8B5CF6); // medalla violeta
     const valueStyle = TextStyle(fontSize: 16, fontWeight: FontWeight.bold);
     Widget cell(Widget icon, Widget value, String label) {
       return Column(
@@ -1147,6 +1146,10 @@ class _UserAvatarSectionState extends State<_UserAvatarSection> {
     super.initState();
     SocialService.equippedAvatarIdNotifier.addListener(_resolve);
     SocialService.equippedFrameIdNotifier.addListener(_onFrameChanged);
+    // El catálogo llega en segundo plano al arrancar: cuando
+    // llega, el marco equipado se resuelve y el anillo aparece
+    // sin tener que abrir la Tienda.
+    RemoteShopCatalog.catalogVersion.addListener(_onFrameChanged);
     _resolve();
   }
 
@@ -1168,6 +1171,7 @@ class _UserAvatarSectionState extends State<_UserAvatarSection> {
   void dispose() {
     SocialService.equippedAvatarIdNotifier.removeListener(_resolve);
     SocialService.equippedFrameIdNotifier.removeListener(_onFrameChanged);
+    RemoteShopCatalog.catalogVersion.removeListener(_onFrameChanged);
     super.dispose();
   }
 
@@ -1208,6 +1212,17 @@ class _UserAvatarCircle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // El lapicito va CENTRADO sobre el borde exterior del círculo
+    // (avatar o marco): en la foto de referencia su centro está a
+    // 1.03 × el radio exterior, a 45° (abajo a la derecha). Antes
+    // quedaba en la esquina (right/bottom 0) y se veía colgando
+    // fuera del marco, a 1.19 × el radio.
+    final total =
+        size + 2 * AvatarFrameRing.paddingFor(frame, 12, photoSize: size);
+    final pencilSize = size >= 140 ? 36.0 : 28.0;
+    final pencilEdge = total / 2 -
+        (1.03 * total / 2) / math.sqrt(2) -
+        pencilSize / 2;
     return Semantics(
       label: tr('avatarTitle'),
       button: true,
@@ -1224,20 +1239,36 @@ class _UserAvatarCircle extends StatelessWidget {
             children: [
               AvatarFrameRing(
                 frame: frame,
-                ringWidth: 4,
+                // Anillo grueso (12 dp): el relieve 3D y las llamas
+                // necesitan grosor para leerse, como en la foto
+                // de referencia del medallón dorado.
+                ringWidth: 12,
+                photoSize: size,
                 child: SocialAvatar(
                   username: UserPrefs.userName,
                   size: size,
                   avatarAsset: asset,
                   avatarImageFile: avatarImageFile,
+                  // La insignia equipada también se ve en el
+                  // perfil propio (2026-11-18: insignias para
+                  // todo el mundo, incluido uno mismo).
+                  badgeId: SocialService.equippedBadgeId,
+                  // El marco lo dibuja el AvatarFrameRing de
+                  // fuera: aquí solo se pasa su aire para que la
+                  // insignia se coloque sobre el borde exterior
+                  // del disco, no sobre el borde de la foto.
+                  framePadding: frame == null
+                      ? null
+                      : AvatarFrameRing.paddingFor(frame, 12,
+                          photoSize: size),
                 ),
               ),
               Positioned(
-                right: 0,
-                bottom: 0,
+                right: pencilEdge,
+                bottom: pencilEdge,
                 child: Container(
-                  width: size >= 140 ? 36 : 28,
-                  height: size >= 140 ? 36 : 28,
+                  width: pencilSize,
+                  height: pencilSize,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: AppAccent.primary,

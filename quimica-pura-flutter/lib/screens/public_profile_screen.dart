@@ -28,8 +28,10 @@ import '../services/progress.dart';
 import '../services/social_service.dart';
 import '../services/sound_service.dart';
 import '../widgets/duo_button.dart';
+import '../widgets/avatar_frame_ring.dart';
 import '../widgets/lucide_icons.dart';
 import '../widgets/motion.dart';
+import '../widgets/profile_animation.dart';
 import '../widgets/profile_background.dart';
 import '../widgets/social_avatar.dart';
 import 'profile_qr_screen.dart';
@@ -364,10 +366,28 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
             padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
             child: Column(
               children: [
-                SocialAvatar(
-                  username: profile.username,
-                  avatarAsset: SocialService.avatarAssetForId(profile.avatarId),
+                // Cabecera DINÁMICA (7.9): sin animación, el avatar
+                // con su marco va CENTRADO; con animación, avatar
+                // +marco a la IZQUIERDA y animación a la DERECHA.
+                // Insignia, marco y animación les salen a todos,
+                // igual que el avatar.
+                ProfileHeaderAvatar(
                   size: 120,
+                  resolveAnimation: () =>
+                      SocialService.animationItemForId(profile.animationId),
+                  avatar: (s) => AvatarFrameRing(
+                    frame: SocialService.shopItemForId(profile.frameId),
+                    // Anillo grueso (10 dp), como en Cuenta.
+                    ringWidth: 10,
+                    photoSize: s,
+                    child: SocialAvatar(
+                      username: profile.username,
+                      avatarAsset:
+                          SocialService.avatarAssetForId(profile.avatarId),
+                      badgeId: profile.badgeId,
+                      size: s,
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 Text(
@@ -1168,6 +1188,7 @@ class _FollowListScreenState extends State<FollowListScreen> {
                                 username: entry.username,
                                 avatarAsset: entry.avatarAsset,
                                 badgeId: entry.badgeId,
+                                frameItem: entry.frameItem,
                                 size: 48,
                               ),
                               const SizedBox(width: 12),

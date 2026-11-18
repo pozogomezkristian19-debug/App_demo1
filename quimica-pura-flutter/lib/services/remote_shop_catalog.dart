@@ -20,6 +20,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -55,6 +56,12 @@ class RemoteShopCatalog {
   static List<ShopItem> get lastLoaded =>
       List<ShopItem>.unmodifiable(instance._lastLoaded ?? const <ShopItem>[]);
 
+  /// Versión del catálogo en memoria: sube cada vez que el
+  /// catálogo bueno cambia (remoto o caché). Las cabeceras de
+  /// perfil la escuchan para repintar el marco o la animación en
+  /// cuanto llega el catálogo, sin tener que abrir la Tienda.
+  static final ValueNotifier<int> catalogVersion = ValueNotifier<int>(0);
+
   /// Inyecta el lector de documentos (solo tests/previews).
   void setFetcherForTests(ShopCatalogFetcher? fetcher) {
     _fetcherOverride = fetcher;
@@ -66,6 +73,7 @@ class RemoteShopCatalog {
     _fetcherOverride = null;
     _lastLoaded = null;
     _lastFetchAt = null;
+    catalogVersion.value = 0;
   }
 
   /// El catálogo: remoto si hay internet, caché local si no, y
@@ -83,6 +91,7 @@ class RemoteShopCatalog {
       if (items.isEmpty) throw StateError('catálogo remoto vacío');
       _lastLoaded = items;
       _lastFetchAt = DateTime.now();
+      catalogVersion.value++;
       await _saveCache(items);
       return List<ShopItem>.unmodifiable(items);
     } catch (_) {
@@ -91,6 +100,7 @@ class RemoteShopCatalog {
       if (cached.isNotEmpty) {
         _lastLoaded = cached;
         _lastFetchAt = DateTime.now();
+        catalogVersion.value++;
         return List<ShopItem>.unmodifiable(cached);
       }
       return List<ShopItem>.unmodifiable(kShopCatalog);

@@ -333,11 +333,15 @@ class _EntryRow extends StatelessWidget {
               child: Center(
                 child: SocialAvatar(
                   username: entry.username,
-                  size: 36,
+                  // Con marco, la foto se achica para que el hueco
+                  // siga midiendo 42 (marco 3 dp por lado): los
+                  // nombres quedan alineados como siempre.
+                  size: entry.frameItem != null ? 30 : 36,
                   rank: rank,
                   avatarAsset: isMe
                       ? SocialService.equippedAvatarAsset ?? entry.avatarAsset
                       : entry.avatarAsset,
+                  frameItem: entry.frameItem,
                 ),
               ),
             ),
@@ -357,11 +361,12 @@ class _EntryRow extends StatelessWidget {
                     ),
                   ),
                 ),
-                // Quemia 7.0: mi insignia equipada junto al nombre.
-                if (isMe && SocialService.equippedBadgeId != null)
+                // Insignia equipada junto al nombre (7.9): la de
+                // CADA UNO, no solo la mía — les sale a todos.
+                if (entry.badgeId != null)
                   Padding(
                     padding: const EdgeInsets.only(left: 4),
-                    child: _BadgeIcon(id: SocialService.equippedBadgeId!),
+                    child: _BadgeIcon(id: entry.badgeId!),
                   ),
               ],
             ),

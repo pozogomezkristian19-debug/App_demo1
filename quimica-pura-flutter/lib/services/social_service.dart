@@ -32,6 +32,7 @@ import 'progress.dart';
 import 'public_profile.dart';
 import 'referral_rewards.dart';
 import 'remote_shop_catalog.dart';
+import 'remote_tuning.dart';
 import 'shop_item.dart';
 import 'user_prefs.dart';
 
@@ -132,6 +133,8 @@ class FriendEntry {
     required this.streak,
     this.badgeId,
     this.avatarId,
+    this.frameId,
+    this.animationId,
     this.lastSeenMs,
     this.isBot = false,
     this.trophiesWon = 0,
@@ -148,11 +151,18 @@ class FriendEntry {
   final String? badgeId;
 
   /// Foto de avatar premium equipada ('avatar_dorado' |
-  /// 'avatar_violeta' | 'avatar_teal'), o null: el disco con la
-  /// inicial. Los marcos de la tienda existen desde la 7.3 (se
-  /// equipan aparte y se dibujan como anillo alrededor de la
-  /// foto), pero no viven en este campo.
+  /// 'avatar_violeta' | 'avatar_teal'), o null: la cara por
+  /// defecto. El marco y la animación viven en sus propios
+  /// campos ([frameId], [animationId]).
   final String? avatarId;
+
+  /// Marco de la tienda equipado ('frame_dorado_3d' | ...), o
+  /// null sin marco. Les sale a todos, igual que el avatar.
+  final String? frameId;
+
+  /// Animación de perfil equipada, o null sin animación. Les sale
+  /// a todos (salvo kill-switch apagado, ver [animationItem]).
+  final String? animationId;
 
   /// Último latido de presencia (ms desde epoch, null = nunca):
   /// para saber si está en línea antes de retarlo a un duelo.
@@ -169,6 +179,16 @@ class FriendEntry {
 
   /// Ruta del asset de la foto equipada, o null sin foto.
   String? get avatarAsset => SocialService.avatarAssetForId(avatarId);
+
+  /// El marco equipado (su artículo del catálogo), o null sin
+  /// marco o si el artículo se desactivó.
+  ShopItem? get frameItem => SocialService.shopItemForId(frameId);
+
+  /// La animación equipada (su artículo del catálogo), o null sin
+  /// animación, con el kill-switch apagado o si el artículo se
+  /// desactivó.
+  ShopItem? get animationItem =>
+      SocialService.animationItemForId(animationId);
 }
 
 /// Una solicitud de amistad (colección 'friend_requests' en
@@ -1869,8 +1889,10 @@ class SocialService {
     _equippedAvatarId = null;
     _equippedBadgeId = null;
     _equippedFrameId = null;
+    _equippedAnimationId = null;
     equippedAvatarIdNotifier.value = null;
     equippedFrameIdNotifier.value = null;
+    equippedAnimationIdNotifier.value = null;
     RemoteShopCatalog.instance.resetForTests();
   }
 
@@ -2102,12 +2124,14 @@ class SocialService {
   static const _kEquippedAvatar = 'social_shop_equipped_avatar';
   static const _kEquippedBadge = 'social_shop_equipped_badge';
   static const _kEquippedFrame = 'social_shop_equipped_frame';
+  static const _kEquippedAnimation = 'social_shop_equipped_animation';
 
   static Set<String>? _owned;
   static String? _equippedThemeId;
   static String? _equippedAvatarId;
   static String? _equippedBadgeId;
   static String? _equippedFrameId;
+  static String? _equippedAnimationId;
   static var _prefsLoaded = false;
 
   /// Carga las compras y lo equipado (llamar en main() antes de
@@ -2121,12 +2145,14 @@ class SocialService {
       _equippedAvatarId = prefs.getString(_kEquippedAvatar);
       _equippedBadgeId = prefs.getString(_kEquippedBadge);
       _equippedFrameId = prefs.getString(_kEquippedFrame);
+      _equippedAnimationId = prefs.getString(_kEquippedAnimation);
     } catch (_) {
       _owned ??= <String>{};
     }
     _prefsLoaded = true;
     equippedAvatarIdNotifier.value = _equippedAvatarId;
     equippedFrameIdNotifier.value = _equippedFrameId;
+    equippedAnimationIdNotifier.value = _equippedAnimationId;
   }
 
   static Future<Set<String>> ownedItemIds() async {
@@ -2146,6 +2172,7 @@ class SocialService {
       'avatar' => _equippedAvatarId,
       'badge' => _equippedBadgeId,
       'frame' => _equippedFrameId,
+      'animation' => _equippedAnimationId,
       _ => null,
     };
   }
@@ -2167,6 +2194,18 @@ class SocialService {
       if (seen.add(item.id)) out.add(item);
     }
     return out;
+  }
+
+  /// Un artículo del catálogo por su id, o null si no existe (o si
+  /// ya no está activo: el catálogo remoto solo trae los activos,
+  /// así que un artículo desactivado con `active: false` deja de
+  /// resolverse y desaparece también de donde estaba equipado).
+  static ShopItem? shopItemForId(String? id) {
+    if (id == null || id.isEmpty) return null;
+    for (final item in _lookupCatalog()) {
+      if (item.id == id) return item;
+    }
+    return null;
   }
 
   /// Color del tema equipado de la tienda (síncrono, para
@@ -2284,6 +2323,37 @@ class SocialService {
   /// Insignia equipada ('badge_star' | 'badge_trophy' | 'badge_flame').
   static String? get equippedBadgeId => _equippedBadgeId;
 
+  /// Animaciones de perfil (kill-switch online, Kristian
+  /// 2026-11-17): el Admin las apaga en 'settings/app' y
+  /// desaparecen de todos los perfiles sin compilar. El valor
+  /// local es solo el respaldo: manda el servidor.
+  static bool get profileAnimationsEnabled =>
+      RemoteTuning.profileAnimationsEnabled;
+
+  /// Id de la animación de perfil equipada (síncrono), o null.
+  static String? get equippedAnimationId => _equippedAnimationId;
+
+  /// La animación de perfil equipada (su artículo del catálogo),
+  /// o null: sin animación, con el kill-switch apagado, o si el
+  /// artículo se desactivó (`active: false`). Así una animación
+  /// deshabilitada desaparece del perfil sin compilar nada.
+  static ShopItem? get equippedAnimationItem =>
+      animationItemForId(_equippedAnimationId);
+
+  /// La animación de perfil de CUALQUIER usuario por su id, o
+  /// null: sin animación, con el kill-switch apagado, o si el
+  /// artículo se desactivó. Igual que [equippedAnimationItem]
+  /// pero para los demás, no solo para uno mismo.
+  static ShopItem? animationItemForId(String? id) {
+    if (!profileAnimationsEnabled) return null;
+    return shopItemForId(id);
+  }
+
+  /// Avisa a quien escucha (la cabecera de Cuenta) cuando cambia
+  /// la animación equipada: el perfil repinta al instante.
+  static final ValueNotifier<String?> equippedAnimationIdNotifier =
+      ValueNotifier<String?>(null);
+
   /// Compra [item]: descuenta los puntos, guarda en local y
   /// sincroniza cuando hay backend. false si no alcanzan los puntos.
   static Future<bool> buyItem(ShopItem item) async {
@@ -2336,6 +2406,8 @@ class SocialService {
         _equippedBadgeId = item.id;
       case 'frame':
         _equippedFrameId = item.id;
+      case 'animation':
+        _equippedAnimationId = item.id;
     }
     await init();
     // Si init() acababa de cargar las preferencias (primera
@@ -2350,6 +2422,10 @@ class SocialService {
       _equippedFrameId = item.id;
       equippedFrameIdNotifier.value = item.id;
     }
+    if (item.kind == 'animation') {
+      _equippedAnimationId = item.id;
+      equippedAnimationIdNotifier.value = item.id;
+    }
     try {
       final prefs = await SharedPreferences.getInstance();
       switch (item.kind) {
@@ -2361,12 +2437,57 @@ class SocialService {
           await prefs.setString(_kEquippedBadge, item.id);
         case 'frame':
           await prefs.setString(_kEquippedFrame, item.id);
+        case 'animation':
+          await prefs.setString(_kEquippedAnimation, item.id);
       }
     } catch (_) {}
     // Lo equipado también se sincroniza (no solo la propiedad):
-    // así el avatar/insignia/tema/marco sobrevive a un cambio de
-    // teléfono y los amigos ven lo que llevas puesto.
+    // así el avatar/insignia/tema/marco/animación sobrevive a un
+    // cambio de teléfono y los amigos ven lo que llevas puesto.
     await _safeVoid(() => _repo.syncEquipped(item.kind, item.id));
+  }
+
+  /// Quita lo equipado de un tipo ('theme' | 'avatar' | 'badge' |
+  /// 'frame' | 'animation'): vuelve al perfil normal (sin tema de
+  /// tienda, con la cara por defecto, sin insignia, sin marco, sin
+  /// animación). La cabecera repinta al instante y el avatar
+  /// vuelve a centrarse. La compra NO se pierde: solo se quita lo
+  /// equipado, y se puede volver a equipar en la Tienda.
+  static Future<void> unequipItem(String kind) async {
+    await init();
+    switch (kind) {
+      case 'theme':
+        _equippedThemeId = null;
+      case 'avatar':
+        _equippedAvatarId = null;
+        equippedAvatarIdNotifier.value = null;
+      case 'badge':
+        _equippedBadgeId = null;
+      case 'frame':
+        _equippedFrameId = null;
+        equippedFrameIdNotifier.value = null;
+      case 'animation':
+        _equippedAnimationId = null;
+        equippedAnimationIdNotifier.value = null;
+      default:
+        return;
+    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      switch (kind) {
+        case 'theme':
+          await prefs.remove(_kEquippedTheme);
+        case 'avatar':
+          await prefs.remove(_kEquippedAvatar);
+        case 'badge':
+          await prefs.remove(_kEquippedBadge);
+        case 'frame':
+          await prefs.remove(_kEquippedFrame);
+        case 'animation':
+          await prefs.remove(_kEquippedAnimation);
+      }
+    } catch (_) {}
+    await _safeVoid(() => _repo.syncEquipped(kind, null));
   }
 
   /// Id del tema de tienda equipado (síncrono), o null.

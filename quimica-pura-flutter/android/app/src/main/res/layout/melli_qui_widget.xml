@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 
-<!-- Tarjeta del widget de inicio (v6; fix4, punto 10: línea de tip):
-     título, tip de estudio del día (ámbar claro, 3 líneas como
-     mucho con elipsis) y racha / vidas / puntos.
-     Colores literales (RemoteViews no admite atributos de tema):
-     noche #0A1628, texto claro y acento menta. -->
+<!-- Tarjeta del widget de inicio (mejorado, 2026-11-18, diseño v3
+     aprobado por Kristian: tarjeta estilo Duolingo, cara de
+     Brenda, llama + racha, tip, meta del día con barra teal,
+     corazón + vidas sobre 10 y rayo + puntos).
+     Los colores salen de widget_colors.xml (con variante night en
+     modo oscuro: tarjeta oscura, texto claro; los acentos quedan
+     iguales). RemoteViews no admite atributos de tema, pero sí
+     recursos @color. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/widget_container"
@@ -13,66 +16,146 @@
     android:layout_margin="8dp"
     android:background="@drawable/widget_background"
     android:orientation="vertical"
-    android:padding="12dp">
+    android:padding="14dp">
 
-    <TextView
+    <!-- Cara de Brenda + "Quemia" + llama y racha. La cara se pinta
+         en el proveedor (bitmap circular desde assets/brenda.png);
+         si no se puede leer, el ImageView queda vacío. -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Quemia"
-        android:textColor="#FFFFFF"
-        android:textSize="18sp"
-        android:textStyle="bold" />
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
 
-    <!-- Tip de estudio del día (fix4, punto 10): rota cada día, con su
-         propio TextView (widget_tip) y la etiqueta "Tip:". Si el texto
-         es largo, se corta con elipsis a 3 líneas. -->
+        <ImageView
+            android:id="@+id/widget_face"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:contentDescription="@null" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:text="Quemia"
+            android:textColor="@color/widget_ink"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <Space
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <ImageView
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:src="@drawable/ic_flame" />
+
+        <TextView
+            android:id="@+id/widget_streak_num"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:textColor="@color/widget_orange"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            tools:text="3" />
+    </LinearLayout>
+
+    <!-- Tip de estudio del día (fix4, punto 10): rota cada día, con
+         su propio TextView (widget_tip) y la etiqueta "Tip:". Si el
+         texto es largo, se corta con elipsis a 2 líneas. -->
     <TextView
         android:id="@+id/widget_tip"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
+        android:layout_marginTop="8dp"
         android:ellipsize="end"
-        android:maxLines="3"
-        android:textColor="#FDE68A"
+        android:maxLines="2"
+        android:textColor="@color/widget_tip"
         android:textSize="14sp"
-        tools:text="Tip: Convierte todo a las unidades del SI antes de sustituir: mL → L, °C → K, g → mol." />
+        tools:text="Tip: Convierte todo a las unidades del SI antes de sustituir." />
 
+    <!-- Meta del día: etiqueta a la izquierda y estado a la derecha
+         ("¡Meta cumplida!" en teal o "0/1"). -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="10dp"
         android:orientation="horizontal">
 
         <TextView
-            android:id="@+id/widget_streak"
+            android:id="@+id/widget_goal_label"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:textColor="#2DD4BF"
+            android:textColor="@color/widget_ink"
             android:textSize="13sp"
             android:textStyle="bold"
-            tools:text="Racha: 3" />
+            tools:text="Meta del día" />
 
         <TextView
-            android:id="@+id/widget_lives"
-            android:layout_width="0dp"
+            android:id="@+id/widget_goal_status"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:gravity="center"
-            android:textColor="#F59E0B"
+            android:textColor="@color/widget_teal"
             android:textSize="13sp"
             android:textStyle="bold"
-            tools:text="Vidas: 5/5" />
+            tools:text="¡Meta cumplida!" />
+    </LinearLayout>
+
+    <ProgressBar
+        android:id="@+id/widget_goal_progress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="6dp"
+        android:layout_marginTop="6dp"
+        android:max="100"
+        android:progress="100"
+        android:progressDrawable="@drawable/widget_progress" />
+
+    <!-- Vidas (corazón + "10/10") y puntos (rayo + número). -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:src="@drawable/ic_heart" />
 
         <TextView
-            android:id="@+id/widget_points"
-            android:layout_width="0dp"
+            android:id="@+id/widget_lives_num"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:gravity="end"
-            android:textColor="#FFFFFF"
+            android:layout_marginStart="6dp"
+            android:textColor="@color/widget_ink"
             android:textSize="13sp"
             android:textStyle="bold"
-            tools:text="Puntos: 120" />
+            tools:text="10/10" />
+
+        <Space
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:src="@drawable/ic_bolt" />
+
+        <TextView
+            android:id="@+id/widget_points_num"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:textColor="@color/widget_ink"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            tools:text="120" />
     </LinearLayout>
 </LinearLayout>

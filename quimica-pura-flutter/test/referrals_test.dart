@@ -58,6 +58,7 @@ void main() {
     AuthService.resetForTests();
     SocialService.resetForTests();
     UserPrefs.publicUsername = '';
+    UserPrefs.usernameChangedAtMs = 0;
   });
 
   test('el código tiene 6 caracteres del alfabeto permitido', () {
@@ -378,5 +379,69 @@ void main() {
     expect(ShopItem.fromMap(kShopCatalog.first.toMap()), isNotNull);
     expect(
         ShopItem.fromMap(kShopCatalog.first.toMap())!.referralOnly, isFalse);
+  });
+
+  group('cambiar el nombre de usuario (límite 10 días, 2026-11-17)', () {
+    test('cambiar por un nombre libre funciona y arranca el contador',
+        () async {
+      UserPrefs.publicUsername = 'Kristian';
+      UserPrefs.usernameChangedAtMs = 0;
+      final claimed = await ReferralService.claimUsername('Carlos');
+      expect(claimed, 'Carlos');
+      expect(UserPrefs.publicUsername, 'Carlos');
+      expect(UserPrefs.usernameChangedAtMs, greaterThan(0));
+      final nameDoc = await fake.getDoc('usernames', 'carlos');
+      expect(nameDoc?['uid'], 'fake-anon-uid');
+      final userDoc = await fake.getDoc('users', 'fake-anon-uid');
+      expect(userDoc?['username'], 'Carlos');
+    });
+
+    test(
+        'cambiar por un nombre cogido deja el viejo y no arranca el contador',
+        () async {
+      UserPrefs.publicUsername = 'Kristian';
+      UserPrefs.usernameChangedAtMs = 0;
+      await fake.setDoc('usernames', 'paula',
+          {'uid': 'otro-uid', 'createdAtMs': 1});
+      final claimed = await ReferralService.claimUsername('Paula');
+      expect(claimed, 'Kristian');
+      expect(UserPrefs.publicUsername, 'Kristian');
+      expect(UserPrefs.usernameChangedAtMs, 0);
+      final userDoc = await fake.getDoc('users', 'fake-anon-uid');
+      expect(userDoc?['username'], isNot('Paula'));
+    });
+
+    test('cambiar por el mismo nombre no hace nada', () async {
+      UserPrefs.publicUsername = 'Kristian';
+      UserPrefs.usernameChangedAtMs = 0;
+      final claimed = await ReferralService.claimUsername('kristian');
+      expect(claimed, 'Kristian');
+      expect(UserPrefs.usernameChangedAtMs, 0);
+    });
+
+    test('el primer reclamo no arranca el contador', () async {
+      UserPrefs.publicUsername = '';
+      UserPrefs.usernameChangedAtMs = 0;
+      final claimed = await ReferralService.claimUsername('Ana');
+      expect(claimed, 'Ana');
+      expect(UserPrefs.publicUsername, 'Ana');
+      expect(UserPrefs.usernameChangedAtMs, 0);
+    });
+
+    test('el contador: cambio reciente bloquea, de hace 11 días permite',
+        () {
+      final now = DateTime(2026, 11, 17, 12);
+      UserPrefs.usernameChangedAtMs = 0;
+      expect(UserPrefs.usernameChangeAvailableOn(now: now), isNull);
+      UserPrefs.usernameChangedAtMs =
+          DateTime(2026, 11, 16, 12).millisecondsSinceEpoch;
+      expect(
+        UserPrefs.usernameChangeAvailableOn(now: now),
+        DateTime(2026, 11, 26, 12),
+      );
+      UserPrefs.usernameChangedAtMs =
+          DateTime(2026, 11, 6, 12).millisecondsSinceEpoch;
+      expect(UserPrefs.usernameChangeAvailableOn(now: now), isNull);
+    });
   });
 }

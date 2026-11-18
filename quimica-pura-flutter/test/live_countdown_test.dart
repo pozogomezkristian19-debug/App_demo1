@@ -9,11 +9,15 @@
 // live_countdown), la decisión pura de cuándo sale y la medianoche
 // de fin. El aviso nativo en sí solo se puede probar en el teléfono
 // tras compilar.
+import 'dart:math';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quimica_pura/services/live_countdown.dart';
 import 'package:quimica_pura/services/localization.dart';
 import 'package:quimica_pura/services/notification_service.dart';
+import 'package:quimica_pura/services/user_prefs.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -22,9 +26,15 @@ void main() {
   final calls = <MethodCall>[];
   var throwOnCall = false;
 
+  setUpAll(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
   setUp(() {
     calls.clear();
     throwOnCall = false;
+    UserPrefs.countdownFireMs = 0;
+    SharedPreferences.setMockInitialValues({});
     LiveCountdown.forceAndroidForTests = true;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (MethodCall call) async {
@@ -61,8 +71,7 @@ void main() {
     expect(args['largeIconPath'], '/tmp/melli_notif_britany.png');
   });
 
-  test('schedule() programa la alarma para la hora del recordatorio',
-      () async {
+  test('schedule() programa la alarma para la hora elegida', () async {
     final at = DateTime(2026, 11, 16, 19);
     final endsAt = DateTime(2026, 11, 17);
     final ok = await LiveCountdown.schedule(
@@ -115,23 +124,21 @@ void main() {
   });
 
   group('shouldShowLiveCountdown', () {
-    test('antes de la hora del recordatorio, todavía no sale', () {
+    test('antes de la hora aleatoria, todavía no sale', () {
       expect(
         NotificationService.shouldShowLiveCountdown(
           now: DateTime(2026, 11, 16, 18, 30),
-          reminderHour: 19,
-          reminderMinute: 0,
+          fireTime: DateTime(2026, 11, 16, 21, 30),
         ),
         isFalse,
       );
     });
 
-    test('a la hora exacta del recordatorio, ya sale', () {
+    test('a la hora aleatoria exacta, ya sale', () {
       expect(
         NotificationService.shouldShowLiveCountdown(
-          now: DateTime(2026, 11, 16, 19, 0),
-          reminderHour: 19,
-          reminderMinute: 0,
+          now: DateTime(2026, 11, 16, 21, 30),
+          fireTime: DateTime(2026, 11, 16, 21, 30),
         ),
         isTrue,
       );
@@ -141,11 +148,83 @@ void main() {
       expect(
         NotificationService.shouldShowLiveCountdown(
           now: DateTime(2026, 11, 16, 22, 15),
-          reminderHour: 19,
-          reminderMinute: 0,
+          fireTime: DateTime(2026, 11, 16, 21, 30),
         ),
         isTrue,
       );
+    });
+  });
+
+  group('randomCountdownFireTime', () {
+    test('siempre cae entre las 21:30 y las 23:00', () {
+      for (var seed = 0; seed < 20; seed++) {
+        final fire = NotificationService.randomCountdownFireTime(
+          DateTime(2026, 11, 18),
+          Random(seed),
+        );
+        expect(fire.isBefore(DateTime(2026, 11, 18, 23, 0)), isTrue);
+        expect(
+          fire.isBefore(DateTime(2026, 11, 18, 21, 30)),
+          isFalse,
+        );
+      }
+    });
+
+    test('con la misma semilla da la misma hora', () {
+      final a = NotificationService.randomCountdownFireTime(
+        DateTime(2026, 11, 18),
+        Random(7),
+      );
+      final b = NotificationService.randomCountdownFireTime(
+        DateTime(2026, 11, 18),
+        Random(7),
+      );
+      expect(a, b);
+    });
+  });
+
+  group('countdownFireTimeForToday', () {
+    test('la primera vez genera una hora y la guarda', () async {
+      final fire =
+          await NotificationService.countdownFireTimeForToday(
+        now: DateTime(2026, 11, 18, 10, 0),
+        random: Random(7),
+      );
+      expect(fire.isBefore(DateTime(2026, 11, 18, 23, 0)), isTrue);
+      expect(
+        fire.isBefore(DateTime(2026, 11, 18, 21, 30)),
+        isFalse,
+      );
+      expect(UserPrefs.countdownFireMs, fire.millisecondsSinceEpoch);
+    });
+
+    test('la segunda vez el mismo día devuelve la misma hora', () async {
+      final first =
+          await NotificationService.countdownFireTimeForToday(
+        now: DateTime(2026, 11, 18, 10, 0),
+        random: Random(7),
+      );
+      final second =
+          await NotificationService.countdownFireTimeForToday(
+        now: DateTime(2026, 11, 18, 20, 0),
+        random: Random(99),
+      );
+      expect(second, first);
+    });
+
+    test('al día siguiente genera una hora nueva', () async {
+      final first =
+          await NotificationService.countdownFireTimeForToday(
+        now: DateTime(2026, 11, 18, 10, 0),
+        random: Random(7),
+      );
+      final next =
+          await NotificationService.countdownFireTimeForToday(
+        now: DateTime(2026, 11, 19, 10, 0),
+        random: Random(7),
+      );
+      expect(next.day, 19);
+      expect(next.millisecondsSinceEpoch, isNot(first.millisecondsSinceEpoch));
     });
   });
 

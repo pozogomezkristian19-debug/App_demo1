@@ -225,6 +225,11 @@ Future<void> main() async {
   // terminados corren en segundo plano y fallan en silencio.
   SocialService.setRepositoryForTests(FirestoreSocialRepository());
   unawaited(RemoteContentService.refreshRemoteContent());
+  // Catálogo de la tienda en segundo plano (7.9): las cabeceras
+  // de perfil necesitan resolver el marco y la animación
+  // equipados sin tener que abrir la Tienda. Nunca lanza y tiene
+  // timeout de 5 s: sin internet, cae al respaldo sin avisar.
+  unawaited(SocialService.refreshShopItems());
   unawaited(ReportsService.retryPendingReports());
   unawaited(DuelService.retryPendingDuels());
   unawaited(TournamentsService.retryPendingScores());

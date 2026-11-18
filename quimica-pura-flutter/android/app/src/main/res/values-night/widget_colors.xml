@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Colores del widget de inicio en modo oscuro (2026-11-18,
+     pedido de Kristian: el widget también tiene que verse en modo
+     oscuro). Tarjeta oscura como las tarjetas de la app
+     (superficie 0xFF1F2E35, borde 0xFF33454E) con texto casi blanco;
+     el labio es más oscuro que la tarjeta para que se note el
+     relieve. La barra teal, la llama, el corazón y el rayo quedan
+     iguales que en claro. -->
+<resources>
+    <color name="widget_card">#1F2E35</color>
+    <color name="widget_card_border">#33454E</color>
+    <color name="widget_card_lip">#152228</color>
+    <color name="widget_ink">#F5F7FA</color>
+    <color name="widget_tip">#94A3B8</color>
+    <color name="widget_track">#33454E</color>
+    <color name="widget_teal">#14B8A6</color>
+    <color name="widget_orange">#FF9600</color>
+    <color name="widget_red">#FF4B4B</color>
+    <color name="widget_amber">#FFC800</color>
+</resources>

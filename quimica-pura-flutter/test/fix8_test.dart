@@ -314,6 +314,10 @@ void main() {
     expect(find.text('Ir a Ajustes'), findsOneWidget);
     await tester.tap(find.text('Cerrar'));
     await tester.pumpAndSettle();
+    // Widget (2026-11-18): tras las notificaciones va la pantalla
+    // del widget; con MÁS TARDE se sigue a la racha.
+    await tester.tap(find.text(tr('obWidgetLater').toUpperCase()));
+    await tester.pumpAndSettle();
     await tester.tap(find.text(tr('obStreakStart').toUpperCase()));
     await tester.pumpAndSettle();
     // Aviso "¡No pierdas tu progreso!" (Duolingo) antes del registro.
@@ -1042,8 +1046,8 @@ void main() {
     });
 
     testWidgets(
-        'inicio de sesión con correo va directo a la principal sin preguntas',
-        (tester) async {
+        'inicio de sesión con correo: antes de la principal sale el '
+        'widget (no obligatorio)', (tester) async {
       fakeAuth.emailAccounts['jorge@example.com'] = 'Secreto123!';
       var finished = false;
       await tester.pumpWidget(
@@ -1059,14 +1063,19 @@ void main() {
       await enterHint(tester, tr('obPasswordHint'), 'Secreto123!');
       await tester.tap(find.text(tr('obSignInButton').toUpperCase()));
       await tester.pumpAndSettle();
-      // Entrar con la cuenta (Kristian 2026-11-15): va directo
-      // a la principal, sin preguntas. Las preguntas quedan
-      // solo en crear cuenta.
-      expect(finished, isTrue);
+      // Entrar con la cuenta (Kristian 2026-11-15): sin preguntas.
+      // Las preguntas quedan solo en crear cuenta. Antes de la
+      // principal sale la pantalla del widget (2026-11-18, diseño
+      // v3 aprobado); con MÁS TARDE se entra igual.
+      expect(finished, isFalse);
+      expect(find.text(tr('obWidgetTitle')), findsOneWidget);
       expect(find.text(tr('obSourceTitle')), findsNothing);
       expect(find.text(tr('obLevelTitle')), findsNothing);
       expect(find.text(tr('obGoalTitle')), findsNothing);
       expect(find.text(tr('obNotifTitle')), findsNothing);
+      await tester.tap(find.text(tr('obWidgetLater').toUpperCase()));
+      await tester.pumpAndSettle();
+      expect(finished, isTrue);
       expect(UserPrefs.userName, 'Jorge');
       expect(tester.takeException(), isNull);
     });
@@ -1319,11 +1328,16 @@ void main() {
       expect(UserPrefs.dailyGoalMinutes, 15);
       // 4) Notificaciones (la misma página de siempre): el permiso
       // está negado en pruebas, sale "Ir a Ajustes" y al cerrarlo
-      // se avanza a la racha (ya NO termina el flujo aquí).
+      // se avanza al widget (MÁS TARDE a la racha; ya NO termina
+      // el flujo aquí).
       expect(find.text(tr('obNotifEnable').toUpperCase()), findsOneWidget);
       await tester.tap(find.text(tr('obNotifEnable').toUpperCase()));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Cerrar'));
+      await tester.pumpAndSettle();
+      // Widget (2026-11-18): tras las notificaciones va la pantalla
+      // del widget; con MÁS TARDE se sigue a la racha.
+      await tester.tap(find.text(tr('obWidgetLater').toUpperCase()));
       await tester.pumpAndSettle();
       // 5) "¡Una nueva racha!": número gigante + "día de racha",
       // la semana con hoy marcado (naranja con ✓).

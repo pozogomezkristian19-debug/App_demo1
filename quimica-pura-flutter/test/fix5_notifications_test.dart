@@ -554,7 +554,7 @@ void main() {
     }
 
     testWidgets('con el permiso concedido, "Activar recordatorios" '
-        'dispara la confirmación y avanza a la racha', (tester) async {
+        'dispara la confirmación y avanza al widget', (tester) async {
       var finished = false;
       await goToNotificationsPage(tester, onFinished: () => finished = true);
       expect(find.text('ACTIVAR RECORDATORIOS'), findsOneWidget);
@@ -562,9 +562,12 @@ void main() {
       await tester.pump(const Duration(seconds: 4));
       await tester.pumpAndSettle();
       // Notificaciones ya NO es la última página en la 7.7 (después
-      // van la racha, el perfil y el referido): al activar, se
-      // avanza a la racha, no se termina el flujo.
+      // van el widget, la racha, el perfil y el referido): al
+      // activar, se avanza al widget, no se termina el flujo.
       expect(finished, isFalse);
+      expect(find.text(tr('obWidgetTitle')), findsOneWidget);
+      await tester.tap(find.text(tr('obWidgetLater').toUpperCase()));
+      await tester.pumpAndSettle();
       expect(find.text(tr('obStreakTitle')), findsOneWidget);
       expect(UserPrefs.reminderOn, isTrue);
       expect(fake.exactAlarmsRequested, isFalse);
@@ -597,10 +600,13 @@ void main() {
       await tester.pump(const Duration(seconds: 4));
       await tester.pumpAndSettle();
       expect(UserPrefs.reminderOn, isTrue);
-      // Al volver con el permiso dado se activa solo y se avanza a
-      // la racha (Quemia 7.7: Notificaciones ya NO es la última
-      // página).
+      // Al volver con el permiso dado se activa solo y se avanza al
+      // widget (Quemia 7.7: Notificaciones ya NO es la última
+      // página); con MÁS TARDE se sigue a la racha.
       expect(finished, isFalse);
+      expect(find.text(tr('obWidgetTitle')), findsOneWidget);
+      await tester.tap(find.text(tr('obWidgetLater').toUpperCase()));
+      await tester.pumpAndSettle();
       expect(find.text(tr('obStreakTitle')), findsOneWidget);
       expect(
           fake.shown
@@ -610,7 +616,7 @@ void main() {
     });
 
     testWidgets('con el permiso denegado y "Cerrar" en el diálogo, '
-        'se avanza a la racha sin activar nada', (tester) async {
+        'se avanza al widget sin activar nada', (tester) async {
       fake.permissionGranted = false;
       var finished = false;
       await goToNotificationsPage(tester, onFinished: () => finished = true);
@@ -619,9 +625,13 @@ void main() {
       expect(find.text('Ir a Ajustes'), findsOneWidget);
       await tester.tap(find.text(tr('notifSettingsClose')));
       await tester.pumpAndSettle();
-      // Al cerrar, se avanza a la racha (Quemia 7.7: Notificaciones
-      // ya NO es la última página), sin activar nada.
+      // Al cerrar, se avanza al widget (Quemia 7.7: Notificaciones
+      // ya NO es la última página), sin activar nada; con MÁS TARDE
+      // se sigue a la racha.
       expect(finished, isFalse);
+      expect(find.text(tr('obWidgetTitle')), findsOneWidget);
+      await tester.tap(find.text(tr('obWidgetLater').toUpperCase()));
+      await tester.pumpAndSettle();
       expect(find.text(tr('obStreakTitle')), findsOneWidget);
       expect(UserPrefs.reminderOn, isFalse);
       expect(fake.settingsOpened, isFalse);

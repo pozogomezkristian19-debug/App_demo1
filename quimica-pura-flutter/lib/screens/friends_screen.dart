@@ -960,6 +960,7 @@ class _FriendRow extends StatelessWidget {
             username: friend.username,
             avatarAsset: friend.avatarAsset,
             badgeId: friend.badgeId,
+            frameItem: friend.frameItem,
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -1061,6 +1062,7 @@ class _SearchResultRow extends StatelessWidget {
             username: entry.username,
             avatarAsset: entry.avatarAsset,
             badgeId: entry.badgeId,
+            frameItem: entry.frameItem,
           ),
           const SizedBox(width: 10),
           Expanded(

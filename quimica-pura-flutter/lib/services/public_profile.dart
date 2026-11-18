@@ -129,6 +129,9 @@ class PublicProfile {
     required this.isFollowedBy,
     required this.isMutual,
     required this.avatarId,
+    this.badgeId,
+    this.frameId,
+    this.animationId,
     required this.isBot,
   });
 
@@ -174,6 +177,17 @@ class PublicProfile {
 
   /// Avatar equipado ('avatar_...'), o null.
   final String? avatarId;
+
+  /// Insignia equipada ('badge_...'), o null sin insignia. Les
+  /// sale a todos (7.9).
+  final String? badgeId;
+
+  /// Marco de la tienda equipado ('frame_...'), o null sin marco.
+  /// Les sale a todos igual que el avatar (7.9).
+  final String? frameId;
+
+  /// Animación de perfil equipada, o null sin animación (7.9).
+  final String? animationId;
 
   /// true si es un BOT (usuario simulado).
   final bool isBot;
@@ -241,6 +255,13 @@ class PublicProfile {
       }
     });
     final avatarRaw = raw['equippedAvatar']?.toString();
+    // Insignia, marco y animación (7.9): les salen a todos. La
+    // cadena vacía es "quitado", no un id.
+    String? nonEmpty(Object? v) {
+      final s = v?.toString().trim() ?? '';
+      return s.isEmpty ? null : s;
+    }
+
     return PublicProfile(
       uid: uid,
       username: username,
@@ -265,6 +286,9 @@ class PublicProfile {
       isFollowedBy: isFollowedBy,
       isMutual: isFollowing && isFollowedBy,
       avatarId: avatarRaw == null || avatarRaw.isEmpty ? null : avatarRaw,
+      badgeId: nonEmpty(raw['equippedBadge']),
+      frameId: nonEmpty(raw['equippedFrame']),
+      animationId: nonEmpty(raw['equippedAnimation']),
       isBot: raw['isBot'] == true,
     );
   }

@@ -447,10 +447,10 @@ void main() {
     // Quemia 7.7 (rediseño 2026-11-13): sin pantalla de idioma y sin
     // barra de progreso; el inicio es Bienvenida -> Elección ->
     // la gemela -> cómo supo -> cuánta química sabe -> meta diaria
-    // -> Notificaciones -> la racha -> aviso "¡No pierdas tu
-    // progreso!" -> Registro. En Notificaciones el permiso está
-    // negado en pruebas: sale "Ir a Ajustes" y al cerrarlo se
-    // avanza a la racha.
+    // -> Notificaciones -> el widget -> la racha -> aviso
+    // "¡No pierdas tu progreso!" -> Registro. En Notificaciones el
+    // permiso está negado en pruebas: sale "Ir a Ajustes" y al
+    // cerrarlo se avanza al widget (MÁS TARDE a la racha).
     await tester.tap(find.text(tr('obContinue').toUpperCase()));
     await tester.pumpAndSettle();
     await tester.tap(find.text(tr('obCreateProfile').toUpperCase()));
@@ -471,11 +471,16 @@ void main() {
     await tester.pumpAndSettle();
     // En preview el permiso SÍ se concede (plataforma falsa
     // _Fix8PreviewFake): al activar no sale "Ir a Ajustes", se
-    // programa la tanda y se avanza a la racha. Hay que avanzar el
-    // reloj 4 s para que el tope de la copia del icono dispare y el
-    // flujo siga (como en fix3, caso concedido).
+    // programa la tanda y se avanza al widget (MÁS TARDE a la
+    // racha). Hay que avanzar el reloj 4 s para que el tope de la
+    // copia del icono dispare y el flujo siga (como en fix3, caso
+    // concedido).
     await tester.tap(find.text(tr('obNotifEnable').toUpperCase()));
     await tester.pump(const Duration(seconds: 4));
+    await tester.pumpAndSettle();
+    // Widget (2026-11-18): tras las notificaciones va la pantalla
+    // del widget; con MÁS TARDE se sigue a la racha.
+    await tester.tap(find.text(tr('obWidgetLater').toUpperCase()));
     await tester.pumpAndSettle();
     await tester.tap(find.text(tr('obStreakStart').toUpperCase()));
     await tester.pumpAndSettle();
@@ -605,9 +610,15 @@ void main() {
     ProgressService.instance.addPoints(2000);
     await pumpScreen(tester, const ShopScreen(isGoogleLinked: true));
     await socialSettle(tester);
-    expect(find.text('Coral'), findsOneWidget);
-    // Precarga de los avatares premium: sin ella salen en blanco.
-    await warmAvatars(tester);
+    // Rejilla 7.9: la Tienda ya no lista los artículos — enseña
+    // una casilla por sección (Temas, Avatares, Insignias, Marcos
+    // y Animación en el perfil) y cada una abre sus artículos.
+    expect(find.text('2000'), findsOneWidget);
+    expect(find.text('Temas'), findsOneWidget);
+    expect(find.text('Avatares'), findsOneWidget);
+    expect(find.text('Insignias'), findsOneWidget);
+    expect(find.text('Marcos'), findsOneWidget);
+    expect(find.text('Animación en el perfil'), findsOneWidget);
     await shot(tester, 'fix8_tienda.png');
   });
 

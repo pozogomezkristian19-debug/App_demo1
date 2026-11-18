@@ -25,6 +25,7 @@ import 'package:quimica_pura/services/referral_service.dart';
 import 'package:quimica_pura/services/user_prefs.dart';
 import 'package:quimica_pura/widgets/duo_button.dart';
 import 'package:quimica_pura/widgets/lucide_icons.dart';
+import 'package:quimica_pura/widgets/username_editor_flow.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'test_helpers.dart';
@@ -84,6 +85,7 @@ void main() {
     UserPrefs.isDark = false;
     UserPrefs.userName = '';
     UserPrefs.publicUsername = '';
+    UserPrefs.usernameChangedAtMs = 0;
   });
 
   Future<void> setPhone(WidgetTester tester) async {
@@ -123,6 +125,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Ir a Ajustes'), findsOneWidget);
     await tester.tap(find.text('Cerrar'));
+    await tester.pumpAndSettle();
+    // Widget (2026-11-18): tras las notificaciones va la pantalla
+    // del widget; con MÁS TARDE se sigue a la racha.
+    await tester.tap(find.text(tr('obWidgetLater').toUpperCase()));
     await tester.pumpAndSettle();
     await tester.tap(find.text(tr('obStreakStart').toUpperCase()));
     await tester.pumpAndSettle();
@@ -550,6 +556,49 @@ void main() {
       expect(UserPrefs.firstName, 'Cristian');
       UserPrefs.userName = '12345';
       expect(UserPrefs.firstName, '');
+    });
+  });
+
+  group('flujo de cambio con límite de 10 días (2026-11-17)', () {
+    testWidgets('cambio reciente enseña la espera con la fecha',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await UserPrefs.load();
+      AppLang.code = 'es';
+      UserPrefs.publicUsername = 'Kristian';
+      UserPrefs.usernameChangedAtMs = DateTime.now()
+          .subtract(const Duration(days: 1))
+          .millisecondsSinceEpoch;
+      await setPhone(tester);
+      await tester.pumpWidget(
+        const MaterialApp(home: UsernameEditorFlow(base: 'Kristian')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text(tr('usernameCooldownTitle')), findsOneWidget);
+      expect(
+        find.textContaining('Puedes cambiar tu nombre de nuevo el'),
+        findsOneWidget,
+      );
+      expect(find.text(tr('usernamePersonalizeTitle')), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('cambio de hace 11 días abre el editor', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await UserPrefs.load();
+      AppLang.code = 'es';
+      UserPrefs.publicUsername = 'Kristian';
+      UserPrefs.usernameChangedAtMs = DateTime.now()
+          .subtract(const Duration(days: 11))
+          .millisecondsSinceEpoch;
+      await setPhone(tester);
+      await tester.pumpWidget(
+        const MaterialApp(home: UsernameEditorFlow(base: 'Kristian')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text(tr('usernamePersonalizeTitle')), findsOneWidget);
+      expect(find.text(tr('usernameCooldownTitle')), findsNothing);
+      expect(tester.takeException(), isNull);
     });
   });
 }

@@ -276,6 +276,14 @@ class ReferralService {
   /// Si está libre se guarda y se escribe en Firestore; si está
   /// cogido por otro, se cae a [ensureUniqueUsername] (base del
   /// nombre). Sin internet se guarda en local y se reclama después.
+  ///
+  /// CAMBIAR el nombre (Kristian 2026-11-17): si ya hay un nombre
+  /// y el candidato es DISTINTO, se reclama el nuevo si está libre
+  /// (el viejo queda reservado: las reglas no dejan borrarlo, así
+  /// que se puede volver a él) y arranca el contador de 10 días
+  /// para el próximo cambio. Si lo tiene otro usuario, se devuelve
+  /// el actual sin cambiar nada. Si el candidato es el mismo, no
+  /// se hace nada. El primer reclamo (sin nombre aún) sigue igual.
   static Future<String> claimUsername(String candidate) async {
     final clean = candidate.replaceAll(RegExp(r'[^A-Za-zÀ-ÿ0-9]'), '');
     final capped = clean.length > usernameMaxLength
@@ -287,15 +295,30 @@ class ReferralService {
       return name;
     }
     final existing = UserPrefs.publicUsername;
-    if (existing.isNotEmpty) return existing;
+    // Mismo nombre que ya tengo: no hay cambio.
+    if (existing.isNotEmpty &&
+        name.toLowerCase() == existing.toLowerCase()) {
+      return existing;
+    }
+    // A partir de aquí, si ya hay nombre, esto es un CAMBIO.
+    final isChange = existing.isNotEmpty;
     final lower = name.toLowerCase();
     final doc = await OnlineCommon.call(
         () => _repo.getDoc('usernames', lower));
     if (doc != null) {
       if (doc['uid'] == _me) {
+        // El nombre es mío (reservado de antes): lo recupero.
         await UserPrefs.savePublicUsername(name);
+        if (isChange) {
+          await OnlineCommon.write(
+              () => _repo.setDoc('users', _me, {'username': name}));
+          await UserPrefs.saveUsernameChangedAtMs(
+              DateTime.now().millisecondsSinceEpoch);
+        }
         return name;
       }
+      // Cogido por otro: sin cambio (el primer reclamo cae al único).
+      if (isChange) return existing;
       return ensureUniqueUsername();
     }
     final ok = await OnlineCommon.write(() => _repo.setDoc(
@@ -314,6 +337,10 @@ class ReferralService {
     await UserPrefs.savePublicUsername(name);
     await OnlineCommon.write(
         () => _repo.setDoc('users', _me, {'username': name}));
+    if (isChange) {
+      await UserPrefs.saveUsernameChangedAtMs(
+          DateTime.now().millisecondsSinceEpoch);
+    }
     return name;
   }
 

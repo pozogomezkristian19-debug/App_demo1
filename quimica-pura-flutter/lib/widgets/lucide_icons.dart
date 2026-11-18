@@ -975,6 +975,15 @@ class LucideIcons {
         'M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.545-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0 0 17.32 5z'),
   ]);
 
+  /// Gema (Lucide, añadida 2026-11-18 para la insignia Gema):
+  /// paths oficiales de lucide.dev/icons/gem (lucide-static,
+  /// licencia ISC), verificados en unpkg/pub.dev/docs.rs.
+  static const LucideIconData gem = LucideIconData([
+    _SvgPath('M6 3h12l4 6-10 13L2 9Z'),
+    _SvgPath('M11 3 8 9l4 13 4-13-3-6'),
+    _SvgPath('M2 9h20'),
+  ]);
+
   static const LucideIconData gift = LucideIconData([
     _SvgPath('M12 7v14'),
     _SvgPath('M20 11v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8'),

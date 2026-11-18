@@ -152,6 +152,9 @@ class LeaderboardEntry {
     required this.levelsPassedTotal,
     required this.streak,
     this.avatarId,
+    this.badgeId,
+    this.frameId,
+    this.animationId,
   });
 
   final String deviceId;
@@ -164,9 +167,30 @@ class LeaderboardEntry {
   /// 'avatar_violeta' | 'avatar_teal'), o null: disco con inicial.
   final String? avatarId;
 
+  /// Insignia equipada, o null sin insignia. Les sale a todos
+  /// (7.9): antes solo uno mismo la veía junto a su nombre.
+  final String? badgeId;
+
+  /// Marco de la tienda equipado, o null sin marco. Les sale a
+  /// todos igual que el avatar (7.9).
+  final String? frameId;
+
+  /// Animación de perfil equipada, o null sin animación (7.9).
+  final String? animationId;
+
   /// Asset de la foto de avatar premium equipada, o null si usa el
   /// disco con la inicial (resuelve por el catálogo de la tienda).
   String? get avatarAsset => SocialService.avatarAssetForId(avatarId);
+
+  /// El marco equipado (su artículo del catálogo), o null sin
+  /// marco o si el artículo se desactivó.
+  ShopItem? get frameItem => SocialService.shopItemForId(frameId);
+
+  /// La animación equipada (su artículo del catálogo), o null sin
+  /// animación, con el kill-switch apagado o si el artículo se
+  /// desactivó.
+  ShopItem? get animationItem =>
+      SocialService.animationItemForId(animationId);
 }
 
 /// Acceso a los datos remotos, inyectable: la app usa Firestore y
@@ -634,6 +658,13 @@ class InMemoryAnalyticsRepository implements AnalyticsRepository {
 }
 
 int _asInt(Object? v) => (v as num?)?.toInt() ?? 0;
+
+/// Cadena no vacía, o null (los campos equipados se guardan como
+/// cadena vacía al quitarse: '' no es un id).
+String? _nonEmpty(Object? v) {
+  final s = v?.toString().trim() ?? '';
+  return s.isEmpty ? null : s;
+}
 
 class AnalyticsSync {
   AnalyticsSync._();
@@ -1346,7 +1377,10 @@ class AnalyticsSync {
             points: _asInt(doc['points']),
             levelsPassedTotal: _levelsTotal(doc['levelsPassed']),
             streak: _asInt(doc['streak']),
-            avatarId: doc['equippedAvatar']?.toString(),
+            avatarId: _nonEmpty(doc['equippedAvatar']),
+            badgeId: _nonEmpty(doc['equippedBadge']),
+            frameId: _nonEmpty(doc['equippedFrame']),
+            animationId: _nonEmpty(doc['equippedAnimation']),
           ));
         }
         return entries;

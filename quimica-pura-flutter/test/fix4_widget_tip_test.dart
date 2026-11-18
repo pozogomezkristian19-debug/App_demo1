@@ -4,11 +4,14 @@
 // la app, localizado en el idioma activo, con etiqueta "Tip:", sin
 // emojis, guardado con HomeWidget.saveWidgetData('tip', ...) y con su
 // propio TextView (widget_tip) en el layout nativo. La pregunta del
-// día y la fila Racha/Vidas/Puntos se mantienen como estaban.
+// día se eliminó de la app en la ronda #6. El widget mejorado
+// (2026-11-18, diseño v3) guarda además la racha, las vidas sobre
+// 10, los puntos y la meta del día con su progreso y estado.
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quimica_pura/data/i18n/content_i18n.dart';
 import 'package:quimica_pura/services/home_widget_service.dart';
+import 'package:quimica_pura/services/localization.dart';
 import 'package:quimica_pura/services/progress.dart';
 import 'package:quimica_pura/services/user_prefs.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -106,9 +109,17 @@ void main() {
       // La pregunta del día se eliminó de la app en la ronda #6:
       // el widget ya no la guarda. Las estadísticas siguen.
       expect(saved.containsKey('qotd'), isFalse);
-      expect(saved['streak'], isNotNull);
-      expect(saved['lives'], isNotNull);
-      expect(saved['points'], isNotNull);
+      // Widget mejorado (2026-11-18, diseño v3): racha, vidas
+      // sobre 10, puntos y meta del día con su progreso y estado.
+      // Con el perfil vacío: racha 0, vidas llenas 10/10, 0
+      // puntos y meta sin hacer (0/1).
+      expect(saved['streakNum'], '0');
+      expect(saved['livesNum'], '10/10');
+      expect(saved['pointsNum'], '0');
+      expect(saved['goalLabel'], tr('obWidgetGoal'));
+      expect(saved['goalDone'], isFalse);
+      expect(saved['goalProgress'], 0);
+      expect(saved['goalStatus'], '0/1');
       expect(updateWidgetCalled, isTrue);
     });
   });

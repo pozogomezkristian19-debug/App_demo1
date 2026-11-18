@@ -56,8 +56,24 @@ flutter:
     - assets/laurel_plata.png
     - assets/laurel_bronce.png
     - assets/avatar_dorado.png
+    - assets/frame_dorado_3d.png
+    - assets/frame_fuego_3d.png
+    # Marcos 3D nuevos (2026-11-18, Kristian: como el de fuego,
+    # en 3D y bien pulidos): discos recortados de las fotos de
+    # referencia, como el Dorado y el Fuego.
+    - assets/frame_diamante_3d.png
+    - assets/frame_esmeralda_3d.png
+    - assets/frame_zafiro_3d.png
+    - assets/frame_rubi_3d.png
+    - assets/frame_hielo_3d.png
     - assets/avatar_violeta.png
     - assets/avatar_teal.png
+    # Avatares nuevos (2026-11-18): mismo formato que los
+    # actuales (PNG 512x512 opaco, la app lo recorta en círculo).
+    - assets/avatar_cientifica.png
+    - assets/avatar_robot.png
+    - assets/avatar_mago.png
+    - assets/avatar_astronauta.png
     - assets/avatar_embajador.png
     - assets/avatar_leyenda.png
     - assets/messenger.png

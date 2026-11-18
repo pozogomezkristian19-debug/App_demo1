@@ -963,6 +963,7 @@ class _RankingRow extends StatelessWidget {
             username: entry.username,
             avatarAsset: entry.avatarAsset,
             badgeId: entry.badgeId,
+            frameItem: entry.frameItem,
           ),
           const SizedBox(width: 10),
           Expanded(

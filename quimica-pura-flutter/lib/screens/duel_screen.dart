@@ -53,6 +53,27 @@ class _DuelScreenState extends State<DuelScreen> {
   var _disconnectDismissed = false;
   var _cancelled = false;
 
+  /// Los cosméticos del rival (7.9): su foto, insignia y marco,
+  /// para que en el duelo se vean como en Amigos y en la Tabla.
+  /// Se resuelven por su nombre de usuario; si no se puede (sin
+  /// internet, rival sin nombre público), el rival se ve con la
+  /// cara por defecto, como antes. Nunca rompe el duelo.
+  FriendEntry? _opponentEntry;
+  String? _opponentEntryFor;
+
+  /// Resuelve los cosméticos del rival por su nombre de usuario
+  /// (una sola vez por rival).
+  Future<void> _loadOpponentEntry(DuelState match) async {
+    final name = match.opponentName.trim();
+    if (name.isEmpty || name == _opponentEntryFor) return;
+    _opponentEntryFor = name;
+    try {
+      final entry = await SocialService.findUserByUsername(name);
+      if (!mounted) return;
+      if (entry != null) setState(() => _opponentEntry = entry);
+    } catch (_) {}
+  }
+
   /// Sondeo del match al azar: mientras estoy en "buscando rival",
   /// el otro puede hacerme match (él crea el duelo conmigo de
   /// playerB). Cada 5 s miro mis duelos abiertos; si aparece uno,
@@ -80,6 +101,7 @@ class _DuelScreenState extends State<DuelScreen> {
         );
     if (!mounted || match == null) return;
     setState(() => _match = match);
+    unawaited(_loadOpponentEntry(match));
     // Rival sin conexión: no hay duelo que seguir (no se creó).
     // La pantalla enseña "[nombre] no está en línea" y no se
     // suscribe a nada.
@@ -164,6 +186,7 @@ class _DuelScreenState extends State<DuelScreen> {
       await SocialService.leaveDuelQueue();
       if (!mounted) return;
       setState(() => _match = found);
+      unawaited(_loadOpponentEntry(found));
       _subscribeToMatch(found);
     } finally {
       _pollInFlight = false;
@@ -312,6 +335,7 @@ class _DuelScreenState extends State<DuelScreen> {
       case DuelPhase.intro:
         return _IntroView(
           opponentName: match.opponentName,
+          opponentEntry: _opponentEntry,
           onStart: _beginPlaying,
           onCancel: _cancel,
         );
@@ -337,6 +361,7 @@ class _DuelScreenState extends State<DuelScreen> {
       case DuelPhase.finished:
         return _ResultView(
           match: match,
+          opponentEntry: _opponentEntry,
           onBack: () => Navigator.of(context).maybePop(),
         );
       case DuelPhase.abandoned:
@@ -421,11 +446,17 @@ class _WaitingView extends StatelessWidget {
 class _IntroView extends StatelessWidget {
   const _IntroView({
     required this.opponentName,
+    this.opponentEntry,
     required this.onStart,
     required this.onCancel,
   });
 
   final String opponentName;
+
+  /// Los cosméticos del rival (foto, insignia, marco), o null si
+  /// aún no se resolvieron: el rival se ve con la cara por
+  /// defecto, como antes.
+  final FriendEntry? opponentEntry;
   final VoidCallback onStart;
   final VoidCallback onCancel;
 
@@ -450,7 +481,15 @@ class _IntroView extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Center(child: SocialAvatar(username: opponentName, size: 72)),
+                Center(
+                    child: SocialAvatar(
+                  username: opponentName,
+                  avatarAsset: opponentEntry?.avatarAsset,
+                  badgeId: opponentEntry?.badgeId,
+                  frameItem: opponentEntry?.frameItem,
+                  frameRingWidth: 6,
+                  size: 72,
+                )),
                 const SizedBox(height: 16),
                 Text(
                   tr('duelAgainst').replaceFirst('%s', opponentName),
@@ -510,9 +549,17 @@ String _fmtTime(int ms) {
 /// amarillo sobre verde). El contenido reparte la pantalla: nada
 /// de medio pantalla vacía.
 class _ResultView extends StatelessWidget {
-  const _ResultView({required this.match, required this.onBack});
+  const _ResultView({
+    required this.match,
+    this.opponentEntry,
+    required this.onBack,
+  });
 
   final DuelState match;
+
+  /// Los cosméticos del rival (foto, insignia, marco), o null si
+  /// aún no se resolvieron.
+  final FriendEntry? opponentEntry;
   final VoidCallback onBack;
 
   @override
@@ -611,8 +658,12 @@ class _ResultView extends StatelessWidget {
                                 score: '${match.myScore}/$total',
                                 avatar: SocialAvatar(
                                   username: UserPrefs.userName,
-                                  avatarAsset: companionAsset(
-                                      Companion.kristian),
+                                  avatarAsset:
+                                      SocialService.equippedAvatarAsset ??
+                                          companionAsset(Companion.kristian),
+                                  badgeId: SocialService.equippedBadgeId,
+                                  frameItem: SocialService.equippedFrameItem,
+                                  frameRingWidth: 6,
                                   size: 72,
                                 ),
                               ),
@@ -625,6 +676,10 @@ class _ResultView extends StatelessWidget {
                                 score: '${match.opponentScore}/$total',
                                 avatar: SocialAvatar(
                                   username: match.opponentName,
+                                  avatarAsset: opponentEntry?.avatarAsset,
+                                  badgeId: opponentEntry?.badgeId,
+                                  frameItem: opponentEntry?.frameItem,
+                                  frameRingWidth: 6,
                                   size: 72,
                                 ),
                               ),

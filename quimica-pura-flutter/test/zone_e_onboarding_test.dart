@@ -110,10 +110,10 @@ void main() {
     // Quemia 7.7 (rediseño 2026-11-13): sin pantalla de idioma y sin
     // barra de progreso; el inicio es Bienvenida -> Elección ->
     // la gemela -> cómo supo -> cuánta química sabe -> meta diaria
-    // -> Notificaciones -> la racha -> aviso "¡No pierdas tu
-    // progreso!" -> Registro. En Notificaciones el permiso está
-    // negado en pruebas: sale "Ir a Ajustes" y al cerrarlo se
-    // avanza a la racha.
+    // -> Notificaciones -> el widget -> la racha -> aviso
+    // "¡No pierdas tu progreso!" -> Registro. En Notificaciones el
+    // permiso está negado en pruebas: sale "Ir a Ajustes" y al
+    // cerrarlo se avanza al widget (MÁS TARDE a la racha).
     await tester.tap(find.text(tr('obContinue').toUpperCase()));
     await tester.pumpAndSettle();
     await tester.tap(find.text(tr('obCreateProfile').toUpperCase()));
@@ -136,6 +136,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Ir a Ajustes'), findsOneWidget);
     await tester.tap(find.text('Cerrar'));
+    await tester.pumpAndSettle();
+    // Widget (2026-11-18): tras las notificaciones va la pantalla
+    // del widget; con MÁS TARDE se sigue a la racha.
+    await tester.tap(find.text(tr('obWidgetLater').toUpperCase()));
     await tester.pumpAndSettle();
     await tester.tap(find.text(tr('obStreakStart').toUpperCase()));
     await tester.pumpAndSettle();

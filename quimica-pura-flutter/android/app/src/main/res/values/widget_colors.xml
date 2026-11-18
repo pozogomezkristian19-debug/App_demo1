@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Colores del widget de inicio (mejorado, 2026-11-18, diseño v3
+     aprobado por Kristian). Los acentos (teal, naranja, rojo,
+     ámbar) son iguales en los dos temas; la tarjeta, el borde, el
+     labio, la tinta, el tip y la pista cambian en modo oscuro
+     (ver values-night/widget_colors.xml). RemoteViews no admite
+     atributos de tema, pero sí recursos @color: el sistema resuelve
+     la variante night al inflar el widget. -->
+<resources>
+    <color name="widget_card">#FFFFFF</color>
+    <color name="widget_card_border">#E5E5E5</color>
+    <color name="widget_card_lip">#E5E5E5</color>
+    <color name="widget_ink">#0F172A</color>
+    <color name="widget_tip">#475569</color>
+    <color name="widget_track">#E5E5E5</color>
+    <color name="widget_teal">#14B8A6</color>
+    <color name="widget_orange">#FF9600</color>
+    <color name="widget_red">#FF4B4B</color>
+    <color name="widget_amber">#FFC800</color>
+</resources>

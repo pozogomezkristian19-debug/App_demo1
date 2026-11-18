@@ -2,9 +2,12 @@
 // la tarjeta sale siempre para cuentas de Google sin contraseña (el
 // recordatorio es una notificación cada hora, no la tarjeta), y la
 // hoja enlaza la contraseña a la cuenta actual sin cambiar de uid.
-// Desde 2026-11-16 (Kristian): CREAR CONTRASEÑA pide PRIMERO un
-// OTP al correo para comprobar que la cuenta es suya, y después
-// se abre la hoja — SIN el correo de restablecer de Firebase.
+// Desde 2026-11-16 (Kristian, «¿para qué si ya hay sesión con mi
+// cuenta de Google?»): CREAR CONTRASEÑA abre la hoja DIRECTO, sin
+// OTP — la sesión de Google YA prueba que la cuenta es suya, así
+// que el código OTP era redundante. El OTP sigue en el registro
+// con correo tomado (ahí no hay sesión). SIN el correo de
+// restablecer de Firebase en ningún paso.
 // Aquí se usa el FakeAuthProvider del servicio, nunca el plugin real.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -30,7 +33,6 @@ void main() {
 
   late FakeAuthProvider fakeAuth;
   late InMemoryAnalyticsRepository fakeRepo;
-  late FakeOtpTransport fakeOtp;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -61,8 +63,6 @@ void main() {
     AuthService.setProviderForTests(fakeAuth);
     fakeRepo = InMemoryAnalyticsRepository();
     AnalyticsSync.setRepositoryForTests(fakeRepo);
-    fakeOtp = FakeOtpTransport();
-    OtpService.setTransportForTests(fakeOtp);
   });
 
   tearDown(() {
@@ -140,18 +140,9 @@ void main() {
         ),
       );
 
-  /// Escribe un código OTP en las 6 casillas de la página de OTP.
-  Future<void> enterOtp(WidgetTester tester, String code) async {
-    final boxes = find.byType(TextField);
-    expect(boxes, findsNWidgets(6));
-    for (var i = 0; i < 6; i++) {
-      await tester.enterText(boxes.at(i), code[i]);
-    }
-    await settle(tester);
-  }
-
-  /// Abre la hoja desde la tarjeta: primero el OTP (Kristian
-  /// 2026-11-16) y después la hoja, y escribe la contraseña.
+  /// Abre la hoja desde la tarjeta (SIN OTP desde 2026-11-16: la
+  /// sesión de Google ya prueba que la cuenta es suya) y escribe
+  /// la contraseña.
   Future<void> openSheetWithPassword(
     WidgetTester tester,
     String password,
@@ -160,18 +151,10 @@ void main() {
       find.text(tr('accountSetPasswordButton').toUpperCase()),
     );
     await settle(tester);
-    // El OTP, no la hoja directa: el código se manda al correo y
-    // ningún correo de restablecer sale de aquí.
-    expect(find.text(tr('obSetPasswordOtpTitle')), findsOneWidget);
-    expect(
-      fakeOtp.lastCode('kristian@gmail.com', OtpPurpose.setPassword),
-      '123456',
-    );
-    expect(fakeAuth.resetEmailsSent, isEmpty);
-    await enterOtp(tester, '123456');
-    await tester.tap(find.text(tr('obContinue').toUpperCase()));
-    await settle(tester);
+    // La hoja directo: ningún OTP se manda y ningún correo de
+    // restablecer sale de aquí.
     expect(find.text(tr('obPasswordTitle')), findsOneWidget);
+    expect(fakeAuth.resetEmailsSent, isEmpty);
     // El correo sale una sola vez, en la hoja: la fila de Google
     // (que también lo mostraba) vive ahora en Ajustes, sección
     // CUENTA (perfil estilo Duolingo, 2026-11-16).
@@ -221,7 +204,7 @@ void main() {
     expect(find.text(tr('accountSetPasswordTitle')), findsOneWidget);
   });
 
-  testWidgets('CREAR CONTRASEÑA pide primero el OTP, no la hoja directa',
+  testWidgets('CREAR CONTRASEÑA abre la hoja directo, sin OTP',
       (tester) async {
     googleAccount();
     await pumpAccount(tester);
@@ -229,36 +212,15 @@ void main() {
       find.text(tr('accountSetPasswordButton').toUpperCase()),
     );
     await settle(tester);
-    // OTP, no la hoja: el código se manda al correo con el
-    // servicio OTP y la contraseña se crea después dentro de la
-    // app. Ningún correo de restablecer sale de aquí (Kristian
-    // 2026-11-16).
-    expect(find.text(tr('obSetPasswordOtpTitle')), findsOneWidget);
+    // SIN OTP (corrección 2026-11-16, Kristian: «¿para qué si ya
+    // hay sesión con mi cuenta de Google?»): la sesión de Google
+    // YA prueba que la cuenta es suya, así que la hoja se abre
+    // directo y ningún código se manda al correo. Ningún correo
+    // de restablecer sale de aquí (Kristian 2026-11-16).
+    expect(find.text(tr('obPasswordTitle')), findsOneWidget);
     expect(find.text('kristian@gmail.com'), findsOneWidget);
-    expect(find.text(tr('obPasswordTitle')), findsNothing);
-    expect(
-      fakeOtp.lastCode('kristian@gmail.com', OtpPurpose.setPassword),
-      '123456',
-    );
+    expect(find.text(tr('obSetPasswordOtpTitle')), findsNothing);
     expect(fakeAuth.resetEmailsSent, isEmpty);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('OTP incorrecto en Cuenta: error y no se abre la hoja',
-      (tester) async {
-    googleAccount();
-    await pumpAccount(tester);
-    await tester.tap(
-      find.text(tr('accountSetPasswordButton').toUpperCase()),
-    );
-    await settle(tester);
-    await enterOtp(tester, '000000');
-    await tester.tap(find.text(tr('obContinue').toUpperCase()));
-    await settle(tester);
-    expect(find.text(tr('obOtpInvalid')), findsOneWidget);
-    expect(find.text(tr('obSetPasswordOtpTitle')), findsOneWidget);
-    expect(find.text(tr('obPasswordTitle')), findsNothing);
-    expect(fakeAuth.emailLinked, isFalse);
     expect(tester.takeException(), isNull);
   });
 

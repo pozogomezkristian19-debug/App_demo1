@@ -311,9 +311,9 @@ void main() {
       // sin la imagen de las gemelas. "Continuar" lleva a la
       // elección; "Crear mi perfil" a la gemela; "Vamos" a las
       // preguntas (cómo supo -> cuánta sabe -> meta -> Notificaciones
-      // -> racha -> Perfil). En Notificaciones el permiso está
-      // negado en pruebas: sale "Ir a Ajustes" y al cerrarlo se
-      // avanza a la racha.
+      // -> el widget -> racha -> Perfil). En Notificaciones el
+      // permiso está negado en pruebas: sale "Ir a Ajustes" y al
+      // cerrarlo se avanza al widget (MÁS TARDE a la racha).
       final twinsImage = find.byWidgetPredicate(
         (w) =>
             w is Image &&
@@ -360,6 +360,10 @@ void main() {
       await tester.tap(find.text(tr('obNotifEnable').toUpperCase()));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Cerrar'));
+      await tester.pumpAndSettle();
+      // Widget (2026-11-18): tras las notificaciones va la pantalla
+      // del widget; con MÁS TARDE se sigue a la racha.
+      await tester.tap(find.text(tr('obWidgetLater').toUpperCase()));
       await tester.pumpAndSettle();
       expect(twinsImage, findsNothing);
       expect(find.text(tr('obStreakTitle')), findsOneWidget);

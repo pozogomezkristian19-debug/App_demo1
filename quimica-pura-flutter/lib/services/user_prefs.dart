@@ -17,6 +17,15 @@ class UserPrefs {
       'melli_language'; // 'es' | 'en' | 'fr' | 'it' | 'pt' | 'ru'
   static const _kPublicUsername =
       'melli_public_username'; // Nombre público único (referidos 7.3)
+  // Último cambio de nombre de usuario (Kristian 2026-11-17: el
+  // nombre solo se puede cambiar cada 10 días). Milisegundos desde
+  // epoch; 0 = nunca se ha cambiado (el primer reclamo no arranca
+  // el contador).
+  static const _kUsernameChangedAtMs = 'quemia_username_changed_at_ms';
+  // Hora aleatoria a la que sale la cuenta atrás esta noche
+  // (Kristian 2026-11-18: entre las 21:30 y las 23:00, una por
+  // día). Milisegundos desde epoch; 0 = aún no se eligió la de hoy.
+  static const _kCountdownFireMs = 'quemia_countdown_fire_ms';
   static const _kTrack = 'melli_track'; // 'uni' | 'bach'
   static const _kSoundOn = 'melli_sound_on';
   static const _kReminderOn = 'melli_reminder_on';
@@ -94,6 +103,31 @@ class UserPrefs {
   /// sufijo numérico; vacío = aún sin reclamar. El saludo
   /// ("Bienvenida Vanessa") sigue usando [userName], no este.
   static String publicUsername = '';
+
+  /// Días que deben pasar entre un cambio de nombre de usuario y
+  /// el siguiente (Kristian 2026-11-17).
+  static const int usernameChangeCooldownDays = 10;
+
+  /// Milisegundos desde epoch del último cambio de nombre
+  /// completado (0 = nunca: el primer reclamo no arranca el
+  /// contador, así que cambiar por primera vez siempre se puede).
+  static int usernameChangedAtMs = 0;
+
+  /// Milisegundos desde epoch de la hora aleatoria a la que sale
+  /// la cuenta atrás esta noche (0 = aún no se eligió la de hoy).
+  static int countdownFireMs = 0;
+
+  /// Fecha en que se podrá cambiar el nombre de nuevo, o null si
+  /// ya se puede (nunca se cambió o pasaron los 10 días). [now]
+  /// solo existe para poder probarlo con una fecha fija.
+  static DateTime? usernameChangeAvailableOn({DateTime? now}) {
+    if (usernameChangedAtMs <= 0) return null;
+    final available = DateTime.fromMillisecondsSinceEpoch(
+      usernameChangedAtMs,
+    ).add(const Duration(days: usernameChangeCooldownDays));
+    final ref = now ?? DateTime.now();
+    return ref.isBefore(available) ? available : null;
+  }
   static bool soundOn = true; // Sonidos y vibración al contestar.
   static bool reminderOn = false; // Recordatorio diario de estudio.
   static int reminderHour = 19;
@@ -146,6 +180,8 @@ class UserPrefs {
     language = prefs.getString(_kLanguage) ?? 'es';
     languageSet = prefs.containsKey(_kLanguage);
     publicUsername = prefs.getString(_kPublicUsername) ?? '';
+    usernameChangedAtMs = prefs.getInt(_kUsernameChangedAtMs) ?? 0;
+    countdownFireMs = prefs.getInt(_kCountdownFireMs) ?? 0;
     // Quemia 7.7: el Bachillerato se eliminó. Un teléfono que tenía
     // 'bach' guardado vuelve a 'uni' solo al abrir la app.
     final storedTrack = prefs.getString(_kTrack) ?? 'uni';
@@ -231,6 +267,25 @@ class UserPrefs {
     final prefs = await SharedPreferences.getInstance();
     publicUsername = name.trim();
     await prefs.setString(_kPublicUsername, publicUsername);
+  }
+
+  /// Guarda cuándo se cambió el nombre de usuario por última vez
+  /// (milisegundos desde epoch). Solo lo llama el cambio
+  /// completado en [ReferralService.claimUsername]: el primer
+  /// reclamo no arranca el contador.
+  static Future<void> saveUsernameChangedAtMs(int ms) async {
+    final prefs = await SharedPreferences.getInstance();
+    usernameChangedAtMs = ms;
+    await prefs.setInt(_kUsernameChangedAtMs, ms);
+  }
+
+  /// Guarda la hora aleatoria de la cuenta atrás de hoy
+  /// (milisegundos desde epoch). La elige el servicio de
+  /// notificaciones una vez al día (countdownFireTimeForToday).
+  static Future<void> saveCountdownFireMs(int ms) async {
+    final prefs = await SharedPreferences.getInstance();
+    countdownFireMs = ms;
+    await prefs.setInt(_kCountdownFireMs, ms);
   }
 
   /// El viejo interruptor claro/oscuro (el icono de la AppBar):

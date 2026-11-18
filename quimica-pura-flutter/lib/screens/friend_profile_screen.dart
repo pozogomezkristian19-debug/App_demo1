@@ -4,6 +4,7 @@ import '../services/localization.dart';
 import '../services/social_service.dart';
 import '../widgets/duo_button.dart';
 import '../widgets/lucide_icons.dart';
+import '../widgets/profile_animation.dart';
 import '../widgets/social_avatar.dart';
 import 'duel_screen.dart';
 
@@ -50,11 +51,21 @@ class FriendProfileScreen extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
         child: Column(
           children: [
-            SocialAvatar(
-              username: friend.username,
-              avatarAsset: friend.avatarAsset,
-              badgeId: friend.badgeId,
+            // Cabecera DINÁMICA (7.9): sin animación, el avatar con
+            // su marco va CENTRADO; con animación, avatar+marco a
+            // la IZQUIERDA y animación a la DERECHA. Todo les sale
+            // a todos, igual que el avatar.
+            ProfileHeaderAvatar(
               size: 96,
+              resolveAnimation: () => friend.animationItem,
+              avatar: (s) => SocialAvatar(
+                username: friend.username,
+                avatarAsset: friend.avatarAsset,
+                badgeId: friend.badgeId,
+                frameItem: friend.frameItem,
+                frameRingWidth: 6,
+                size: s,
+              ),
             ),
             const SizedBox(height: 16),
             Text(

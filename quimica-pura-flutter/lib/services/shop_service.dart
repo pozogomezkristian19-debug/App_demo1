@@ -6,10 +6,11 @@
 // restaura con restoreFromCloud) y el admin la vea.
 //
 // Lo EQUIPADO también se sincroniza (syncEquipped): tema, avatar,
-// insignia y marco (7.3) se escriben en el mismo documento
-// (campos 'equippedTheme', 'equippedAvatar', 'equippedBadge',
-// 'equippedFrame'; cadena vacía = quitado) para que sobrevivan a
-// un cambio de teléfono y los amigos vean lo que llevas puesto.
+// insignia, marco (7.3) y animación (7.9) se escriben en el mismo
+// documento (campos 'equippedTheme', 'equippedAvatar',
+// 'equippedBadge', 'equippedFrame', 'equippedAnimation'; cadena
+// vacía = quitado) para que sobrevivan a un cambio de teléfono y
+// los amigos vean lo que llevas puesto.
 // La lectura de vuelta (cloudEquipped) está lista para el
 // respaldo: falta enchufarla al restaurar en un teléfono nuevo
 // (restoreFromCloud).
@@ -87,6 +88,7 @@ class ShopService {
       'avatar' => 'equippedAvatar',
       'badge' => 'equippedBadge',
       'frame' => 'equippedFrame',
+      'animation' => 'equippedAnimation',
       _ => '',
     };
     if (field.isEmpty) return false;
@@ -118,6 +120,7 @@ class ShopService {
       'avatar': 'equippedAvatar',
       'badge': 'equippedBadge',
       'frame': 'equippedFrame',
+      'animation': 'equippedAnimation',
     }.entries) {
       final value = doc[entry.value]?.toString().trim() ?? '';
       if (value.isNotEmpty) out[entry.key] = value;

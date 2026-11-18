@@ -19,6 +19,9 @@
 //     mantenimiento (local: false, apagado).
 //   'maintenanceMessage': String, mensaje que muestra esa pantalla
 //     (local: 'Quemia está en mantenimiento. Vuelve pronto.').
+//   'profileAnimationsEnabled': bool, kill-switch de las
+//     animaciones de perfil (local: true, encendidas): false las
+//     quita de todos los perfiles sin compilar nada.
 //
 // Solo la analítica toca estos valores (AnalyticsSync.applyRemoteSettings);
 // el resto de la app solo los LEE. Sin dependencia de Firebase: así
@@ -56,6 +59,13 @@ class RemoteTuning {
   /// 'settings/app'): la app muestra la pantalla de mantenimiento
   /// en vez de la app normal. Local: apagado.
   static bool maintenanceMode = false;
+
+  /// Animaciones de perfil (Kristian 2026-11-17, kill-switch
+  /// online): el Admin puede apagarlas en 'settings/app'
+  /// ('profileAnimationsEnabled': false) y desaparecen de TODOS
+  /// los perfiles sin compilar nada. Local: encendidas. Solo se
+  /// lee; quien decide es el servidor (ver RemoteTuning.apply).
+  static bool profileAnimationsEnabled = true;
 
   /// Mensaje que muestra la pantalla de mantenimiento. Local:
   /// 'Quemia está en mantenimiento. Vuelve pronto.'.
@@ -131,6 +141,11 @@ class RemoteTuning {
       if (showWhatsApp is bool) showWhatsAppInSupport = showWhatsApp;
       final maintenance = settings['maintenanceMode'];
       if (maintenance is bool) maintenanceMode = maintenance;
+      // Kill-switch de las animaciones de perfil (2026-11-17):
+      // false = se apagan en todos los perfiles sin compilar.
+      // Si el campo no viene o viene roto, quedan encendidas.
+      final animations = settings['profileAnimationsEnabled'];
+      if (animations is bool) profileAnimationsEnabled = animations;
       final maintenanceMessageRaw = settings['maintenanceMessage'];
       if (maintenanceMessageRaw is String) {
         final v = maintenanceMessageRaw.trim();
@@ -178,6 +193,7 @@ class RemoteTuning {
     showWhatsAppInSupport = false;
     maintenanceMode = false;
     maintenanceMessage = 'Quemia está en mantenimiento. Vuelve pronto.';
+    profileAnimationsEnabled = true;
     planPrices = <String, int>{
       for (final p in premiumPlans) p.id: p.examplePrice,
     };

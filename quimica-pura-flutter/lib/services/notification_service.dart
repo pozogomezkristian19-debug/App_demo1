@@ -1361,12 +1361,12 @@ class NotificationService {
   /// Android 16+ es un Live Update y sale en Hyper Island.
   ///
   /// Cuándo sale: recordatorios activados + permiso dado + racha
-  /// viva y ese día aún sin practicar + ya es la hora del
-  /// recordatorio de hoy. Si aún no es la hora, se programa sola
-  /// con una alarma exacta (la app puede estar cerrada). Si no
-  /// toca (sin recordatorios, sin racha en juego o ya se practicó),
-  /// se quita la que hubiera. Nunca rompe el arranque: cualquier
-  /// fallo se traga.
+  /// viva y ese día aún sin practicar + ya es la hora ALEATORIA de
+  /// hoy (entre 21:30 y 23:00, una por día; Kristian 2026-11-18).
+  /// Si aún no es la hora, se programa sola con una alarma exacta
+  /// (la app puede estar cerrada). Si no toca (sin recordatorios,
+  /// sin racha en juego o ya se practicó), se quita la que hubiera.
+  /// Nunca rompe el arranque: cualquier fallo se traga.
   static Future<void> syncLiveCountdown() async {
     try {
       final p = ProgressService.instance;
@@ -1383,11 +1383,8 @@ class NotificationService {
       final body = tr('liveCountdownBody');
       final largeIconPath = await _twinLargeIconPath();
       final endsAt = liveCountdownEndsAt(now);
-      if (shouldShowLiveCountdown(
-        now: now,
-        reminderHour: UserPrefs.reminderHour,
-        reminderMinute: UserPrefs.reminderMinute,
-      )) {
+      final fireTime = await countdownFireTimeForToday(now: now);
+      if (shouldShowLiveCountdown(now: now, fireTime: fireTime)) {
         await LiveCountdown.show(
           endsAt: endsAt,
           title: title,
@@ -1397,15 +1394,8 @@ class NotificationService {
         );
         return;
       }
-      final at = DateTime(
-        now.year,
-        now.month,
-        now.day,
-        UserPrefs.reminderHour,
-        UserPrefs.reminderMinute,
-      );
       await LiveCountdown.schedule(
-        at: at,
+        at: fireTime,
         endsAt: endsAt,
         title: title,
         body: body,
@@ -1416,22 +1406,49 @@ class NotificationService {
     }
   }
 
-  /// ¿Ya es la hora del recordatorio de hoy? Puro, para pruebas.
-  /// [now] es la hora actual; la hora del recordatorio es
-  /// [reminderHour]:[reminderMinute] de hoy.
+  /// La cuenta atrás sale cada noche a una hora ALEATORIA entre las
+  /// 21:30 y las 23:00 (Kristian 2026-11-18). Ventana en minutos
+  /// desde las 21:30: 90 minutos (21:30-22:59).
+  static const int countdownFireWindowMinutes = 90;
+
+  /// Hora aleatoria de la cuenta atrás para el día [day]: las 21:30
+  /// más 0-89 minutos. Puro, para pruebas ([random] inyectable).
+  static DateTime randomCountdownFireTime(DateTime day, [Random? random]) {
+    final r = random ?? Random();
+    return DateTime(day.year, day.month, day.day, 21, 30)
+        .add(Duration(minutes: r.nextInt(countdownFireWindowMinutes)));
+  }
+
+  /// La hora aleatoria de la cuenta atrás de hoy: se elige UNA vez
+  /// al día y se guarda en el teléfono, así no cambia cada vez que
+  /// se abre la app. Si ya hay una guardada para hoy, se reutiliza.
+  static Future<DateTime> countdownFireTimeForToday({
+    DateTime? now,
+    Random? random,
+  }) async {
+    final ref = now ?? DateTime.now();
+    final stored = UserPrefs.countdownFireMs;
+    if (stored > 0) {
+      final storedDay = DateTime.fromMillisecondsSinceEpoch(stored);
+      if (storedDay.year == ref.year &&
+          storedDay.month == ref.month &&
+          storedDay.day == ref.day) {
+        return storedDay;
+      }
+    }
+    final fire = randomCountdownFireTime(ref, random);
+    await UserPrefs.saveCountdownFireMs(fire.millisecondsSinceEpoch);
+    return fire;
+  }
+
+  /// ¿Ya es la hora aleatoria de la cuenta atrás de hoy? Puro, para
+  /// pruebas. [now] es la hora actual; [fireTime] es la hora
+  /// aleatoria elegida para hoy.
   static bool shouldShowLiveCountdown({
     required DateTime now,
-    required int reminderHour,
-    required int reminderMinute,
+    required DateTime fireTime,
   }) {
-    final reminderToday = DateTime(
-      now.year,
-      now.month,
-      now.day,
-      reminderHour,
-      reminderMinute,
-    );
-    return !now.isBefore(reminderToday);
+    return !now.isBefore(fireTime);
   }
 
   /// La medianoche que cierra el día de [now] (fin de la cuenta

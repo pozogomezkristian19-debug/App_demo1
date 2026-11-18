@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Barra de la meta del día en el widget mejorado (2026-11-18):
+     pista y relleno teal, como en la app. Los colores salen de
+     widget_colors.xml (la pista es oscura en modo oscuro). -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@android:id/background">
+        <shape>
+            <solid android:color="@color/widget_track" />
+            <corners android:radius="3dp" />
+        </shape>
+    </item>
+    <item android:id="@android:id/progress">
+        <clip>
+            <shape>
+                <solid android:color="@color/widget_teal" />
+                <corners android:radius="3dp" />
+            </shape>
+        </clip>
+    </item>
+</layer-list>

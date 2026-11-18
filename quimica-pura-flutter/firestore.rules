@@ -1079,11 +1079,28 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    //  Colección 'shop_items' — catálogo de la tienda (7.3). AÑADIDO
+    //  2026-11-17: no tenía bloque y caía en el comodín final (denegado
+    //  siempre): la app no podía leer los marcos ni ningún artículo
+    //  nuevo, y la Tienda solo enseñaba el respaldo offline de 9
+    //  artículos. La lectura es pública: son artículos cosméticos en
+    //  venta, nada personal.
+    // -------------------------------------------------------------------------
+    match /shop_items/{itemId} {
+
+      // LECTURA PÚBLICA: la app principal lee el catálogo sin sesión.
+      allow read: if true;
+
+      // ESCRITURA: solo administradores (el dueño incluido).
+      allow create, update, delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
     //  Todo lo demás: denegado por defecto. Cualquier colección o documento
     //  que no esté en el contrato (users, admins, settings/app, duels,
     //  duel_queue, tournaments, tournament_scores, reports,
     //  paymentRequests, announcements, groups, friends, friend_requests,
-    //  levels, support_messages, support_auto_replies, admin_history)
+    //  levels, shop_items, support_messages, support_auto_replies, admin_history)
     //  no se puede leer ni escribir desde ningún cliente.
     //  HUECO FUTURO: el modelo admite ampliaciones (p. ej. más colecciones
     //  de la 7.0 o de versiones posteriores), pero cada colección nueva

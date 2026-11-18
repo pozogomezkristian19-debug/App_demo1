@@ -34,11 +34,13 @@ import '../services/localization.dart';
 import '../services/progress.dart';
 import '../services/remote_shop_catalog.dart';
 import '../services/social_service.dart';
+import '../services/sound_service.dart';
 import '../services/user_prefs.dart';
 import '../widgets/avatar_frame_ring.dart';
 import '../widgets/duo_button.dart';
 import '../widgets/lucide_icons.dart';
 import '../widgets/online_gate.dart';
+import '../widgets/profile_animation.dart';
 
 class ShopScreen extends StatefulWidget {
   const ShopScreen({
@@ -56,11 +58,6 @@ class ShopScreen extends StatefulWidget {
 
 class _ShopScreenState extends State<ShopScreen> {
   var _online = true;
-  var _owned = <String>{};
-  String? _equippedThemeId;
-  String? _equippedAvatarId;
-  String? _equippedBadgeId;
-  String? _equippedFrameId;
 
   @override
   void initState() {
@@ -70,42 +67,8 @@ class _ShopScreenState extends State<ShopScreen> {
 
   Future<void> _load() async {
     final online = await SocialService.online;
-    final owned = await SocialService.ownedItemIds();
-    final theme = await SocialService.equippedItemId('theme');
-    final avatar = await SocialService.equippedItemId('avatar');
-    final badge = await SocialService.equippedItemId('badge');
-    final frame = await SocialService.equippedItemId('frame');
     if (!mounted) return;
-    setState(() {
-      _online = online;
-      _owned = owned;
-      _equippedThemeId = theme;
-      _equippedAvatarId = avatar;
-      _equippedBadgeId = badge;
-      _equippedFrameId = frame;
-    });
-  }
-
-  Future<void> _buy(ShopItem item) async {
-    final ok = await SocialService.buyItem(item);
-    if (!mounted) return;
-    if (ok) {
-      await _load();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('shopBought'))),
-      );
-    }
-  }
-
-  Future<void> _equip(ShopItem item) async {
-    await SocialService.equipItem(item);
-    if (item.kind == 'theme') {
-      // Avisa a la app de que el acento cambió (AppAccent lo lee
-      // de SocialService, no de UserPrefs, que solo guarda
-      // 'verde'/'violeta').
-      UserPrefs.themeAccentNotifier.value = item.id;
-    }
-    await _load();
+    setState(() => _online = online);
   }
 
   @override
@@ -134,6 +97,20 @@ class _ShopScreenState extends State<ShopScreen> {
                   if (items.isEmpty) {
                     return _CalmLine(text: tr('shopEmpty'));
                   }
+                  // (2026-11-18, Kristian): la casilla
+                  // Animación solo sale cuando hay al menos
+                  // una animación ACTIVA en el catálogo.
+                  // Sin animaciones la opción queda oculta;
+                  // al subir una, la casilla aparece sola
+                  // al reabrir la Tienda. Las demás
+                  // secciones salen siempre.
+                  final sections = _ShopSection.values
+                      .where(
+                        (s) =>
+                            s != _ShopSection.animations ||
+                            items.any((i) => i.kind == 'animation'),
+                      )
+                      .toList();
                   return ListView(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                     children: [
@@ -173,78 +150,305 @@ class _ShopScreenState extends State<ShopScreen> {
                           ),
                         ),
                       ),
-                      _SectionTitle(text: tr('shopThemes')),
-                      for (final (i, item)
-                          in items.where((i) => i.kind == 'theme').indexed)
-                        FadeSlideIn(
-                          delay: Duration(milliseconds: (i * 40).clamp(0, 400)),
-                          child: RepaintBoundary(
-                            child: _ItemCard(
-                              item: item,
-                              points: points,
-                              owned: _owned.contains(item.id),
-                              equipped: _equippedThemeId == item.id,
-                              onBuy: () => _buy(item),
-                              onEquip: () => _equip(item),
-                            ),
-                          ),
+                      // Rejilla de secciones (7.9, mockup aprobado):
+                      // una tarjetica por sección — Temas, Avatares,
+                      // Insignias, Marcos y Animación en el perfil —
+                      // cada una abre su sección con sus artículos.
+                      // Así cada cosa va separada y organizada, y la
+                      // Tienda ya no es una lista larga de todo.
+                      // Altura FIJA (200 dp) en vez de proporción:
+                      // con childAspectRatio la casilla se quedaba
+                      // 1 px corta en pantallas estrechas y el
+                      // contenido se desbordaba.
+                      GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          mainAxisSpacing: 12,
+                          crossAxisSpacing: 12,
+                          mainAxisExtent: 200,
                         ),
-                      _SectionTitle(text: tr('shopAvatars')),
-                      for (final (i, item)
-                          in items.where((i) => i.kind == 'avatar').indexed)
-                        FadeSlideIn(
-                          delay: Duration(milliseconds: (i * 40).clamp(0, 400)),
-                          child: RepaintBoundary(
-                            child: _ItemCard(
-                              item: item,
-                              points: points,
-                              owned: _owned.contains(item.id),
-                              equipped: _equippedAvatarId == item.id,
-                              onBuy: () => _buy(item),
-                              onEquip: () => _equip(item),
-                            ),
-                          ),
-                        ),
-                      _SectionTitle(text: tr('shopBadges')),
-                      for (final (i, item)
-                          in items.where((i) => i.kind == 'badge').indexed)
-                        FadeSlideIn(
-                          delay: Duration(milliseconds: (i * 40).clamp(0, 400)),
-                          child: RepaintBoundary(
-                            child: _ItemCard(
-                              item: item,
-                              points: points,
-                              owned: _owned.contains(item.id),
-                              equipped: _equippedBadgeId == item.id,
-                              onBuy: () => _buy(item),
-                              onEquip: () => _equip(item),
-                            ),
-                          ),
-                        ),
-                      if (items.any((i) => i.kind == 'frame')) ...[
-                        _SectionTitle(text: tr('shopFrames')),
-                        for (final (i, item)
-                            in items.where((i) => i.kind == 'frame').indexed)
-                          FadeSlideIn(
-                            delay:
-                                Duration(milliseconds: (i * 40).clamp(0, 400)),
-                            child: RepaintBoundary(
-                              child: _ItemCard(
-                                item: item,
-                                points: points,
-                                owned: _owned.contains(item.id),
-                                equipped: _equippedFrameId == item.id,
-                                onBuy: () => _buy(item),
-                                onEquip: () => _equip(item),
+                        padding: const EdgeInsets.fromLTRB(4, 8, 4, 4),
+                        itemCount: sections.length,
+                        itemBuilder: (context, index) {
+                          final section = sections[index];
+                          return _SectionTile(
+                            section: section,
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => _ShopSectionScreen(
+                                  section: section,
+                                  items: items
+                                      .where((i) => i.kind == section.kind)
+                                      .toList(),
+                                ),
                               ),
                             ),
-                          ),
-                      ],
+                          );
+                        },
+                      ),
                     ],
                   );
                 },
               ),
       ),
+    );
+  }
+}
+
+/// Secciones de la Tienda (7.9): una tarjetica por sección en la
+/// rejilla. El `kind` es el del artículo (`ShopItem.kind`).
+enum _ShopSection {
+  themes('theme'),
+  avatars('avatar'),
+  badges('badge'),
+  frames('frame'),
+  animations('animation');
+
+  const _ShopSection(this.kind);
+
+  final String kind;
+
+  String title(BuildContext context) => switch (this) {
+        _ShopSection.themes => tr('shopThemes'),
+        _ShopSection.avatars => tr('shopAvatars'),
+        _ShopSection.badges => tr('shopBadges'),
+        _ShopSection.frames => tr('shopFrames'),
+        _ShopSection.animations => tr('shopAnimations'),
+      };
+
+  String subtitle(BuildContext context) => switch (this) {
+        _ShopSection.themes => tr('shopThemesDesc'),
+        _ShopSection.avatars => tr('shopAvatarsDesc'),
+        _ShopSection.badges => tr('shopBadgesDesc'),
+        _ShopSection.frames => tr('shopFramesDesc'),
+        _ShopSection.animations => tr('shopAnimationsDesc'),
+      };
+
+  /// Icono y color del chip (mockup aprobado: gota violeta,
+  /// cara azul, trofeo amarillo, imagen teal; la animación lleva
+  /// destellos naranjas).
+  (LucideIconData, Color) get chip => switch (this) {
+        _ShopSection.themes => (LucideIcons.droplet, const Color(0xFF8B5CF6)),
+        _ShopSection.avatars => (LucideIcons.smile, const Color(0xFF3B82F6)),
+        _ShopSection.badges => (LucideIcons.trophy, const Color(0xFFFFC800)),
+        _ShopSection.frames => (LucideIcons.image, const Color(0xFF00C2A8)),
+        _ShopSection.animations =>
+          (LucideIcons.sparkles, const Color(0xFFFF9600)),
+      };
+}
+
+/// Tarjetica de sección (mockup aprobado): verde en oscuro, blanca
+/// con borde en claro; arriba el chip del icono, debajo el título
+/// en negrita y la frase. Al tocarla abre su sección.
+class _SectionTile extends StatelessWidget {
+  const _SectionTile({required this.section, required this.onTap});
+
+  final _ShopSection section;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final (icon, chipColor) = section.chip;
+    final ink = isDark
+        ? Colors.white
+        : Theme.of(context).colorScheme.onSurface;
+    final subInk = isDark
+        ? Colors.white.withValues(alpha: 0.75)
+        : Theme.of(context).colorScheme.onSurfaceVariant;
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        onTap: () {
+          SoundService.tap();
+          onTap();
+        },
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF2E7D52) : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: isDark
+                ? null
+                : Border.all(color: const Color(0xFFE5E5E5), width: 2),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: chipColor,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                alignment: Alignment.center,
+                child: LucideIcon(icon, size: 30, color: Colors.white),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                section.title(context),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: ink,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                section.subtitle(context),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: subInk,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Pantalla de una sección de la Tienda: los artículos de ese tipo
+/// con sus tarjetas de siempre (comprar / equipar / quitar).
+/// Carga sus propias compras y lo equipado, así al volver a la
+/// rejilla no hace falta recargar nada.
+class _ShopSectionScreen extends StatefulWidget {
+  const _ShopSectionScreen({required this.section, required this.items});
+
+  final _ShopSection section;
+  final List<ShopItem> items;
+
+  @override
+  State<_ShopSectionScreen> createState() => _ShopSectionScreenState();
+}
+
+class _ShopSectionScreenState extends State<_ShopSectionScreen> {
+  var _owned = <String>{};
+  String? _equippedId;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final owned = await SocialService.ownedItemIds();
+    final equipped =
+        await SocialService.equippedItemId(widget.section.kind);
+    if (!mounted) return;
+    setState(() {
+      _owned = owned;
+      _equippedId = equipped;
+    });
+  }
+
+  Future<void> _buy(ShopItem item) async {
+    final ok = await SocialService.buyItem(item);
+    if (!mounted) return;
+    if (ok) {
+      await _load();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(tr('shopBought'))),
+      );
+    }
+  }
+
+  Future<void> _equip(ShopItem item) async {
+    await SocialService.equipItem(item);
+    if (item.kind == 'theme') {
+      // Avisa a la app de que el acento cambió (AppAccent lo lee
+      // de SocialService, no de UserPrefs, que solo guarda
+      // 'verde'/'violeta').
+      UserPrefs.themeAccentNotifier.value = item.id;
+    }
+    await _load();
+  }
+
+  /// Quita lo equipado (animación, marco, insignia...): vuelve al
+  /// perfil normal. La compra no se pierde.
+  Future<void> _unequip(ShopItem item) async {
+    await SocialService.unequipItem(item.kind);
+    await _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final points = ProgressService.instance.points;
+    final items = widget.items;
+    return Scaffold(
+      // Flecha de atrás de Lucide, no la de Material: la de
+      // Material sale como un cuadradito ▯ en las fotos de prueba
+      // (la fuente de iconos no carga en goldens).
+      appBar: AppBar(
+        leading: IconButton(
+          key: const ValueKey('shopSectionBack'),
+          icon: const LucideIcon(LucideIcons.arrowLeft),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: Text(widget.section.title(context)),
+      ),
+      body: items.isEmpty
+          ? _CalmLine(
+              text: widget.section == _ShopSection.animations
+                  ? tr('shopNoAnimations')
+                  : tr('shopEmpty'),
+            )
+          : ListView(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 4, 4, 12),
+                  child: Row(
+                    children: [
+                      const LucideIcon(
+                        LucideIcons.star,
+                        size: 20,
+                        color: Color(0xFFFFC800),
+                        filled: true,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '$points',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                for (final (i, item) in items.indexed)
+                  FadeSlideIn(
+                    delay: Duration(milliseconds: (i * 40).clamp(0, 400)),
+                    child: RepaintBoundary(
+                      child: _ItemCard(
+                        item: item,
+                        points: points,
+                        owned: _owned.contains(item.id),
+                        equipped: _equippedId == item.id,
+                        onBuy: () => _buy(item),
+                        onEquip: () => _equip(item),
+                        onUnequip: () => _unequip(item),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
     );
   }
 }
@@ -322,26 +526,6 @@ class _BuyPointsCard extends StatelessWidget {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({required this.text});
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 18, 4, 8),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 20,
-          fontWeight: FontWeight.w800,
-          color: Theme.of(context).colorScheme.onSurface,
         ),
       ),
     );
@@ -461,6 +645,7 @@ class _ItemCard extends StatelessWidget {
     required this.equipped,
     required this.onBuy,
     required this.onEquip,
+    required this.onUnequip,
   });
 
   final ShopItem item;
@@ -469,6 +654,10 @@ class _ItemCard extends StatelessWidget {
   final bool equipped;
   final VoidCallback onBuy;
   final VoidCallback onEquip;
+
+  /// Quita lo equipado (al tocar el chip "Equipado"): vuelve al
+  /// perfil normal. La compra no se pierde.
+  final VoidCallback onUnequip;
 
   /// Frase graciosa de cada avatar premium (respaldo: el catálogo
   /// remoto ya trae `description`; esto solo cubre un artículo sin
@@ -483,9 +672,10 @@ class _ItemCard extends StatelessWidget {
 
   static const _line = Color(0xFFE5E5E5);
 
-  /// Botón de acción del producto: equipado = chip "Equipado";
-  /// comprado = "EQUIPAR"; sin comprar y con puntos = "COMPRAR ·
-  /// precio"; sin puntos = SOLO el precio (Quemia 7.7, Kristian:
+  /// Botón de acción del producto: equipado = chip "Equipado"
+  /// (TOCABLE: lo quita y vuelve al perfil normal); comprado =
+  /// "EQUIPAR"; sin comprar y con puntos = "COMPRAR · precio";
+  /// sin puntos = SOLO el precio (Quemia 7.7, Kristian:
   /// que no diga "Te faltan X puntos", que ponga un precio y ya).
   Widget _action(BuildContext context) {
     if (equipped) {
@@ -516,13 +706,19 @@ class _ItemCard extends StatelessWidget {
   }
 
   /// Icono de la insignia (7.3: ADN, átomo y cohete se suman a
-  /// estrella, trofeo y llama).
+  /// estrella, trofeo y llama; 2026-11-18: corona, gema, rayo,
+  /// corazón y medalla).
   LucideIconData _badgeIconData() => switch (item.badgeIcon) {
         'trophy' => LucideIcons.trophy,
         'flame' => LucideIcons.flame,
         'dna' => LucideIcons.dna,
         'atom' => LucideIcons.atom,
         'rocket' => LucideIcons.rocket,
+        'crown' => LucideIcons.crown,
+        'gem' => LucideIcons.gem,
+        'zap' => LucideIcons.zap,
+        'heart' => LucideIcons.heart,
+        'medal' => LucideIcons.medal,
         _ => LucideIcons.star,
       };
 
@@ -550,23 +746,29 @@ class _ItemCard extends StatelessWidget {
             size: 22, color: const Color(0xFF4B4B4B)),
       );
     } else if (item.kind == 'frame') {
-      // Vista previa del marco: el anillo alrededor de una foto
-      // (la del avatar dorado, como en el mockup). Foto de 36 dp +
-      // anillo de 4 dp = 44 dp, igual que el resto de vistas
-      // previas de fila.
+      // Vista previa del marco: el anillo 3D alrededor de una foto
+      // (la del avatar dorado, como en el mockup). La foto mide 32
+      // dp en todos los marcos; el dorado y el fuego son la foto
+      // de referencia recortada, y su aire es una fracción de la
+      // foto (medido en la foto misma).
       preview = AvatarFrameRing(
         frame: item,
-        ringWidth: 4,
+        ringWidth: 6,
+        photoSize: 32,
         child: ClipOval(
           child: Image.asset(
             'assets/avatar_dorado.png',
-            width: 36,
-            height: 36,
+            width: 32,
+            height: 32,
             fit: BoxFit.cover,
             filterQuality: FilterQuality.medium,
           ),
         ),
       );
+    } else if (item.kind == 'animation') {
+      // Vista previa de la animación: la Lottie en 44 dp (o el
+      // icono de destellos mientras no se descarga). Sin fondo.
+      preview = ProfileAnimation(animation: item, size: 44);
     } else {
       final base = item.color == null ? AppAccent.primary : Color(item.color!);
       preview = Container(
@@ -643,6 +845,27 @@ class _ItemCard extends StatelessWidget {
                         ),
                       ),
               ),
+              // Quitar lo equipado (7.9): al tocarlo se quita el
+              // artículo y el perfil vuelve a lo normal. La compra
+              // no se pierde: se puede volver a equipar.
+              if (equipped)
+                TextButton(
+                  onPressed: onUnequip,
+                  style: TextButton.styleFrom(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: Text(
+                    tr('shopUnequip'),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
             ],
           ),
           const SizedBox(height: 12),

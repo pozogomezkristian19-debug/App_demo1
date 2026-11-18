@@ -123,6 +123,10 @@ void main() {
     expect(find.text('Ir a Ajustes'), findsOneWidget);
     await tester.tap(find.text('Cerrar'));
     await tester.pumpAndSettle();
+    // Widget (2026-11-18): tras las notificaciones va la pantalla
+    // del widget; con MÁS TARDE se sigue a la racha.
+    await tester.tap(find.text(tr('obWidgetLater').toUpperCase()));
+    await tester.pumpAndSettle();
     await tester.tap(find.text(tr('obStreakStart').toUpperCase()));
     await tester.pumpAndSettle();
     // Aviso "¡No pierdas tu progreso!" (Duolingo) antes del registro.
