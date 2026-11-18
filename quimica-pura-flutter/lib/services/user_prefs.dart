@@ -332,11 +332,15 @@ class UserPrefs {
   }
 
   /// Primer nombre del usuario (primera palabra del nombre
-  /// guardado); vacío si no hay nombre.
+  /// guardado); vacío si no hay nombre. Sin los números del final:
+  /// si el nombre es «Cristian5845» (el sufijo que se pone cuando
+  /// el nombre está cogido), la notificación y el saludo dicen solo
+  /// «Cristian» (Kristian 2026-11-17).
   static String get firstName {
     final name = userName.trim();
     if (name.isEmpty) return '';
-    return name.split(RegExp(r'\s+')).first;
+    final first = name.split(RegExp(r'\s+')).first;
+    return first.replaceFirst(RegExp(r'\d+$'), '');
   }
 
   /// Saludo de cada entrada: "Bienvenido [primer nombre]" o

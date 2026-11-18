@@ -327,6 +327,33 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('escribir un nombre largo lo recorta a 15 al reclamar',
+        (tester) async {
+      String? chosen;
+      await setPhone(tester);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: UsernameChoicePage(
+            base: 'Kristian',
+            onConfirm: (name) async => chosen = name,
+            isTaken: (_) async => false,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byWidgetPredicate((w) =>
+            w is TextField && w.decoration?.hintText == tr('obUsernameHint')),
+        'ChristianLarguisimoNombre',
+      );
+      await tester.pumpAndSettle();
+      await tester
+          .tap(find.text(tr('obUsernameUseThis').toUpperCase()));
+      await tester.pumpAndSettle();
+      expect(chosen, 'ChristianLargui');
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('nombre cogido muestra sugerencias y tocar una la reclama',
         (tester) async {
       String? chosen;
@@ -501,6 +528,28 @@ void main() {
       final claimed = await ReferralService.claimUsername('Ana');
       expect(claimed, 'Ana');
       expect(UserPrefs.publicUsername, 'Ana');
+    });
+
+    test('claimUsername recorta el nombre a 15 caracteres', () async {
+      SharedPreferences.setMockInitialValues({});
+      await UserPrefs.load();
+      UserPrefs.publicUsername = '';
+      final claimed = await ReferralService.claimUsername(
+          'ChristianLarguisimoNombre');
+      expect(claimed, 'ChristianLargui');
+      expect(claimed.length, 15);
+      expect(UserPrefs.publicUsername, 'ChristianLargui');
+    });
+
+    test('el primer nombre pierde los números del final', () {
+      UserPrefs.userName = 'Cristian5845';
+      expect(UserPrefs.firstName, 'Cristian');
+      UserPrefs.userName = 'Cristian Pozo Gómez';
+      expect(UserPrefs.firstName, 'Cristian');
+      UserPrefs.userName = 'Cristian';
+      expect(UserPrefs.firstName, 'Cristian');
+      UserPrefs.userName = '12345';
+      expect(UserPrefs.firstName, '');
     });
   });
 }

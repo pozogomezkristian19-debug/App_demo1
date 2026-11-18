@@ -255,8 +255,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           // CUENTA (como Duolingo): la cuenta de Google, el tema,
           // el idioma, los recordatorios, las notificaciones, los
-          // favoritos, compartir el progreso y los referidos
-          // (mudados de Cuenta, 2026-11-16).
+          // favoritos y compartir el progreso. Los referidos ya NO
+          // viven aquí: desde 2026-11-17 viven SOLO en Online
+          // (Kristian: cada cosa en un solo sitio).
           _SettingsSectionTitle(
             key: const ValueKey('settingsAccountSection'),
             title: tr('settingsAccountSection'),
@@ -340,16 +341,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: tr('accountShareProgress'),
             subtitle: tr('accountShareProgressSub'),
             onTap: () => widget.onOpenScreen('stats'),
-          ),
-          // Referidos (mudado de Cuenta, Kristian 2026-11-16,
-          // simplificación aprobada): invita con tu código y los
-          // dos ganan puntos.
-          _SettingsRow(
-            icon: LucideIcons.heart,
-            iconColor: teal,
-            title: tr('accountReferrals'),
-            subtitle: tr('accountReferralsSub'),
-            onTap: () => widget.onOpenScreen('referrals'),
           ),
           // SOPORTE (como Duolingo): cómo se juega, acerca de,
           // compartir la app y buscar actualización.

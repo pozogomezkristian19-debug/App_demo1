@@ -13,9 +13,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:quimica_pura/screens/duel_screen.dart';
 import 'package:quimica_pura/screens/friends_screen.dart';
 import 'package:quimica_pura/screens/leaderboard_screen.dart';
+import 'package:quimica_pura/screens/onboarding_screen.dart';
 import 'package:quimica_pura/screens/shop_screen.dart';
 import 'package:quimica_pura/screens/tournaments_screen.dart';
 import 'package:quimica_pura/services/analytics_sync.dart';
+import 'package:quimica_pura/services/auth_service.dart';
 import 'package:quimica_pura/services/localization.dart';
 import 'package:quimica_pura/services/progress.dart';
 import 'package:quimica_pura/services/social_service.dart';
@@ -133,6 +135,70 @@ void main() {
       expect(find.text(tr('onlineNeedGoogle')), findsNothing);
       expect(find.text(tr('friendsRandomDuel')), findsOneWidget);
       expect(find.text('laura'), findsOneWidget);
+    });
+
+    testWidgets('con correo (sin Google): la puerta deja pasar',
+        (tester) async {
+      // Revisión 2026-11-17: "con sesión" es Google O correo — las
+      // casillas de Online ya se enseñan con cualquiera de los dos,
+      // pero la puerta solo dejaba pasar con Google.
+      final fakeAuth = FakeAuthProvider()
+        ..uid = 'fake-uid'
+        ..emailLinked = true;
+      AuthService.setProviderForTests(fakeAuth);
+      addTearDown(AuthService.resetForTests);
+      await pumpScreen(tester, const ShopScreen(isGoogleLinked: false),
+          size: const Size(360, 1200));
+      expect(find.text(tr('onlineNeedGoogle')), findsNothing);
+      expect(find.text('Coral'), findsOneWidget);
+    });
+
+    testWidgets('la puerta ofrece entrar con correo, no solo Google',
+        (tester) async {
+      // Revisión 2026-11-17: la tarjeta solo ofrecía Google; un
+      // usuario con cuenta de correo sin sesión no tenía cómo
+      // entrar desde aquí.
+      await pumpScreen(
+          tester, const FriendsScreen(isGoogleLinked: false));
+      expect(find.text(tr('onlineEnterWithEmail')), findsOneWidget);
+    });
+  });
+
+  group('inicio de sesión con cuenta solo de Google (2026-11-17)', () {
+    testWidgets('el fallo dice que entre con Google, no el genérico',
+        (tester) async {
+      // La cuenta está en el índice con hasPassword=false: su
+      // correo + la contraseña de Google fallan siempre, y antes
+      // solo salía "el correo o la contraseña no son correctos".
+      final analyticsRepo = InMemoryAnalyticsRepository();
+      analyticsRepo.docs['emails'] = {
+        'solo-google@x.com': {'uid': 'u1', 'hasPassword': false},
+      };
+      AnalyticsSync.setRepositoryForTests(analyticsRepo);
+      final fakeAuth = FakeAuthProvider();
+      AuthService.setProviderForTests(fakeAuth);
+      addTearDown(AuthService.resetForTests);
+      await pumpScreen(
+          tester,
+          OnboardingScreen(
+            fromAccount: true,
+            onFinished: () {},
+            onCancel: () {},
+          ),
+          size: const Size(360, 800));
+      await tester.tap(find.text(tr('obEnterAccount')));
+      await _settle(tester);
+      await tester.enterText(
+          find.byType(TextField).at(0), 'solo-google@x.com');
+      await tester.enterText(
+          find.byType(TextField).at(1), 'la-de-google');
+      // Sin este pump el botón INGRESAR sigue deshabilitado (se
+      // construye con los controladores vacíos).
+      await tester.pump();
+      await tester.tap(find.text(tr('obSignInButton').toUpperCase()));
+      await _settle(tester);
+      expect(find.text(tr('obGoogleOnlyAccount')), findsOneWidget);
+      expect(find.text(tr('obSignInFailed')), findsNothing);
     });
   });
 
@@ -502,6 +568,19 @@ void main() {
       await tester.tap(find
           .text(tr('tournJoinPaid').replaceFirst('%s', '25').toUpperCase()));
       await _settle(tester);
+      // Confirmación (auditoría 2026-11-17): con entrada se
+      // pregunta antes de cobrar. El botón del diálogo tiene el
+      // mismo texto que el de la tarjeta, así que se busca dentro
+      // del diálogo; cerrar un diálogo necesita dos pasadas.
+      expect(find.text(tr('tournJoinConfirm').replaceFirst('%s', '25')),
+          findsOneWidget);
+      await tester.tap(find.descendant(
+        of: find.byType(Dialog),
+        matching: find.text(
+            tr('tournJoinPaid').replaceFirst('%s', '25').toUpperCase()),
+      ));
+      await _settle(tester);
+      await _settle(tester);
       // Tras unirse a t2 (activo, 25 puntos), su botón pasa a
       // "Jugar" y solo queda el de t3 (próximo, 50 puntos).
       expect(
@@ -514,6 +593,29 @@ void main() {
           findsOneWidget);
       expect(find.text(tr('tournPlay').toUpperCase()), findsNWidgets(2));
       expect(ProgressService.instance.points, 75);
+    });
+
+    // Auditoría 2026-11-17 (fix 5): cancelar la confirmación no
+    // cobra nada y no une.
+    testWidgets('entrar pagando: cancelar no cobra nada',
+        (tester) async {
+      ProgressService.instance.addPoints(100);
+      await pumpScreen(
+          tester, const TournamentsScreen(isGoogleLinked: true),
+          size: const Size(360, 1000));
+      await tester.tap(find
+          .text(tr('tournJoinPaid').replaceFirst('%s', '25').toUpperCase()));
+      await _settle(tester);
+      expect(find.text(tr('tournJoinConfirm').replaceFirst('%s', '25')),
+          findsOneWidget);
+      await tester.tap(find.text(tr('cancel').toUpperCase()));
+      await _settle(tester);
+      await _settle(tester);
+      expect(
+          find.text(
+              tr('tournJoinPaid').replaceFirst('%s', '25').toUpperCase()),
+          findsOneWidget);
+      expect(ProgressService.instance.points, 100);
     });
 
     testWidgets('jugar actualiza mi mejor puntaje y la clasificación',
@@ -617,6 +719,16 @@ void main() {
   });
 
   group('tienda de puntos', () {
+    testWidgets('la tarjeta de comprar puntos está arriba de la Tienda',
+        (tester) async {
+      // Compra real (2026-11-17): la tarjeta abre la pantalla de
+      // paquetes por Transfermóvil.
+      await pumpScreen(tester, const ShopScreen(isGoogleLinked: true),
+          size: const Size(360, 1200));
+      expect(find.text('¿Te faltan puntos?'), findsOneWidget);
+      expect(find.text('COMPRAR PUNTOS'), findsOneWidget);
+    });
+
     testWidgets('comprar descuenta puntos y deja equipar', (tester) async {
       ProgressService.instance.addPoints(2000);
       final before = ProgressService.instance.points;
@@ -624,8 +736,11 @@ void main() {
           size: const Size(360, 1200));
       expect(find.text('Coral'), findsOneWidget);
       // Coral cuesta 300: tras comprar, el saldo baja 300.
-      await tester.tap(
-          find.textContaining(tr('shopBuy').toUpperCase()).first);
+      // El botón dice "COMPRAR · 300": el ' · 300' excluye el
+      // botón "COMPRAR PUNTOS" de la tarjeta de arriba (2026-11-17).
+      await tester.tap(find
+          .textContaining('${tr('shopBuy').toUpperCase()} · 300')
+          .first);
       await _settle(tester);
       expect(find.text(tr('shopBought')), findsOneWidget);
       expect(ProgressService.instance.points, before - 300);
@@ -648,7 +763,10 @@ void main() {
       // Coral cuesta 300: su precio aparece como chip, sin botón
       // de compra ni texto de "faltan".
       expect(find.text('300'), findsWidgets);
-      expect(find.textContaining(tr('shopBuy').toUpperCase()), findsNothing);
+      // Solo botones de artículo ("COMPRAR · precio"): el botón
+      // "COMPRAR PUNTOS" de la tarjeta no cuenta (2026-11-17).
+      expect(find.textContaining('${tr('shopBuy').toUpperCase()} · '),
+          findsNothing);
       expect(ProgressService.instance.points, 0);
     });
 
@@ -656,8 +774,11 @@ void main() {
       ProgressService.instance.addPoints(1000);
       await pumpScreen(tester, const ShopScreen(isGoogleLinked: true),
           size: const Size(360, 1200));
-      await tester.tap(
-          find.textContaining(tr('shopBuy').toUpperCase()).first);
+      // "COMPRAR · 300" = Coral (sortOrder 1); excluye el botón
+      // "COMPRAR PUNTOS" de la tarjeta de arriba (2026-11-17).
+      await tester.tap(find
+          .textContaining('${tr('shopBuy').toUpperCase()} · 300')
+          .first);
       await _settle(tester);
       final owned = await SocialService.ownedItemIds();
       expect(owned, contains('theme_coral'));

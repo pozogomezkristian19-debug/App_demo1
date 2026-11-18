@@ -173,11 +173,12 @@ void main() {
     await setPhone(tester);
     await tester.pumpWidget(const MelliQuiApp());
     await settle(tester);
-    // Ir a Cuenta (quinta pestaña) y de ahí a Ajustes: "¿Cómo se
-    // juega?" vive ahora en Ajustes. 2026-11-16 (perfil estilo
-    // Duolingo): Cuenta es una pantalla aparte y la puerta a
-    // Ajustes es el ENGRANAJE de arriba, no una fila al final.
-    await tester.tap(find.text(tr('accountTitle')));
+    // Ir a Cuenta (botón de perfil de la barra de arriba) y de
+    // ahí a Ajustes: "¿Cómo se juega?" vive ahora en Ajustes.
+    // 2026-11-16 (perfil estilo Duolingo): Cuenta es una pantalla
+    // aparte y la puerta a Ajustes es el ENGRANAJE de arriba, no
+    // una fila al final. 2026-11-17: Cuenta ya NO es pestaña.
+    await tester.tap(find.byKey(const ValueKey('topBarProfileButton')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.byType(AccountProfilePage), findsOneWidget);

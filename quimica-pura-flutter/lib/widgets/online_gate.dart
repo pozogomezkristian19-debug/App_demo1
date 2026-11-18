@@ -1,9 +1,14 @@
-// Puerta de identidad (Quemia 7.0, regla 09:19): para JUGAR online
-// hay que tener la cuenta de Google vinculada. Todas las pantallas
-// online (tabla, amigos, duelos, torneos, grupos, tienda) envuelven
-// su contenido en `OnlineGate`: sin Google, la pantalla muestra
-// SOLO esta tarjeta limpia (texto + botón de Google). El estudio
-// nunca pasa por aquí: funciona sin internet y sin Google.
+// Puerta de identidad (Quemia 7.0, regla 09:19; revisada
+// 2026-11-17): para JUGAR online hay que tener sesión — con
+// Google O con correo. Antes la puerta solo dejaba pasar con
+// Google, pero las casillas de Online ya se enseñan con
+// cualquiera de los dos: un usuario con correo veía Amigos y al
+// tocarlo le pedía Google. Todas las pantallas online (tabla,
+// amigos, duelos, torneos, grupos, tienda) envuelven su contenido
+// en `OnlineGate`: sin sesión, la pantalla muestra SOLO esta
+// tarjeta limpia (texto + botón de Google + entrar con correo).
+// El estudio nunca pasa por aquí: funciona sin internet y sin
+// Google.
 //
 // `isGoogleLinked` y `onLinkGoogle` son inyectables para tests y
 // previews; sin ellos se usa AuthService. El error, si el enlace
@@ -12,6 +17,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../screens/onboarding_screen.dart';
 import '../services/accent.dart';
 import '../services/analytics_sync.dart';
 import '../services/auth_service.dart';
@@ -46,9 +52,27 @@ class _OnlineGateState extends State<OnlineGate> {
   String? _errorCode;
 
   bool get _isLinked =>
-      widget.isGoogleLinked ??
-      _linkedAfterTap ??
-      AuthService.isGoogleLinked;
+      (widget.isGoogleLinked ??
+          _linkedAfterTap ??
+          AuthService.isGoogleLinked) ||
+      AuthService.isEmailLinked;
+
+  /// Entra con correo (revisión 2026-11-17): la tarjeta solo
+  /// ofrecía Google, y un usuario con cuenta de correo que estaba
+  /// sin sesión no tenía cómo entrar desde aquí. Al volver se
+  /// repinta la puerta para que ya enseñe el contenido.
+  Future<void> _openEmailSignIn() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => OnboardingScreen(
+          fromAccount: true,
+          onFinished: () => Navigator.of(context).pop(),
+          onCancel: () => Navigator.of(context).pop(),
+        ),
+      ),
+    );
+    if (mounted) setState(() {});
+  }
 
   Future<void> _link() async {
     if (_busy) return;
@@ -130,6 +154,18 @@ class _OnlineGateState extends State<OnlineGate> {
                     child: GoogleSignInButton(
                       onPressed: _busy ? null : _link,
                       busy: _busy,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: _busy ? null : _openEmailSignIn,
+                    child: Text(
+                      tr('onlineEnterWithEmail'),
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: AppAccent.primary,
+                      ),
                     ),
                   ),
                   if (_errorKey != null) ...[

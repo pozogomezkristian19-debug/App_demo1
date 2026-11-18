@@ -24,6 +24,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:quimica_pura/main.dart';
 import 'package:quimica_pura/screens/account_screen.dart';
 import 'package:quimica_pura/screens/leaderboard_screen.dart';
+import 'package:quimica_pura/screens/online_screen.dart';
 import 'package:quimica_pura/screens/loading_screen.dart';
 import 'package:quimica_pura/screens/onboarding_screen.dart';
 import 'package:quimica_pura/screens/practicar_screen.dart';
@@ -42,6 +43,7 @@ import 'package:quimica_pura/widgets/google_sign_in_button.dart';
 import 'package:quimica_pura/widgets/lucide_icons.dart';
 import 'package:quimica_pura/widgets/social_avatar.dart';
 import 'package:quimica_pura/widgets/main_bottom_nav.dart';
+import 'package:quimica_pura/widgets/nav_icons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'test_helpers.dart';
@@ -201,6 +203,30 @@ void main() {
             onShowShareApp: () {},
             trackTopics: const ['estequiometria'],
           ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    return opened;
+  }
+
+  /// Online (2026-11-17, reorganización): la rejilla con todo lo
+  /// online. Ventana alta como pumpAccount: la rejilla solo
+  /// construye las casillas que caben en pantalla.
+  Future<List<String>> pumpOnline(WidgetTester tester) async {
+    tester.view.physicalSize = const Size(360 * 2, 3000 * 2);
+    tester.view.devicePixelRatio = 2.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    final opened = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(useMaterial3: true),
+        home: Scaffold(
+          body: OnlineScreen(onOpenScreen: opened.add),
         ),
       ),
     );
@@ -474,7 +500,7 @@ void main() {
       await tester.pump();
     }
 
-    testWidgets('orden: Aprender, Resolver, Niveles, Tabla, Cuenta',
+    testWidgets('orden: Aprender, Resolver, Niveles, Tabla, Online',
         (tester) async {
       await pumpNav(tester, selected: 2, tapped: []);
       final xs = <String, double>{
@@ -483,15 +509,16 @@ void main() {
           tr('tabResolver'),
           tr('tabLevels'),
           tr('tabTable'),
-          tr('accountTitle'),
+          tr('tabOnline'),
         ])
           label: tester.getCenter(find.text(label)).dx,
       };
       // Quemia 7.3 (Kristian): Aprender PRIMERO y Resolver después.
+      // 2026-11-17: la última pestaña es Online, no Cuenta.
       expect(xs[tr('tabLearn')]!, lessThan(xs[tr('tabResolver')]!));
       expect(xs[tr('tabResolver')]!, lessThan(xs[tr('tabLevels')]!));
       expect(xs[tr('tabLevels')]!, lessThan(xs[tr('tabTable')]!));
-      expect(xs[tr('tabTable')]!, lessThan(xs[tr('accountTitle')]!));
+      expect(xs[tr('tabTable')]!, lessThan(xs[tr('tabOnline')]!));
       // Sin NavigationBar: la barra es MainBottomNav.
       expect(find.byType(MainBottomNav), findsOneWidget);
       expect(find.byType(NavigationBar), findsNothing);
@@ -518,7 +545,7 @@ void main() {
       await tester.tap(find.text(tr('tabLearn')));
       await tester.tap(find.text(tr('tabResolver')));
       await tester.tap(find.text(tr('tabTable')));
-      await tester.tap(find.text(tr('accountTitle')));
+      await tester.tap(find.text(tr('tabOnline')));
       await tester.tap(find.byKey(const ValueKey('nav-center-levels')));
       // Quemia 7.3: Aprender es el 0 y Resolver el 1 (antes al revés).
       expect(tapped, [0, 1, 3, 4, 2]);
@@ -531,71 +558,110 @@ void main() {
       final levelsText = tester.widget<Text>(find.text(tr('tabLevels')));
       expect(levelsText.style?.color, const Color(0xFF00C2A8));
       expect(levelsText.style?.fontWeight, FontWeight.bold);
-      // Otra seleccionada: su etiqueta también va en teal y negrita
-      // (la barra nueva usa un solo color de acción, no un color
-      // por pestaña).
+      // Otra seleccionada: su etiqueta va en SU color propio y
+      // negrita (Kristian 2026-11-17: fuera el verde único para
+      // todas; cada pestaña con su colorcito lindo: Aprender
+      // marrón, Resolver naranja, Tabla violeta, Online azul).
       // Quemia 7.3: el índice 0 es Aprender (antes Resolver).
       await pumpNav(tester, selected: 0, tapped: []);
       final learnText = tester.widget<Text>(find.text(tr('tabLearn')));
-      expect(learnText.style?.color, const Color(0xFF00C2A8));
+      expect(learnText.style?.color,
+          navTabLabelColor(NavTabIconKind.learn, true, false));
       expect(learnText.style?.fontWeight, FontWeight.bold);
+      await pumpNav(tester, selected: 1, tapped: []);
+      final solverText = tester.widget<Text>(find.text(tr('tabResolver')));
+      expect(solverText.style?.color,
+          navTabLabelColor(NavTabIconKind.solver, true, false));
+      expect(solverText.style?.fontWeight, FontWeight.bold);
+      await pumpNav(tester, selected: 3, tapped: []);
+      final tableText = tester.widget<Text>(find.text(tr('tabTable')));
+      expect(tableText.style?.color,
+          navTabLabelColor(NavTabIconKind.table, true, false));
+      expect(tableText.style?.fontWeight, FontWeight.bold);
+      await pumpNav(tester, selected: 4, tapped: []);
+      final onlineText = tester.widget<Text>(find.text(tr('tabOnline')));
+      expect(onlineText.style?.color,
+          navTabLabelColor(NavTabIconKind.online, true, false));
+      expect(onlineText.style?.fontWeight, FontWeight.bold);
+      // Sin seleccionar: su color propio pero clarito — nunca
+      // gris y nunca el color fuerte (Kristian 2026-11-17).
+      await pumpNav(tester, selected: 2, tapped: []);
+      final learnIdle = tester.widget<Text>(find.text(tr('tabLearn')));
+      expect(learnIdle.style?.color,
+          navTabLabelColor(NavTabIconKind.learn, false, false));
+      expect(learnIdle.style?.color, isNot(const Color(0xFFAFAFAF)));
+      expect(
+          learnIdle.style?.color,
+          isNot(navTabLabelColor(NavTabIconKind.learn, true, false)));
     });
   });
 
   group('Cuenta (ronda #8)', () {
-    testWidgets('las filas nuevas existen y no queda la de recuperar',
+    testWidgets('en Cuenta queda SOLO Premium; lo online vive en Online',
         (tester) async {
       // (Diseño 7.0) La fila "Compartir mi progreso" ya no existe:
       // compartir es automático con Google vinculada.
       // (2026-11-16, perfil estilo Duolingo) "Vincular con Google"
       // ya NO está en Cuenta: vive en Ajustes, sección CUENTA.
-      // (2026-11-16) En Cuenta quedan 7 filas: Estadísticas,
-      // Amigos, Tabla de posiciones, Torneo, Tienda, Premium y
-      // Canjear código. Tienda y Premium volvieron de Ajustes
-      // (Kristian 2026-11-16). Se bombea CON sesión: Amigos,
-      // Tabla y Torneo solo salen con sesión (un invitado no ve
-      // lo de buscar otra gente). El falso necesita uid (si no,
-      // currentUser es null y no hay sesión aunque googleLinked
-      // sea true).
+      // (2026-11-17, reorganización Online) En Cuenta queda SOLO
+      // Premium: Estadísticas, Amigos, Tabla, Torneos, Referidos,
+      // Tienda y Canjear viven en Online (rejilla). Se bombea CON
+      // sesión. El falso necesita uid (si no, currentUser es null
+      // y no hay sesión aunque googleLinked sea true).
       fakeAuth.uid = 'fake-uid';
       fakeAuth.googleLinked = true;
       await pumpAccount(tester);
-      expect(find.text(tr('accountLeaderboard')), findsOneWidget);
+      expect(find.text(tr('accountPremium')), findsOneWidget);
       expect(find.text(tr('accountLinkGoogle')), findsNothing);
       expect(find.text('Recuperar mi progreso'), findsNothing);
-      // Orden: Estadísticas, Amigos, Tabla, Torneo, Tienda,
-      // Premium, Canjear. Idioma ya no está en Cuenta: vive en
-      // Ajustes.
-      final yStats = tester.getCenter(find.text(tr('accountStats'))).dy;
-      final yFriends = tester.getCenter(find.text(tr('accountFriends'))).dy;
-      final yLeaderboard =
-          tester.getCenter(find.text(tr('accountLeaderboard'))).dy;
-      final yTournaments =
-          tester.getCenter(find.text(tr('accountTournaments'))).dy;
-      final yShop = tester.getCenter(find.text(tr('accountShop'))).dy;
-      final yPremium = tester.getCenter(find.text(tr('accountPremium'))).dy;
-      final yRedeem = tester.getCenter(find.text(tr('accountRedeem'))).dy;
-      expect(yStats, lessThan(yFriends));
-      expect(yFriends, lessThan(yLeaderboard));
-      expect(yLeaderboard, lessThan(yTournaments));
-      expect(yTournaments, lessThan(yShop));
-      expect(yShop, lessThan(yPremium));
-      expect(yPremium, lessThan(yRedeem));
+      for (final moved in [
+        tr('accountStats'),
+        tr('accountFriends'),
+        tr('accountLeaderboard'),
+        tr('accountTournaments'),
+        tr('accountShop'),
+        tr('accountRedeem'),
+        tr('accountReferrals'),
+      ]) {
+        expect(find.text(moved), findsNothing);
+      }
       expect(find.text(tr('accountLanguage')), findsNothing);
-      // Referidos sigue en Ajustes (no volvió con Tienda/Premium).
-      expect(find.text(tr('accountReferrals')), findsNothing);
     });
 
     testWidgets('"Tabla de posiciones" abre la pantalla de leaderboard',
         (tester) async {
-      // La fila solo sale con sesión (un invitado no ve lo de
-      // buscar otra gente).
+      // La casilla vive en Online (2026-11-17, reorganización),
+      // no en Cuenta. Solo sale con sesión (un invitado no ve lo
+      // de buscar otra gente).
       fakeAuth.uid = 'fake-uid';
       fakeAuth.googleLinked = true;
-      final opened = await pumpAccount(tester);
+      final opened = await pumpOnline(tester);
       await tester.tap(find.text(tr('accountLeaderboard')));
       await tester.pump();
       expect(opened, ['leaderboard']);
+    });
+
+    testWidgets('Online: la rejilla trae las 7 casillas con sesión',
+        (tester) async {
+      // Con sesión salen las 7 (Estadísticas, Amigos, Tabla,
+      // Torneos, Referidos, Tienda, Canjear); de invitado solo
+      // 4 (sin Amigos, Tabla ni Torneos).
+      fakeAuth.uid = 'fake-uid';
+      fakeAuth.googleLinked = true;
+      await pumpOnline(tester);
+      for (final title in [
+        tr('accountStats'),
+        tr('accountFriends'),
+        tr('accountLeaderboard'),
+        tr('accountTournaments'),
+        tr('accountReferrals'),
+        tr('accountShop'),
+        tr('accountRedeem'),
+      ]) {
+        expect(find.text(title), findsOneWidget);
+      }
+      expect(find.byType(OnlineScreen), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets(
@@ -651,12 +717,19 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
       expect(find.byType(TablaScreen), findsOneWidget);
-      await tester.tap(find.text(tr('accountTitle')));
+      // 2026-11-17 (reorganización Online): la última pestaña es
+      // Online, una pestaña normal — cambia el cuerpo y la barra
+      // de abajo SE QUEDA.
+      await tester.tap(find.text(tr('tabOnline')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
-      // 2026-11-16 (perfil estilo Duolingo): tocar Cuenta ABRE
-      // OTRA PANTALLA (AccountProfilePage), sin navbar; la pestaña
-      // de abajo se queda en la anterior (Tabla).
+      expect(find.byType(OnlineScreen), findsOneWidget);
+      expect(find.byType(MainBottomNav), findsOneWidget);
+      // Cuenta ya NO es pestaña: se abre con el botón de perfil
+      // de la barra de arriba (otra pantalla, sin navbar).
+      await tester.tap(find.byKey(const ValueKey('topBarProfileButton')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
       expect(find.byType(AccountProfilePage), findsOneWidget);
       expect(find.byType(AccountScreen), findsOneWidget);
       expect(find.byType(MainBottomNav), findsNothing);
@@ -672,9 +745,11 @@ void main() {
       expect(find.byType(PracticarScreen), findsOneWidget);
     });
 
-    testWidgets('el menú tiene la tabla y la abre', (tester) async {
-      // El menú solo enseña la tabla con sesión (un invitado no
-      // ve lo de buscar otra gente). Con contraseña puesta
+    testWidgets('el menú ya no tiene lo online; Online abre la tabla',
+        (tester) async {
+      // 2026-11-17 (reorganización Online): Tabla, Amigos,
+      // Torneos y Referidos salieron del menú; todo lo online
+      // vive en la pestaña Online. Con contraseña puesta
       // (emailLinked): si no, HomeScreen programa el
       // recordatorio de contraseña y su timeout de 3 s para
       // copiar el icono queda pendiente en la zona falsa y el
@@ -687,7 +762,21 @@ void main() {
       tester.state<ScaffoldState>(find.byType(Scaffold).first).openDrawer();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      expect(find.text(tr('accountLeaderboard')), findsOneWidget);
+      for (final gone in [
+        tr('accountLeaderboard'),
+        tr('accountFriends'),
+        tr('accountTournaments'),
+        tr('accountReferrals'),
+      ]) {
+        expect(find.text(gone), findsNothing);
+      }
+      tester.state<ScaffoldState>(find.byType(Scaffold).first).closeDrawer();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.text(tr('tabOnline')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byType(OnlineScreen), findsOneWidget);
       await tester.tap(find.text(tr('accountLeaderboard')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
@@ -1631,6 +1720,16 @@ class _SlowFakeAuth implements AuthProvider {
     email = null;
     displayName = null;
     return true;
+  }
+
+  // Cerrar sesión (2026-11-16): como el falso real — se va
+  // Google y se queda como invitado.
+  @override
+  Future<void> signOut() async {
+    googleLinked = false;
+    email = null;
+    displayName = null;
+    uid = 'fake-anon-uid';
   }
 
   @override

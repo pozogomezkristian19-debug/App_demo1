@@ -118,6 +118,28 @@ void main() {
     expect(latest.plan, '3m');
   });
 
+  test('reintento tras tiempo agotado adopta la solicitud ya creada',
+      () async {
+    // Conexión lenta (2026-11-17): el primer intento escribe en el
+    // servidor pero la respuesta se pierde (tiempo agotado). El
+    // reintento NO debe crear otra solicitud: adopta la pendiente
+    // que ya existe para el mismo plan.
+    repo.createDocTimeoutsAfterWrite = 1;
+    final ok = await PremiumService.instance.submitPaymentRequest(
+      plan: '1m',
+      screenshotData: 'data:image/jpeg;base64,AAA',
+    );
+    expect(ok, isTrue);
+    await settle();
+    final docs = repo.docs['paymentRequests']!;
+    expect(docs.length, 1);
+    expect(PremiumService.instance.lastSubmitError, isNull);
+    final latest = PremiumService.latestRequestNotifier.value;
+    expect(latest, isNotNull);
+    expect(latest!.isPending, isTrue);
+    expect(latest.plan, '1m');
+  });
+
   test('invitado (sin sesión) no puede enviar solicitud', () async {
     // Cambio 6: sin sesión no hay pago. El invitado tiene uid
     // (anónimo) pero ni Google ni correo enlazados.

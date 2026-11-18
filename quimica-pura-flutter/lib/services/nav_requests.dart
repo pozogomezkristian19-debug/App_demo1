@@ -44,6 +44,10 @@ class NavRequests {
   /// Consulta con la que Tabla debe filtrar al abrirse.
   static String? tableQuery;
 
+  /// Tema (slug) al que Niveles debe desplazarse al abrirse
+  /// (búsqueda «Niveles: X», auditoría 2026-11-17).
+  static String? levelsTopic;
+
   /// Si es true, Niveles debe empezar el repaso de errores.
   static bool startReview = false;
 

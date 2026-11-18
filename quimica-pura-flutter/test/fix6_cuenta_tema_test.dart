@@ -143,23 +143,16 @@ void main() {
       // Las filas son tarjetas redondeadas (organización 6.3, ya
       // no ListTile): se leen por sus títulos de texto, en orden
       // de aparición en la lista. Perfil estilo Duolingo:
-      // 7 filas — Estadísticas, Amigos, Tabla, Torneo, Tienda,
-      // Premium y Canjear. Tienda y Premium volvieron de Ajustes
-      // (Kristian 2026-11-16: "saca tienda y premium de
-      // configuraciones, déjalo en cuenta"). Vincular con Google,
-      // Acerca de, Compartir la app y Ajustes ya NO están aquí:
-      // viven en Ajustes por categorías (el engranaje de arriba
-      // abre Ajustes).
+      // 1 fila — SOLO Premium (2026-11-17, reorganización
+      // Online: Estadísticas, Amigos, Tabla, Torneos, Referidos,
+      // Tienda y Canjear viven en Online, en rejilla, no en
+      // filas). Vincular con Google, Acerca de, Compartir la app
+      // y Ajustes ya NO están aquí: viven en Ajustes por
+      // categorías (el engranaje de arriba abre Ajustes).
       final expectedOrder = [
-        tr('accountStats'),
-        tr('accountFriends'),
-        tr('accountLeaderboard'),
-        tr('accountTournaments'),
-        tr('accountShop'),
         tr('accountPremium'),
-        tr('accountRedeem'),
       ];
-      expect(expectedOrder.length, 7);
+      expect(expectedOrder.length, 1);
       final texts = tester
           .widgetList<Text>(find.byType(Text))
           .map((t) => t.data ?? '')
@@ -179,6 +172,12 @@ void main() {
       // el sistema de temas sigue viviendo en Ajustes.
       expect(find.text(tr('themeTitle')), findsNothing);
       for (final moved in [
+        tr('accountStats'),
+        tr('accountFriends'),
+        tr('accountLeaderboard'),
+        tr('accountTournaments'),
+        tr('accountShop'),
+        tr('accountRedeem'),
         tr('accountReferrals'),
         tr('accountLinkGoogle'),
         tr('accountAbout'),
@@ -198,7 +197,7 @@ void main() {
       // lateral: lo cubre fix6_menu_test.dart.)
     });
 
-    testWidgets('Ajustes por categorías, con las 14 filas en orden',
+    testWidgets('Ajustes por categorías, con las 11 filas en orden',
         (tester) async {
       // Ventana alta para que el ListView construya las 14 filas.
       tester.view.physicalSize = const Size(800, 3000);
@@ -238,10 +237,11 @@ void main() {
       }
       expect(sections, sectionOrder);
 
-      // 12 filas (sin "Cambiar versión", eliminado; la pista es
-      // siempre 'uni'): 8 en CUENTA (Referidos mudado de Cuenta)
-      // y 4 en SOPORTE. Premium y Tienda volvieron a Cuenta
-      // (Kristian 2026-11-16).
+      // 11 filas (sin "Cambiar versión", eliminado; la pista es
+      // siempre 'uni'): 7 en CUENTA (Referidos vive SOLO en
+      // Online desde 2026-11-17, Kristian: cada cosa en un solo
+      // sitio) y 4 en SOPORTE. Premium y Tienda volvieron a
+      // Cuenta (Kristian 2026-11-16).
       final expectedOrder = [
         tr('accountLinkGoogle'),
         tr('themeTitle'),
@@ -250,13 +250,12 @@ void main() {
         tr('inboxTitle'),
         tr('accountFavorites'),
         tr('accountShareProgress'),
-        tr('accountReferrals'),
         tr('howToPlayTitle'),
         tr('accountAbout'),
         tr('accountShareApp'),
         tr('checkUpdateTitle'),
       ];
-      expect(expectedOrder.length, 12);
+      expect(expectedOrder.length, 11);
       final titles = <String>[];
       for (final data in texts.where(expectedOrder.contains)) {
         if (titles.isEmpty || titles.last != data) titles.add(data);

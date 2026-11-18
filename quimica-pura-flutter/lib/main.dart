@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
@@ -28,6 +29,7 @@ import 'screens/language_screen.dart';
 import 'screens/leaderboard_screen.dart';
 import 'screens/notes_screen.dart';
 import 'screens/notifications_screen.dart';
+import 'screens/online_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/practicar_screen.dart';
 import 'screens/reference_tables_screen.dart';
@@ -56,7 +58,6 @@ import 'services/notification_service.dart';
 import 'services/push_service.dart';
 import 'services/nav_requests.dart';
 import 'services/notes.dart';
-import 'services/premium.dart';
 import 'services/premium_service.dart';
 import 'services/trial.dart';
 import 'services/progress.dart';
@@ -75,6 +76,7 @@ import 'services/firestore_social_repository.dart';
 import 'services/friends_groups_service.dart';
 import 'services/presence_service.dart';
 import 'services/remote_content_service.dart';
+import 'services/remote_shop_catalog.dart';
 import 'services/referral_service.dart';
 import 'services/reports_service.dart';
 import 'services/shop_service.dart';
@@ -87,6 +89,7 @@ import 'screens/premium_paywall_screen.dart';
 import 'screens/premium_sign_in_choice_screen.dart';
 import 'widgets/lives_chip.dart';
 import 'widgets/main_bottom_nav.dart';
+import 'widgets/social_avatar.dart';
 import 'widgets/theme_toggle.dart';
 
 /// URL de la página de descarga de Melli-Qui (landing en GitHub Pages).
@@ -1021,62 +1024,69 @@ class _MelliQuiAppState extends State<MelliQuiApp> with WidgetsBindingObserver {
 /// cuaderno). En las pantallas principales no hay barra
 /// (corrección 2026-11-12, Kristian).
 
-/// Chip de repaso en la AppBar (fix2, item 2): icono de repaso +
-/// cantidad de errores por repasar, con el color del tema.
-/// Icono ARRIBA del texto no: en la barra va en línea, como el chip
-/// de vidas, para que quepa junto a la campana.
-/// PÍLDORA teal oscura (Zona F, corrección 2026-11-12, imagen de
-/// Kristian): fondo #134E4A, icono + número en menta #2DD4BF,
-/// redondeada, en claro y en oscuro (color semántico, no de
-/// acento). Antes era fondo transparente con el color del tema.
-class _ReviewChip extends StatelessWidget {
-  const _ReviewChip({required this.count, required this.onTap});
-  final int count;
+/// Botón de perfil en la AppBar (2026-11-17, Kristian): el más
+/// llamativo de la barra. Círculo de 40 dp con la foto del
+/// usuario (avatar equipado ya descargado, o la cara por defecto
+/// según el género) y anillo de 2 pt del acento. Escucha el
+/// notifier del avatar equipado, así repinta al instante al
+/// equipar otro sin volver a entrar. Abre Cuenta.
+class _TopBarProfileButton extends StatefulWidget {
+  const _TopBarProfileButton({super.key, required this.onTap});
+
   final VoidCallback onTap;
+
+  @override
+  State<_TopBarProfileButton> createState() => _TopBarProfileButtonState();
+}
+
+class _TopBarProfileButtonState extends State<_TopBarProfileButton> {
+  File? _remoteFile;
+
+  @override
+  void initState() {
+    super.initState();
+    SocialService.equippedAvatarIdNotifier.addListener(_resolve);
+    _resolve();
+  }
+
+  Future<void> _resolve() async {
+    final url = SocialService.equippedAvatarImageUrl;
+    File? file;
+    if (url != null && url.isNotEmpty) {
+      file = await ShopImageCache.ensureCached(url);
+    }
+    if (!mounted) return;
+    setState(() => _remoteFile = file);
+  }
+
+  @override
+  void dispose() {
+    SocialService.equippedAvatarIdNotifier.removeListener(_resolve);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(999),
-        onTap: onTap,
+        customBorder: const CircleBorder(),
+        onTap: widget.onTap,
         child: Container(
-          // Píldora teal oscura con el número dentro (imagen de
-          // Kristian): fondo #134E4A, icono + número en menta.
-          // Altura fija kTopBarPillHeight: igual que vidas y campana.
+          width: 40,
+          height: 40,
           decoration: BoxDecoration(
-            color: AppAccent.pillDarkBackground,
-            borderRadius: BorderRadius.circular(999),
+            shape: BoxShape.circle,
+            border: Border.all(color: AppAccent.primary, width: 2),
           ),
-          height: kTopBarPillHeight,
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              LucideIcon(LucideIcons.rotateCcw,
-                  size: 20, color: AppAccent.pillDarkForeground),
-              const SizedBox(width: 4),
-              // El número cambia con animación (pulido 7.7): al
-              // repasar, el conteo no salta de golpe, entra con
-              // escala + fundido.
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
-                transitionBuilder: (child, animation) => ScaleTransition(
-                  scale: animation,
-                  child: FadeTransition(opacity: animation, child: child),
-                ),
-                child: Text(
-                  '$count',
-                  key: ValueKey(count),
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    color: AppAccent.pillDarkForeground,
-                  ),
-                ),
-              ),
-            ],
+          alignment: Alignment.center,
+          child: SocialAvatar(
+            username: UserPrefs.userName,
+            avatarAsset: SocialService.displayAvatarAssetForGender(
+              UserPrefs.userGender,
+            ),
+            avatarImageFile: _remoteFile,
+            size: 36,
           ),
         ),
       ),
@@ -1084,13 +1094,14 @@ class _ReviewChip extends StatelessWidget {
   }
 }
 
-/// Separación IGUAL entre los tres controles de la AppBar (fix4,
-/// punto 9): vidas, repaso y campana. Cada control lleva este
-/// padding a ambos lados, así que el hueco entre dos controles es
-/// siempre 2 × _kTopBarGap (12 px) y no depende del icono que lleve
-/// cada uno: antes los dos chips llevaban Padding(right: 2) y la
+/// Separación IGUAL entre los controles de la AppBar (fix4,
+/// punto 9): vidas y campana. Cada control lleva este padding a
+/// ambos lados, así que el hueco entre dos controles es siempre
+/// 2 × _kTopBarGap (12 px) y no depende del icono que lleve cada
+/// uno: antes los dos chips llevaban Padding(right: 2) y la
 /// campana era un IconButton con su propio inset de 12 px, así que
-/// los huecos se veían distintos.
+/// los huecos se veían distintos. El botón de perfil lleva su
+/// propio padding (6 a la izquierda, 10 a la derecha).
 const double _kTopBarGap = 6.0;
 
 /// Campana de notificaciones en la AppBar (fix4, puntos 8 y 9):
@@ -1258,6 +1269,10 @@ class _HomeScreenState extends State<HomeScreen> {
     // la pantalla "Se acabó tu prueba" (si no está en mitad de un
     // quiz: eso lo mira _maybeShowTrialEnded).
     TrialService.trialNotifier.addListener(_onTrialChanged);
+    // Cerrar sesión (Kristian 2026-11-16): al cambiar la sesión
+    // (salir o vincular) el shell se repinta como invitado o con
+    // sesión, sin reabrir la app.
+    AuthService.authVersion.addListener(_onAuthChanged);
     // Tocar una notificación (o su acción "Repasar ahora") pide el
     // repaso de errores aunque la app ya estuviera abierta (fix3,
     // punto 9): sin este aviso, Niveles ya montada no volvería a
@@ -1272,10 +1287,10 @@ class _HomeScreenState extends State<HomeScreen> {
     NavRequests.updateRequested.addListener(_onNotificationUpdateRequest);
     NavRequests.installRequested.addListener(_onNotificationInstallRequest);
     // Recordatorio de contraseña (Kristian 2026-11-15): si la cuenta
-    // es de Google y aún no tiene contraseña, programa la notificación
-    // de cada hora ("Asegura tu cuenta con una contraseña"). También
-    // reprograma tras un reinicio o tras apagar los recordatorios
-    // (que borran todo lo programado).
+    // es de Google y aún no tiene contraseña, programa UN aviso único
+    // (~1 h después de abrir la app). También reprograma tras un
+    // reinicio o tras apagar los recordatorios (que borran todo lo
+    // programado).
     unawaited(NotificationService.schedulePasswordReminder());
     // Tras el primer frame: el diálogo de actualización si la app
     // se abrió desde su recordatorio, y si no, la comprobación
@@ -1285,15 +1300,22 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       final pushKey = NavRequests.takePendingPushScreen();
       if (pushKey != null) {
+        // La app se abrió desde una notificación: el destino va
+        // limpio, sin diálogos encima (auditoría 2026-11-17: antes
+        // se abría Amigos y encima saltaban el diálogo de
+        // actualización y «Se acabó tu prueba»). La actualización y
+        // el fin de la prueba salen en el próximo arranque: no se
+        // consumen aquí, así que no se pierden.
         _openScreenKey(pushKey);
+      } else {
+        if (NavRequests.showUpdateDialog) {
+          NavRequests.showUpdateDialog = false;
+          await UpdateCheckService.showPendingUpdateDialog(context);
+          return;
+        }
+        await UpdateCheckService.checkForUpdate(context);
+        if (!mounted) return;
       }
-      if (NavRequests.showUpdateDialog) {
-        NavRequests.showUpdateDialog = false;
-        await UpdateCheckService.showPendingUpdateDialog(context);
-        return;
-      }
-      await UpdateCheckService.checkForUpdate(context);
-      if (!mounted) return;
       // Logros nuevos y aviso de racha en la bandeja (fix4, punto 8).
       await NotificationInbox.syncDaily(_trackTopics);
       // Cuenta atrás en vivo de la racha (Kristian 2026-11-16):
@@ -1306,7 +1328,7 @@ class _HomeScreenState extends State<HomeScreen> {
       // acabó tu prueba" (al final del arranque, para no pelearse
       // con el diálogo de actualización ni con la pantalla del
       // push).
-      _maybeShowTrialEnded();
+      if (pushKey == null) _maybeShowTrialEnded();
     });
   }
 
@@ -1314,6 +1336,13 @@ class _HomeScreenState extends State<HomeScreen> {
   /// sale la pantalla (si no hay un quiz en curso).
   void _onTrialChanged() {
     if (!TrialService.trialNotifier.value) _maybeShowTrialEnded();
+  }
+
+  /// La sesión cambió (cerrar sesión o vincular): repintar el
+  /// shell con la sesión actual (menú, barra, candados).
+  void _onAuthChanged() {
+    if (!mounted) return;
+    setState(() {});
   }
 
   /// ¿Toca enseñar la pantalla "Se acabó tu prueba"? Ver
@@ -1343,6 +1372,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     PremiumService.paywallRequested.removeListener(_onPaywallRequested);
     TrialService.trialNotifier.removeListener(_onTrialChanged);
+    AuthService.authVersion.removeListener(_onAuthChanged);
     PremiumService.instance.stop();
     NavRequests.reviewRequested.removeListener(_onNotificationReviewRequest);
     NavRequests.pushRequested.removeListener(_onPushRequest);
@@ -1463,12 +1493,12 @@ class _HomeScreenState extends State<HomeScreen> {
   // con Niveles en el centro (índice 2): Resolver, Aprender,
   // Niveles, Tabla, Cuenta.
   // Quemia 7.3 (Kristian): Aprender PRIMERO y Resolver después:
-  // Aprender, Resolver, Niveles, Tabla, Cuenta.
-  // Perfil estilo Duolingo (Kristian 2026-11-16): la pestaña
-  // Cuenta ya NO cambia el cuerpo — al tocarla se abre la
-  // pantalla aparte (AccountProfilePage, ruta propia, sin barra
-  // de abajo ni barra de corazones). El hueco 4 del _pages queda
-  // como marcador vacío que nunca se enseña: _index nunca es 4.
+  // Aprender, Resolver, Niveles, Tabla, Online (2026-11-17,
+  // reorganización: la pestaña 4 ya NO es Cuenta — es Online, el
+  // mundito con todo lo online. Cuenta se abre con el botón de
+  // perfil de la barra de arriba, como pantalla aparte
+  // (AccountProfilePage, ruta propia, sin barra de abajo ni
+  // barra de corazones).
   List<Widget> get _pages => [
         const AprenderScreen(),
         const ResolverScreen(),
@@ -1486,7 +1516,7 @@ class _HomeScreenState extends State<HomeScreen> {
               }
             }),
         const TablaScreen(),
-        const SizedBox.shrink(),
+        OnlineScreen(onOpenScreen: _openScreenKey),
       ];
 
   /// Abre Cuenta como PANTALLA APARTE (perfil estilo Duolingo,
@@ -1522,33 +1552,14 @@ class _HomeScreenState extends State<HomeScreen> {
     bool startReview = false,
     String? tableQuery,
     int? tableTab,
+    String? levelsTopic,
   }) {
     if (openSolver != null) NavRequests.openSolverTitle = openSolver;
     if (startReview) NavRequests.startReview = true;
     if (tableQuery != null) NavRequests.tableQuery = tableQuery;
     if (tableTab != null) NavRequests.tableTab = tableTab;
+    if (levelsTopic != null) NavRequests.levelsTopic = levelsTopic;
     setState(() => _index = i);
-  }
-
-  /// Repaso desde la barra de arriba (fix2, item 2): si hay errores,
-  /// va a Niveles y arranca el repaso; si no hay, avisa.
-  /// Mis errores es Premium: el usuario gratis ve el paywall
-  /// en vez del repaso.
-  void _startReviewFromAppBar() {
-    if (premiumSectionLocked(
-      isPremium: PremiumService.isPremiumNow,
-      section: PremiumLockedSection.misErrores,
-    )) {
-      _openPaywall();
-      return;
-    }
-    if (ProgressService.instance.failedCount == 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('quizNoErrors'))),
-      );
-      return;
-    }
-    _goToTab(2, startReview: true);
   }
 
   /// Abre una pantalla del menú o de la búsqueda por su clave.
@@ -1564,6 +1575,20 @@ class _HomeScreenState extends State<HomeScreen> {
             key == 'tournaments') &&
         !AuthService.isGoogleLinked &&
         !AuthService.isEmailLinked) {
+      // Revisión 2026-11-17: antes no pasaba NADA (el invitado
+      // tocaba Amigos/Tabla/Torneos desde la búsqueda o una
+      // notificación y la pantalla no se abría ni decía por qué).
+      // Ahora se le ofrece iniciar sesión, igual que la tarjeta
+      // de invitado de Online (OnboardingScreen desde Cuenta).
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => OnboardingScreen(
+            fromAccount: true,
+            onFinished: () => Navigator.of(context).pop(),
+            onCancel: () => Navigator.of(context).pop(),
+          ),
+        ),
+      );
       return;
     }
     Widget? page;
@@ -1668,13 +1693,17 @@ class _HomeScreenState extends State<HomeScreen> {
       case 'topic':
         final topic = findTopic(entry.target);
         if (topic != null) {
+          // Como los demás casos: cerrar la búsqueda antes de
+          // abrir el detalle (auditoría 2026-11-17: sin el pop, el
+          // atrás del detalle volvía a la búsqueda).
+          Navigator.of(context).pop();
           Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => TopicDetailScreen(topic: topic)),
           );
         }
       case 'levels':
         Navigator.of(context).pop();
-        _goToTab(2);
+        _goToTab(2, levelsTopic: entry.target);
       case 'solver':
         Navigator.of(context).pop();
         _goToTab(1, openSolver: entry.target);
@@ -1682,7 +1711,12 @@ class _HomeScreenState extends State<HomeScreen> {
         final z = int.tryParse(entry.target) ?? 0;
         final element =
             allElements.where((e) => e.atomicNumber == z).firstOrNull;
-        if (element != null) showElementSheet(context, element);
+        if (element != null) {
+          // Igual que 'topic': cerrar la búsqueda antes de abrir
+          // la hoja (auditoría 2026-11-17).
+          Navigator.of(context).pop();
+          showElementSheet(context, element);
+        }
       case 'formula':
         Navigator.of(context).pop();
         Navigator.of(context).push(
@@ -1958,7 +1992,9 @@ class _HomeScreenState extends State<HomeScreen> {
       // "Tabla"...) se recortaba ("Ni...") y ya está como
       // título grande dentro del contenido de cada pestaña.
       // La barra queda solo con sus controles: menú, vidas,
-      // repaso y campana.
+      // campana y perfil. El repaso de errores ya NO está aquí
+      // (2026-11-17, Kristian): se entra desde las
+      // notificaciones y desde la búsqueda.
       actions: [
         // Chip de vidas junto al saludo (corazón + número, fix 1):
         // siempre visible en las 5 pestañas. Se actualiza solo
@@ -1984,32 +2020,31 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
-        // Repasar mis errores (fix2, item 2): entrada visible en
-        // la barra de arriba, estilo Duolingo, junto a la campana
-        // de notificaciones. El numerito es la cantidad de errores
-        // por repasar; sin errores, avisa y no abre nada.
-        // El avatar del usuario ya NO está aquí (fix2, item 6).
-        Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: _kTopBarGap),
-            child: ValueListenableBuilder<int>(
-              valueListenable: ProgressService.failedNotifier,
-              builder: (context, _, __) => _ReviewChip(
-                count: ProgressService.instance.failedCount,
-                onTap: _startReviewFromAppBar,
-              ),
-            ),
-          ),
-        ),
         // Campana de notificaciones (fix4, punto 8): abre la
         // bandeja de Notificaciones (ya no Recordatorios).
-        // Fondo transparente como los otros dos chips
-        // (§3.9.5, Zona A), no píldora.
+        // Fondo transparente como el chip de vidas
+        // (§3.9.5, Zona A), no píldora. Va a la derecha de las
+        // vidas (2026-11-17, Kristian).
         Center(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: _kTopBarGap),
             child: _NotificationBell(
               onTap: () => _openScreenKey('notifications'),
+            ),
+          ),
+        ),
+        // Botón de perfil (2026-11-17, Kristian): el más
+        // llamativo de la barra — la foto del usuario (avatar
+        // equipado o la cara por defecto) en un círculo de 40 dp
+        // con anillo del acento, al final a la derecha. Abre
+        // Cuenta, que ya no es pestaña de abajo. De invitado
+        // sale la cara por defecto.
+        Center(
+          child: Padding(
+            padding: const EdgeInsets.only(left: _kTopBarGap, right: 10),
+            child: _TopBarProfileButton(
+              key: const ValueKey('topBarProfileButton'),
+              onTap: _openAccount,
             ),
           ),
         ),
@@ -2026,10 +2061,11 @@ class _HomeScreenState extends State<HomeScreen> {
     // pestaña con el acento verde, o violeta para todas con el
     // acento violeta.
     // Ronda #8 (Quemia 6.5): la lista va en el orden NUEVO de la
-    // barra (Aprender, Resolver, Niveles, Tabla, Cuenta — 7.3:
-    // Aprender primero), así que cada pestaña conserva SU color
-    // de antes: Aprender era la 2, Resolver la 1, Niveles la 0,
-    // Tabla la 3 y Cuenta la 4.
+    // barra (Aprender, Resolver, Niveles, Tabla, Online — 7.3:
+    // Aprender primero; 2026-11-17 la 4 ya no es Cuenta sino
+    // Online), así que cada pestaña conserva SU color de antes:
+    // Aprender era la 2, Resolver la 1, Niveles la 0, Tabla la 3
+    // y la 4 era Cuenta.
     const _navOldIndex = [2, 1, 0, 3, 4];
     final tabColors = List<Color>.generate(
       5,
@@ -2229,41 +2265,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                 subtitle: tr('timedSub'),
                                 onTap: () => _openScreenKey('timed'),
                               ),
-                              // Lo de buscar otra gente SOLO con
-                              // sesión (Kristian 2026-11-16): un
-                              // invitado no ve Tabla, Amigos ni
-                              // Torneos en el menú, así no puede
-                              // seguir a nadie.
-                              if (AuthService.isGoogleLinked ||
-                                  AuthService.isEmailLinked) ...[
-                                _drawerItem(
-                                  icon: LucideIcons.trophy,
-                                  title: tr('accountLeaderboard'),
-                                  subtitle: tr('accountLeaderboardSub'),
-                                  onTap: () => _openScreenKey('leaderboard'),
-                                ),
-                                // Quemia 7.0: social junto a la tabla.
-                                _drawerItem(
-                                  icon: LucideIcons.userRound,
-                                  title: tr('accountFriends'),
-                                  subtitle: tr('accountFriendsSub'),
-                                  onTap: () => _openScreenKey('friends'),
-                                ),
-                                _drawerItem(
-                                  icon: LucideIcons.award,
-                                  title: tr('accountTournaments'),
-                                  subtitle: tr('accountTournamentsSub'),
-                                  onTap: () => _openScreenKey('tournaments'),
-                                ),
-                              ],
-                              // Referidos (7.3): junto a Amigos y
-                              // Grupos, en la misma sección social.
-                              _drawerItem(
-                                icon: LucideIcons.heart,
-                                title: tr('accountReferrals'),
-                                subtitle: tr('accountReferralsSub'),
-                                onTap: () => _openScreenKey('referrals'),
-                              ),
+                              // Tabla, Amigos, Torneos y Referidos ya
+                              // NO están en el menú (2026-11-17,
+                              // reorganización Online): todo lo
+                              // online vive en la pestaña Online,
+                              // para que no esté repetido.
                               _drawerItem(
                                 icon: LucideIcons.circleHelp,
                                 title: tr('tableQuizTitle'),
@@ -2411,14 +2417,10 @@ class _HomeScreenState extends State<HomeScreen> {
                           selectedIndex: _index,
                           onSelected: (i) {
                             SoundService.tap();
-                            // La pestaña Cuenta abre la pantalla
-                            // aparte (perfil estilo Duolingo,
-                            // Kristian 2026-11-16): no cambia la
-                            // pestaña de debajo.
-                            if (i == 4) {
-                              _openAccount();
-                              return;
-                            }
+                            // Todas las pestañas cambian el cuerpo,
+                            // incluida Online (4). Cuenta ya NO es
+                            // pestaña: se abre con el botón de
+                            // perfil de la barra de arriba.
                             setState(() => _index = i);
                           },
                           isDark: widget.isDark,

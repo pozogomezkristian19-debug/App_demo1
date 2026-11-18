@@ -545,7 +545,14 @@ void main() {
   }
 
   Future<void> goTab(WidgetTester tester, String label) async {
-    await tester.tap(find.text(label));
+    // 2026-11-17 (reorganización Online): Cuenta ya NO es pestaña
+    // de abajo — se abre con el botón de perfil de la barra de
+    // arriba (la foto con el anillo del acento).
+    if (label == tr('accountTitle')) {
+      await tester.tap(find.byKey(const ValueKey('topBarProfileButton')));
+    } else {
+      await tester.tap(find.text(label));
+    }
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
   }

@@ -132,6 +132,11 @@ abstract class AuthProvider {
   /// Desvincula Google de la sesión actual.
   Future<bool> unlinkGoogle();
 
+  /// Cierra la sesión por completo (Google/correo) y deja la
+  /// sesión sin usuario. La fachada vuelve a entrar como
+  /// invitado después. NUNCA lanza.
+  Future<void> signOut();
+
   /// Usuario actual, o null si no hay sesión.
   AuthUserInfo? get currentUser;
 
@@ -678,6 +683,19 @@ class FirebaseAuthProvider implements AuthProvider {
     }
   }
 
+  /// Cierra la sesión de Firebase y de Google (para que el próximo
+  /// inicio enseñe el selector de cuentas en vez de entrar solo
+  /// con la misma). NUNCA lanza.
+  @override
+  Future<void> signOut() async {
+    try {
+      await _auth.signOut();
+    } catch (_) {}
+    try {
+      await GoogleSignIn.instance.signOut();
+    } catch (_) {}
+  }
+
   @override
   AuthUserInfo? get currentUser {
     try {
@@ -914,6 +932,18 @@ class FakeAuthProvider implements AuthProvider {
     email = null;
     displayName = null;
     return true;
+  }
+
+  /// Cierra la sesión en el falso: se va Google/correo y se
+  /// vuelve a un anónimo nuevo (como el real tras signOut +
+  /// ensureAnonymous).
+  @override
+  Future<void> signOut() async {
+    googleLinked = false;
+    emailLinked = false;
+    email = null;
+    displayName = null;
+    uid = 'fake-anon-uid';
   }
 
   @override
@@ -1217,6 +1247,24 @@ class AuthService {
     } catch (_) {
       return false;
     }
+  }
+
+  /// Cierra la sesión (2026-11-16, Kristian: botón en Cuenta).
+  /// Se va Google/correo y se vuelve a entrar como invitado
+  /// (anónimo nuevo): el progreso LOCAL se queda en el teléfono
+  /// y la nube de la cuenta vieja queda intacta; al volver a
+  /// entrar con la misma cuenta de Google, la migración best-of
+  /// lo restaura. Devuelve true si quedó como invitado. NUNCA
+  /// lanza.
+  static Future<bool> signOut() async {
+    try {
+      await _provider
+          .signOut()
+          .timeout(const Duration(seconds: 5), onTimeout: () {});
+    } catch (_) {}
+    final anon = await ensureAnonymous();
+    _bumpAuthVersion();
+    return anon != null;
   }
 
   /// Solo para tests: inyecta un proveedor (el falso en memoria).

@@ -11,6 +11,7 @@ import 'package:quimica_pura/data/questions.dart';
 import 'package:quimica_pura/main.dart';
 import 'package:quimica_pura/screens/practicar_screen.dart';
 import 'package:quimica_pura/services/localization.dart';
+import 'package:quimica_pura/services/nav_requests.dart';
 import 'package:quimica_pura/services/progress.dart';
 import 'package:quimica_pura/services/user_prefs.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -150,6 +151,38 @@ void main() {
       expect(find.text('Marcar como dominado'), findsNothing);
       expect(find.textContaining('Temas dominados'), findsNothing);
       expect(find.textContaining('dominado'), findsNothing);
+    });
+
+    // Auditoría 2026-11-17 (fix 4): buscar «Niveles: Equilibrio»
+    // debe abrir Niveles DESPLAZADO hasta ese tema, no arriba del
+    // todo. Equilibrio es el 5.º tema: el camino baja más de 1000.
+    testWidgets('búsqueda Niveles: Equilibrio desplaza el camino',
+        (tester) async {
+      NavRequests.levelsTopic = 'equilibrio';
+      addTearDown(() => NavRequests.levelsTopic = null);
+      await pumpNiveles(tester);
+      await tester.pump(const Duration(milliseconds: 600));
+      final scrollView = tester.widget<SingleChildScrollView>(
+        find.descendant(
+          of: find.byType(PracticarScreen),
+          matching: find.byType(SingleChildScrollView),
+        ),
+      );
+      expect(scrollView.controller, isNotNull);
+      expect(scrollView.controller!.offset, greaterThan(1000));
+    });
+
+    testWidgets('sin petición, Niveles abre arriba del todo',
+        (tester) async {
+      await pumpNiveles(tester);
+      final scrollView = tester.widget<SingleChildScrollView>(
+        find.descendant(
+          of: find.byType(PracticarScreen),
+          matching: find.byType(SingleChildScrollView),
+        ),
+      );
+      expect(scrollView.controller, isNotNull);
+      expect(scrollView.controller!.offset, 0);
     });
   });
 }

@@ -214,7 +214,85 @@ class _TournamentCard extends StatelessWidget {
   /// los puntos, se avisa y no se descuenta nada ni se entra. Al
   /// entrar NO se muestra SnackBar: el botón ya cambia a "Jugar"
   /// y un aviso flotante taparía las opciones si se juega enseguida.
+  /// Con entrada (auditoría 2026-11-17): ANTES de cobrar se pregunta
+  /// — un toque sin querer no debe descontar puntos. Gratis entra
+  /// directo, sin preguntar.
   Future<void> _join(BuildContext context, TournamentInfo t) async {
+    if (t.entryFee > 0) {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (context) {
+          final isDark = Theme.of(context).brightness == Brightness.dark;
+          final ink = isDark ? Colors.white : const Color(0xFF4B4B4B);
+          return Dialog(
+            backgroundColor:
+                isDark ? const Color(0xFF1F2E35) : Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    t.title,
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: ink,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    tr('tournJoinConfirm')
+                        .replaceFirst('%s', '${t.entryFee}'),
+                    style: TextStyle(
+                      fontSize: 16,
+                      height: 1.4,
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.7)
+                          : const Color(0xFF777777),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DuoButton.secondary(
+                          label: tr('cancel').toUpperCase(),
+                          onPressed: () =>
+                              Navigator.of(context).pop(false),
+                          fontSize: 15,
+                          icon: LucideIcons.x,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: DuoButton.primary(
+                          label: tr('tournJoinPaid')
+                              .replaceFirst('%s', '${t.entryFee}')
+                              .toUpperCase(),
+                          onPressed: () =>
+                              Navigator.of(context).pop(true),
+                          fontSize: 15,
+                          icon: LucideIcons.play,
+                          topColor: const Color(0xFF1CB0F6),
+                          bottomColor: const Color(0xFF1CB0F6),
+                          edgeColor: const Color(0xFF1899D6),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+      if (confirm != true || !context.mounted) return;
+    }
     final result =
         await SocialService.joinTournament(t.id, entryFee: t.entryFee);
     if (!context.mounted) return;

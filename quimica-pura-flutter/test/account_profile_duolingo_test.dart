@@ -83,6 +83,7 @@ void main() {
     await UserPrefs.saveThemeMode('claro');
     await tester.pumpWidget(
       MaterialApp(
+        debugShowCheckedModeBanner: false,
         theme: ThemeData(useMaterial3: true),
         home: Scaffold(
           body: AccountScreen(
@@ -189,6 +190,46 @@ void main() {
       expect(opened, ['avatar']);
     });
 
+    testWidgets('fila Cambiar nombre de usuario (Kristian 2026-11-17)',
+        (tester) async {
+      UserPrefs.publicUsername = 'kristian';
+      await pumpAccount(tester);
+      await settle(tester);
+      // Fila visible con el nombre actual, entre Premium y
+      // Cerrar sesión. El lapicito junto al @usuario se quitó:
+      // se leía como "cambiar el avatar".
+      expect(find.text(tr('accountChangeUsername')), findsOneWidget);
+      // La fila abre la MISMA pantalla de elegir nombre que el
+      // editor de avatar (UsernameEditorFlow).
+      await tester.tap(find.text(tr('accountChangeUsername')));
+      await settle(tester);
+      expect(find.text(tr('usernamePersonalizeTitle')), findsOneWidget);
+    });
+
+    testWidgets('foto: fila Cambiar nombre de usuario en Cuenta',
+        (tester) async {
+      UserPrefs.publicUsername = 'kristian';
+      await pumpAccount(tester);
+      await settle(tester);
+      // La foto del perfil y el logo del pie, si no, salen como
+      // círculo / hueco vacío en la captura (carrera de
+      // decodificación).
+      final ctx = tester.element(find.byType(MaterialApp));
+      await tester.runAsync(() async {
+        await precacheImage(
+            const AssetImage('assets/avatar_default.png'), ctx);
+        await precacheImage(const AssetImage('assets/logo.png'), ctx);
+      });
+      await tester.pump();
+      // pumpAccount usa vista alta (800x3000): toda Cuenta cabe
+      // sin deslizar, como la foto fix6_cuenta.
+      await expectLater(
+        find.byType(MaterialApp),
+        matchesGoldenFile(
+            '../../melli-qui-v6-previews/cuenta_cambiar_nombre.png'),
+      );
+    });
+
     testWidgets('fila Niveles / Siguiendo / Seguidores',
         (tester) async {
       await pumpAccount(tester);
@@ -244,12 +285,14 @@ void main() {
       expect(find.text(tr('accountPoints')), findsOneWidget);
       expect(find.text(tr('trophiesWord')), findsOneWidget);
       expect(find.text(tr('accountAchievements')), findsOneWidget);
-      // Sin progreso: racha 0, puntos 0, trofeos 0/1, logros 0/10.
+      // Sin progreso: racha 0, puntos 0, trofeos 0/1, logros 0/11
+      // (11 logros desde la 7.8: se sumó "Super científico" a
+      // 1500 puntos; el 0/10 era de cuando eran 10).
       expect(find.text('0/1'), findsOneWidget);
-      expect(find.text('0/10'), findsOneWidget);
+      expect(find.text('0/11'), findsOneWidget);
     });
 
-    testWidgets('LOGROS con los 10 logros', (tester) async {
+    testWidgets('LOGROS con los 11 logros', (tester) async {
       await pumpAccount(tester);
       expect(
           find.text(tr('accountAchievements').toUpperCase()), findsOneWidget);
@@ -263,6 +306,7 @@ void main() {
         '100 aciertos',
         '500 aciertos',
         '1000 aciertos',
+        'Super científico',
         'Repaso al día',
       ]) {
         expect(find.text(title), findsOneWidget, reason: title);
@@ -270,23 +314,18 @@ void main() {
     });
 
     testWidgets(
-        'las filas de contenido quedan en el perfil, en orden',
+        'en el perfil queda SOLO Premium (lo demás vive en Online)',
         (tester) async {
       await pumpAccount(tester);
       await settle(tester);
-      // 7 filas en Cuenta: Tienda y Premium volvieron de Ajustes
-      // (Kristian 2026-11-16: "saca tienda y premium de
-      // configuraciones, déjalo en cuenta").
+      // 1 fila en Cuenta: SOLO Premium (2026-11-17,
+      // reorganización Online: Estadísticas, Amigos, Tabla,
+      // Torneos, Referidos, Tienda y Canjear viven en Online,
+      // en rejilla, no en filas).
       final expectedOrder = [
-        tr('accountStats'),
-        tr('accountFriends'),
-        tr('accountLeaderboard'),
-        tr('accountTournaments'),
-        tr('accountShop'),
         tr('accountPremium'),
-        tr('accountRedeem'),
       ];
-      expect(expectedOrder.length, 7);
+      expect(expectedOrder.length, 1);
       final texts = tester
           .widgetList<Text>(find.byType(Text))
           .map((t) => t.data ?? '')
@@ -296,9 +335,15 @@ void main() {
         if (titles.isEmpty || titles.last != data) titles.add(data);
       }
       expect(titles, expectedOrder);
-      // Referidos sigue en Ajustes: ya NO está en Cuenta (nada
+      // Lo online ya NO está en Cuenta: vive en Online (nada
       // se borra, solo cambia de sitio).
       for (final moved in [
+        tr('accountStats'),
+        tr('accountFriends'),
+        tr('accountLeaderboard'),
+        tr('accountTournaments'),
+        tr('accountShop'),
+        tr('accountRedeem'),
         tr('accountReferrals'),
         tr('accountLinkGoogle'),
         tr('accountAbout'),
@@ -311,7 +356,7 @@ void main() {
   });
 
   group('Ajustes por categorías (Cuenta / Soporte)', () {
-    testWidgets('las 12 filas, en orden y por secciones',
+    testWidgets('las 11 filas, en orden y por secciones',
         (tester) async {
       final opened = <String>[];
       tester.view.physicalSize = const Size(800, 3000);
@@ -351,9 +396,9 @@ void main() {
       }
       expect(sections, sectionOrder);
 
-      // Las 12 filas, en orden: 8 en CUENTA (Referidos mudado
-      // de Cuenta) y 4 en SOPORTE. Premium y Tienda volvieron a
-      // Cuenta (Kristian 2026-11-16).
+      // Las 11 filas, en orden: 7 en CUENTA (Referidos salió de
+      // Ajustes 2026-11-17: vive solo en Online) y 4 en SOPORTE.
+      // Premium y Tienda volvieron a Cuenta (Kristian 2026-11-16).
       final expectedOrder = [
         tr('accountLinkGoogle'),
         tr('themeTitle'),
@@ -362,13 +407,12 @@ void main() {
         tr('inboxTitle'),
         tr('accountFavorites'),
         tr('accountShareProgress'),
-        tr('accountReferrals'),
         tr('howToPlayTitle'),
         tr('accountAbout'),
         tr('accountShareApp'),
         tr('checkUpdateTitle'),
       ];
-      expect(expectedOrder.length, 12);
+      expect(expectedOrder.length, 11);
       final titles = <String>[];
       for (final data in texts.where(expectedOrder.contains)) {
         if (titles.isEmpty || titles.last != data) titles.add(data);

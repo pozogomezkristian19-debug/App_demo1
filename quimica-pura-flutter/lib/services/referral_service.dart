@@ -185,6 +185,22 @@ class ReferralService {
 
   // ---- Nombre público único ----
 
+  /// Largo máximo del nombre de usuario (Kristian 2026-11-17: que
+  /// nadie ponga un nombre tan largo). Vale para el nombre escrito,
+  /// la base y el nombre reclamado; con el sufijo de 4 dígitos el
+  /// total tampoco pasa de aquí (la base se recorta antes).
+  static const int usernameMaxLength = 15;
+
+  /// Sufijo de 4 dígitos que se pone cuando la base está cogida.
+  static const int _usernameSuffixLength = 4;
+
+  /// Base recortada para que, con el sufijo, el nombre final no
+  /// pase de [usernameMaxLength].
+  static String _baseForSuffix(String base) {
+    final maxBase = usernameMaxLength - _usernameSuffixLength;
+    return base.length > maxBase ? base.substring(0, maxBase) : base;
+  }
+
   /// Base del nombre público: primer nombre del onboarding, solo
   /// letras y números, con la primera en mayúscula. Vacío si no
   /// hay nombre (entonces 'Quimico').
@@ -192,14 +208,17 @@ class ReferralService {
     final first = UserPrefs.firstName;
     final clean = first.replaceAll(RegExp(r'[^A-Za-zÀ-ÿ0-9]'), '');
     if (clean.isEmpty) return 'Quimico';
-    final capped = clean.length > 20 ? clean.substring(0, 20) : clean;
+    final capped = clean.length > usernameMaxLength
+        ? clean.substring(0, usernameMaxLength)
+        : clean;
     return capped[0].toUpperCase() + capped.substring(1);
   }
 
   /// Base del nombre de usuario desde la cuenta de Google (Quemia
   /// 7.7, Kristian): la app coge el nombre del correo. Primero el
   /// primer nombre de la cuenta; si no lo hay, el prefijo del correo
-  /// (antes de la @). Limpio, primera en mayúscula, máximo 20.
+  /// (antes de la @). Limpio, primera en mayúscula, máximo
+  /// [usernameMaxLength].
   static String usernameBaseFromGoogle(String? name, String? email) {
     String raw = '';
     if (name != null && name.trim().isNotEmpty) {
@@ -209,7 +228,9 @@ class ReferralService {
     }
     final clean = raw.replaceAll(RegExp(r'[^A-Za-zÀ-ÿ0-9]'), '');
     if (clean.isEmpty) return 'Quimico';
-    final capped = clean.length > 20 ? clean.substring(0, 20) : clean;
+    final capped = clean.length > usernameMaxLength
+        ? clean.substring(0, usernameMaxLength)
+        : clean;
     return capped[0].toUpperCase() + capped.substring(1);
   }
 
@@ -239,9 +260,11 @@ class ReferralService {
       out.add(base);
       return out;
     }
-    // Ocupada: probar con sufijos hasta tener 3 libres.
+    // Ocupada: probar con sufijos hasta tener 3 libres. La base se
+    // recorta para que el total no pase del máximo.
+    final suffixedBase = _baseForSuffix(base);
     for (var attempt = 0; attempt < 12 && out.length < 3; attempt++) {
-      final candidate = '$base${1000 + random.nextInt(9000)}';
+      final candidate = '$suffixedBase${1000 + random.nextInt(9000)}';
       if (out.contains(candidate)) continue;
       if (!await isUsernameTaken(candidate)) out.add(candidate);
     }
@@ -255,7 +278,10 @@ class ReferralService {
   /// nombre). Sin internet se guarda en local y se reclama después.
   static Future<String> claimUsername(String candidate) async {
     final clean = candidate.replaceAll(RegExp(r'[^A-Za-zÀ-ÿ0-9]'), '');
-    final name = clean.isEmpty ? _usernameBase() : clean;
+    final capped = clean.length > usernameMaxLength
+        ? clean.substring(0, usernameMaxLength)
+        : clean;
+    final name = capped.isEmpty ? _usernameBase() : capped;
     if (!_allowed) {
       await UserPrefs.savePublicUsername(name);
       return name;
@@ -302,10 +328,14 @@ class ReferralService {
     final existing = UserPrefs.publicUsername;
     if (existing.isNotEmpty) return existing;
     final base = _usernameBase();
+    // Con sufijo, la base se recorta para que el total no pase del
+    // máximo (p. ej. Christian + 4 dígitos = 13).
+    final suffixedBase = _baseForSuffix(base);
     final random = Random.secure();
     for (var attempt = 0; attempt < 12; attempt++) {
-      final candidate =
-          attempt == 0 ? base : '$base${1000 + random.nextInt(9000)}';
+      final candidate = attempt == 0
+          ? base
+          : '$suffixedBase${1000 + random.nextInt(9000)}';
       final lower = candidate.toLowerCase();
       // ¿Está cogido? Se lee primero: el falso en memoria (y el
       // cliente) no distingue "no existe" de "sin internet" en la

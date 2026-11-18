@@ -1,9 +1,10 @@
 // Pruebas de la Zona G2 (Quemia 7.1): la separación en DOS CAPAS
 // de notificaciones.
 //
-//   1. SIN INTERNET (local, del teléfono): recordatorios de estudio
-//      (61-180 min), la prueba de aviso, la confirmación al activar
-//      y los avisos de logros/racha. Se programan y se muestran con
+//   1. SIN INTERNET (local, del teléfono): el aviso diario de
+//      estudio (una alarma al día a la hora elegida), la prueba de
+//      aviso, la confirmación al activar y los avisos de logros/racha.
+//      Se programan y se muestran con
 //      flutter_local_notifications, sin tocar Firebase, FCM ni la
 //      red. El trabajo FCM de las zonas D1/D2/D3 no debe haberlos
 //      roto ni haberlos hecho depender de la red.
@@ -176,8 +177,8 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('la tanda de recordatorios se programa sin Firebase '
-        'ni FCM (3 avisos)', (tester) async {
+    testWidgets('el aviso diario se programa sin Firebase '
+        'ni FCM (1 alarma)', (tester) async {
       // OJO (lección de esta zona): en testWidgets el tiempo es
       // falso y los temporizadores solo avanzan con pump(): la
       // copia del icono grande lleva un tope de 3 s y el
@@ -191,8 +192,8 @@ void main() {
       final future = NotificationService.scheduleNext();
       await tester.pump(const Duration(seconds: 4));
       final scheduled = await future;
-      expect(scheduled, hasLength(3));
-      expect(fake.zonedScheduled, 3);
+      expect(scheduled, hasLength(1));
+      expect(fake.zonedScheduled, 1);
       expect(tester.takeException(), isNull);
     });
 
@@ -218,8 +219,8 @@ void main() {
       final scheduleFuture = NotificationService.scheduleNext();
       await tester.pump(const Duration(seconds: 4));
       final scheduled = await scheduleFuture;
-      expect(scheduled, hasLength(3));
-      expect(fake.zonedScheduled, 3);
+      expect(scheduled, hasLength(1));
+      expect(fake.zonedScheduled, 1);
       expect(tester.takeException(), isNull);
     });
   });

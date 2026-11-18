@@ -28,11 +28,16 @@ import java.io.File
  *   izquierda, el título a la derecha y la cuenta atrás en ROJO
  *   debajo del título. El Chronometer va bajando solo, segundo a
  *   segundo, sin que la app tenga que re-publicar nada.
- * - COMPROMISO (Kristian 2026-11-16, su captura de Duolingo,
- *   decisión 12:01): él se queda con este aspecto. Con vista
- *   personalizada Android NO permite que el aviso sea un Live
- *   Update, así que NO sale en Hyper Island como chip; la versión
- *   de isla (estilo estándar + ProgressStyle) no se hace.
+ * - ISLA (Kristian 2026-11-17, sus capturas de Duolingo 21:48):
+ *   él quiere que salga TAMBIÉN en la isla, como Duolingo. La
+ *   isla de HyperOS no lee el Chronometer de la vista
+ *   personalizada: lee el cronómetro ESTÁNDAR del aviso (when +
+ *   usesChronometer + countDown). Por eso el constructor pone
+ *   esos tres campos ADEMÁS de la vista personalizada: la vista
+ *   sigue mandando en la pantalla de bloqueo y la cortina, y la
+ *   isla coge el cronómetro estándar y enseña la cuenta atrás
+ *   bajando. El compromiso del 2026-11-16 («me quedo con la
+ *   notificación») queda superado: ahora son las dos cosas.
  * - El aviso es EN CURSO (ongoing): no se puede barrer con el
  *   dedo; se quita al tocarlo (abre la app y la app lo cancela
  *   cuando se hace la lección) o a medianoche. Igual que Duolingo.
@@ -245,6 +250,13 @@ object LiveCountdown {
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setAutoCancel(false)
+            // Cronómetro ESTÁNDAR (2026-11-17): la isla de HyperOS
+            // enseña la cuenta atrás desde aquí; la vista
+            // personalizada de abajo sigue mandando en la cortina
+            // y la pantalla de bloqueo.
+            .setWhen(endAtMs)
+            .setUsesChronometer(true)
+            .setChronometerCountDown(true)
         if (largeIcon != null) builder.setLargeIcon(largeIcon)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -276,10 +288,7 @@ object LiveCountdown {
             val total = (endAtMs - startAtMs).coerceAtLeast(1L)
             val percent = ((now - startAtMs) * 100 / total).toInt()
                 .coerceIn(0, 100)
-            builder.setWhen(endAtMs)
-                .setUsesChronometer(true)
-                .setChronometerCountDown(true)
-                .setProgress(100, percent, false)
+            builder.setProgress(100, percent, false)
         }
         return builder.build()
     }

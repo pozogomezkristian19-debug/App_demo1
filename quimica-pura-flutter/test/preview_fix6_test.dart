@@ -27,8 +27,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:quimica_pura/main.dart';
 import 'package:quimica_pura/screens/account_screen.dart';
+import 'package:quimica_pura/screens/onboarding_screen.dart';
 import 'package:quimica_pura/screens/reminder_screen.dart';
+import 'package:quimica_pura/screens/settings_screen.dart';
 import 'package:quimica_pura/services/accent.dart';
+import 'package:quimica_pura/services/auth_service.dart';
 import 'package:quimica_pura/services/localization.dart';
 import 'package:quimica_pura/services/notification_inbox.dart';
 import 'package:quimica_pura/services/notification_service.dart';
@@ -218,6 +221,11 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    // UserPrefs guarda el estado en ESTÁTICOS (reminderOn, tema,
+    // acento...): sin recargarlos, el test de recordatorios (que
+    // pone 'melli_reminder_on': true) contamina los siguientes y
+    // Ajustes muestra la hora en vez de «Desactivado».
+    await UserPrefs.load();
     await ProgressService.load();
     await NotificationInbox.load();
     NotificationService.resetForTests();
@@ -386,6 +394,17 @@ void main() {
     expect(find.text('Pregunta del día'), findsNothing);
     expect(find.text(tr('practiceOtherWays')), findsNothing);
     await warmCompanions(tester);
+    // Y el AVATAR DEL USUARIO del botón de perfil de la barra
+    // (2026-11-17): con estos prefs es avatar_default. Sin
+    // precache, la primera captura del proceso lo pilla vacío
+    // (carrera de decodificación real-async) y el golden sale
+    // distinto según el orden de ejecución.
+    final ctx = tester.element(find.byType(MaterialApp));
+    await tester.runAsync(() async {
+      await precacheImage(
+          const AssetImage('assets/avatar_default.png'), ctx);
+    });
+    await tester.pump();
     await shot(tester, 'fix6_niveles.png');
   });
 
@@ -394,6 +413,13 @@ void main() {
     expect(find.text('Pregunta del día'), findsNothing);
     expect(find.text(tr('practiceOtherWays')), findsNothing);
     await warmCompanions(tester);
+    // Mismo precache del avatar del botón de perfil que en claro.
+    final ctx = tester.element(find.byType(MaterialApp));
+    await tester.runAsync(() async {
+      await precacheImage(
+          const AssetImage('assets/avatar_default.png'), ctx);
+    });
+    await tester.pump();
     await shot(tester, 'fix6_niveles_dark.png');
   });
 
@@ -402,26 +428,25 @@ void main() {
     // del acompañante del día (no el avatar premium equipado:
     // ese sigue en Tabla de posiciones, Amigos y Torneos).
     await pumpApp(tester);
-    await tester.tap(find.text(tr('accountTitle')));
+    // 2026-11-17 (reorganización Online): Cuenta ya NO es
+    // pestaña de abajo — se abre con el botón de perfil de la
+    // barra de arriba.
+    await tester.tap(find.byKey(const ValueKey('topBarProfileButton')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
-    // Las tres primeras filas, en orden (2026-11-16, Cuenta
-    // actual): Estadísticas, Tienda y Premium. "Vincular con
-    // Google" se mudó a Ajustes y Amigos/Tabla/Torneos solo salen
-    // con sesión (09:01: un invitado no ve lo de buscar gente).
-    // La lista tiene scroll (ventana de teléfono 393x852) y las
-    // filas de abajo no se construyen hasta bajar; para leer el
-    // orden en el árbol se agranda la ventana un momento (a 3000
-    // cabe todo) y luego se vuelve a tamaño de teléfono para la
-    // foto. Los títulos se leen DENTRO de AccountProfilePage: la
-    // "Tienda" del menú hamburguesa (cerrado, pero en el árbol)
-    // duplicaría el texto.
+    // En Cuenta queda SOLO Premium (2026-11-17): Estadísticas,
+    // Tienda, Amigos, Tabla, Torneos, Referidos y Canjear viven
+    // en Online. La lista tiene scroll (ventana de teléfono
+    // 393x852) y las filas de abajo no se construyen hasta bajar;
+    // para leer el orden en el árbol se agranda la ventana un
+    // momento (a 3000 cabe todo) y luego se vuelve a tamaño de
+    // teléfono para la foto. Los títulos se leen DENTRO de
+    // AccountProfilePage: la "Tienda" del menú hamburguesa
+    // (cerrado, pero en el árbol) duplicaría el texto.
     tester.view.physicalSize = const Size(393 * 2, 3000 * 2);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
     final expectedOrder = [
-      tr('accountStats'),
-      tr('accountShop'),
       tr('accountPremium'),
     ];
     final seenTitles = tester
@@ -545,5 +570,115 @@ void main() {
     });
     await tester.pump();
     await shot(tester, 'fix6_resolver.png');
+  });
+
+  // 2026-11-17 (reorganización Online): fotos de la pantalla
+  // Online para Kristian, en claro, a 393x852. El navegador no
+  // puede guardar capturas PNG en disco ni emular un teléfono,
+  // así que estas fotos salen del mismo render de la app.
+  testWidgets('online_invitado: Online como invitado, rejilla de 4',
+      (tester) async {
+    await pumpApp(tester);
+    await tester.tap(find.text(tr('tabOnline')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    // El avatar del botón de perfil (avatar_default con estos
+    // prefs): sin precache, la primera captura del proceso lo
+    // pilla vacío (carrera de decodificación real-async).
+    final ctx = tester.element(find.byType(MaterialApp));
+    await tester.runAsync(() async {
+      await precacheImage(
+          const AssetImage('assets/avatar_default.png'), ctx);
+    });
+    await tester.pump();
+    await shot(tester, 'online_invitado.png');
+    // 2026-11-17: de invitado sale la tarjeta de crear el perfil
+    // y su botón abre el inicio de la app (elección crear perfil
+    // / entrar con Google / entrar con correo).
+    expect(find.byKey(const ValueKey('onlineSignInInvite')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('onlineSignInButton')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(OnboardingScreen), findsOneWidget);
+    expect(find.text(tr('obChoiceTitle')), findsOneWidget);
+  });
+
+  testWidgets('online_sesion: Online con sesión, sugerencias + 7',
+      (tester) async {
+    final fakeAuth = FakeAuthProvider()
+      ..uid = 'dev-kristian'
+      ..googleLinked = true
+      ..emailLinked = true
+      ..email = 'kristian@example.com'
+      ..displayName = 'Kristian Pozo';
+    AuthService.setProviderForTests(fakeAuth);
+    // Sugerencias de demostración (si no, el repo iría al
+    // Firestore real y la fila saldría vacía).
+    SocialService.setRepositoryForTests(
+        InMemorySocialRepository(seedDemo: true));
+    addTearDown(() {
+      AuthService.resetForTests();
+      SocialService.resetForTests();
+    });
+    await pumpApp(tester);
+    await tester.tap(find.text(tr('tabOnline')));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(const Duration(seconds: 1));
+    // Avatar del botón de perfil + los de las sugerencias
+    // (dorado y violeta son los dos con avatarId en la demo).
+    final ctx = tester.element(find.byType(MaterialApp));
+    await tester.runAsync(() async {
+      for (final name in [
+        'avatar_default',
+        'avatar_dorado',
+        'avatar_violeta',
+      ]) {
+        await precacheImage(AssetImage('assets/$name.png'), ctx);
+      }
+    });
+    await tester.pump();
+    // Con sesión NO sale la tarjeta de invitar a iniciar sesión.
+    expect(find.byKey(const ValueKey('onlineSignInInvite')), findsNothing);
+    await shot(tester, 'online_sesion.png');
+  });
+
+  // 2026-11-17: fotos de Ajustes para Kristian, en claro, a
+  // 393x852. Se entra desde el engranaje de Cuenta (que se abre
+  // con el botón de perfil de la barra de arriba).
+  testWidgets('ajustes_arriba: Ajustes, parte de arriba', (tester) async {
+    await pumpApp(tester);
+    await tester.tap(find.byKey(const ValueKey('topBarProfileButton')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.byTooltip(tr('settingsTitle')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    // 2026-11-17: Referidos ya NO vive en Ajustes (solo en Online).
+    expect(
+      find.descendant(
+        of: find.byType(SettingsScreen),
+        matching: find.text(tr('accountReferrals')),
+      ),
+      findsNothing,
+    );
+    await shot(tester, 'ajustes_arriba.png');
+  });
+
+  testWidgets('ajustes_abajo: Ajustes, parte de abajo', (tester) async {
+    await pumpApp(tester);
+    await tester.tap(find.byKey(const ValueKey('topBarProfileButton')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.byTooltip(tr('settingsTitle')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    // Baja hasta la última fila (Buscar actualización).
+    await tester.scrollUntilVisible(
+      find.text(tr('checkUpdateTitle')),
+      300,
+    );
+    await tester.pump();
+    await shot(tester, 'ajustes_abajo.png');
   });
 }

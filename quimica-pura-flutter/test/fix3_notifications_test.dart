@@ -1,13 +1,12 @@
 // Pruebas de la ronda de arreglos #3, punto 9 (notificaciones):
 // el permiso se pide en el onboarding, el primer aviso llega dentro
 // de la primera hora y ninguna plantilla muestra un slug.
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
+import 'package:timezone/data/latest.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:quimica_pura/data/i18n/content_i18n.dart';
 import 'package:quimica_pura/data/questions.dart';
@@ -109,29 +108,26 @@ void main() {
         _FakeAndroidNotifications(permissionGranted: false);
   });
 
-  test('el primer aviso llega dentro de la primera hora (20-50 min)',
+  test('el aviso diario llega a la hora elegida (hoy o mañana)',
       () {
-    for (var seed = 0; seed < 100; seed++) {
-      final gap = NotificationService.nextFirstGapMinutes(Random(seed));
-      expect(gap, greaterThanOrEqualTo(20));
-      expect(gap, lessThanOrEqualTo(50));
-      expect(NotificationService.firstGapIsValid(gap), isTrue);
-    }
-  });
-
-  test('firstGapIsValid: 19 no vale, 20 y 50 sí, 51 no', () {
-    expect(NotificationService.firstGapIsValid(19), isFalse);
-    expect(NotificationService.firstGapIsValid(20), isTrue);
-    expect(NotificationService.firstGapIsValid(50), isTrue);
-    expect(NotificationService.firstGapIsValid(51), isFalse);
-  });
-
-  test('el primer aviso siempre llega antes que un hueco normal', () {
-    for (var seed = 0; seed < 100; seed++) {
-      final first = NotificationService.nextFirstGapMinutes(Random(seed));
-      final next = NotificationService.nextGapMinutes(Random(seed));
-      expect(first, lessThan(next));
-    }
+    tzdata.initializeTimeZones();
+    final loc = tz.getLocation('America/Havana');
+    final morning = tz.TZDateTime(loc, 2026, 11, 17, 10, 0);
+    final next = NotificationService.nextDailyReminder(
+      hour: 19,
+      minute: 0,
+      now: morning,
+    );
+    expect(next.day, 17);
+    expect(next.hour, 19);
+    final night = tz.TZDateTime(loc, 2026, 11, 17, 20, 30);
+    final nextDay = NotificationService.nextDailyReminder(
+      hour: 19,
+      minute: 0,
+      now: night,
+    );
+    expect(nextDay.day, 18);
+    expect(nextDay.hour, 19);
   });
 
   test('ninguna plantilla de notificación contiene un slug', () {
@@ -329,14 +325,22 @@ void main() {
     expect(got!.difference(next).inSeconds.abs(), lessThanOrEqualTo(1));
   });
 
-  test('nextNotificationTime es null sin avisos o con todos pasados',
-      () async {
+  test('nextNotificationTime es null sin avisos; una hora pasada '
+      'rueda al día siguiente (la alarma es diaria)', () async {
     SharedPreferences.setMockInitialValues({'melli_notif_next': ''});
     expect(await NotificationService.nextNotificationTime(), isNull);
-    final past = DateTime.now().subtract(const Duration(hours: 1));
+    final now = DateTime.now();
+    final past = now.subtract(const Duration(hours: 1));
     SharedPreferences.setMockInitialValues(
         {'melli_notif_next': past.toIso8601String()});
-    expect(await NotificationService.nextNotificationTime(), isNull);
+    // La alarma diaria se repite: la hora pasada no está "pasada
+    // para siempre", toca mañana a la misma hora.
+    final got = await NotificationService.nextNotificationTime();
+    expect(got, isNotNull);
+    expect(got!.hour, past.hour);
+    expect(got.minute, past.minute);
+    expect(got.isAfter(now), isTrue);
+    expect(got.difference(now).inHours, lessThan(24));
   });
 
   testWidgets('la pantalla simplificada no muestra el próximo aviso '

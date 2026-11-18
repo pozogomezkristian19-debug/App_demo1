@@ -257,6 +257,37 @@ class _PracticarScreenState extends State<PracticarScreen> {
       if (ProgressService.instance.failedCount > 0) {
         WidgetsBinding.instance.addPostFrameCallback(
             (_) => _start(const _QuizSpec(kind: 'review')));
+      } else {
+        // Sin errores no hay nada que repasar: se avisa (antes lo
+        // hacía el chip de la barra de arriba, quitado 2026-11-17;
+        // el aviso tiene que seguir existiendo en la entrada que
+        // queda — búsqueda y notificaciones — o el toque no hace
+        // nada en silencio). Se difiere al final del frame, como
+        // el _start de arriba: esto corre en pleno build.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(tr('quizNoErrors'))),
+          );
+        });
+      }
+    }
+
+    // Ir a un tema concreto del camino (búsqueda «Niveles: X»,
+    // auditoría 2026-11-17): desplaza el camino hasta la cabecera
+    // de ese tema. Sin el tema (otra pista, slug viejo) no se hace
+    // nada — el camino queda donde estaba.
+    final levelsTopic = NavRequests.levelsTopic;
+    if (levelsTopic != null) {
+      NavRequests.levelsTopic = null;
+      // Que no se pelee con el desplazamiento al nodo actual: si
+      // se pidió un tema, manda el tema.
+      _scrolledToCurrent = true;
+      if (_byTopic.containsKey(levelsTopic)) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _scrollToTopic(levelsTopic);
+        });
       }
     }
   }
@@ -297,6 +328,23 @@ class _PracticarScreenState extends State<PracticarScreen> {
     if (!needsScroll) return;
     Scrollable.ensureVisible(ctx,
         alignment: 0.45, duration: const Duration(milliseconds: 400));
+  }
+
+  /// Una clave por tema para desplazar el camino hasta su cabecera
+  /// (búsqueda «Niveles: X»). Se crean bajo demanda y se guardan:
+  /// una clave nueva en cada build rompería el desplazamiento.
+  final Map<String, GlobalKey> _topicKeys = {};
+
+  GlobalKey _topicKey(String slug) =>
+      _topicKeys.putIfAbsent(slug, () => GlobalKey());
+
+  /// Desplaza el camino hasta la cabecera de un tema (búsqueda
+  /// «Niveles: X»).
+  void _scrollToTopic(String slug) {
+    final ctx = _topicKeys[slug]?.currentContext;
+    if (ctx == null) return;
+    Scrollable.ensureVisible(ctx,
+        alignment: 0.05, duration: const Duration(milliseconds: 400));
   }
 
   /// Temas y preguntas del banco de la pista actual, en el idioma
@@ -601,7 +649,14 @@ class _PracticarScreenState extends State<PracticarScreen> {
       return;
     }
     final questions = _buildQuestions(spec);
-    if (questions.isEmpty) return;
+    if (questions.isEmpty) {
+      // Nivel sin preguntas: avisar en vez de callar (auditoría
+      // 2026-11-17: el toque no hacía nada en silencio).
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(tr('levelNoQuestions'))),
+      );
+      return;
+    }
     _scrolledToCurrent = false;
     if (!_backRegistered) {
       BackNav.register(_closeQuiz);
@@ -694,6 +749,86 @@ class _PracticarScreenState extends State<PracticarScreen> {
     }
   }
 
+  /// Volver a un nivel YA JUGADO (Kristian 2026-11-17): antes de
+  /// entrar, pregunta "¿Volver a jugar?" en un diálogo, para que
+  /// un toque sin querer no empiece el juego directo. Solo para
+  /// niveles ya superados; el nivel actual arranca directo.
+  /// La tarjeta es estilo Duolingo (2026-11-17: el AlertDialog
+  /// normal «está feo»): fondo redondeado y dos botones 3D de
+  /// verdad, Cancelar en secundario y Jugar en primario, iguales
+  /// de tamaño — nada de enlaces de texto, ni morado.
+  Future<void> _askReplay(String topic, int level) async {
+    final play = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final ink = isDark ? Colors.white : const Color(0xFF4B4B4B);
+        final sub = isDark
+            ? Colors.white.withValues(alpha: 0.7)
+            : const Color(0xFF777777);
+        return Dialog(
+          backgroundColor:
+              isDark ? const Color(0xFF1F2E35) : Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  tr('replayLevelTitle'),
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: ink,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  tr('replayLevelBody')
+                      .replaceFirst('%s', '${tr('levelWord')} $level')
+                      .replaceFirst('%s', localizedTopicName(topic)),
+                  style: TextStyle(fontSize: 16, height: 1.4, color: sub),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: DuoButton.secondary(
+                        label: tr('cancel').toUpperCase(),
+                        onPressed: () =>
+                            Navigator.of(context).pop(false),
+                        fontSize: 15,
+                        icon: LucideIcons.x,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: DuoButton.primary(
+                        label: tr('replayLevelPlay').toUpperCase(),
+                        onPressed: () =>
+                            Navigator.of(context).pop(true),
+                        fontSize: 15,
+                        icon: LucideIcons.play,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (play == true && mounted) {
+      SoundService.tap();
+      _start(_QuizSpec(kind: 'level', topic: topic, level: level));
+    }
+  }
+
   bool _mixedUnlocked() {
     final progress = ProgressService.instance;
     // Desbloqueado cuando el Nivel 1 está pasado en todos los temas:
@@ -748,6 +883,7 @@ class _PracticarScreenState extends State<PracticarScreen> {
     // el camino es lo primero que se ve al abrir Niveles.
     Widget topicSection(int i) {
       return _TopicPathSection(
+        key: _topicKey(topics[i]),
         topic: topics[i],
         bankCount: byTopic[topics[i]]!.length,
         levelCount: _levelCount(topics[i]),
@@ -764,7 +900,16 @@ class _PracticarScreenState extends State<PracticarScreen> {
             return;
           }
           if (unlocked) {
-            _start(_QuizSpec(kind: 'level', topic: topics[i], level: level));
+            // Nivel ya superado: preguntar antes de entrar (un
+            // toque sin querer no empieza el juego). El nivel
+            // actual (== desbloqueado) arranca directo.
+            if (level <
+                ProgressService.instance.unlockedLevel(topics[i])) {
+              _askReplay(topics[i], level);
+            } else {
+              _start(
+                  _QuizSpec(kind: 'level', topic: topics[i], level: level));
+            }
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -970,6 +1115,7 @@ class _PracticarScreenState extends State<PracticarScreen> {
 /// el anterior) se ve con candado y no se puede abrir.
 class _TopicPathSection extends StatelessWidget {
   const _TopicPathSection({
+    super.key,
     required this.topic,
     required this.bankCount,
     required this.levelCount,
@@ -2308,13 +2454,16 @@ class _QuizRunnerState extends State<_QuizRunner> {
   /// Pantalla de resultado de nivel (spec §3.4): celebración a
   /// pantalla completa con fondo oscuro #131F24, mascota grande
   /// celebrando, confeti, título amarillo, XP grande y 3 tarjetas
-  /// de color sólido (PUNTOS amarilla, PRECISIÓN teal, TIEMPO azul).
-  /// Un solo botón grande azul + "Repetir"/"Volver" como enlaces de
-  /// texto discretos. El mismo patrón cubre el repaso y el examen
-  /// mixto (sin "Pasar de nivel": su botón grande es REPETIR).
+  /// en superficie oscura (el color vive solo en el iconito de
+  /// cada una — Kristian 2026-11-17: las 3 tarjetas de color
+  /// sólido eran demasiados contrastes). Un solo botón grande
+  /// azul + "Repetir" y "Volver" como botones secundarios
+  /// visibles, iguales en tamaño (antes eran enlaces de texto
+  /// gris que casi no se veían). El mismo patrón cubre el repaso
+  /// y el examen mixto (sin "Pasar de nivel": su botón grande
+  /// es REPETIR).
   Widget _buildResult(BuildContext context) {
     const dark = Color(0xFF131F24);
-    const muted = Color(0xFFAFAFAF);
     final total = widget.quiz.items.length;
     final percent = ((100 * _score) / total).round();
     final isLevel = widget.spec.kind == 'level';
@@ -2412,31 +2561,40 @@ class _QuizRunnerState extends State<_QuizRunner> {
                           ],
                         ),
                         // Las 3 tarjetas EXACTAMENTE iguales (mismo
-                        // alto y ancho, texto blanco en negrita sobre
-                        // el color, también en la amarilla de PUNTOS).
+                        // alto y ancho): superficie oscura con borde
+                        // sutil; el color vive solo en el iconito
+                        // de cada una, no en toda la tarjeta
+                        // (Kristian 2026-11-17: demasiados
+                        // contrastes de colores).
                         Row(
                           children: [
                             _ResultStatCard(
-                              color: const Color(0xFFFFC800),
+                              icon: LucideIcons.star,
+                              accent: const Color(0xFFFFC800),
                               label: tr('pointsTitle'),
                               value: pointsText,
                             ),
                             const SizedBox(width: 12),
                             _ResultStatCard(
-                              color: AppAccent.primary,
+                              icon: LucideIcons.target,
+                              accent: AppAccent.primary,
                               label: tr('quizAccuracy'),
                               value: '$percent%',
                             ),
                             const SizedBox(width: 12),
                             _ResultStatCard(
-                              color: const Color(0xFF1CB0F6),
+                              icon: LucideIcons.clock,
+                              accent: const Color(0xFF1CB0F6),
                               label: tr('quizTime'),
                               value: elapsed,
                             ),
                           ],
                         ),
                         // Un solo botón grande azul + "Repetir" y
-                        // "Volver" como enlaces de texto discretos.
+                        // "Volver" como botones secundarios
+                        // visibles, del mismo tamaño (Kristian
+                        // 2026-11-17: los enlaces de texto gris
+                        // casi no se veían).
                         Column(
                           children: [
                             SizedBox(
@@ -2451,29 +2609,31 @@ class _QuizRunnerState extends State<_QuizRunner> {
                               ),
                             ),
                             const SizedBox(height: 12),
-                            // "Repetir" y "Volver" como enlaces
-                            // discretos, no botones (§3.4.5). Si el
-                            // botón grande ya es REPETIR, no se repite
-                            // el enlace.
+                            // Si el botón grande ya es REPETIR, no
+                            // se repite: solo sale VOLVER, a lo
+                            // ancho (también botón, no enlace).
                             Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                if (canPass)
-                                  TextButton(
-                                    onPressed: widget.onRepeat,
-                                    child: Text(tr('quizRepeat').toUpperCase(),
-                                        style: const TextStyle(
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.w700,
-                                            color: muted)),
+                                if (canPass) ...[
+                                  Expanded(
+                                    child: DuoButton.secondary(
+                                      label: tr('quizRepeat')
+                                          .toUpperCase(),
+                                      icon: LucideIcons.rotateCcw,
+                                      onPressed: widget.onRepeat,
+                                      fontSize: 15,
+                                    ),
                                   ),
-                                TextButton(
-                                  onPressed: widget.onExit,
-                                  child: Text(tr('quizBack').toUpperCase(),
-                                      style: const TextStyle(
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w700,
-                                          color: muted)),
+                                  const SizedBox(width: 12),
+                                ],
+                                Expanded(
+                                  child: DuoButton.secondary(
+                                    label:
+                                        tr('quizBack').toUpperCase(),
+                                    icon: LucideIcons.arrowLeft,
+                                    onPressed: widget.onExit,
+                                    fontSize: 15,
+                                  ),
                                 ),
                               ],
                             ),
@@ -2493,15 +2653,20 @@ class _QuizRunnerState extends State<_QuizRunner> {
   }
 }
 
-/// Una tarjeta de estadística del resultado (§3.4.4): color sólido
-/// con el texto BLANCO en negrita dentro (también en la amarilla
-/// de PUNTOS; la lección de Kristian: texto oscuro sobre tarjeta
-/// de color no se lee). Las 3 tarjetas son idénticas en tamaño.
+/// Una tarjeta de estadística del resultado (§3.4.4): superficie
+/// oscura con borde sutil, iconito de color, etiqueta gris y valor
+/// blanco en negrita. Las 3 tarjetas son idénticas en tamaño. Antes
+/// eran 3 bloques de color sólido (amarillo, teal, azul) y Kristian
+/// 2026-11-17 pidió menos contrastes de colores.
 class _ResultStatCard extends StatelessWidget {
   const _ResultStatCard(
-      {required this.color, required this.label, required this.value});
+      {required this.icon,
+      required this.accent,
+      required this.label,
+      required this.value});
 
-  final Color color;
+  final LucideIconData icon;
+  final Color accent;
   final String label;
   final String value;
 
@@ -2511,16 +2676,19 @@ class _ResultStatCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
         decoration: BoxDecoration(
-          color: color,
+          color: const Color(0xFF1F2E35),
+          border: Border.all(color: const Color(0xFF33454E), width: 1.5),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Column(
           children: [
+            LucideIcon(icon, size: 22, color: accent),
+            const SizedBox(height: 6),
             Text(label.toUpperCase(),
                 style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w800,
-                    color: Colors.white),
+                    color: Color(0xFFAFAFAF)),
                 textAlign: TextAlign.center,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis),

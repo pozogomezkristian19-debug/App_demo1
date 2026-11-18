@@ -28,6 +28,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../widgets/icon_animations.dart';
 import '../services/accent.dart';
+import 'buy_points_screen.dart';
 
 import '../services/localization.dart';
 import '../services/progress.dart';
@@ -162,6 +163,16 @@ class _ShopScreenState extends State<ShopScreen> {
                           ],
                         ),
                       ),
+                      // Comprar puntos (2026-11-17, compra real):
+                      // tarjeta arriba de la tienda que abre la
+                      // pantalla de paquetes por Transfermóvil.
+                      _BuyPointsCard(
+                        onOpen: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const BuyPointsScreen(),
+                          ),
+                        ),
+                      ),
                       _SectionTitle(text: tr('shopThemes')),
                       for (final (i, item)
                           in items.where((i) => i.kind == 'theme').indexed)
@@ -233,6 +244,85 @@ class _ShopScreenState extends State<ShopScreen> {
                   );
                 },
               ),
+      ),
+    );
+  }
+}
+
+/// Tarjeta "Comprar puntos" arriba de la Tienda (2026-11-17): abre
+/// la pantalla de paquetes por Transfermóvil. La compra es real:
+/// la solicitud va a Firestore y Kristian la aprueba (o niega).
+/// Textos en español directo; se localizan en 6 idiomas cuando se
+/// elija el diseño final.
+class _BuyPointsCard extends StatelessWidget {
+  const _BuyPointsCard({required this.onOpen});
+
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 8, 4, 12),
+      child: Card(
+        margin: EdgeInsets.zero,
+        elevation: 0,
+        color: isDark ? AppAccent.darkCard : Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(
+            color:
+                isDark ? AppAccent.darkBorder : const Color(0xFFE5E5E5),
+            width: 2,
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const LucideIcon(
+                    LucideIcons.star,
+                    size: 28,
+                    color: Color(0xFFFFC800),
+                    filled: true,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          '¿Te faltan puntos?',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Text(
+                          'Compra puntos con Transfermóvil',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: scheme.onSurface.withValues(alpha: 0.7),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              DuoButton.primary(
+                label: 'COMPRAR PUNTOS',
+                onPressed: onOpen,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

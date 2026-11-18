@@ -368,8 +368,10 @@ void main() {
         // La fila Premium VOLVIÓ a Cuenta (Kristian 2026-11-16:
         // "saca tienda y premium de configuraciones, déjalo en
         // cuenta"); el estado de la prueba se ve en el banner y
-        // en el subtítulo de la fila. La lista es perezosa: hay
-        // que bajar hasta las filas para que se construyan.
+        // en el subtítulo de la fila. Tienda ya NO vive en Cuenta
+        // (2026-11-17, reorganización Online): vive en Online.
+        // La lista es perezosa: hay que bajar hasta las filas
+        // para que se construyan.
         final scrollable = find
             .descendant(
               of: find.byType(ListView),
@@ -384,7 +386,7 @@ void main() {
         await tester.pump();
         expect(find.text(tr('accountPremium')), findsOneWidget,
             reason: name);
-        expect(find.text(tr('accountShop')), findsOneWidget,
+        expect(find.text(tr('accountShop')), findsNothing,
             reason: name);
         expect(tester.takeException(), isNull);
       }

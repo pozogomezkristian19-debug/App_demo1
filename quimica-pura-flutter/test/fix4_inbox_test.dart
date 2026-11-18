@@ -13,6 +13,7 @@ import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:quimica_pura/main.dart';
 import 'package:quimica_pura/screens/notifications_screen.dart';
 import 'package:quimica_pura/services/achievements.dart';
+import 'package:quimica_pura/services/analytics_sync.dart';
 import 'package:quimica_pura/services/localization.dart';
 import 'package:quimica_pura/services/notification_inbox.dart';
 import 'package:quimica_pura/services/notification_service.dart';
@@ -525,6 +526,65 @@ void main() {
         findsOneWidget,
       );
       expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('Soporte te respondió (auditoría 2026-11-17, fix 2)', () {
+    Future<void> pumpInbox(WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: NotificationsScreen(onOpenScreen: (_) {}),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('tocar la entrada enseña la respuesta del admin',
+        (tester) async {
+      final repo = InMemoryAnalyticsRepository();
+      repo.docs['support_messages'] = {
+        'msg1': {'reply': 'Gracias por avisar, ya lo revisamos.'},
+      };
+      AnalyticsSync.setRepositoryForTests(repo);
+      addTearDown(AnalyticsSync.resetForTests);
+      await NotificationInbox.addIfAbsent(
+        id: 'support-reply-msg1',
+        kind: InboxKind.support,
+        title: 'Soporte te respondió',
+        body: 'Toca para leer la respuesta.',
+        data: {'messageId': 'msg1'},
+      );
+      await pumpInbox(tester);
+      await tester.tap(find.text('Soporte te respondió'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Gracias por avisar, ya lo revisamos.'),
+          findsOneWidget);
+      expect(find.text(tr('supportReplyClose').toUpperCase()),
+          findsOneWidget);
+    });
+
+    testWidgets('sin respuesta cargable avisa en vez de callar',
+        (tester) async {
+      final repo = InMemoryAnalyticsRepository();
+      AnalyticsSync.setRepositoryForTests(repo);
+      addTearDown(AnalyticsSync.resetForTests);
+      await NotificationInbox.addIfAbsent(
+        id: 'support-reply-msg2',
+        kind: InboxKind.support,
+        title: 'Soporte te respondió',
+        body: 'Toca para leer la respuesta.',
+        data: {'messageId': 'msg2'},
+      );
+      await pumpInbox(tester);
+      await tester.tap(find.text('Soporte te respondió'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text(tr('supportReplyMissing')), findsOneWidget);
     });
   });
 }

@@ -150,28 +150,22 @@ void main() {
     }
 
     testWidgets(
-        'círculo grande del avatar del usuario (160 dp) + miniatura '
-        'de la compañera (22 dp) junto a la línea, sin selector viejo',
+        'círculo grande del avatar del usuario (160 dp), sin la '
+        'línea de la compañera ni selector viejo',
         (tester) async {
       await pumpAccount(tester);
-      final companion = companionOfTheDay();
       // Alcance 9 (7.1): el círculo grande de la cabecera ES el
       // avatar del usuario (SocialAvatar de 160 dp, con su lápiz;
       // 96 dp hasta el perfil estilo Duolingo de 2026-11-16),
-      // ya NO la compañera del día. La compañera sigue en su
-      // miniatura (CompanionAvatar de 22 dp) junto a la línea
-      // "Hoy te acompaña…", así foto y línea coinciden.
+      // ya NO la compañera del día. La línea "Hoy te acompaña…"
+      // con su miniatura (22 dp) ya NO está en Cuenta (arreglo
+      // 2026-11-16 23:2x, punto 9 del reporte de errores de la
+      // 7.8): ni CompanionAvatar ni su texto salen aquí.
       expect(find.byType(SocialAvatar), findsOneWidget);
       expect(tester.getSize(find.byType(SocialAvatar)),
           const Size(160, 160));
-      expect(find.byType(CompanionAvatar), findsOneWidget);
-      expect(tester.getSize(find.byType(CompanionAvatar)),
-          const Size(22, 22));
-      // La línea "Hoy te acompaña…" dice el nombre UNA vez…
-      expect(
-          find.text(tr(companionOfDayKey(companion))), findsOneWidget);
-      // …y no hay etiqueta de nombre suelta bajo la foto.
-      expect(find.text(companionName(companion)), findsNothing);
+      expect(find.byType(CompanionAvatar), findsNothing);
+      expect(find.textContaining('Hoy te acompaña'), findsNothing);
       // Sin avatar dibujado con código ni selector viejo.
       expect(find.byType(MelliAvatar), findsNothing);
       expect(find.text(tr('accountAvatarTitle')), findsNothing);

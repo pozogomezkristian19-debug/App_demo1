@@ -167,12 +167,12 @@ class AppAccent {
     return isViolet ? const Color(0xFFC4B5FD) : const Color(0xFF2DD4BF);
   }
 
-  /// Color de la pestaña seleccionada: UN
-  /// SOLO color de acción (regla 9): el acento elegido (teal con
-  /// Verde, violeta con Violeta), en claro y en oscuro lo pasa
-  /// main.dart según el brillo. La lista de colores por pestaña de
-  /// antes (cada pestaña con su color propio) queda retirada: la
-  /// barra propia (MainBottomNav) usa este color único.
+  /// Color del acento para Niveles (el círculo central y su
+  /// etiqueta): el acento elegido (teal con Verde, violeta con
+  /// Violeta), en claro y en oscuro lo pasa main.dart según el
+  /// brillo. Las 4 pestañas de fuera ya NO usan este color único:
+  /// desde 2026-11-17 cada una lleva su color propio
+  /// (nav_icons.dart, Kristian: fuera el verde único para todas).
   static Color tabColor(int index) {
     return AppAccent.primary;
   }

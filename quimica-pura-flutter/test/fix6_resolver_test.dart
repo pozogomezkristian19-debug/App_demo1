@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:quimica_pura/data/i18n/content_i18n.dart';
 import 'package:quimica_pura/screens/resolver_screen.dart';
 import 'package:quimica_pura/services/localization.dart';
+import 'package:quimica_pura/services/nav_requests.dart';
 import 'package:quimica_pura/services/premium_service.dart';
 import 'package:quimica_pura/services/progress.dart';
 import 'package:quimica_pura/services/user_prefs.dart';
@@ -128,5 +129,15 @@ void main() {
     expect(find.text(tr('menuConstants')), findsOneWidget);
     // Una sola AppBar en la pantalla abierta.
     expect(find.byType(AppBar), findsOneWidget);
+  });
+
+  // Auditoría 2026-11-17 (fix 9): pedir un solucionador con un
+  // título que ya no existe avisa en vez de callar.
+  testWidgets('título de solver inexistente avisa en vez de callar',
+      (tester) async {
+    NavRequests.openSolverTitle = 'Un título que no existe';
+    addTearDown(() => NavRequests.openSolverTitle = null);
+    await pumpResolver(tester);
+    expect(find.text(tr('solverNotFound')), findsOneWidget);
   });
 }

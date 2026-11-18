@@ -86,9 +86,14 @@ class _Fix7FakeNotifications extends AndroidFlutterLocalNotificationsPlugin
   final shownDetails =
       <({int id, String? channelId, Importance? importance})>[];
 
-  /// Detalles de cada zonedSchedule(): canal e importancia.
-  final scheduledDetails =
-      <({int id, String? channelId, Importance? importance})>[];
+  /// Detalles de cada zonedSchedule(): canal, importancia y
+  /// repetición diaria.
+  final scheduledDetails = <({
+    int id,
+    String? channelId,
+    Importance? importance,
+    DateTimeComponents? match,
+  })>[];
 
   /// Alarmas programadas con éxito con zonedSchedule().
   var zonedScheduled = 0;
@@ -173,6 +178,7 @@ class _Fix7FakeNotifications extends AndroidFlutterLocalNotificationsPlugin
       id: id,
       channelId: notificationDetails?.channelId,
       importance: notificationDetails?.importance,
+      match: matchDateTimeComponents,
     ));
     zonedScheduled++;
   }
@@ -375,13 +381,15 @@ void main() {
         "'melli_study_reminders'", () async {
       final scheduled =
           await NotificationService.scheduleNext(rng: Random(7));
-      expect(scheduled, hasLength(3));
-      expect(fake.zonedScheduled, 3);
-      expect(fake.scheduledDetails, hasLength(3));
+      expect(scheduled, hasLength(1));
+      expect(fake.zonedScheduled, 1);
+      expect(fake.scheduledDetails, hasLength(1));
       for (final d in fake.scheduledDetails) {
         expect(d.channelId, 'melli_study_reminders',
             reason: 'los programados NO se mueven al canal de prueba');
         expect(d.importance, Importance.defaultImportance);
+        // Un aviso diario repetible (Kristian 2026-11-17).
+        expect(d.match, DateTimeComponents.time);
       }
     });
   });

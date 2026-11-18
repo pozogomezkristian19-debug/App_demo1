@@ -455,36 +455,23 @@ class NotificationService {
       ? AndroidScheduleMode.exactAllowWhileIdle
       : AndroidScheduleMode.inexactAllowWhileIdle;
 
-  /// Intervalo entre avisos, en minutos: siempre más de 1 hora.
-  static const int minGapMinutes = 61;
-  static const int maxGapMinutes = 180;
+  /// Id fijo del aviso diario de repaso: cada día REEMPLAZA al
+  /// anterior, así nunca se acumulan varios casi iguales en la
+  /// bandeja del sistema (Kristian 2026-11-17).
+  static const int studyReminderId = 100;
 
-  /// El PRIMER aviso llega pronto, dentro de la primera hora
-  /// (20-50 min). Si el primero tardara 3 horas, el usuario cree que
-  /// no funciona. Los siguientes sí van a 61-180 min.
-  static const int minFirstGapMinutes = 20;
-  static const int maxFirstGapMinutes = 50;
-
-  /// ¿La próxima notificación debe llegar dentro de estos márgenes?
-  /// (Para pruebas: el aviso llega entre 61 y 180 min después de ahora.)
-  static bool gapIsValid(int minutes) =>
-      minutes >= minGapMinutes && minutes <= maxGapMinutes;
-
-  /// ¿El primer aviso llega dentro de la primera hora (20-50 min)?
-  /// (Para pruebas.)
-  static bool firstGapIsValid(int minutes) =>
-      minutes >= minFirstGapMinutes && minutes <= maxFirstGapMinutes;
-
-  /// Un hueco aleatorio entre dos avisos: siempre más de 1 hora
-  /// (61-180 minutos). Función pura para poder probarla.
-  static int nextGapMinutes(Random rng) =>
-      minGapMinutes + rng.nextInt(maxGapMinutes - minGapMinutes + 1);
-
-  /// El hueco hasta el PRIMER aviso: aleatorio, dentro de la primera
-  /// hora (20-50 minutos). Función pura para poder probarla.
-  static int nextFirstGapMinutes(Random rng) =>
-      minFirstGapMinutes +
-      rng.nextInt(maxFirstGapMinutes - minFirstGapMinutes + 1);
+  /// Próxima ocurrencia de la hora de repaso (hour:minute): hoy si
+  /// aún no pasó, si no mañana. Función pura para poder probarla.
+  static tz.TZDateTime nextDailyReminder({
+    required int hour,
+    required int minute,
+    required tz.TZDateTime now,
+  }) {
+    var at = tz.TZDateTime(
+        now.location, now.year, now.month, now.day, hour, minute);
+    if (!at.isAfter(now)) at = at.add(const Duration(days: 1));
+    return at;
+  }
 
   /// Inicializa el plugin y, si el recordatorio está activado, programa
   /// la próxima tanda. No pide el permiso aquí: se pide al activar el
@@ -645,8 +632,8 @@ class NotificationService {
   }
 
   /// Activa los recordatorios: pide el permiso con el diálogo del
-  /// sistema DIRECTO (Android 13+), guarda el ajuste, programa la
-  /// primera tanda (el primer aviso llega dentro de la primera
+  /// sistema DIRECTO (Android 13+), guarda el ajuste, programa el
+  /// aviso diario a la hora elegida (el primer aviso llega a esa
   /// hora) y dispara UNA notificación inmediata de confirmación para
   /// que se VEA que las notificaciones funcionan (fix5, punto 1).
   /// Si el permiso está denegado de forma permanente, el sistema ya
@@ -702,83 +689,98 @@ class NotificationService {
         false, UserPrefs.reminderHour, UserPrefs.reminderMinute);
   }
 
-  /// Programa 3 avisos por delante: el primero dentro de la primera
-  /// hora (20-50 min) y los siguientes 61-180 min después del
-  /// anterior. Devuelve las horas programadas (para depurar).
+  /// Programa UN aviso diario de repaso a la hora elegida (por
+  /// defecto 19:00): una sola alarma repetible cada día
+  /// (DateTimeComponents.time) con id fijo, así el aviso de cada día
+  /// REEMPLAZA al anterior y nunca se acumulan varios casi iguales
+  /// en la bandeja del sistema (Kristian 2026-11-17: antes era una
+  /// tanda de 3 avisos cada 1-3 horas). Devuelve la próxima hora
+  /// programada (para depurar). El cuerpo es un mensaje genérico de
+  /// la lista, NO la cuenta atrás de la racha: una alarma repetible
+  /// congela el texto al programarla y la cuenta atrás quedaría
+  /// vieja al día siguiente; la cuenta atrás en vivo vive en su
+  /// propio aviso (LiveCountdown).
   static Future<List<DateTime>> scheduleNext({Random? rng}) async {
     final random = rng ?? Random();
     final now = tz.TZDateTime.now(tz.local);
-    var at = now;
     final scheduled = <DateTime>[];
     try {
-      // Sin permiso no hay nada que programar: las alarmas no se
-      // mostrarían nunca y el "Próximo aviso" guardado mentiría
-      // (fix5, punto 1). Se borra la tanda vieja, si la había; al
+      // Sin permiso no hay nada que programar: la alarma no se
+      // mostraría nunca y el "Próximo aviso" guardado mentiría
+      // (fix5, punto 1). Se borra la hora vieja, si la había; al
       // volver a concederse el permiso, enable() reprograma.
       if (!await isPermissionGranted) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.remove(_kNextNotifs);
         return [];
       }
-      // Alarmas exactas (fix5): se PRUEBAN en cada tanda. Si el
-      // usuario las concedió en Ajustes desde la última vez, esta
-      // tanda ya sale exacta; si no están concedidas, el primer
-      // intento falla antes de programar y _scheduleOne vuelve a
-      // inexacta (sin abrir Ajustes ni pedir nada).
+      // Alarmas exactas (fix5): se PRUEBAN en cada programación. Si
+      // el usuario las concedió en Ajustes desde la última vez, esta
+      // ya sale exacta; si no están concedidas, el primer intento
+      // falla antes de programar y _scheduleOne vuelve a inexacta
+      // (sin abrir Ajustes ni pedir nada).
       _exactAlarms = true;
       await _plugin.cancelAll();
       final details = await _details();
-      for (var i = 0; i < 3; i++) {
-        final gap =
-            i == 0 ? nextFirstGapMinutes(random) : nextGapMinutes(random);
-        at = at.add(Duration(minutes: gap));
-        // El título llama por el nombre y el cuerpo lleva la
-        // cuenta atrás para LA HORA DE ESTE AVISO (que es la hora
-        // de envío): el texto que llega es el que vale entonces.
-        final content = reminderContent(fireTime: at, rng: random);
-        await _scheduleOne(100 + i, content.body, at, details,
-            title: content.title);
-        scheduled.add(at);
-      }
+      final next = nextDailyReminder(
+        hour: UserPrefs.reminderHour,
+        minute: UserPrefs.reminderMinute,
+        now: now,
+      );
+      final title = reminderTitle(_reminderFirstName(), AppLang.code);
+      await _scheduleOne(
+        studyReminderId,
+        _pickMessage(random),
+        next,
+        details,
+        title: title,
+        daily: true,
+      );
+      scheduled.add(next);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_kLastNotif,
-          scheduled.isEmpty ? '' : scheduled.last.toIso8601String());
-      await prefs.setString(
-          _kNextNotifs, scheduled.map((d) => d.toIso8601String()).join(','));
+      await prefs.setString(_kLastNotif, next.toIso8601String());
+      await prefs.setString(_kNextNotifs, next.toIso8601String());
     } catch (_) {
       // Si programar falla (p. ej. sin plugin en pruebas), no se rompe
       // la app: el recordatorio simplemente no llega.
     }
     // El cancelAll() de arriba borra TAMBIÉN el recordatorio de
-    // contraseña (cada hora): se vuelve a programar aquí; si la
-    // cuenta ya tiene contraseña (o no es de Google), el método
-    // mismo lo cancela. En SEGUNDO PLANO, sin esperarlo: el
-    // recordatorio es de cada hora (no urge) y esperarlo alargaba
-    // scheduleNext() más allá de los topes que ya lleva la tanda
-    // (la copia del icono grande, 3 s) — en pruebas el flujo que
-    // espera a scheduleNext() (p. ej. Activar recordatorios en el
-    // inicio) se quedaba sin avanzar. Además se rearma al abrir la
-    // app, así que nada se pierde si este intento no llega.
+    // contraseña (una sola vez, ~1 h después de abrir la app): se
+    // vuelve a programar aquí; si la cuenta ya tiene contraseña (o
+    // no es de Google), el método mismo lo cancela. En SEGUNDO PLANO,
+    // sin esperarlo: el recordatorio no urge y esperarlo alargaba
+    // scheduleNext() más allá de los topes que ya lleva (la copia del
+    // icono grande, 3 s) — en pruebas el flujo que espera a
+    // scheduleNext() (p. ej. Activar recordatorios en el inicio) se
+    // quedaba sin avanzar. Además se rearma al abrir la app, así que
+    // nada se pierde si este intento no llega.
     unawaited(schedulePasswordReminder());
     return scheduled;
   }
 
   /// Próximo aviso programado que aún no ha pasado, o null si no hay
-  /// ninguno (recordatorios apagados, tanda ya pasada o nunca se
-  /// programó). Solo lee lo guardado por [scheduleNext]; no programa
-  /// nada. Si el primero de la tanda ya pasó (la app lleva horas sin
-  /// abrirse), devuelve el siguiente que siga en el futuro.
+  /// ninguno (recordatorios apagados o nunca se programó). Solo lee
+  /// lo guardado por [scheduleNext]; no programa nada. La alarma es
+  /// diaria y repetible: si la hora guardada ya pasó (la app lleva
+  /// días sin abrirse), la próxima es esa misma hora en un día
+  /// posterior.
   static Future<DateTime?> nextNotificationTime() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString(_kNextNotifs);
       if (raw == null || raw.isEmpty) return null;
       final now = DateTime.now();
+      DateTime? earliest;
       for (final part in raw.split(',')) {
-        final at = DateTime.tryParse(part.trim());
-        if (at != null && at.isAfter(now)) return at;
+        final parsed = DateTime.tryParse(part.trim());
+        if (parsed == null) continue;
+        var at = parsed;
+        while (!at.isAfter(now)) {
+          at = at.add(const Duration(days: 1));
+        }
+        if (earliest == null || at.isBefore(earliest)) earliest = at;
       }
-      return null;
+      return earliest;
     } catch (_) {
       return null;
     }
@@ -838,11 +840,11 @@ class NotificationService {
     }
   }
 
-  /// estudio que ya se dispararon (fix4, punto 8): cada hora
+  /// estudio que ya se dispararon (fix4, punto 8): la hora
   /// programada que ya pasó genera una entrada ("Hora de repasar"),
   /// por si el usuario no vio el aviso. Se llama al abrir la app
-  /// (antes de reprogramar la tanda, que borraría las horas
-  /// pasadas), al tocar una notificación de repaso y al abrir la
+  /// (antes de reprogramar el aviso diario, que borraría la hora
+  /// pasada), al tocar una notificación de repaso y al abrir la
   /// bandeja. NO reescribe la lista de programadas: el dedup va por
   /// el id de la entrada (recordatorio-<milisegundos de la hora>),
   /// así que llamarlo dos veces no duplica nada. [nowOverride] es
@@ -875,9 +877,12 @@ class NotificationService {
   /// se apaga el modo exacto hasta que se vuelva a conceder.
   /// [title] es el título de la notificación (por defecto 'Quemia';
   /// los recordatorios de estudio pasan el suyo, con el nombre).
+  /// [daily]: la alarma se repite cada día a esa hora
+  /// (DateTimeComponents.time); sin daily, es un solo disparo.
   static Future<void> _scheduleOne(
       int id, String body, tz.TZDateTime at, NotificationDetails details,
-      {String? payload, String title = 'Quemia'}) async {
+      {String? payload, String title = 'Quemia', bool daily = false}) async {
+    final match = daily ? DateTimeComponents.time : null;
     try {
       await _plugin.zonedSchedule(
         id: id,
@@ -885,6 +890,7 @@ class NotificationService {
         body: body,
         scheduledDate: at,
         payload: payload ?? reviewPayload,
+        matchDateTimeComponents: match,
         notificationDetails: details,
         androidScheduleMode: scheduleMode,
       );
@@ -903,6 +909,7 @@ class NotificationService {
         body: body,
         scheduledDate: at,
         payload: payload ?? reviewPayload,
+        matchDateTimeComponents: match,
         notificationDetails: details,
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       );
@@ -1588,18 +1595,20 @@ class NotificationService {
   }
 
   /// ¿Toca recordarle la contraseña? Solo cuentas creadas con
-  /// Google que todavía no tienen contraseña (Kristian 2026-11-15:
-  /// el recordatorio es una notificación cada hora).
+  /// Google que todavía no tienen contraseña (Kristian 2026-11-15).
+  /// OJO: el índice de correos confirma que su cuenta de Google no
+  /// tiene contraseña puesta (hasPassword=false): el aviso es
+  /// correcto, pero él lo ve incoherente porque su cuenta de Google
+  /// YA tiene contraseña — el texto ahora explica el porqué.
   static bool shouldRemindPassword() =>
       AuthService.isGoogleLinked && !AuthService.isEmailLinked;
 
-  /// Programa el recordatorio "Asegura tu cuenta con una
-  /// contraseña", cada hora, hasta que la contraseña quede puesta.
-  /// Inexacto a propósito: una vez por hora no necesita el permiso
-  /// de alarmas exactas y nunca falla por eso. Si la cuenta ya
-  /// tiene contraseña (o no es de Google), cancela el recordatorio
-  /// y devuelve false. Idempotente: llamar de nuevo con el mismo
-  /// id reprograma (la primera suena una hora después de la llamada).
+  /// Programa el recordatorio de la contraseña: UNA sola vez, ~1
+  /// hora después de abrir la app (al abrir de nuevo se rearma).
+  /// Antes era cada hora en bucle y se acumulaba en la bandeja
+  /// (Kristian 2026-11-17). Si la cuenta ya tiene contraseña (o no
+  /// es de Google), cancela el recordatorio y devuelve false.
+  /// Idempotente: llamar de nuevo reprograma el único disparo.
   static Future<bool> schedulePasswordReminder() async {
     try {
       if (!shouldRemindPassword()) {
@@ -1607,20 +1616,15 @@ class NotificationService {
         return false;
       }
       final details = await _updateReminderDetails();
-      // Tope de 2 s (convención del archivo): sin plugin real, la
-      // llamada al canal nativo no se resuelve nunca y dejaría
-      // colgado a scheduleNext() y al flujo que lo espera.
-      await _plugin
-          .periodicallyShow(
-            id: _passwordReminderId,
-            title: 'Quemia',
-            body: tr('passwordReminderBody'),
-            repeatInterval: RepeatInterval.hourly,
-            notificationDetails: details,
-            androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-            payload: passwordPayload,
-          )
-          .timeout(const Duration(seconds: 2));
+      final at = tz.TZDateTime.now(tz.local).add(const Duration(hours: 1));
+      await _scheduleOne(
+        _passwordReminderId,
+        tr('passwordReminderBody'),
+        at,
+        details,
+        payload: passwordPayload,
+        title: 'Quemia',
+      );
       return true;
     } catch (_) {
       return false;

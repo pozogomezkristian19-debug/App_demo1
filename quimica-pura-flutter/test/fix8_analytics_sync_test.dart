@@ -92,6 +92,25 @@ class HangingAnalyticsRepository implements AnalyticsRepository {
       Completer<bool>().future;
 }
 
+/// Repositorio con la lectura caída (simula la conexión lenta de
+/// la noche del 2026-11-16, cuando la nube de Kristian se borró):
+/// getUser lanza siempre; setUser cuenta las llamadas para probar
+/// que NUNCA se escribe sin lectura previa.
+class _FailingReadAnalyticsRepository extends InMemoryAnalyticsRepository {
+  var setUserCalls = 0;
+
+  @override
+  Future<Map<String, dynamic>?> getUser(String deviceId) async {
+    throw StateError('lectura caída');
+  }
+
+  @override
+  Future<void> setUser(String deviceId, Map<String, dynamic> data) async {
+    setUserCalls++;
+    return super.setUser(deviceId, data);
+  }
+}
+
 void main() {
   late InMemoryAnalyticsRepository fake;
   late FakeAuthProvider authFake;
@@ -321,6 +340,24 @@ void main() {
     expect(await AnalyticsSync.restoreFromCloud(), isFalse);
   });
 
+  test('la subida toma los puntos de la nube cuando tiene más '
+      '(compra aprobada)', () async {
+    // Compra de puntos (2026-11-17): el Admin acredita los puntos
+    // en la nube; al subir, el teléfono sube también (solo suma,
+    // nunca baja). Sin esto, los puntos aprobados no se verían en
+    // el saldo hasta re-enlazar Google.
+    ProgressService.instance.addPoints(10);
+    await AuthService.linkWithGoogle();
+    await AnalyticsSync.uploadProgress(force: true);
+    expect(ProgressService.instance.points, 10);
+
+    // El Admin acredita 500: la nube pasa a 510.
+    await fake.setDoc('users', AnalyticsSync.deviceId, {'points': 510});
+    await AnalyticsSync.uploadProgress(force: true);
+    expect(ProgressService.instance.points, 510);
+    expect(fake.users[AnalyticsSync.deviceId]!['points'], 510);
+  });
+
   test('applyRecovered nunca baja el progreso local', () async {
     ProgressService.instance.addPoints(100);
     ProgressService.instance.recordLevelPass('estequiometria', 1);
@@ -372,10 +409,12 @@ void main() {
     };
     expect(await AnalyticsSync.linkGoogleAndRestore(), isTrue);
     expect(AuthService.isGoogleLinked, isTrue);
-    // El uid no cambió: no hace falta restaurar; el progreso local
-    // sigue en 0 y el respaldo NO pisa el documento remoto (fusión
-    // por máximo: sigue en 33).
-    expect(ProgressService.instance.points, 0);
+    // El uid no cambió: restoreFromCloud NO corre; pero la subida
+    // fusiona por máximo y el teléfono toma los 33 de la nube
+    // (compra de puntos 2026-11-17: la nube manda cuando tiene más
+    // puntos que el teléfono; solo suma, nunca baja). El respaldo
+    // NO pisa el documento remoto (sigue en 33).
+    expect(ProgressService.instance.points, 33);
     expect(fake.users['fake-anon-uid']?['points'], 33);
   });
 
@@ -564,5 +603,35 @@ void main() {
     expect(levelPassed(4, 5), isTrue);
     expect(pointsForCorrect(1), 3);
     expect(maxLives, 10);
+  });
+
+  test('sin lectura previa NO se escribe: la nube no se borra '
+      '(2026-11-16, Kristian)', () async {
+    // La noche del 16 la lectura cayó con la conexión lenta y la
+    // subida escribió la foto local vacía encima: su cuenta quedó
+    // en 0 puntos y con otro nombre. Ahora, si la lectura falla,
+    // no se escribe nada y la nube queda intacta.
+    await AuthService.linkWithGoogle();
+    final failing = _FailingReadAnalyticsRepository();
+    failing.users['fake-anon-uid'] = {
+      'username': 'kristian',
+      'points': 500,
+      'joinedAt': 111,
+    };
+    AnalyticsSync.setRepositoryForTests(failing);
+    await AnalyticsSync.uploadProgress(force: true);
+    expect(failing.setUserCalls, 0);
+    expect(failing.users['fake-anon-uid']?['points'], 500);
+    expect(failing.users['fake-anon-uid']?['username'], 'kristian');
+  });
+
+  test('cerrar sesión: sale a invitado (2026-11-16, Kristian)',
+      () async {
+    await AuthService.linkWithGoogle();
+    expect(AuthService.isGoogleLinked, isTrue);
+    expect(await AuthService.signOut(), isTrue);
+    expect(AuthService.isGoogleLinked, isFalse);
+    expect(AuthService.isEmailLinked, isFalse);
+    expect(AuthService.currentUid, 'fake-anon-uid');
   });
 }

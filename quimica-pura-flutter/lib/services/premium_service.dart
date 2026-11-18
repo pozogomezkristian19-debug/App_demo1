@@ -331,59 +331,133 @@ class PremiumService {
     }
   }
 
+  /// Motivo del último envío fallido ('timeout' | 'denied' |
+  /// 'no-session' | 'bad-plan' | 'unknown'), o null si el último
+  /// envío fue bien. El paywall lo usa para decirle al usuario
+  /// QUÉ pasó, no solo "revisa tu conexión".
+  String? lastSubmitError;
+
   /// Crea la solicitud de pago en paymentRequests/{autoId} con la
   /// captura en base64 (screenshotData). El cliente NUNCA escribe
   /// premiumExpiresAt/premiumPlan. Devuelve true si se creó.
   /// [screenshotData] es la data URL de pickAndEncodeScreenshot
   /// (puede ser '' si el usuario no subió captura).
+  ///
+  /// Conexión lenta (2026-11-16, Kristian: el envío falló): la
+  /// captura en base64 pesa ~100-300 KB y con la conexión lenta
+  /// 10 s no alcanzan — ahora 30 s por intento y 2 intentos. La
+  /// escucha en vivo y el refresco van FUERA del reintento: si la
+  /// solicitud ya se creó, no se crea otra igual.
   Future<bool> submitPaymentRequest({
     required String plan,
     String screenshotData = '',
   }) async {
     final uid = _uid ?? AuthService.currentUid;
-    if (uid == null || uid.isEmpty) return false;
+    if (uid == null || uid.isEmpty) {
+      lastSubmitError = 'no-session';
+      return false;
+    }
     // Cambio 6 (2026-11-15): sin sesión no hay pago — el invitado
     // nunca llega al paywall (la puerta está en _openPaywall), y
     // esto es el cinturón y tirantes por si llegara aquí.
-    if (!isSignedIn) return false;
-    if (!isValidPremiumPlan(plan)) return false;
-    _uid = uid;
-    try {
-      final username = UserPrefs.publicUsername.isNotEmpty
-          ? UserPrefs.publicUsername
-          : UserPrefs.userName;
-      final id = await AnalyticsSync.repository
-          .createDoc('paymentRequests', <String, dynamic>{
-        'uid': uid,
-        'username': username,
-        'plan': plan,
-        'amount': premiumPriceFor(plan, RemoteTuning.planPrices),
-        'screenshotUrl': '',
-        'screenshotPath': '',
-        'screenshotData': screenshotData,
-        'status': 'pending',
-        'reason': '',
-        'createdAt': DateTime.now(),
-        'reviewedAt': null,
-        'reviewedBy': null,
-      }).timeout(const Duration(seconds: 10));
-      _watchedRequestId = id;
-      await _requestSub?.cancel();
-      try {
-        _requestSub = AnalyticsSync.repository
-            .watchDoc('paymentRequests', id)
-            .listen((data) {
-          final req = PaymentRequest.fromMap(id, data);
-          if (req != null) latestRequestNotifier.value = req;
-        }, onError: (_) {});
-      } catch (_) {
-        // Sin escucha en vivo: el refresco de 30 s la actualiza.
-      }
-      await refreshLatestRequest();
-      return true;
-    } catch (_) {
+    if (!isSignedIn) {
+      lastSubmitError = 'no-session';
       return false;
     }
+    if (!isValidPremiumPlan(plan)) {
+      lastSubmitError = 'bad-plan';
+      return false;
+    }
+    _uid = uid;
+    String? failure;
+    String? id;
+    for (var attempt = 0; attempt < 2 && id == null; attempt++) {
+      if (attempt > 0) {
+        // El intento anterior se quedó sin respuesta (tiempo
+        // agotado o error): puede que el servidor SÍ haya creado
+        // la solicitud y solo se perdiera la respuesta. Antes de
+        // crear otra, se busca la pendiente que ya exista para
+        // este plan y se adopta (2026-11-17, revisión: con la
+        // conexión lenta, el reintento duplicaba la solicitud y
+        // en el Admin se veían dos pendientes del mismo usuario).
+        // Solo se adopta si está pendiente y es del mismo plan;
+        // si no hay red, el refresco no hace nada y el reintento
+        // sigue normal.
+        await refreshLatestRequest();
+        final existing = latestRequestNotifier.value;
+        if (existing != null &&
+            existing.isPending &&
+            existing.plan == plan) {
+          id = existing.id;
+          break;
+        }
+      }
+      try {
+        final username = UserPrefs.publicUsername.isNotEmpty
+            ? UserPrefs.publicUsername
+            : UserPrefs.userName;
+        id = await AnalyticsSync.repository
+            .createDoc('paymentRequests', <String, dynamic>{
+          'uid': uid,
+          'username': username,
+          'plan': plan,
+          'amount': premiumPriceFor(plan, RemoteTuning.planPrices),
+          'screenshotUrl': '',
+          'screenshotPath': '',
+          'screenshotData': screenshotData,
+          'status': 'pending',
+          'reason': '',
+          'createdAt': DateTime.now(),
+          'reviewedAt': null,
+          'reviewedBy': null,
+        }).timeout(const Duration(seconds: 30));
+      } on TimeoutException {
+        // Conexión lenta: se reintenta una vez.
+        failure = 'timeout';
+      } on FirebaseException catch (e) {
+        // Sin permiso no se reintenta: volver a intentarlo no
+        // cambia nada.
+        if (e.code == 'permission-denied') {
+          lastSubmitError = 'denied';
+          return false;
+        }
+        failure = 'unknown';
+      } catch (_) {
+        failure = 'unknown';
+      }
+    }
+    if (id == null) {
+      lastSubmitError = failure ?? 'unknown';
+      return false;
+    }
+    lastSubmitError = null;
+    // `id` es String? y el cierre de listen() no conserva la
+    // promoción del chequeo de null: copiar a no-nulo.
+    final requestId = id;
+    _watchedRequestId = requestId;
+    await _requestSub?.cancel();
+    try {
+      _requestSub = AnalyticsSync.repository
+          .watchDoc('paymentRequests', requestId)
+          .listen((data) {
+        final req = PaymentRequest.fromMap(requestId, data);
+        if (req != null) latestRequestNotifier.value = req;
+      }, onError: (_) {});
+    } catch (_) {
+      // Sin escucha en vivo: el refresco de 30 s la actualiza.
+    }
+    await refreshLatestRequest();
+    return true;
+  }
+
+  /// Reinicia tras un cambio de sesión (cerrar sesión, 2026-11-16):
+  /// corta las escuchas del uid viejo (su Premium y su solicitud
+  /// ya no son mías) y se suscribe al uid actual. El invitado no
+  /// tiene Premium pagado ni solicitudes pendientes.
+  void restart() {
+    stop();
+    latestRequestNotifier.value = null;
+    start();
   }
 
   /// Para la escucha (al cerrar sesión, en tests). No borra el

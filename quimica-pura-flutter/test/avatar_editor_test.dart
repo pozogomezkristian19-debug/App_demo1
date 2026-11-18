@@ -5,7 +5,8 @@
 // - El avatar por defecto va según el género del onboarding.
 // - El círculo grande de Cuenta es el avatar del usuario (no la
 //   compañera) y al tocarlo abre la galería; la línea "Hoy te
-//   acompaña…" sigue intacta con su miniatura.
+//   acompaña…" se quitó en 2026-11-16 por orden de Kristian, así
+//   que en Cuenta ya no hay miniatura de la compañera.
 // - El género no se muestra escrito en Cuenta.
 // - El menú trae el logo del anillo, no el de las gemelas.
 import 'package:flutter/material.dart';
@@ -46,11 +47,13 @@ void main() {
             const MethodChannel('xyz.luan/audioplayers'), (m) async => null);
     UserPrefs.userName = '';
     UserPrefs.userGender = '';
+    UserPrefs.publicUsername = '';
   });
 
   tearDown(() {
     UserPrefs.userName = '';
     UserPrefs.userGender = '';
+    UserPrefs.publicUsername = '';
   });
 
   Finder imageAsset(String asset) => find.byWidgetPredicate((w) =>
@@ -248,11 +251,12 @@ void main() {
       );
       expect((avatarImage.image as AssetImage).assetName,
           'assets/avatar_dorado.png');
-      // La compañera sigue solo en miniatura junto a la línea.
-      expect(find.byType(CompanionAvatar), findsOneWidget);
-      expect(tester.getSize(find.byType(CompanionAvatar)), const Size(22, 22));
-      expect(find.text(tr(companionOfDayKey(companionOfTheDay()))),
-          findsOneWidget);
+      // La compañera ya NO sale en miniatura en Cuenta (2026-11-16,
+      // Kristian: se quitó la línea "Hoy te acompaña"). La melliza
+      // solo aparece en la tarjeta "¡Completa tu perfil!" (con
+      // sesión y sin nombre de usuario) — como invitado, aquí no
+      // hay ninguna.
+      expect(find.byType(CompanionAvatar), findsNothing);
       // Tocar el círculo abre la galería.
       await tester.tap(find.byType(SocialAvatar));
       await tester.pump();
@@ -348,6 +352,71 @@ void main() {
           matching: find.text(tr('appSubtitle')),
         ),
         findsOneWidget,
+      );
+    });
+  });
+
+  group('fila Cambiar nombre de usuario (Kristian 2026-11-17)', () {
+    testWidgets('sale antes de los avatares y abre la misma pantalla',
+        (tester) async {
+      UserPrefs.publicUsername = 'kristian';
+      await pumpEditor(tester);
+      expect(find.text(tr('accountChangeUsername')), findsOneWidget);
+      expect(find.text('@kristian'), findsOneWidget);
+      // La fila abre la MISMA pantalla de elegir nombre que
+      // Cuenta (UsernameEditorFlow, no una pantalla nueva).
+      await tester.tap(find.text(tr('accountChangeUsername')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text(tr('usernamePersonalizeTitle')), findsOneWidget);
+    });
+
+    testWidgets('sin nombre de usuario no hay fila', (tester) async {
+      await pumpEditor(tester);
+      expect(find.text(tr('accountChangeUsername')), findsNothing);
+    });
+
+    testWidgets('foto: la fila antes de los avatares', (tester) async {
+      UserPrefs.publicUsername = 'kristian';
+      tester.view.physicalSize = const Size(393 * 2, 852 * 2);
+      tester.view.devicePixelRatio = 2.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+      await tester.pumpWidget(
+        MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: ThemeData(useMaterial3: true),
+          home: Scaffold(
+            body: AvatarEditorScreen(onOpenScreen: (_) {}),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      // Las fotos de la galería, si no, salen como círculos
+      // vacíos en la captura (carrera de decodificación).
+      final ctx = tester.element(find.byType(MaterialApp));
+      await tester.runAsync(() async {
+        for (final name in [
+          'avatar_default',
+          'brenda',
+          'britany',
+          'kristian',
+          'avatar_dorado',
+          'avatar_violeta',
+          'avatar_teal',
+        ]) {
+          await precacheImage(AssetImage('assets/$name.png'), ctx);
+        }
+      });
+      await tester.pump();
+      await expectLater(
+        find.byType(MaterialApp),
+        matchesGoldenFile(
+            '../../melli-qui-v6-previews/avatar_editor_cambiar_nombre.png'),
       );
     });
   });

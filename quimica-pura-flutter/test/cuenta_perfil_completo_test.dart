@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:quimica_pura/screens/account_screen.dart';
+import 'package:quimica_pura/screens/online_screen.dart';
 import 'package:quimica_pura/screens/profile_qr_screen.dart';
 import 'package:quimica_pura/screens/public_profile_screen.dart';
 import 'package:quimica_pura/services/analytics_sync.dart';
@@ -129,12 +130,37 @@ void main() {
     return list.first.username;
   }
 
+  /// Online en vez de Cuenta: las sugerencias de amigos viven en
+  /// Online (2026-11-17, reorganización), no en Cuenta.
+  Future<void> pumpOnline(WidgetTester tester) async {
+    tester.view.physicalSize = const Size(800, 3000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    await UserPrefs.saveThemeMode('claro');
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(useMaterial3: true),
+        home: Scaffold(
+          body: OnlineScreen(
+            key: UniqueKey(),
+            onOpenScreen: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await settle(tester);
+  }
+
   group('seguir y contadores reales (Cuenta)', () {
     testWidgets('seguir una sugerencia: botón a SIGUIENDO, sube '
         'Siguiendo y la tarjeta la sustituye la siguiente',
         (tester) async {
       final first = await firstSuggestionUsername();
-      await pumpAccount(tester);
+      await pumpOnline(tester);
       expect(find.text(tr('accountSuggestionsTitle').toUpperCase()), findsOneWidget);
       expect(find.text(first), findsOneWidget);
       expect(await SocialService.followingCount('dev-kristian'), 0);
@@ -177,10 +203,12 @@ void main() {
       expect(find.text(tr('accountTournaments')), findsNothing);
       // Niveles pasados NO es social: sí sale.
       expect(find.text(tr('accountLevels')), findsOneWidget);
-      // Tienda y Premium NO son sociales: salen también de
-      // invitado (Kristian 2026-11-16: viven en Cuenta, no en
-      // Ajustes).
-      expect(find.text(tr('accountShop')), findsOneWidget);
+      // Premium NO es social: sale también de invitado (Kristian
+      // 2026-11-16: vive en Cuenta, no en Ajustes). Tienda y
+      // Canjear ya NO viven en Cuenta (2026-11-17,
+      // reorganización Online): viven en Online.
+      expect(find.text(tr('accountShop')), findsNothing);
+      expect(find.text(tr('accountRedeem')), findsNothing);
       expect(find.text(tr('accountPremium')), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
@@ -278,11 +306,13 @@ void main() {
           on: DateTime(2026, 11, 17));
       final day3 = await SocialService.friendSuggestions(
           on: DateTime(2026, 11, 18));
-      expect(day1.length, 2);
+      // Hasta 5 (2026-11-16, Kristian: cuadritos estilo Facebook
+      // que se deslizan; no infinito, tres-cinco).
+      expect(day1.length, 5);
       expect(
           day1.map((s) => s.deviceId), day1Again.map((s) => s.deviceId));
       // En 3 días distintos, el primer sugerido cambia al menos
-      // una vez (rotación real, no siempre los mismos 2).
+      // una vez (rotación real, no siempre los mismos 5).
       final firsts = {
         day1.first.deviceId,
         day2.first.deviceId,
@@ -300,7 +330,7 @@ void main() {
     testWidgets('la X descarta la sugerencia solo por hoy',
         (tester) async {
       final first = await firstSuggestionUsername();
-      await pumpAccount(tester);
+      await pumpOnline(tester);
       expect(find.text(first), findsOneWidget);
       final dismiss = find.byWidgetPredicate((w) =>
           w is LucideIcon && w.icon == LucideIcons.x);
@@ -554,18 +584,15 @@ void main() {
       // El total de puntos cuenta hasta 1420 (no se queda en 0).
       expect(find.text('1420'), findsOneWidget);
 
+      // Las sugerencias viven en Online (2026-11-17): con
+      // movimiento reducido la pantalla se dibuja sin animaciones.
       await tester.pumpWidget(
         MaterialApp(
           theme: ThemeData(useMaterial3: true),
           home: MediaQuery(
             data: const MediaQueryData(accessibleNavigation: true),
             child: Scaffold(
-              body: AccountScreen(
-                onOpenScreen: (_) {},
-                onShowAbout: () {},
-                onShowShareApp: () {},
-                trackTopics: const ['estequiometria'],
-              ),
+              body: OnlineScreen(onOpenScreen: (_) {}),
             ),
           ),
         ),

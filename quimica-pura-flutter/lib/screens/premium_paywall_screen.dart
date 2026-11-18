@@ -113,9 +113,20 @@ class _PremiumPaywallScreenState extends State<PremiumPaywallScreen> {
     if (ok) {
       setState(() => _step = 2);
     } else {
-      setState(() =>
-          _error = 'No se pudo enviar la solicitud. Revisa tu conexión '
-              'e inténtalo de nuevo.');
+      // Error concreto (2026-11-16, Kristian: el envío falló con
+      // la conexión lenta): decir QUÉ pasó, no solo "revisa tu
+      // conexión".
+      final reason = PremiumService.instance.lastSubmitError;
+      setState(() => _error = switch (reason) {
+            'timeout' =>
+              'La conexión va lenta y no se pudo enviar. Inténtalo de nuevo.',
+            'denied' =>
+              'No se pudo enviar: cierra sesión y vuelve a entrar, e inténtalo de nuevo.',
+            'no-session' =>
+              'No se pudo enviar: inicia sesión e inténtalo de nuevo.',
+            _ =>
+              'No se pudo enviar la solicitud. Revisa tu conexión e inténtalo de nuevo.',
+          });
     }
   }
 
@@ -542,12 +553,44 @@ class _ComparisonCard extends StatelessWidget {
         isDark ? AppAccent.darkBorder : const Color(0xFFE5E5E5);
     // La Tabla periódica NO aparece aquí (2026-11-15, Kristian):
     // sigue siendo gratis, solo no lleva fila en esta tabla.
+    // "10 al día" (2026-11-16): "10 vidas al día" no cabía y se
+    // partía en dos líneas; la fila ya dice "Corazones".
     const rows = <(String, String, String)>[
-      ('Corazones ilimitados', '10 vidas al día', 'Ilimitados'),
+      ('Corazones ilimitados', '10 al día', 'Ilimitados'),
       ('Aprender, Resolver y Temas', 'Con candado', 'Sin candado'),
       ('Mis errores', 'Con candado', 'Sin candado'),
       ('Lecciones sin conexión', 'Limitado', 'Sin límite'),
     ];
+    // Celda de valor: el texto ("10 al día", "Limitado") se pinta
+    // tal cual; "Con candado" es una crucecita verde y "Sin
+    // candado" un ✓ verde (2026-11-17, Kristian: "eso de con
+    // candado, no, pon una crucecita... mejor verde que del mismo
+    // color" — el verde es el de Premium, AppAccent.primary, el
+    // mismo de los valores de la columna PREMIUM). Lucide, como
+    // el resto de la pantalla (Icons.close/check de Material salen
+    // como ▯ en las fotos de prueba: esa fuente no se carga ahí).
+    Widget valueCell(String value, {required bool premium}) {
+      if (value == 'Con candado') {
+        return LucideIcon(LucideIcons.x,
+            size: 20, color: AppAccent.primary);
+      }
+      if (value == 'Sin candado') {
+        return LucideIcon(LucideIcons.check,
+            size: 22, color: AppAccent.primary);
+      }
+      return Text(
+        value,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: premium ? FontWeight.w800 : null,
+          color: premium
+              ? AppAccent.primary
+              : scheme.onSurface.withValues(alpha: 0.8),
+        ),
+      );
+    }
+
     return Card(
       margin: EdgeInsets.zero,
       elevation: 0,
@@ -557,35 +600,43 @@ class _ComparisonCard extends StatelessWidget {
         side: BorderSide(color: borderColor, width: 2),
       ),
       child: Padding(
-        // Compacta (2026-11-16): la tabla desbordaba 105 px en
-        // 393x852 porque cada fila ocupaba 2-3 líneas. Con la
-        // etiqueta más ancha (flex 5) y letra 13/12, cada fila
-        // cabe en UNA línea y la tarjeta pasa de ~314 a ~125 px.
-        padding: const EdgeInsets.all(6),
+        // Aireada (2026-11-17, Kristian: "se ve todo junto,
+        // achicado y feo así"): la versión compacta de 12 pt sin
+        // hueco entre filas se leía como una tabla apretada. Ahora
+        // cada fila respira (8 pt arriba y abajo), letra 14 en las
+        // etiquetas y 13 en los valores (a 14 los valores
+        // "Con/Sin candado" se partían en 2 líneas y la tarjeta
+        // desbordaba 115 px con Nunito en 393x852), y una línea
+        // fina separa las filas. La etiqueta larga ("Aprender,
+        // Resolver y Temas") puede ocupar 2 líneas: con el hueco
+        // se ve a propósito, no apretada.
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         child: Column(
           children: [
             Row(
               children: [
-                const Expanded(flex: 5, child: SizedBox.shrink()),
+                const Expanded(flex: 4, child: SizedBox.shrink()),
+                const SizedBox(width: 8),
                 Expanded(
                   flex: 2,
                   child: Text(
                     'GRATIS',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: 14,
                       fontWeight: FontWeight.w800,
                       color: scheme.onSurface.withValues(alpha: 0.7),
                     ),
                   ),
                 ),
+                const SizedBox(width: 8),
                 Expanded(
                   flex: 2,
                   child: Text(
                     'PREMIUM',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: 14,
                       fontWeight: FontWeight.w800,
                       color: AppAccent.primary,
                     ),
@@ -593,49 +644,45 @@ class _ComparisonCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 6),
-            for (final row in rows)
+            const SizedBox(height: 8),
+            Divider(height: 1, thickness: 1, color: borderColor),
+            for (var i = 0; i < rows.length; i++) ...[
+              if (i > 0)
+                Divider(height: 1, thickness: 1, color: borderColor),
               Padding(
-                padding: const EdgeInsets.symmetric(vertical: 0),
+                padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Expanded(
-                      flex: 5,
+                      flex: 4,
                       child: Text(
-                        row.$1,
+                        rows[i].$1,
                         style: TextStyle(
-                          fontSize: 13,
+                          fontSize: 14,
                           fontWeight: FontWeight.w700,
                           color: scheme.onSurface,
                         ),
                       ),
                     ),
+                    const SizedBox(width: 8),
                     Expanded(
                       flex: 2,
-                      child: Text(
-                        row.$2,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: scheme.onSurface.withValues(alpha: 0.8),
-                        ),
+                      child: Center(
+                        child: valueCell(rows[i].$2, premium: false),
                       ),
                     ),
+                    const SizedBox(width: 8),
                     Expanded(
                       flex: 2,
-                      child: Text(
-                        row.$3,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                          color: AppAccent.primary,
-                        ),
+                      child: Center(
+                        child: valueCell(rows[i].$3, premium: true),
                       ),
                     ),
                   ],
                 ),
               ),
+            ],
           ],
         ),
       ),

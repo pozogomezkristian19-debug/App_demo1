@@ -1,10 +1,10 @@
-// Recordatorio de contraseña cada hora (Kristian 2026-11-15):
-// si la cuenta es de Google y aún no tiene contraseña, la app
-// programa una notificación local cada hora ("Asegura tu cuenta
-// con una contraseña"); al tocarla se abre Cuenta. Cuando la
-// contraseña queda puesta (o la cuenta no es de Google), el
-// recordatorio se cancela. Aquí se usa el FakeAuthProvider del
-// servicio, nunca el plugin real.
+// Recordatorio de contraseña (Kristian 2026-11-15): si la cuenta
+// es de Google y aún no tiene contraseña, la app programa UN aviso
+// único ~1 h después de abrir la app (2026-11-17: antes era cada
+// hora en bucle y se acumulaba en la bandeja); al tocarla se abre
+// Cuenta. Cuando la contraseña queda puesta (o la cuenta no es de
+// Google), el recordatorio se cancela. Aquí se usa el
+// FakeAuthProvider del servicio, nunca el plugin real.
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quimica_pura/services/auth_service.dart';
@@ -57,10 +57,10 @@ void main() {
     expect(NotificationService.shouldRemindPassword(), isFalse);
   });
 
-  test('el texto del recordatorio es el que pidió él', () {
+  test('el texto del recordatorio explica el porqué (2026-11-17)', () {
     expect(
       tr('passwordReminderBody'),
-      'Asegura tu cuenta con una contraseña',
+      'Solo entras con Google: ponle una contraseña para no perder tu progreso',
     );
     expect(NotificationService.passwordPayload, 'set_password');
   });

@@ -706,6 +706,68 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    //  Colección 'pointsRequests' — compras de puntos con Transfermóvil.
+    //  AÑADIDO 2026-11-17 (Kristian: que la compra de puntos funcione
+    //  de verdad, no solo diseño): mismo contrato que paymentRequests
+    //  pero con puntos en vez de plan. Campos: uid, username, points
+    //  (500 | 1200 | 3000), amount (CUP), screenshotUrl, screenshotPath,
+    //  screenshotData, status ('pending' | 'approved' | 'denied'),
+    //  reason, createdAt, reviewedAt, reviewedBy. El cliente NUNCA
+    //  escribe los puntos del usuario: al aprobar, el Admin (o el
+    //  script review_points.py) suma los puntos con un incremento.
+    // -------------------------------------------------------------------------
+    match /pointsRequests/{requestId} {
+
+      // LECTURA: solo los admins y el propio autor (uid del documento
+      // igual al uid de la sesión). Nadie más ve las solicitudes de
+      // otros: llevan captura del comprobante.
+      allow read: if isAdmin()
+        || (isSignedIn() && resource.data.uid == request.auth.uid);
+
+      // CREAR: cualquier usuario autenticado, pero solo como autor de su
+      // propia solicitud: uid tiene que ser su uid, el estado inicial
+      // tiene que ser 'pending', los puntos uno de los tres paquetes y
+      // amount un entero (precio en CUP). Solo los 12 campos del
+      // contrato.
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.points in [500, 1200, 3000]
+        && request.resource.data.amount is int
+        && request.resource.data.keys().hasOnly(['uid', 'username',
+            'points', 'amount', 'screenshotUrl', 'screenshotPath',
+            'screenshotData', 'status', 'reason', 'createdAt',
+            'reviewedAt', 'reviewedBy'])
+        && request.resource.data.uid is string
+        && request.resource.data.username is string
+        && request.resource.data.screenshotUrl is string
+        && request.resource.data.screenshotPath is string
+        && request.resource.data.screenshotData is string
+        && request.resource.data.reason is string
+        && request.resource.data.createdAt is timestamp
+        && (!('reviewedAt' in request.resource.data)
+            || request.resource.data.reviewedAt == null
+            || request.resource.data.reviewedAt is timestamp)
+        && (!('reviewedBy' in request.resource.data)
+            || request.resource.data.reviewedBy == null
+            || request.resource.data.reviewedBy is string);
+
+      // ACTUALIZAR: SOLO los admins, y SOLO la revisión: estado, motivo,
+      // fecha de revisión y quién revisó. Ningún otro campo (usuario,
+      // puntos, importe, captura, fecha de creación) se puede tocar
+      // después de creado. Un usuario no puede aprobarse su propia
+      // compra.
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'reason', 'reviewedAt', 'reviewedBy'])
+        && request.resource.data.status in ['pending', 'approved', 'denied'];
+
+      // BORRAR: nadie desde un cliente; las solicitudes se conservan
+      // como historial (aprobadas o denegadas).
+      allow delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
     //  Colección 'support_messages' — mensajes de soporte. AÑADIDO
     //  2026-11-15: la cabecera decía que estaba cubierta pero el bloque
     //  nunca se escribió y caía en el comodín final (denegado siempre):

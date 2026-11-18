@@ -237,6 +237,17 @@ class _ResolverScreenState extends State<ResolverScreen> {
       final i = solverEntries.indexWhere((s) => s.title == title);
       if (i >= 0) {
         WidgetsBinding.instance.addPostFrameCallback((_) => _openSolver(i));
+      } else {
+        // Título que ya no existe (búsqueda vieja): avisar en vez
+        // de callar (auditoría 2026-11-17). Resolver ya está
+        // abierto; el aviso explica por qué no se abrió el
+        // solucionador.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(tr('solverNotFound'))),
+          );
+        });
       }
     }
   }

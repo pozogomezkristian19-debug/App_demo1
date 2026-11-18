@@ -67,6 +67,13 @@ class _Fix5FakeNotifications extends AndroidFlutterLocalNotificationsPlugin
   /// Alarmas programadas con éxito con zonedSchedule().
   var zonedScheduled = 0;
 
+  /// Llamadas a zonedSchedule(): (id, fecha, repetición diaria).
+  final scheduledCalls = <({
+    int id,
+    tz.TZDateTime date,
+    DateTimeComponents? match,
+  })>[];
+
   @override
   Future<bool> initialize({
     required AndroidInitializationSettings settings,
@@ -137,6 +144,8 @@ class _Fix5FakeNotifications extends AndroidFlutterLocalNotificationsPlugin
         !canScheduleExact) {
       throw PlatformException(code: 'exact_alarms_not_permitted');
     }
+    scheduledCalls
+        .add((id: id, date: scheduledDate, match: matchDateTimeComponents));
     zonedScheduled++;
   }
 }
@@ -218,9 +227,9 @@ void main() {
       expect(NotificationService.exactAlarmsOn, isFalse);
       expect(NotificationService.scheduleMode,
           AndroidScheduleMode.inexactAllowWhileIdle);
-      // La tanda sale igual: 3 avisos programados (el primero, tras
-      // fallar en exacto, se reprogramó inexacto).
-      expect(fake.zonedScheduled, 3);
+      // El aviso diario sale igual: 1 alarma (tras fallar en exacto,
+      // se reprogramó inexacta).
+      expect(fake.zonedScheduled, 1);
     });
 
     test('enable() con el permiso concedido dispara UNA notificación '
@@ -236,7 +245,7 @@ void main() {
       expect(fake.shown.single.title, 'Quemia');
       expect(fake.shown.single.body, tr('notifEnabledConfirm'));
       expect(UserPrefs.reminderOn, isTrue);
-      expect(fake.zonedScheduled, 3);
+      expect(fake.zonedScheduled, 1);
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getString('melli_notif_next'), isNotNull);
     });
@@ -274,21 +283,24 @@ void main() {
       expect(prefs.getString('melli_notif_next'), isNull);
     });
 
-    test('scheduleNext con permiso programa 3 avisos (primero en '
-        '20-50 min)', () async {
+    test('scheduleNext con permiso programa UN aviso diario a la '
+        'hora elegida (19:00)', () async {
       final scheduled = await NotificationService.scheduleNext();
-      expect(scheduled, hasLength(3));
-      expect(fake.zonedScheduled, 3);
+      expect(scheduled, hasLength(1));
+      expect(fake.zonedScheduled, 1);
       final now = DateTime.now();
-      final firstGap = scheduled.first.difference(now).inMinutes;
-      expect(firstGap, greaterThanOrEqualTo(19));
-      expect(firstGap, lessThanOrEqualTo(51));
-      for (var i = 1; i < scheduled.length; i++) {
-        final gap =
-            scheduled[i].difference(scheduled[i - 1]).inMinutes;
-        expect(gap, greaterThanOrEqualTo(60));
-        expect(gap, lessThanOrEqualTo(181));
-      }
+      final next = scheduled.single;
+      // A la hora elegida (por defecto 19:00), hoy o mañana.
+      expect(next.hour, 19);
+      expect(next.minute, 0);
+      expect(next.isAfter(now), isTrue);
+      expect(next.difference(now).inHours, lessThan(24));
+      // Una sola alarma, repetible cada día, con id fijo: el aviso
+      // de cada día reemplaza al anterior (Kristian 2026-11-17).
+      expect(fake.scheduledCalls, hasLength(1));
+      expect(fake.scheduledCalls.single.id,
+          NotificationService.studyReminderId);
+      expect(fake.scheduledCalls.single.match, DateTimeComponents.time);
     });
   });
 

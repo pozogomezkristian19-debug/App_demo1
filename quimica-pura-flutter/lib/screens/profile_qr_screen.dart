@@ -25,6 +25,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../services/accent.dart';
 import '../services/localization.dart';
+import '../services/remote_shop_catalog.dart';
 import '../services/social_service.dart';
 import '../services/sound_service.dart';
 import '../widgets/duo_button.dart';
@@ -42,6 +43,7 @@ class QrScreen extends StatefulWidget {
     required this.displayName,
     this.avatarAsset,
     this.avatarImageFile,
+    this.avatarImageUrl,
     this.isOwn = false,
   });
 
@@ -49,6 +51,11 @@ class QrScreen extends StatefulWidget {
   final String displayName;
   final String? avatarAsset;
   final File? avatarImageFile;
+
+  /// Foto equipada remota: se baja al llegar, sin frenar la
+  /// apertura (auditoría 2026-11-17). Mientras tanto se ve el
+  /// avatar por defecto (avatarAsset).
+  final String? avatarImageUrl;
   final bool isOwn;
 
   @override
@@ -63,6 +70,23 @@ class _QrScreenState extends State<QrScreen> {
   bool _scanning = false;
   bool _handledScan = false;
   String? _scanMessage;
+
+  /// Foto equipada ya resuelta (la del constructor o la bajada al
+  /// llegar). Mientras se baja, el avatar por defecto.
+  File? _avatarFile;
+
+  @override
+  void initState() {
+    super.initState();
+    _avatarFile = widget.avatarImageFile;
+    final url = widget.avatarImageUrl;
+    if (_avatarFile == null && url != null && url.isNotEmpty) {
+      ShopImageCache.ensureCached(url).then((file) {
+        if (!mounted || file == null) return;
+        setState(() => _avatarFile = file);
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -243,7 +267,7 @@ class _QrScreenState extends State<QrScreen> {
                             child: SocialAvatar(
                               username: widget.username,
                               avatarAsset: widget.avatarAsset,
-                              avatarImageFile: widget.avatarImageFile,
+                              avatarImageFile: _avatarFile,
                               size: 64,
                             ),
                           ),

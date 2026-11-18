@@ -68,7 +68,9 @@ void main() {
   /// 2026-11-16 (perfil estilo Duolingo): "Acerca de" vive en
   /// Ajustes; la puerta es el engranaje de arriba del perfil.
   Future<void> openAboutSheet(WidgetTester tester) async {
-    await tester.tap(find.text(tr('accountTitle')).first);
+    // 2026-11-17: Cuenta ya NO es pestaña — se abre con el botón
+    // de perfil de la barra de arriba.
+    await tester.tap(find.byKey(const ValueKey('topBarProfileButton')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.byType(AccountProfilePage), findsOneWidget);

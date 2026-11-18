@@ -30,6 +30,7 @@ import '../services/sound_service.dart';
 import '../widgets/duo_button.dart';
 import '../widgets/lucide_icons.dart';
 import '../widgets/motion.dart';
+import '../widgets/profile_background.dart';
 import '../widgets/social_avatar.dart';
 import 'profile_qr_screen.dart';
 
@@ -75,9 +76,36 @@ class _PublicColors {
 /// botón QR, PROGRESO SEMANAL (esa persona vs "Tú"), RESUMEN,
 /// LOGROS y REPORTAR / BLOQUEAR al final.
 class PublicProfileScreen extends StatefulWidget {
-  const PublicProfileScreen({super.key, required this.uid});
+  const PublicProfileScreen({
+    super.key,
+    required this.uid,
+    this.backgroundAsset,
+    this.backgroundOnline = true,
+    this.fullBackgroundAsset,
+    this.fullBackgroundOnline = true,
+  });
 
   final String uid;
+
+  /// BORRADOR PARA FOTO (2026-11-17): asset Lottie del tema de
+  /// fondo equipado (ejemplo local). null = sin tema = fondo
+  /// plano, como hoy. En la versión real, la URL que manda el
+  /// servidor para el tema equipado de este perfil.
+  final String? backgroundAsset;
+
+  /// BORRADOR: hay internet. Sin internet el fondo no se ve y el
+  /// perfil queda plano (en la versión real, lo dice la conexión,
+  /// no un parámetro).
+  final bool backgroundOnline;
+
+  /// BORRADOR PARA FOTO (2026-11-17): asset Lottie del fondo
+  /// PREMIUM de toda la pantalla (ejemplo local). null = sin
+  /// fondo = perfil normal. En la versión real, el vídeo que
+  /// manda el servidor para el fondo equipado de este perfil.
+  final String? fullBackgroundAsset;
+
+  /// BORRADOR: hay internet para el fondo completo.
+  final bool fullBackgroundOnline;
 
   @override
   State<PublicProfileScreen> createState() => _PublicProfileScreenState();
@@ -96,8 +124,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
   /// Sesión iniciada (Google o correo): lo social — SEGUIR,
   /// listas de seguidos/seguidores — solo sale con sesión
   /// (Kristian 2026-11-16).
-  bool get _signedIn =>
-      AuthService.isGoogleLinked || AuthService.isEmailLinked;
+  bool get _signedIn => AuthService.isGoogleLinked || AuthService.isEmailLinked;
 
   @override
   void initState() {
@@ -157,8 +184,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
         builder: (_) => QrScreen(
           username: profile.username,
           displayName: profile.displayName,
-          avatarAsset:
-              SocialService.avatarAssetForId(profile.avatarId),
+          avatarAsset: SocialService.avatarAssetForId(profile.avatarId),
         ),
       ),
     );
@@ -258,10 +284,14 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
   Widget build(BuildContext context) {
     final c = _PublicColors.of(context);
     final profile = _profile;
+    // Fondo premium de toda la pantalla (borrador): fondo negro
+    // y la animación atenuada y difuminada detrás de todo.
+    final hasFullBackground =
+        widget.fullBackgroundOnline && widget.fullBackgroundAsset != null;
     return Scaffold(
-      backgroundColor: c.bg,
+      backgroundColor: hasFullBackground ? Colors.black : c.bg,
       appBar: AppBar(
-        backgroundColor: c.bg,
+        backgroundColor: hasFullBackground ? Colors.black : c.bg,
         elevation: 0,
         centerTitle: true,
         title: profile == null
@@ -285,7 +315,11 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
             )
           : profile == null
               ? const Center(child: CircularProgressIndicator())
-              : _buildProfile(context, c, profile),
+              : ProfileFullBackground(
+                  online: widget.fullBackgroundOnline,
+                  lottieAsset: widget.fullBackgroundAsset,
+                  child: _buildProfile(context, c, profile),
+                ),
     );
   }
 
@@ -305,46 +339,56 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
       final year = DateTime.fromMillisecondsSinceEpoch(profile.joinedAtMs)
           .year
           .toString();
-      joinedParts.add(
-          tr('accountJoinedYear').replaceFirst('%s', year));
+      joinedParts.add(tr('accountJoinedYear').replaceFirst('%s', year));
     }
     final joinedLine = joinedParts.join(' · ').toUpperCase();
+    // Fondo animado (borrador): con tema e internet, la zona del
+    // avatar es transparente para que se vea la animación detrás.
+    // También con el fondo completo: la cabecera no tapa la
+    // animación de toda la pantalla.
+    final hasBackground =
+        (widget.backgroundOnline && widget.backgroundAsset != null) ||
+            (widget.fullBackgroundOnline &&
+                widget.fullBackgroundAsset != null);
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       children: [
-        Container(
-          decoration: BoxDecoration(
-            color: zoneColor,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
-          child: Column(
-            children: [
-              SocialAvatar(
-                username: profile.username,
-                avatarAsset:
-                    SocialService.avatarAssetForId(profile.avatarId),
-                size: 120,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                profile.displayName,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w800,
-                  color: c.ink,
+        ProfileBackground(
+          online: widget.backgroundOnline,
+          lottieAsset: widget.backgroundAsset,
+          child: Container(
+            decoration: BoxDecoration(
+              color: hasBackground ? Colors.transparent : zoneColor,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+            child: Column(
+              children: [
+                SocialAvatar(
+                  username: profile.username,
+                  avatarAsset: SocialService.avatarAssetForId(profile.avatarId),
+                  size: 120,
                 ),
-              ),
-              if (joinedLine.isNotEmpty) ...[
-                const SizedBox(height: 4),
+                const SizedBox(height: 12),
                 Text(
-                  joinedLine,
+                  profile.displayName,
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 14, color: c.inkSoft),
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                    color: c.ink,
+                  ),
                 ),
+                if (joinedLine.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    joinedLine,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 14, color: c.inkSoft),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
         const SizedBox(height: 16),
@@ -395,13 +439,11 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                           icon: profile.isMutual
                               ? LucideIcons.heart
                               : LucideIcons.check,
-                          onPressed:
-                              _followBusy ? null : _toggleFollow,
+                          onPressed: _followBusy ? null : _toggleFollow,
                         )
                       : DuoButton.primary(
                           label: tr('accountFollow').toUpperCase(),
-                          onPressed:
-                              _followBusy ? null : _toggleFollow,
+                          onPressed: _followBusy ? null : _toggleFollow,
                         ),
                 ),
               ),
@@ -425,8 +467,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
         _SectionTitle(title: tr('accountSummary')),
         _PublicSummaryGrid(profile: profile),
         _SectionTitle(title: tr('accountAchievements')),
-        _PublicAchievementsGrid(
-            earned: profile.achievementsWon.toSet()),
+        _PublicAchievementsGrid(earned: profile.achievementsWon.toSet()),
         const SizedBox(height: 24),
         _EndRow(
           icon: LucideIcons.flag,
@@ -438,9 +479,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
         _EndRow(
           icon: LucideIcons.ban,
           iconColor: const Color(0xFFEF4444),
-          label: _blocked
-              ? tr('profileUnblockUser')
-              : tr('profileBlockUser'),
+          label: _blocked ? tr('profileUnblockUser') : tr('profileBlockUser'),
           onTap: _toggleBlock,
         ),
       ],
@@ -579,11 +618,9 @@ class _WeeklySection extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final scheme = Theme.of(context).colorScheme;
     final today = DateTime.now();
-    final days = List.generate(
-        7, (i) => today.subtract(Duration(days: 6 - i)));
+    final days = List.generate(7, (i) => today.subtract(Duration(days: 6 - i)));
     final keys = days.map(ProgressService.dateKey).toList();
-    final theirValues =
-        keys.map((k) => theirDailyPoints[k] ?? 0).toList();
+    final theirValues = keys.map((k) => theirDailyPoints[k] ?? 0).toList();
     final myValues = keys.map((k) => myDailyPoints[k] ?? 0).toList();
     final theirTotal = theirValues.fold(0, (a, b) => a + b);
     final myTotal = myValues.fold(0, (a, b) => a + b);
@@ -750,9 +787,7 @@ class _WeeklyLinePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final maxV = math.max(
-        1,
-        [...theirValues, ...myValues]
-            .fold(0, (a, b) => math.max(a, b)));
+        1, [...theirValues, ...myValues].fold(0, (a, b) => math.max(a, b)));
     Offset point(int i, int v) {
       final x = 12.0 + i * (size.width - 24.0) / 6;
       final y = size.height - 12.0 - (v / maxV) * (size.height - 24.0);
@@ -761,7 +796,8 @@ class _WeeklyLinePainter extends CustomPainter {
 
     void drawLine(List<int> values, Color color) {
       if (values.isEmpty) return;
-      final path = Path()..moveTo(point(0, values[0]).dx, point(0, values[0]).dy);
+      final path = Path()
+        ..moveTo(point(0, values[0]).dx, point(0, values[0]).dy);
       for (var i = 1; i < values.length; i++) {
         final p = point(i, values[i]);
         path.lineTo(p.dx, p.dy);
@@ -776,8 +812,7 @@ class _WeeklyLinePainter extends CustomPainter {
       }
       if (metric == null) return;
       final total = metric.length;
-      final shown =
-          metric.extractPath(0, total * progress.clamp(0.0, 1.0));
+      final shown = metric.extractPath(0, total * progress.clamp(0.0, 1.0));
       canvas.drawPath(
         shown,
         Paint()
@@ -869,8 +904,7 @@ class _PublicSummaryGrid extends StatelessWidget {
                   color: medalColor,
                   threeD: true,
                 ),
-                CountUp(
-                    value: profile.levelsPassedTotal, style: valueStyle),
+                CountUp(value: profile.levelsPassedTotal, style: valueStyle),
                 tr('accountLevels'),
               ),
             ),
@@ -1115,8 +1149,8 @@ class _FollowListScreenState extends State<FollowListScreen> {
                           SoundService.tap();
                           Navigator.of(context).push(
                             MaterialPageRoute<void>(
-                              builder: (_) => PublicProfileScreen(
-                                  uid: entry.deviceId),
+                              builder: (_) =>
+                                  PublicProfileScreen(uid: entry.deviceId),
                             ),
                           );
                         },
@@ -1139,8 +1173,7 @@ class _FollowListScreenState extends State<FollowListScreen> {
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
                                       entry.username,

@@ -1690,7 +1690,9 @@ class InMemorySocialRepository implements SocialRepository {
             // vuelven a sugerir (pulido 2026-11-16).
             !_isFollowingEdge(_meId, u.deviceId))
         .toList();
-    return shuffleForDate(pool, day).take(2).toList();
+    // Hasta 5 (2026-11-16, Kristian: cuadritos estilo Facebook
+    // que se deslizan a la derecha; no infinito, tres-cinco).
+    return shuffleForDate(pool, day).take(5).toList();
   }
 
   @override

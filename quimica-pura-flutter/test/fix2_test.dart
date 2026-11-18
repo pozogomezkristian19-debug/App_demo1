@@ -19,6 +19,7 @@ import 'package:quimica_pura/screens/theme_screen.dart';
 import 'package:quimica_pura/screens/timed_exam_screen.dart';
 import 'package:quimica_pura/services/accent.dart';
 import 'package:quimica_pura/services/localization.dart';
+import 'package:quimica_pura/services/nav_requests.dart';
 import 'package:quimica_pura/services/premium_service.dart';
 import 'package:quimica_pura/services/progress.dart';
 import 'package:quimica_pura/services/user_prefs.dart';
@@ -128,11 +129,17 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     }
 
-    testWidgets('campana + repaso arriba, sin avatar y sin lupa',
+    testWidgets('campana + perfil arriba, sin repaso, sin avatar y sin lupa',
         (tester) async {
       await pumpHome(tester);
       expect(lucide(LucideIcons.bell), findsOneWidget);
-      expect(lucide(LucideIcons.rotateCcw), findsOneWidget);
+      // 2026-11-17 (Kristian): el chip de repaso ya NO está en la
+      // barra — el repaso se entra desde la búsqueda y desde las
+      // notificaciones. En su sitio, a la derecha de la campana,
+      // va el botón de perfil (la foto, lo más llamativo).
+      expect(lucide(LucideIcons.rotateCcw), findsNothing);
+      expect(find.byKey(const ValueKey('topBarProfileButton')),
+          findsOneWidget);
       expect(find.byType(MelliAvatar), findsNothing);
       // La lupa ya no está en la barra: la búsqueda vive en el menú
       // (la del menú es la del cajón, fuera de la AppBar).
@@ -145,47 +152,38 @@ void main() {
       );
     });
 
-    testWidgets('sin errores, el repaso avisa; con errores, el número sube',
+    testWidgets('sin errores, el repaso avisa; con errores, arranca',
         (tester) async {
       // Mis errores es Premium (Kristian 2026-11-16): sin Premium
-      // el toque abre el paywall y el aviso no sale. Con Premium
-      // el repaso avisa como antes.
+      // el toque abre el paywall y el repaso no arranca. Con
+      // Premium el repaso avisa como antes.
+      // 2026-11-17: el chip de la barra ya NO existe; la entrada
+      // que queda es la búsqueda / las notificaciones, que ponen
+      // NavRequests.startReview y Niveles la consume al montar.
+      // Sin errores avisa ("No tienes errores pendientes"); con
+      // errores arranca el repaso (sesión activa: sin AppBar).
       PremiumService.premiumNotifier.value = true;
       addTearDown(() => PremiumService.premiumNotifier.value = false);
+      NavRequests.startReview = true;
       await pumpHome(tester);
-      await tester.tap(lucide(LucideIcons.rotateCcw));
-      await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text(tr('quizNoErrors')), findsOneWidget);
 
-      // Un error nuevo: el numerito del chip pasa de 0 a 1.
+      // Un error nuevo (pregunta real del banco, para que el
+      // repaso tenga variantes): el repaso arranca.
+      final q = allQuestions
+          .firstWhere((element) => element.topic == 'estequiometria');
       ProgressService.instance.addFailed(FailedEntry(
-        id: 'fix2-test-1',
-        topic: 'estequiometria',
-        question: 'Pregunta de prueba',
+        id: 'bank:${q.topic}:${q.question}',
+        topic: q.topic,
+        question: q.question,
         level: 1,
       ));
-      // El número cambia con AnimatedSwitcher (pulido 7.7, 200 ms):
-      // durante la transición hay DOS Text en el árbol (el '0' que
-      // sale y el '1' que entra), así que hay que dejar que termine
-      // antes de leer el número con .single. El primer pump
-      // reconstruye con el conteo nuevo y ARRANCA la transición; el
-      // segundo avanza el reloj 300 ms y la completa.
-      await tester.pump();
+      NavRequests.startReview = true;
+      await pumpHome(tester);
       await tester.pump(const Duration(milliseconds: 300));
-      // La fila del chip (ancestro Row más cercano al icono) tiene
-      // un solo Text: el número de errores.
-      final chipRow = find
-          .ancestor(
-            of: lucide(LucideIcons.rotateCcw),
-            matching: find.byType(Row),
-          )
-          .first;
-      final chipText = find.descendant(
-        of: chipRow,
-        matching: find.byType(Text),
-      );
-      expect(tester.widget<Text>(chipText).data, '1');
+      expect(find.byType(AppBar), findsNothing);
+      expect(find.textContaining('Pregunta 1 de'), findsOneWidget);
     });
 
     testWidgets(
@@ -417,12 +415,11 @@ void main() {
       await tester.tap(find.byType(SocialAvatar));
       await tester.pump();
       expect(opened, ['avatar']);
-      // La compañera del día sigue, pero en MINIATURA (22 dp)
-      // junto a la línea "Hoy te acompaña…": no es TwinAvatarA/B
-      // (la API nueva es CompanionAvatar, que cubre a los tres,
-      // incluido Kristian) ni hay etiqueta de nombre bajo la foto.
-      expect(find.byType(CompanionAvatar), findsOneWidget);
-      expect(tester.getSize(find.byType(CompanionAvatar)), const Size(22, 22));
+      // La línea "Hoy te acompaña…" ya NO está en Cuenta (arreglo
+      // 2026-11-16 23:2x, punto 9 del reporte de errores de la
+      // 7.8): ni CompanionAvatar ni su texto salen aquí. Siguen
+      // sin haber avatares dibujados con código.
+      expect(find.byType(CompanionAvatar), findsNothing);
       expect(find.byType(TwinAvatarA), findsNothing);
       expect(find.byType(TwinAvatarB), findsNothing);
       // 2026-11-16 (perfil estilo Duolingo, como en la captura de
@@ -432,8 +429,6 @@ void main() {
       // no existe.
       expect(find.text('Kristian'), findsNothing);
       expect(find.text(tr('accountTitle')), findsNothing);
-      expect(find.text(tr(companionOfDayKey(companionOfTheDay()))),
-          findsOneWidget);
       // Alcance 10: el género NO se muestra escrito en ningún
       // sitio de Cuenta.
       expect(find.text('Bienvenido Kristian'), findsNothing);
@@ -648,10 +643,14 @@ void main() {
         ),
         findsNothing,
       );
-      // Los controles siguen: menú, vidas, repaso, campana y tema.
+      // Los controles siguen: menú, vidas, campana y perfil
+      // (2026-11-17: el repaso salió de la barra; en su sitio, a
+      // la derecha de la campana, va el botón de perfil).
       expect(find.byTooltip(tr('menuWord')), findsOneWidget);
       expect(lucide(LucideIcons.bell), findsOneWidget);
-      expect(lucide(LucideIcons.rotateCcw), findsOneWidget);
+      expect(lucide(LucideIcons.rotateCcw), findsNothing);
+      expect(find.byKey(const ValueKey('topBarProfileButton')),
+          findsOneWidget);
     });
 
     testWidgets(
@@ -909,8 +908,12 @@ void main() {
         level: 1,
       ));
       await tester.pump();
-      await tester.tap(lucide(LucideIcons.rotateCcw));
-      await tester.pump();
+      // 2026-11-17: el chip de repaso ya NO está en la barra; la
+      // entrada es la búsqueda / las notificaciones, que ponen
+      // NavRequests.startReview. Se pone la petición y se vuelve a
+      // bombear: Niveles la consume al montar y arranca el repaso.
+      NavRequests.startReview = true;
+      await pumpHomeScreen(tester);
       await tester.pump(const Duration(milliseconds: 300));
       // Sesión activa: sin AppBar ni navbar; sí botón X de salida.
       expect(find.byType(AppBar), findsNothing);

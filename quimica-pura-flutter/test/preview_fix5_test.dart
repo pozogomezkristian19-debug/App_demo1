@@ -202,6 +202,17 @@ void main() {
         localizedTopicTitle(uniTopics.first).toUpperCase()));
     expect(firstTopic.top, lessThan(200));
     await warmCompanions(tester);
+    // Y el AVATAR DEL USUARIO del botón de perfil de la barra
+    // (2026-11-17): con estos prefs es avatar_default. Sin
+    // precache, la primera captura del proceso lo pilla vacío
+    // (carrera de decodificación real-async) y el golden sale
+    // distinto según el orden de ejecución.
+    final ctx = tester.element(find.byType(MaterialApp));
+    await tester.runAsync(() async {
+      await precacheImage(
+          const AssetImage('assets/avatar_default.png'), ctx);
+    });
+    await tester.pump();
     await shot(tester, 'fix5_niveles_primero.png');
   });
 
@@ -211,7 +222,9 @@ void main() {
     await setPhone(tester);
     await tester.pumpWidget(const MelliQuiApp());
     await settle(tester);
-    await tester.tap(find.text(tr('accountTitle')));
+    // 2026-11-17: Cuenta ya NO es pestaña — se abre con el botón
+    // de perfil de la barra de arriba.
+    await tester.tap(find.byKey(const ValueKey('topBarProfileButton')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
     // 7.1: "¿Cómo se juega?" vive en Ajustes; en Cuenta ya NO hay

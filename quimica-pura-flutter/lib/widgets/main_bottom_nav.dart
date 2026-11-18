@@ -14,27 +14,28 @@
 //   (floatingShadow). El círculo sobresale 4 dp por encima de
 //   la barra (top: -4, Stack sin recorte). Icono de ruta
 //   blanco, plano (no 3D); debajo, la etiqueta "Niveles".
-// - Las 4 pestañas de fuera: icono sólido de 24 dp +
-//   etiqueta de 12 pt. La seleccionada se distingue SOLO por el
-//   color del icono y de la etiqueta (color del acento), SIN fondo
-//   ni brillo detrás: ni la píldora #CCFBF1 detrás del icono ni la
-//   franja #F8F8F8 (corrección de Kristian 2026-11-12: el
-//   resaltado tipo píldora del tab activo es feo). En oscuro,
-//   igual: sin píldora teal al 25 %. El color activo sigue al
-//   acento en los dos temas: en claro AppAccent.primary (teal con
-//   Verde, violeta con Violeta) y en oscuro el color del acento
-//   que pasa main.dart en tabColors (menta o violeta claro).
-//   Antes, en claro, el color activo, la píldora y el círculo
-//   central eran teal FIJOS: con Violeta elegido, la barra entera
-//   seguía verde (la mezcla de la captura de Kristian).
+// - Las 4 pestañas de fuera: icono 3D de 26 dp (NavTabIcon:
+//   libro marrón, calculadora naranja, rejilla de colores,
+//   mundito azul — cada pestaña con SU objeto y SU color, SIN
+//   emojis, al estilo Duolingo; Kristian 2026-11-17: fuera el
+//   verde único para todas) + etiqueta de 11 pt. La seleccionada
+//   se distingue SOLO por el color del icono y de la etiqueta
+//   (su color propio fuerte, no el acento), SIN fondo ni brillo
+//   detrás: ni la píldora #CCFBF1 detrás del icono ni la franja
+//   #F8F8F8 (corrección de Kristian 2026-11-12: el resaltado tipo
+//   píldora del tab activo es feo). De inactiva, la pestaña se
+//   dibuja con SU color propio pero clarito — NUNCA gris
+//   (Kristian 2026-11-17). Niveles (el centro) NO se toca: su
+//   círculo sigue el acento, como siempre.
 // - El orden es Aprender (0), Resolver (1), Niveles (2,
-//   centro), Tabla (3), Cuenta (4) — Quemia 7.3: Aprender
-//   primero, Resolver después. onSelected recibe esos
-//   mismos índices. El hueco central de la fila tiene flex 1
-//   (corrección 2026-11-12, alcance 7: con flex 2 los vecinos
-//   —Aprender y Tabla— quedaban MUY separados del círculo
-//   central; con flex 1 quedan pegados a él, sin tocar el
-//   círculo ni cambiar las posiciones).
+//   centro), Tabla (3), Online (4) — Quemia 7.3: Aprender
+//   primero, Resolver después; 2026-11-17 la 4 ya no es Cuenta
+//   sino Online (el mundito, todo lo online). onSelected
+//   recibe esos mismos índices. El hueco central de la fila
+//   tiene flex 1 (corrección 2026-11-12, alcance 7: con flex 2
+//   los vecinos —Aprender y Tabla— quedaban MUY separados del
+//   círculo central; con flex 1 quedan pegados a él, sin tocar
+//   el círculo ni cambiar las posiciones).
 
 import 'package:flutter/material.dart';
 
@@ -42,6 +43,7 @@ import 'icon_animations.dart';
 import '../services/accent.dart';
 import '../services/localization.dart';
 import 'lucide_icons.dart';
+import 'nav_icons.dart';
 import 'shadows.dart';
 
 /// Barra inferior con Niveles en el centro (círculo grande).
@@ -68,19 +70,21 @@ class MainBottomNav extends StatelessWidget {
   /// Gris de las pestañas inactivas.
   static const _inactive = Color(0xFFAFAFAF);
 
-  /// Color activo de una pestaña de fuera: el acento en los dos
-  /// temas — en claro AppAccent.primary, en oscuro el color del
-  /// acento que pasa main.dart en tabColors (menta o violeta
-  /// claro). Antes en claro era teal fijo: con Violeta, la barra
-  /// seguía verde.
+  /// Color activo SOLO de Niveles (la etiqueta del centro): el
+  /// acento en los dos temas — en claro AppAccent.primary, en
+  /// oscuro el color del acento que pasa main.dart en tabColors
+  /// (menta o violeta claro). Las 4 pestañas de fuera ya NO usan
+  /// el acento: cada una lleva su color propio (nav_icons.dart,
+  /// Kristian 2026-11-17: fuera el verde único para todas).
   Color _activeColor(int index) =>
       isDark ? tabColors[index] : AppAccent.primary;
 
   @override
   Widget build(BuildContext context) {
-    // Orden de la barra (ronda #8; 7.3: Aprender primero):
+    // Orden de la barra (ronda #8; 7.3: Aprender primero;
+    // 2026-11-17: la 4 es Online, no Cuenta):
     // Aprender (0), Resolver (1), Niveles (2, centro), Tabla (3),
-    // Cuenta (4).
+    // Online (4).
     // La barra mide 90 dp + una línea fina de 1 dp arriba (el
     // borde superior): 91 dp en total. La línea va como hija
     // propia (Container de 1 dp), no como borde del fondo, para
@@ -119,46 +123,42 @@ class MainBottomNav extends StatelessWidget {
                       Expanded(
                         child: _TabButton(
                           index: 0,
-                          icon: LucideIcons.bookOpen,
+                          kind: NavTabIconKind.learn,
                           label: tr('tabLearn'),
                           selectedIndex: selectedIndex,
                           onSelected: onSelected,
                           isDark: isDark,
-                          activeColor: _activeColor(0),
                         ),
                       ),
                       Expanded(
                         child: _TabButton(
                           index: 1,
-                          icon: LucideIcons.calculator,
+                          kind: NavTabIconKind.solver,
                           label: tr('tabResolver'),
                           selectedIndex: selectedIndex,
                           onSelected: onSelected,
                           isDark: isDark,
-                          activeColor: _activeColor(1),
                         ),
                       ),
                       const Expanded(flex: 1, child: SizedBox.shrink()),
                       Expanded(
                         child: _TabButton(
                           index: 3,
-                          icon: LucideIcons.layoutGrid,
+                          kind: NavTabIconKind.table,
                           label: tr('tabTable'),
                           selectedIndex: selectedIndex,
                           onSelected: onSelected,
                           isDark: isDark,
-                          activeColor: _activeColor(3),
                         ),
                       ),
                       Expanded(
                         child: _TabButton(
                           index: 4,
-                          icon: LucideIcons.userRound,
-                          label: tr('accountTitle'),
+                          kind: NavTabIconKind.online,
+                          label: tr('tabOnline'),
                           selectedIndex: selectedIndex,
                           onSelected: onSelected,
                           isDark: isDark,
-                          activeColor: _activeColor(4),
                         ),
                       ),
                     ],
@@ -263,29 +263,30 @@ class MainBottomNav extends StatelessWidget {
   }
 }
 
-/// Una pestaña de fuera (Resolver, Aprender, Tabla, Cuenta):
-/// icono sólido de 24 dp + etiqueta de 12 pt, centrados. La
-/// seleccionada se distingue SOLO por el color del icono y de la
-/// etiqueta (activeColor): SIN fondo ni brillo detrás (ni franja,
-/// ni píldora detrás del icono — corrección 2026-11-12).
+/// Una pestaña de fuera (Aprender, Resolver, Tabla, Online):
+/// icono 3D de 26 dp (NavTabIcon: cada pestaña con SU objeto y
+/// SU color) + etiqueta de 11 pt, centrados. La seleccionada se
+/// distingue SOLO por el color del icono y de la etiqueta (su
+/// color propio fuerte, navTabLabelColor): SIN fondo ni brillo
+/// detrás (ni franja, ni píldora detrás del icono — corrección
+/// 2026-11-12). De inactiva, icono y etiqueta van con su color
+/// propio pero clarito (nunca gris).
 class _TabButton extends StatelessWidget {
   const _TabButton({
     required this.index,
-    required this.icon,
+    required this.kind,
     required this.label,
     required this.selectedIndex,
     required this.onSelected,
     required this.isDark,
-    required this.activeColor,
   });
 
   final int index;
-  final LucideIconData icon;
+  final NavTabIconKind kind;
   final String label;
   final int selectedIndex;
   final ValueChanged<int> onSelected;
   final bool isDark;
-  final Color activeColor;
 
   @override
   Widget build(BuildContext context) {
@@ -319,11 +320,10 @@ class _TabButton extends StatelessWidget {
                     scale: selected ? 1.15 : 1.0,
                     duration: const Duration(milliseconds: 200),
                     curve: Curves.easeOutCubic,
-                    child: LucideIcon(
-                      icon,
-                      size: 28,
-                      color: selected ? activeColor : MainBottomNav._inactive,
-                      threeD: selected,
+                    child: NavTabIcon(
+                      kind: kind,
+                      selected: selected,
+                      isDark: isDark,
                     ),
                   ),
                 ),
@@ -334,7 +334,7 @@ class _TabButton extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: selected ? FontWeight.bold : FontWeight.w600,
-                  color: selected ? activeColor : MainBottomNav._inactive,
+                  color: navTabLabelColor(kind, selected, isDark),
                 ),
               ),
             ],

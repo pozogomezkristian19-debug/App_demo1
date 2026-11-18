@@ -424,6 +424,13 @@ class InMemoryAnalyticsRepository implements AnalyticsRepository {
   /// red colgada: los servicios deben cortar con timeout).
   bool hangWrites = false;
 
+  /// Veces que createDoc escribe el documento y LUEGO lanza
+  /// TimeoutException (respuesta perdida con la conexión lenta: el
+  /// servidor sí guardó, el cliente no se enteró). Para probar que
+  /// el reintento de submitPaymentRequest adopta la solicitud ya
+  /// creada en vez de duplicarla (2026-11-17).
+  int createDocTimeoutsAfterWrite = 0;
+
   int _createCounter = 0;
 
   final Map<String, StreamController<Map<String, dynamic>?>> _watchers = {};
@@ -505,6 +512,11 @@ class InMemoryAnalyticsRepository implements AnalyticsRepository {
     final id = 'fake-${++_createCounter}';
     _collection(collection)[id] = Map<String, dynamic>.from(data);
     _notify(collection, id);
+    if (createDocTimeoutsAfterWrite > 0) {
+      createDocTimeoutsAfterWrite--;
+      throw TimeoutException(
+          'fake lost response', const Duration(seconds: 30));
+    }
     return id;
   }
 
@@ -828,13 +840,36 @@ class AnalyticsSync {
   /// antiguo, puntos y niveles por tema quedan en el mayor, y los
   /// días de práctica se unen (la racha sale de esa unión). Así dos
   /// teléfonos con la misma cuenta no se pisan el progreso.
+  ///
+  /// LECTURA PREVIA OBLIGATORIA (2026-11-16, Kristian: la nube se
+  /// borró — puntos, niveles, trofeos y nombre a cero): sin
+  /// confirmar el documento que hay en la nube, NO se escribe
+  /// nada. Un snapshot local vacío (recién instalado) o
+  /// desactualizado pisaría el progreso real. Si la lectura falla
+  /// (sin red o lenta: timeout de 5 s), la subida queda pendiente
+  /// y se reintenta al abrir la app; el documento nuevo se crea
+  /// cuando la lectura completa (devuelve null = no existe) y
+  /// entonces sí se escribe.
   static Future<void> _writeSnapshot(Map<String, dynamic> data) async {
     final id = deviceId;
     if (id.isEmpty) return;
+    Map<String, dynamic>? existing;
+    var readOk = false;
     try {
-      final existing = await _repository
-          .getUser(id)
-          .timeout(const Duration(seconds: 5), onTimeout: () => null);
+      existing =
+          await _repository.getUser(id).timeout(const Duration(seconds: 5));
+      // La lectura completó: el documento puede no existir
+      // (existing null) y eso está bien, se crea.
+      readOk = true;
+    } catch (_) {
+      readOk = false;
+    }
+    if (!readOk) {
+      // Sin lectura no se escribe: queda pendiente de reintento.
+      await _markPending(true);
+      return;
+    }
+    try {
       if (existing != null && existing.isNotEmpty) {
         final remoteJoined = _asInt(existing['joinedAt']);
         if (remoteJoined > 0) {
@@ -846,6 +881,15 @@ class AnalyticsSync {
         final remotePoints = _asInt(existing['points']);
         final localPoints = _asInt(data['points']);
         if (remotePoints > localPoints) data['points'] = remotePoints;
+        // Si la nube tiene MÁS puntos que el teléfono (puntos
+        // acreditados por el Admin al aprobar una compra, o ganados
+        // en otro teléfono), el teléfono también sube: solo suma,
+        // nunca baja (2026-11-17, compra de puntos). Sin esto, los
+        // puntos aprobados no se verían en el saldo hasta re-enlazar
+        // Google: la subida solo los dejaba en la nube.
+        if (remotePoints > localPoints) {
+          await ProgressService.applyRecoveredData(points: remotePoints);
+        }
         final mergedDays = <String>{};
         final localDays = data['practiceDays'];
         if (localDays is List) {
@@ -885,7 +929,10 @@ class AnalyticsSync {
         if (remoteMixed > localMixed) data['mixedBest'] = remoteMixed;
       }
     } catch (_) {
-      // Sin lectura previa: se escribe la foto local tal cual.
+      // Si la fusión falla, tampoco se escribe: un snapshot sin
+      // fusionar pisaría el progreso de la nube. Queda pendiente.
+      await _markPending(true);
+      return;
     }
     // Timeout de 5 s (Regla 2): sin internet la escritura queda
     // encolada en el SDK, pero este intento se da por fallido y

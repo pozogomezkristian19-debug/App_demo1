@@ -52,7 +52,6 @@ const List<(String, String, String, String)> appScreens = [
   ('constants', 'Constantes y conversiones', 'Constantes y conversor de unidades', 'swap_horiz'),
   ('favorites', 'Favoritos', 'Elementos, temas y fórmulas guardados', 'star'),
   ('reminder', 'Recordatorio de estudio', 'Aviso diario para practicar', 'alarm'),
-  ('version', 'Cambiar versión', 'Bachillerato o Universidad', 'swap_horizontal_circle'),
   ('language', 'Idioma', 'Español, English, Français, Italiano, Português, Русский', 'language'),
   ('theme', 'Tema', 'Color y modo claro u oscuro', 'style'),
   ('notifications', 'Notificaciones', 'Avisos y centro de notificaciones', 'alarm'),

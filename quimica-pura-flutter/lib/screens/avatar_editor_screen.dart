@@ -23,6 +23,7 @@ import '../services/social_service.dart';
 import '../services/sound_service.dart';
 import '../services/user_prefs.dart';
 import '../widgets/lucide_icons.dart';
+import '../widgets/username_editor_flow.dart';
 
 /// Colores del editor según el tema: los mismos que Cuenta y
 /// Ajustes (fondo blanco y tinta #4B4B4B en claro; fondo y
@@ -32,6 +33,8 @@ class _AvatarColors {
     required this.bg,
     required this.ink,
     required this.inkSoft,
+    required this.border,
+    required this.card,
   });
 
   factory _AvatarColors.of(BuildContext context) {
@@ -40,18 +43,30 @@ class _AvatarColors {
         bg: AppAccent.darkBackground,
         ink: Colors.white,
         inkSoft: AppAccent.darkInkSoft,
+        border: AppAccent.darkBorder,
+        card: AppAccent.darkCard,
       );
     }
     return const _AvatarColors(
       bg: Colors.white,
       ink: Color(0xFF4B4B4B),
       inkSoft: Color(0xFF777777),
+      border: Color(0xFFE5E5E5),
+      card: Colors.white,
     );
   }
 
   final Color bg;
   final Color ink;
   final Color inkSoft;
+
+  /// Borde y fondo de la fila "Cambiar nombre de usuario": como
+  /// las filas de Cuenta (2026-11-17: el borde oscuro en claro
+  /// «está feo» — era AppAccent.darkBorder en los dos temas).
+  final Color border;
+
+  /// Fondo de la fila: blanco en claro, superficie oscura en oscuro.
+  final Color card;
 }
 
 /// Un avatar de la galería: id (el que se guarda en
@@ -115,6 +130,22 @@ class _AvatarEditorScreenState extends State<AvatarEditorScreen> {
     setState(() {
       _owned = owned;
     });
+  }
+
+  /// Cambiar el nombre de usuario (Kristian 2026-11-17): abre
+  /// la MISMA pantalla de elegir nombre que Cuenta
+  /// (UsernameEditorFlow). Al guardar, se repinta la fila con
+  /// el nombre nuevo.
+  Future<void> _openChangeUsername() async {
+    final username = UserPrefs.publicUsername;
+    if (username.isEmpty) return;
+    SoundService.tap();
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => UsernameEditorFlow(base: username),
+      ),
+    );
+    if (saved == true && mounted) setState(() {});
   }
 
   /// La galería: primero los 4 libres, luego los 3 premium del
@@ -192,6 +223,18 @@ class _AvatarEditorScreenState extends State<AvatarEditorScreen> {
             tr('avatarSub'),
             style: TextStyle(fontSize: 16, color: c.inkSoft),
           ),
+          // Cambiar el nombre de usuario (Kristian 2026-11-17):
+          // fila visible ANTES de los avatares, con el nombre
+          // actual; abre la misma pantalla de elegir nombre
+          // que Cuenta. Solo con nombre de usuario.
+          if (UserPrefs.publicUsername.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            _ChangeUsernameRow(
+              username: UserPrefs.publicUsername,
+              colors: c,
+              onTap: _openChangeUsername,
+            ),
+          ],
           const SizedBox(height: 20),
           GridView.builder(
             shrinkWrap: true,
@@ -327,6 +370,77 @@ class _AvatarTile extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Fila "Cambiar nombre de usuario" (Kristian 2026-11-17): antes
+/// de los avatares, con el nombre actual + flecha. El icono NO es
+/// el lápiz (ese es el del avatar): es la persona (userRound).
+/// Abre la misma pantalla de elegir nombre que Cuenta.
+class _ChangeUsernameRow extends StatelessWidget {
+  const _ChangeUsernameRow({
+    required this.username,
+    required this.colors,
+    required this.onTap,
+  });
+
+  final String username;
+  final _AvatarColors colors;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding:
+              const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+          decoration: BoxDecoration(
+            color: colors.card,
+            border: Border.all(color: colors.border),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Row(
+            children: [
+              LucideIcon(
+                LucideIcons.userRound,
+                size: 20,
+                color: AppAccent.primary,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      tr('accountChangeUsername'),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: colors.ink,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '@$username',
+                      style: TextStyle(fontSize: 14, color: colors.inkSoft),
+                    ),
+                  ],
+                ),
+              ),
+              LucideIcon(
+                LucideIcons.chevronRight,
+                size: 20,
+                color: colors.inkSoft,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

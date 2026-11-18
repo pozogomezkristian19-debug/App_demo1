@@ -86,6 +86,7 @@ const Map<String, Map<String, String>> _strings = {
     'tabResolver': 'Resolver',
     'tabLearn': 'Aprender',
     'tabTable': 'Tabla',
+    'tabOnline': 'Online',
     'tabTips': 'Tips',
     'appSubtitle': 'Química Pura — Universidad',
     'obWelcome': 'Bienvenidos',
@@ -227,6 +228,9 @@ const Map<String, Map<String, String>> _strings = {
     'obSignInButton': 'Ingresar',
     'obForgotPassword': '¿Has olvidado tu contraseña?',
     'obSignInFailed': 'El correo o la contraseña no son correctos.',
+    'obGoogleOnlyAccount':
+        'Esta cuenta entra con Google y no tiene contraseña de Quemia. Usa el botón de Google.',
+    'onlineEnterWithEmail': 'O entra con tu correo',
     'obResetTitle': 'Recupera tu contraseña',
     'obResetBody':
         'Te mandamos un enlace a tu correo para cambiar tu contraseña.',
@@ -308,6 +312,10 @@ const Map<String, Map<String, String>> _strings = {
     'quizResult': 'Resultado',
     'quizRepeat': 'Repetir',
     'quizBack': 'Volver',
+    'replayLevelTitle': '¿Volver a jugar?',
+    'replayLevelBody':
+        '%s de %s. Ya lo superaste. ¿Quieres jugarlo de nuevo?',
+    'replayLevelPlay': 'Jugar',
     'quizCorrect': '¡Correcto!',
     'quizPraise0': '¡Muy bien!',
     'quizPraise1': '¡Genial!',
@@ -330,6 +338,8 @@ const Map<String, Map<String, String>> _strings = {
     'quizGood': '¡Bien!',
     'quizKeepGoing': 'Sigue practicando',
     'quizNoErrors': 'No tienes errores pendientes',
+    'levelNoQuestions': 'Este nivel no tiene preguntas todavía',
+    'solverNotFound': 'No se encontró ese solucionador',
     'quizOf': 'de',
     'quizScore': 'Aciertos',
     'quizAccuracy': 'Precisión',
@@ -560,6 +570,9 @@ const Map<String, Map<String, String>> _strings = {
     'notifTitle': 'Recordatorios',
     'inboxTitle': 'Notificaciones',
     'inboxEmpty': 'No tienes notificaciones todavía.',
+    'supportReplyClose': 'Entendido',
+    'supportReplyMissing':
+        'No se pudo cargar la respuesta. Inténtalo de nuevo.',
     'inboxEnableButton': 'Activar notificaciones',
     'inboxReminderTitle': 'Hora de repasar',
     'inboxReminderBody': 'Tenías un recordatorio de estudio pendiente.',
@@ -660,7 +673,13 @@ const Map<String, Map<String, String>> _strings = {
     'accountSetPasswordBody':
         'Entraste con Google y todavía no tienes contraseña. Créala para poder entrar también con tu correo.',
     'accountSetPasswordButton': 'Crear contraseña',
-    'passwordReminderBody': 'Asegura tu cuenta con una contraseña',
+    'accountChangeUsername': 'Cambiar nombre de usuario',
+    'accountSignOut': 'Cerrar sesión',
+    'accountSignOutTitle': '¿Cerrar sesión?',
+    'accountSignOutBody':
+        'Tu progreso se queda guardado en este teléfono y vuelve cuando inicies sesión otra vez con la misma cuenta.',
+    'passwordReminderBody':
+        'Solo entras con Google: ponle una contraseña para no perder tu progreso',
     'accountSetPasswordSheetBody':
         'Es la contraseña con la que podrás entrar con tu correo, además de con Google.',
     'accountSetPasswordSave': 'Guardar contraseña',
@@ -679,6 +698,9 @@ const Map<String, Map<String, String>> _strings = {
     // Ronda #8 (Quemia 7.0): social (amigos, duelos, torneos,
     // tienda, grupos, reportes, puerta de Google).
     'onlineNeedGoogle': 'Inicia sesión con Google para jugar online',
+    'onlineGuestBody':
+        'Inicia sesión para ver Amigos, Tabla de posiciones y Torneos',
+    'onlineSignInButton': 'Iniciar sesión',
     'socialOffline':
         'Sin conexión — esto se actualizará cuando tengas internet',
     'accountFriends': 'Amigos',
@@ -890,6 +912,8 @@ const Map<String, Map<String, String>> _strings = {
     'tournNotEnoughPoints': 'Te faltan %s puntos para entrar',
     'tournJoinFailed':
         'No se pudo entrar. Revisa tu conexión e inténtalo de nuevo.',
+    'tournJoinConfirm':
+        'La entrada cuesta %s puntos. ¿Seguro que quieres entrar?',
     'tournLeave': 'Salir del torneo',
     'tournLeaveTitle': '¿Salir del torneo?',
     'tournLeaveLoseFee':
@@ -939,6 +963,8 @@ const Map<String, Map<String, String>> _strings = {
     'reportReasonWrong': 'La respuesta correcta está mal',
     'reportReasonUnclear': 'La pregunta no se entiende',
     'reportReasonData': 'Faltan los datos',
+    'reportReasonOther': 'Otro',
+    'reportOtherHint': 'Explica qué está mal',
     'reportSend': 'Enviar reporte',
     'reportThanks': 'Gracias por avisar',
     'lbRankUp': '¡Subiste al puesto %s!',
@@ -971,6 +997,7 @@ const Map<String, Map<String, String>> _strings = {
     'tabResolver': 'Solve',
     'tabLearn': 'Learn',
     'tabTable': 'Table',
+    'tabOnline': 'Online',
     'tabTips': 'Tips',
     'appSubtitle': 'Pure Chemistry — University',
     'obWelcome': 'Welcome',
@@ -1111,6 +1138,9 @@ const Map<String, Map<String, String>> _strings = {
     'obSignInButton': 'Sign in',
     'obForgotPassword': 'Forgot your password?',
     'obSignInFailed': 'The email or password is not correct.',
+    'obGoogleOnlyAccount':
+        'This account signs in with Google and has no Quemia password. Use the Google button.',
+    'onlineEnterWithEmail': 'Or sign in with your email',
     'obResetTitle': 'Reset your password',
     'obResetBody': 'We will send a link to your email to reset your password.',
     'obNewPasswordTitle': 'Set a new password',
@@ -1193,6 +1223,10 @@ const Map<String, Map<String, String>> _strings = {
     'quizResult': 'Result',
     'quizRepeat': 'Retry',
     'quizBack': 'Back',
+    'replayLevelTitle': 'Play again?',
+    'replayLevelBody':
+        '%s of %s. You already passed it. Want to play it again?',
+    'replayLevelPlay': 'Play',
     'quizCorrect': 'Correct!',
     'quizPraise0': 'Nice job!',
     'quizPraise1': 'Great!',
@@ -1215,6 +1249,8 @@ const Map<String, Map<String, String>> _strings = {
     'quizGood': 'Good!',
     'quizKeepGoing': 'Keep practicing',
     'quizNoErrors': 'You have no pending mistakes',
+    'levelNoQuestions': 'This level has no questions yet',
+    'solverNotFound': 'That solver was not found',
     'quizOf': 'of',
     'quizScore': 'Correct',
     'quizAccuracy': 'Accuracy',
@@ -1338,6 +1374,8 @@ const Map<String, Map<String, String>> _strings = {
     'notifTitle': 'Reminders',
     'inboxTitle': 'Notifications',
     'inboxEmpty': 'You don’t have any notifications yet.',
+    'supportReplyClose': 'Got it',
+    'supportReplyMissing': 'Couldn’t load the reply. Try again.',
     'inboxEnableButton': 'Turn on notifications',
     'inboxReminderTitle': 'Time to review',
     'inboxReminderBody': 'You had a pending study reminder.',
@@ -1547,7 +1585,13 @@ const Map<String, Map<String, String>> _strings = {
     'accountSetPasswordBody':
         'You signed in with Google and don’t have a password yet. Create one so you can also sign in with your email.',
     'accountSetPasswordButton': 'Create password',
-    'passwordReminderBody': 'Secure your account with a password',
+    'accountChangeUsername': 'Change username',
+    'accountSignOut': 'Sign out',
+    'accountSignOutTitle': 'Sign out?',
+    'accountSignOutBody':
+        'Your progress stays saved on this phone and comes back when you sign in again with the same account.',
+    'passwordReminderBody':
+        'You only sign in with Google: add a password so you never lose your progress',
     'accountSetPasswordSheetBody':
         'This is the password you’ll use to sign in with your email, as well as with Google.',
     'accountSetPasswordSave': 'Save password',
@@ -1564,6 +1608,9 @@ const Map<String, Map<String, String>> _strings = {
     // Ronda #8 (Quemia 7.0): social (amigos, duelos, torneos,
     // tienda, grupos, reportes, puerta de Google).
     'onlineNeedGoogle': 'Sign in with Google to play online',
+    'onlineGuestBody':
+        'Sign in to see Friends, Leaderboard and Tournaments',
+    'onlineSignInButton': 'Sign in',
     'socialOffline': 'Offline — this will update when you have internet',
     'accountFriends': 'Friends',
     'accountFriendsSub': 'Your friends and their duels',
@@ -1771,6 +1818,8 @@ const Map<String, Map<String, String>> _strings = {
     'tournJoinPaid': 'Join · %s pts',
     'tournNotEnoughPoints': 'You need %s more points to join',
     'tournJoinFailed': 'Couldn’t join. Check your connection and try again.',
+    'tournJoinConfirm':
+        'Entry costs %s points. Are you sure you want to join?',
     'tournLeave': 'Leave tournament',
     'tournLeaveTitle': 'Leave the tournament?',
     'tournLeaveLoseFee':
@@ -1820,6 +1869,8 @@ const Map<String, Map<String, String>> _strings = {
     'reportReasonWrong': 'The correct answer is wrong',
     'reportReasonUnclear': 'The question is unclear',
     'reportReasonData': 'The data is missing',
+    'reportReasonOther': 'Other',
+    'reportOtherHint': 'Explain what’s wrong',
     'reportSend': 'Send report',
     'reportThanks': 'Thanks for letting us know',
     'lbRankUp': 'You moved up to rank %s!',
@@ -1852,6 +1903,7 @@ const Map<String, Map<String, String>> _strings = {
     'tabResolver': 'Résoudre',
     'tabLearn': 'Apprendre',
     'tabTable': 'Tableau',
+    'tabOnline': 'En ligne',
     'tabTips': 'Conseils',
     'appSubtitle': 'Chimie pure — Université',
     'obWelcome': 'Bienvenue',
@@ -1994,6 +2046,9 @@ const Map<String, Map<String, String>> _strings = {
     'obSignInButton': 'Se connecter',
     'obForgotPassword': 'Mot de passe oublié ?',
     'obSignInFailed': 'L’e-mail ou le mot de passe est incorrect.',
+    'obGoogleOnlyAccount':
+        'Ce compte se connecte avec Google et n’a pas de mot de passe Quemia. Utilise le bouton Google.',
+    'onlineEnterWithEmail': 'Ou connecte-toi avec ton e-mail',
     'obResetTitle': 'Réinitialise ton mot de passe',
     'obResetBody':
         'Nous t’enverrons un lien par e-mail pour changer ton mot de passe.',
@@ -2076,6 +2131,10 @@ const Map<String, Map<String, String>> _strings = {
     'quizResult': 'Résultat',
     'quizRepeat': 'Recommencer',
     'quizBack': 'Retour',
+    'replayLevelTitle': 'Rejouer ?',
+    'replayLevelBody':
+        '%s de %s. Tu l\'as déjà réussi. Tu veux le refaire ?',
+    'replayLevelPlay': 'Jouer',
     'quizCorrect': 'Correct !',
     'quizPraise0': 'Beau travail !',
     'quizPraise1': 'Génial !',
@@ -2163,6 +2222,9 @@ const Map<String, Map<String, String>> _strings = {
     'notifTitle': 'Rappels',
     'inboxTitle': 'Notifications',
     'inboxEmpty': 'Tu n’as aucune notification pour le moment.',
+    'supportReplyClose': 'Compris',
+    'supportReplyMissing':
+        'Impossible de charger la réponse. Réessaie.',
     'inboxEnableButton': 'Activer les notifications',
     'inboxReminderTitle': 'C’est l’heure de réviser',
     'inboxReminderBody': 'Tu avais un rappel d’étude en attente.',
@@ -2216,6 +2278,8 @@ const Map<String, Map<String, String>> _strings = {
     'quizGood': 'Bien !',
     'quizKeepGoing': 'Continue à t’entraîner',
     'quizNoErrors': 'Tu n’as pas d’erreurs en attente',
+    'levelNoQuestions': 'Ce niveau n’a pas encore de questions',
+    'solverNotFound': 'Ce solveur est introuvable',
     'quizOf': 'sur',
     'quizScore': 'Bonnes réponses',
     'quizAccuracy': 'Précision',
@@ -2438,7 +2502,13 @@ const Map<String, Map<String, String>> _strings = {
     'accountSetPasswordBody':
         'Tu t’es connecté avec Google et tu n’as pas encore de mot de passe. Crée-en un pour pouvoir aussi te connecter avec ton e-mail.',
     'accountSetPasswordButton': 'Créer un mot de passe',
-    'passwordReminderBody': 'Sécurise ton compte avec un mot de passe',
+    'accountChangeUsername': "Changer de nom d'utilisateur",
+    'accountSignOut': 'Se déconnecter',
+    'accountSignOutTitle': 'Se déconnecter ?',
+    'accountSignOutBody':
+        'Ta progression reste enregistrée sur ce téléphone et revient quand tu te reconnectes avec le même compte.',
+    'passwordReminderBody':
+        'Tu te connectes seulement avec Google : ajoute un mot de passe pour ne pas perdre ta progression',
     'accountSetPasswordSheetBody':
         'C’est le mot de passe avec lequel tu pourras te connecter avec ton e-mail, en plus de Google.',
     'accountSetPasswordSave': 'Enregistrer le mot de passe',
@@ -2456,6 +2526,9 @@ const Map<String, Map<String, String>> _strings = {
     // Ronda #8 (Quemia 7.0): social (amigos, duelos, torneos,
     // tienda, grupos, reportes, puerta de Google).
     'onlineNeedGoogle': 'Connecte-toi avec Google pour jouer en ligne',
+    'onlineGuestBody':
+        'Connecte-toi pour voir Amis, Classement et Tournois',
+    'onlineSignInButton': 'Se connecter',
     'socialOffline':
         'Hors ligne — cela se mettra à jour quand tu auras internet',
     'accountFriends': 'Amis',
@@ -2676,6 +2749,8 @@ const Map<String, Map<String, String>> _strings = {
     'tournNotEnoughPoints': 'Il te manque %s points pour participer',
     'tournJoinFailed':
         'Impossible de participer. Vérifie ta connexion et réessaie.',
+    'tournJoinConfirm':
+        'L’entrée coûte %s points. Tu veux vraiment participer ?',
     'tournLeave': 'Quitter le tournoi',
     'tournLeaveTitle': 'Quitter le tournoi ?',
     'tournLeaveLoseFee':
@@ -2726,6 +2801,8 @@ const Map<String, Map<String, String>> _strings = {
     'reportReasonWrong': 'La bonne réponse est fausse',
     'reportReasonUnclear': 'La question n’est pas claire',
     'reportReasonData': 'Il manque les données',
+    'reportReasonOther': 'Autre',
+    'reportOtherHint': 'Explique ce qui ne va pas',
     'reportSend': 'Envoyer le signalement',
     'reportThanks': 'Merci de nous l’avoir signalé',
     'lbRankUp': 'Tu es monté à la place %s !',
@@ -2758,6 +2835,7 @@ const Map<String, Map<String, String>> _strings = {
     'tabResolver': 'Risolvi',
     'tabLearn': 'Impara',
     'tabTable': 'Tavola',
+    'tabOnline': 'Online',
     'tabTips': 'Consigli',
     'appSubtitle': 'Chimica pura — Università',
     'obWelcome': 'Benvenuti',
@@ -2900,6 +2978,9 @@ const Map<String, Map<String, String>> _strings = {
     'obSignInButton': 'Accedi',
     'obForgotPassword': 'Hai dimenticato la password?',
     'obSignInFailed': 'L’e-mail o la password non sono corretti.',
+    'obGoogleOnlyAccount':
+        'Questo account accede con Google e non ha una password Quemia. Usa il pulsante Google.',
+    'onlineEnterWithEmail': 'Oppure accedi con la tua e-mail',
     'obResetTitle': 'Recupera la password',
     'obResetBody': 'Ti manderemo un link via e-mail per cambiare la password.',
     'obNewPasswordTitle': 'Imposta una nuova password',
@@ -2977,6 +3058,9 @@ const Map<String, Map<String, String>> _strings = {
     'notifTitle': 'Promemoria',
     'inboxTitle': 'Notifiche',
     'inboxEmpty': 'Non hai ancora notifiche.',
+    'supportReplyClose': 'Capito',
+    'supportReplyMissing':
+        'Non è stato possibile caricare la risposta. Riprova.',
     'inboxEnableButton': 'Attiva le notifiche',
     'inboxReminderTitle': 'È ora di ripassare',
     'inboxReminderBody': 'Avevi un promemoria di studio in sospeso.',
@@ -3097,6 +3181,10 @@ const Map<String, Map<String, String>> _strings = {
     'quizResult': 'Risultato',
     'quizRepeat': 'Riprova',
     'quizBack': 'Indietro',
+    'replayLevelTitle': 'Rigiocare?',
+    'replayLevelBody':
+        '%s di %s. L\'hai già superato. Vuoi rigiocarlo?',
+    'replayLevelPlay': 'Gioca',
     'quizCorrect': 'Corretto!',
     'quizPraise0': 'Ben fatto!',
     'quizPraise1': 'Fantastico!',
@@ -3119,6 +3207,8 @@ const Map<String, Map<String, String>> _strings = {
     'quizGood': 'Bene!',
     'quizKeepGoing': 'Continua ad esercitarti',
     'quizNoErrors': 'Non hai errori in sospeso',
+    'levelNoQuestions': 'Questo livello non ha ancora domande',
+    'solverNotFound': 'Questo risolutore non è stato trovato',
     'quizOf': 'di',
     'quizScore': 'Risposte corrette',
     'quizAccuracy': 'Precisione',
@@ -3334,7 +3424,13 @@ const Map<String, Map<String, String>> _strings = {
     'accountSetPasswordBody':
         'Hai effettuato l’accesso con Google e non hai ancora una password. Creane una per poter accedere anche con la tua email.',
     'accountSetPasswordButton': 'Crea una password',
-    'passwordReminderBody': 'Proteggi il tuo account con una password',
+    'accountChangeUsername': 'Cambia nome utente',
+    'accountSignOut': 'Esci',
+    'accountSignOutTitle': 'Uscire?',
+    'accountSignOutBody':
+        'I tuoi progressi restano salvati su questo telefono e tornano quando accedi di nuovo con lo stesso account.',
+    'passwordReminderBody':
+        'Accedi solo con Google: aggiungi una password per non perdere i tuoi progressi',
     'accountSetPasswordSheetBody':
         'È la password con cui potrai accedere con la tua email, oltre che con Google.',
     'accountSetPasswordSave': 'Salva la password',
@@ -3352,6 +3448,8 @@ const Map<String, Map<String, String>> _strings = {
     // Ronda #8 (Quemia 7.0): social (amigos, duelos, torneos,
     // tienda, grupos, reportes, puerta de Google).
     'onlineNeedGoogle': 'Accedi con Google per giocare online',
+    'onlineGuestBody': 'Accedi per vedere Amici, Classifica e Tornei',
+    'onlineSignInButton': 'Accedi',
     'socialOffline': 'Offline — si aggiornerà quando avrai internet',
     'accountFriends': 'Amici',
     'accountFriendsSub': 'I tuoi amici e le loro sfide',
@@ -3567,6 +3665,8 @@ const Map<String, Map<String, String>> _strings = {
     'tournNotEnoughPoints': 'Ti mancano %s punti per partecipare',
     'tournJoinFailed':
         'Non è stato possibile partecipare. Controlla la connessione e riprova.',
+    'tournJoinConfirm':
+        'L’iscrizione costa %s punti. Sei sicuro di voler partecipare?',
     'tournLeave': 'Esci dal torneo',
     'tournLeaveTitle': 'Uscire dal torneo?',
     'tournLeaveLoseFee':
@@ -3617,6 +3717,8 @@ const Map<String, Map<String, String>> _strings = {
     'reportReasonWrong': 'La risposta corretta è sbagliata',
     'reportReasonUnclear': 'La domanda non è chiara',
     'reportReasonData': 'Mancano i dati',
+    'reportReasonOther': 'Altro',
+    'reportOtherHint': 'Spiega cosa non va',
     'reportSend': 'Invia segnalazione',
     'reportThanks': 'Grazie per averci avvisato',
     'lbRankUp': 'Sei salito al posto %s!',
@@ -3649,6 +3751,7 @@ const Map<String, Map<String, String>> _strings = {
     'tabResolver': 'Resolver',
     'tabLearn': 'Aprender',
     'tabTable': 'Tabela',
+    'tabOnline': 'Online',
     'tabTips': 'Dicas',
     'appSubtitle': 'Química pura — Universidade',
     'obWelcome': 'Bem-vindos',
@@ -3790,6 +3893,9 @@ const Map<String, Map<String, String>> _strings = {
     'obSignInButton': 'Entrar',
     'obForgotPassword': 'Esqueceste-te da palavra-passe?',
     'obSignInFailed': 'O e-mail ou a palavra-passe não estão corretos.',
+    'obGoogleOnlyAccount':
+        'Esta conta entra com o Google e não tem palavra-passe Quemia. Usa o botão do Google.',
+    'onlineEnterWithEmail': 'Ou entra com o teu e-mail',
     'obResetTitle': 'Recupera a tua palavra-passe',
     'obResetBody':
         'Vamos enviar-te um link por e-mail para mudares a tua palavra-passe.',
@@ -3870,6 +3976,10 @@ const Map<String, Map<String, String>> _strings = {
     'quizResult': 'Resultado',
     'quizRepeat': 'Repetir',
     'quizBack': 'Voltar',
+    'replayLevelTitle': 'Jogar de novo?',
+    'replayLevelBody':
+        '%s de %s. Você já passou. Quer jogar de novo?',
+    'replayLevelPlay': 'Jogar',
     'quizCorrect': 'Correto!',
     'quizPraise0': 'Muito bem!',
     'quizPraise1': 'Ótimo!',
@@ -3892,6 +4002,8 @@ const Map<String, Map<String, String>> _strings = {
     'quizGood': 'Bom!',
     'quizKeepGoing': 'Continua a praticar',
     'quizNoErrors': 'Não tens erros pendentes',
+    'levelNoQuestions': 'Este nível ainda não tem perguntas',
+    'solverNotFound': 'Não foi possível encontrar esse solucionador',
     'quizOf': 'de',
     'quizScore': 'Acertos',
     'quizAccuracy': 'Precisão',
@@ -3975,6 +4087,9 @@ const Map<String, Map<String, String>> _strings = {
     'notifTitle': 'Lembretes',
     'inboxTitle': 'Notificações',
     'inboxEmpty': 'Você ainda não tem notificações.',
+    'supportReplyClose': 'Entendido',
+    'supportReplyMissing':
+        'Não foi possível carregar a resposta. Tenta de novo.',
     'inboxEnableButton': 'Ativar notificações',
     'inboxReminderTitle': 'Hora de revisar',
     'inboxReminderBody': 'Você tinha um lembrete de estudo pendente.',
@@ -4221,7 +4336,13 @@ const Map<String, Map<String, String>> _strings = {
     'accountSetPasswordBody':
         'Você entrou com o Google e ainda não tem senha. Crie uma para poder entrar também com seu e-mail.',
     'accountSetPasswordButton': 'Criar senha',
-    'passwordReminderBody': 'Proteja sua conta com uma senha',
+    'accountChangeUsername': 'Alterar nome de usuário',
+    'accountSignOut': 'Sair',
+    'accountSignOutTitle': 'Sair da conta?',
+    'accountSignOutBody':
+        'Seu progresso fica salvo neste telefone e volta quando você entrar novamente com a mesma conta.',
+    'passwordReminderBody':
+        'Você só entra com o Google: adicione uma senha para não perder seu progresso',
     'accountSetPasswordSheetBody':
         'É a senha com que você poderá entrar com seu e-mail, além do Google.',
     'accountSetPasswordSave': 'Salvar senha',
@@ -4240,6 +4361,9 @@ const Map<String, Map<String, String>> _strings = {
     // Ronda #8 (Quemia 7.0): social (amigos, duelos, torneos,
     // tienda, grupos, reportes, puerta de Google).
     'onlineNeedGoogle': 'Entre com o Google para jogar online',
+    'onlineGuestBody':
+        'Entre para ver Amigos, Classificação e Torneios',
+    'onlineSignInButton': 'Entrar',
     'socialOffline':
         'Sem conexão — isto será atualizado quando você tiver internet',
     'accountFriends': 'Amigos',
@@ -4452,6 +4576,8 @@ const Map<String, Map<String, String>> _strings = {
     'tournNotEnoughPoints': 'Faltam %s pontos para entrar',
     'tournJoinFailed':
         'Não foi possível entrar. Verifique a conexão e tente de novo.',
+    'tournJoinConfirm':
+        'A entrada custa %s pontos. Tens certeza que queres entrar?',
     'tournLeave': 'Sair do torneio',
     'tournLeaveTitle': 'Sair do torneio?',
     'tournLeaveLoseFee':
@@ -4501,6 +4627,8 @@ const Map<String, Map<String, String>> _strings = {
     'reportReasonWrong': 'A resposta correta está errada',
     'reportReasonUnclear': 'A pergunta não está clara',
     'reportReasonData': 'Faltam os dados',
+    'reportReasonOther': 'Outro',
+    'reportOtherHint': 'Explica o que está errado',
     'reportSend': 'Enviar relatório',
     'reportThanks': 'Obrigado por avisar',
     'lbRankUp': 'Você subiu para o %sº lugar!',
@@ -4533,6 +4661,7 @@ const Map<String, Map<String, String>> _strings = {
     'tabResolver': 'Решать',
     'tabLearn': 'Учить',
     'tabTable': 'Таблица',
+    'tabOnline': 'Онлайн',
     'tabTips': 'Советы',
     'appSubtitle': 'Чистая химия — Университет',
     'obWelcome': 'Добро пожаловать',
@@ -4675,6 +4804,9 @@ const Map<String, Map<String, String>> _strings = {
     'obSignInButton': 'Войти',
     'obForgotPassword': 'Забыл пароль?',
     'obSignInFailed': 'Неверная почта или пароль.',
+    'obGoogleOnlyAccount':
+        'Этот аккаунт входит через Google, у него нет пароля Quemia. Используй кнопку Google.',
+    'onlineEnterWithEmail': 'Или войди по почте',
     'obResetTitle': 'Восстанови пароль',
     'obResetBody': 'Мы отправим тебе ссылку на почту для смены пароля.',
     'obNewPasswordTitle': 'Задай новый пароль',
@@ -4753,6 +4885,10 @@ const Map<String, Map<String, String>> _strings = {
     'quizResult': 'Результат',
     'quizRepeat': 'Ещё раз',
     'quizBack': 'Назад',
+    'replayLevelTitle': 'Играть снова?',
+    'replayLevelBody':
+        '%s из %s. Ты его уже прошёл. Сыграть ещё раз?',
+    'replayLevelPlay': 'Играть',
     'quizCorrect': 'Верно!',
     'quizPraise0': 'Отлично!',
     'quizPraise1': 'Здорово!',
@@ -4775,6 +4911,8 @@ const Map<String, Map<String, String>> _strings = {
     'quizGood': 'Хорошо!',
     'quizKeepGoing': 'Продолжай практиковаться',
     'quizNoErrors': 'У тебя нет ошибок для повторения',
+    'levelNoQuestions': 'У этого уровня пока нет вопросов',
+    'solverNotFound': 'Этот решатель не найден',
     'quizOf': 'из',
     'quizScore': 'Верных ответов',
     'quizAccuracy': 'Точность',
@@ -5005,6 +5143,8 @@ const Map<String, Map<String, String>> _strings = {
     'notifTitle': 'Напоминания',
     'inboxTitle': 'Уведомления',
     'inboxEmpty': 'Пока нет уведомлений.',
+    'supportReplyClose': 'Понял',
+    'supportReplyMissing': 'Не удалось загрузить ответ. Попробуй снова.',
     'inboxEnableButton': 'Включить уведомления',
     'inboxReminderTitle': 'Время повторять',
     'inboxReminderBody': 'У тебя было отложенное напоминание об учёбе.',
@@ -5103,7 +5243,13 @@ const Map<String, Map<String, String>> _strings = {
     'accountSetPasswordBody':
         'Вы вошли через Google, и у вас пока нет пароля. Создайте его, чтобы входить также по электронной почте.',
     'accountSetPasswordButton': 'Создать пароль',
-    'passwordReminderBody': 'Защитите свой аккаунт паролем',
+    'accountChangeUsername': 'Изменить имя пользователя',
+    'accountSignOut': 'Выйти',
+    'accountSignOutTitle': 'Выйти?',
+    'accountSignOutBody':
+        'Твой прогресс останется на этом телефоне и вернётся, когда ты снова войдёшь в тот же аккаунт.',
+    'passwordReminderBody':
+        'Ты входишь только через Google: добавь пароль, чтобы не потерять прогресс',
     'accountSetPasswordSheetBody':
         'Это пароль, с которым вы сможете входить по электронной почте, а также через Google.',
     'accountSetPasswordSave': 'Сохранить пароль',
@@ -5120,6 +5266,9 @@ const Map<String, Map<String, String>> _strings = {
     // Ronda #8 (Quemia 7.0): social (amigos, duelos, torneos,
     // tienda, grupos, reportes, puerta de Google).
     'onlineNeedGoogle': 'Войди через Google, чтобы играть онлайн',
+    'onlineGuestBody':
+        'Войди, чтобы увидеть Друзей, Рейтинг и Турниры',
+    'onlineSignInButton': 'Войти',
     'socialOffline': 'Нет интернета — обновится, когда появится связь',
     'accountFriends': 'Друзья',
     'accountFriendsSub': 'Твои друзья и их дуэли',
@@ -5329,6 +5478,7 @@ const Map<String, Map<String, String>> _strings = {
     'tournNotEnoughPoints': 'Не хватает %s очков для участия',
     'tournJoinFailed':
         'Не удалось вступить. Проверь соединение и попробуй снова.',
+    'tournJoinConfirm': 'Вход стоит %s очков. Точно хочешь участвовать?',
     'tournLeave': 'Покинуть турнир',
     'tournLeaveTitle': 'Покинуть турнир?',
     'tournLeaveLoseFee':
@@ -5378,6 +5528,8 @@ const Map<String, Map<String, String>> _strings = {
     'reportReasonWrong': 'Правильный ответ неверный',
     'reportReasonUnclear': 'Вопрос непонятен',
     'reportReasonData': 'Не хватает данных',
+    'reportReasonOther': 'Другое',
+    'reportOtherHint': 'Объясни, что не так',
     'reportSend': 'Отправить',
     'reportThanks': 'Спасибо, что сообщил',
     'lbRankUp': 'Ты поднялся на %s место!',

@@ -1107,7 +1107,9 @@ class _UsernameChoicePageState extends State<UsernameChoicePage> {
 
   static String _clean(String value) {
     final clean = value.replaceAll(RegExp(r'[^A-Za-zÀ-ÿ0-9]'), '');
-    return clean.length > 20 ? clean.substring(0, 20) : clean;
+    return clean.length > ReferralService.usernameMaxLength
+        ? clean.substring(0, ReferralService.usernameMaxLength)
+        : clean;
   }
 
   @override
@@ -3442,7 +3444,22 @@ class _SignInPageState extends State<_SignInPage> {
     if (!mounted) return;
     setState(() => _busy = false);
     if (!ok) {
-      setState(() => _error = tr('obSignInFailed'));
+      // Revisión 2026-11-17 (Kristian: "ya tiene contraseña y pide
+      // contraseña"): una cuenta SOLO de Google no tiene contraseña
+      // de Quemia — escribir su correo + la contraseña de Google
+      // falla siempre, y el error genérico no lo explicaba. Si el
+      // fallo es de credenciales y el índice dice que esa cuenta
+      // no tiene contraseña, se le dice que entre con Google.
+      var message = tr('obSignInFailed');
+      final code = AuthService.lastEmailError ?? '';
+      if (code.contains('invalid-credential') ||
+          code.contains('wrong-password')) {
+        final entry = await EmailIndex.lookup(email);
+        if (entry != null && entry.hasPassword == false) {
+          message = tr('obGoogleOnlyAccount');
+        }
+      }
+      setState(() => _error = message);
       return;
     }
     await widget.onSignedIn();
@@ -3717,11 +3734,24 @@ class _ForgotPasswordFlowState extends State<_ForgotPasswordFlow> {
   /// Manda el enlace de Firebase para cambiar la contraseña (gratis,
   /// sin código OTP). Si sale bien, pasa a la pantalla de
   /// confirmación; si no, enseña el error y se queda en el correo.
+  /// Revisión 2026-11-17: una cuenta SOLO de Google no tiene
+  /// contraseña que restablecer — pedir el enlace ahí deja al
+  /// usuario esperando un correo que nunca llega. En ese caso se
+  /// le dice que entre con Google, sin mandar nada.
   Future<void> _sendLink() async {
     setState(() {
       _busy = true;
       _error = null;
     });
+    final entry = await EmailIndex.lookup(_email);
+    if (!mounted) return;
+    if (entry != null && entry.hasPassword == false) {
+      setState(() {
+        _busy = false;
+        _error = tr('obGoogleOnlyAccount');
+      });
+      return;
+    }
     final ok = await AuthService.sendPasswordResetEmail(_email);
     if (!mounted) return;
     setState(() => _busy = false);

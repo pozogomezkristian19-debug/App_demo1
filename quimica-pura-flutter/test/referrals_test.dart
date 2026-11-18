@@ -106,6 +106,20 @@ void main() {
     expect(reserved?['uid'], 'user-b');
   });
 
+    test('nombre largo: la base se recorta a 15 y el sufijo también',
+        () async {
+      UserPrefs.userName = 'ChristianLarguisimoNombre';
+      final first = await ReferralService.ensureUniqueUsername();
+      expect(first, 'ChristianLargui');
+      expect(first.length, 15);
+
+      // Segundo teléfono, mismo nombre largo: base recortada + 4 dígitos.
+      await setUpUser(uid: 'user-b', name: 'ChristianLarguisimoNombre');
+      final second = await ReferralService.ensureUniqueUsername();
+      expect(second.length, 15);
+      expect(second, matches(RegExp(r'^ChristianLa\d{4}$')));
+    });
+
   test('redeemCode rechaza formatos malos', () async {
     expect(await ReferralService.redeemCode('ABC'),
         RedeemResult.invalid);

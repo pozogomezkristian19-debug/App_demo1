@@ -21,10 +21,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import '../services/accent.dart';
+import '../services/analytics_sync.dart';
 
 import '../services/localization.dart';
 import '../services/notification_inbox.dart';
 import '../services/notification_service.dart';
+import '../services/online_common.dart';
 import '../services/update_check.dart';
 import '../widgets/duo_button.dart';
 import '../widgets/lucide_icons.dart';
@@ -120,10 +122,12 @@ class _NotificationsScreenState extends State<NotificationsScreen>
         // La racha se salva practicando: volver a Niveles.
         Navigator.of(context).pop();
       case InboxKind.support:
-        // Respuesta del admin a un mensaje de soporte: solo se
-        // marca como leída (la charla vive en Soporte, B la abre
-        // desde Cuenta o el drawer).
-        break;
+        // Respuesta del admin a un mensaje de soporte: enseñarla
+        // en un diálogo (auditoría 2026-11-17, fix 2: antes solo
+        // se marcaba como leída y el aviso prometía «Toca para
+        // leer la respuesta»). La charla de Soporte se eliminó
+        // en la 7.7; la respuesta vive en 'support_messages'.
+        await _showSupportReply(entry);
       case InboxKind.friendRequest:
         // Solicitud de amistad: se confirma o se elimina en Amigos.
         Navigator.of(context).pop();
@@ -138,6 +142,98 @@ class _NotificationsScreenState extends State<NotificationsScreen>
         // marca como leída.
         break;
     }
+  }
+
+  /// Respuesta del admin a un mensaje de soporte (colección
+  /// 'support_messages'): el texto de 'reply'. Si el aviso ya
+  /// trae la respuesta en su cuerpo (el push la lleva a veces),
+  /// esa vale; si no se puede cargar nada, el mensaje de error.
+  /// Nunca lanza (OnlineCommon.call devuelve null sin internet).
+  Future<String> _loadSupportReply(InboxEntry entry) async {
+    final messageId = entry.data['messageId'] as String?;
+    if (messageId != null && messageId.isNotEmpty) {
+      final doc = await OnlineCommon.call(() =>
+          AnalyticsSync.repository.getDoc('support_messages', messageId));
+      final reply = (doc?['reply'] as String?)?.trim() ?? '';
+      if (reply.isNotEmpty) return reply;
+    }
+    final body = entry.body.trim();
+    // El cuerpo genérico del push NO es la respuesta (es el texto
+    // «Toca para leer la respuesta.» de push_service.dart).
+    if (body.isNotEmpty && body != 'Toca para leer la respuesta.') {
+      return body;
+    }
+    return tr('supportReplyMissing');
+  }
+
+  /// Enseña la respuesta de soporte en un diálogo (auditoría
+  /// 2026-11-17, fix 2: antes tocar «Soporte te respondió» solo
+  /// marcaba como leída y no se veía nada).
+  Future<void> _showSupportReply(InboxEntry entry) async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final ink = isDark ? Colors.white : const Color(0xFF4B4B4B);
+    final replyFuture = _loadSupportReply(entry);
+    await showDialog<void>(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: isDark ? const Color(0xFF1F2E35) : Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                entry.title,
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: ink,
+                ),
+              ),
+              const SizedBox(height: 10),
+              FutureBuilder<String>(
+                future: replyFuture,
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) {
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      child: Center(
+                        child: SizedBox(
+                          width: 28,
+                          height: 28,
+                          child: CircularProgressIndicator(strokeWidth: 3),
+                        ),
+                      ),
+                    );
+                  }
+                  return Text(
+                    snapshot.data!,
+                    style: TextStyle(
+                      fontSize: 16,
+                      height: 1.4,
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.7)
+                          : const Color(0xFF777777),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 20),
+              DuoButton.primary(
+                label: tr('supportReplyClose').toUpperCase(),
+                onPressed: () => Navigator.of(context).pop(),
+                fontSize: 15,
+                icon: LucideIcons.check,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override

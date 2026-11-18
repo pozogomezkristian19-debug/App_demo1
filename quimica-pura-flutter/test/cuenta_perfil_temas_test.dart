@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:quimica_pura/screens/account_screen.dart';
+import 'package:quimica_pura/screens/online_screen.dart';
 import 'package:quimica_pura/screens/profile_qr_screen.dart';
 import 'package:quimica_pura/screens/public_profile_screen.dart';
 import 'package:quimica_pura/services/accent.dart';
@@ -147,7 +148,7 @@ void main() {
 
   group('Cuenta en los 4 temas', () {
     testWidgets('avatar SIN fondo distinto, RESUMEN con iconos '
-        'nuevos, banner, tarjeta y sugerencias', (tester) async {
+        'nuevos, banner y tarjeta', (tester) async {
       await TrialService.instance.start();
       for (final (dark, accent) in _combos) {
         final name = _comboName(dark, accent);
@@ -237,7 +238,26 @@ void main() {
         expect(_contrast(cardTitle.style!.color!, cardBg),
             greaterThanOrEqualTo(4.5),
             reason: '$name: título de la tarjeta');
-        // Sugerencias: título + al menos una persona con SEGUIR.
+        // Las sugerencias ya NO viven en Cuenta (2026-11-17,
+        // reorganización Online): las cubre el test de Online
+        // de abajo.
+        expect(tester.takeException(), isNull);
+      }
+      TrialService.instance.stop();
+    });
+
+    testWidgets('sugerencias en Online en los 4 temas: título + SEGUIR',
+        (tester) async {
+      // Las sugerencias viven en Online (2026-11-17): título +
+      // al menos una persona con SEGUIR, en los 4 temas.
+      for (final (dark, accent) in _combos) {
+        final name = _comboName(dark, accent);
+        await pumpThemed(
+          tester,
+          OnlineScreen(key: UniqueKey(), onOpenScreen: (_) {}),
+          dark: dark,
+          accent: accent,
+        );
         expect(
             find.text(tr('accountSuggestionsTitle').toUpperCase()),
             findsOneWidget,
@@ -246,7 +266,6 @@ void main() {
             reason: '$name: botón SEGUIR');
         expect(tester.takeException(), isNull);
       }
-      TrialService.instance.stop();
     });
   });
 

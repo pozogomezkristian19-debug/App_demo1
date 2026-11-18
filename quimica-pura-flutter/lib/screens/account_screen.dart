@@ -1,28 +1,27 @@
 // Pantalla Cuenta — PERFIL ESTILO DUOLINGO (Kristian 2026-11-16):
 // Cuenta ya NO es una pestaña del navbar: es una PANTALLA APARTE
-// (AccountProfilePage, ruta propia) que se abre al tocar Cuenta en
-// la barra de abajo, SIN la barra de abajo y SIN la barra de
-// corazones/puntos de arriba. Se vuelve con la X y con el atrás
-// del teléfono. Dentro, todo organizado y clarito como el perfil
-// de Duolingo: foto/avatar GRANDE con el lapicito para editarla,
-// nombre + @usuario · año en que se unió, fila Niveles /
+// (AccountProfilePage, ruta propia) que se abre con el botón de
+// perfil de la barra de arriba, SIN la barra de abajo y SIN la
+// barra de corazones/puntos de arriba. Se vuelve con la X y con
+// el atrás del teléfono. Dentro, todo organizado y clarito como
+// el perfil de Duolingo: foto/avatar GRANDE con el lapicito para
+// editarla, nombre + @usuario · año en que se unió, fila Niveles /
 // Siguiendo / Seguidores, botón AGREGA AMIGOS, RESUMEN (racha,
 // puntos, trofeos, logros), LOGROS (los 10 logros, gris el que
-// falta), fila Premium y las filas de contenido. La tarjeta de
-// la contraseña y el banner de prueba siguen aquí (son lo de
-// "completar el perfil").
+// falta) y la fila Premium. La tarjeta de la contraseña y el
+// banner de prueba siguen aquí (son lo de "completar el perfil").
 // - Vincular con Google, Acerca de y Compartir la app se mudaron
 //   a Ajustes (por categorías: Cuenta / Suscripción / Soporte);
 //   la fila Ajustes la sustituye el engranaje de arriba.
-// - (2026-11-16, simplificación aprobada): en el perfil quedan
-//   SOLO 5 filas (Estadísticas, Amigos, Tabla, Torneo, Canjear);
-//   Premium vive solo en Ajustes → SUSCRIPCIÓN, Tienda en
-//   Ajustes → TIENDA y Referidos en Ajustes → CUENTA.
+// - (2026-11-17, reorganización Online): en el perfil queda SOLO
+//   la fila Premium. Estadísticas, Amigos, Tabla, Torneos,
+//   Referidos, Tienda y Canjear viven en Online (rejilla, no
+//   filas), y las sugerencias de amigos van con Amigos en Online.
 // - (2026-11-16, lote de perfil): nombre debajo del avatar (no en
 //   la cabecera, según la guía); zona del avatar con su propio
 //   fondo; contadores Siguiendo/Seguidores reales y tocables (sus
 //   listas); botón QR al lado de AGREGA AMIGOS; tarjeta
-//   "¡Completa tu perfil!" y sugerencias de amigos.
+//   "¡Completa tu perfil!".
 // - El avatar del usuario NO cambia: solo su presentación, grande
 //   y limpia. Las gemelas Brenda (violeta) y Britany (azul) no
 //   cambian: la compañera del día sigue en su línea pequeña.
@@ -67,15 +66,13 @@ import '../services/social_service.dart';
 import '../services/sound_service.dart';
 import '../services/user_prefs.dart';
 import '../services/notification_service.dart';
-import '../services/otp_service.dart';
 import '../widgets/brand_logo.dart';
 import '../widgets/duo_button.dart';
 import '../widgets/set_password_form.dart';
 import '../widgets/social_avatar.dart';
 import '../widgets/trial_banner.dart';
 import '../widgets/twin_avatars.dart';
-import 'onboarding_screen.dart';
-import 'otp_code_page.dart';
+import '../widgets/username_editor_flow.dart';
 import 'profile_qr_screen.dart';
 import 'public_profile_screen.dart';
 
@@ -87,7 +84,6 @@ import 'public_profile_screen.dart';
 const _ink = Color(0xFF4B4B4B);
 const _inkSoft = Color(0xFF777777);
 const _border = Color(0xFFE5E5E5);
-const _violet = Color(0xFF8B5CF6);
 const _amber = Color(0xFFF59E0B);
 
 /// Colores de Cuenta según el tema (auditoría fix2): en claro son los
@@ -243,13 +239,12 @@ class _AccountScreenState extends State<AccountScreen> {
     _loadGoogleState();
     _loadPasswordState();
     _loadJoinedYear();
-    // Lo social (sugerencias, AGREGA AMIGOS, seguidores) solo
-    // existe con sesión (Kristian 2026-11-16): sin sesión ni se
-    // carga ni se enseña nada de eso.
+    // Lo social (AGREGA AMIGOS, seguidores) solo existe con
+    // sesión (Kristian 2026-11-16): sin sesión ni se carga ni
+    // se enseña nada de eso. Las sugerencias viven en Online.
     if (_signedIn) {
       _socialLoaded = true;
       _loadFollowCounts();
-      _loadSuggestions();
     }
   }
 
@@ -316,86 +311,9 @@ class _AccountScreenState extends State<AccountScreen> {
     });
   }
 
-  /// Sugerencias de amigos (lote 2026-11-16): 2 personas que rotan
-  /// cada día. null = aún cargando; [] = no hay ninguna.
-  List<FriendEntry>? _suggestions;
-
-  /// ¿A cuáles de las sugerencias ya sigo? (para que el botón diga
-  /// SIGUIENDO desde el principio).
-  final _suggestionFollowing = <String, bool>{};
-
-  /// ¿Cuáles de las sugerencias ME siguen a mí? (si sigo a una que
-  /// me sigue, somos mutuos: el botón lleva corazón, no check).
-  final _suggestionFollowedBy = <String, bool>{};
-
-  /// Sugerencias en salida (al seguir, la tarjeta se desliza y se
-  /// desvanece en 300 ms antes de que la sustituya la siguiente).
-  final _exitingSuggestions = <String>{};
-
-  /// Seguir en curso por uid (el botón no acepta otro toque
-  /// mientras tanto).
-  final _followBusy = <String>{};
-
-  Future<void> _loadSuggestions() async {
-    final list = await SocialService.friendSuggestions();
-    if (!mounted) return;
-    final following = <String, bool>{};
-    final followedBy = <String, bool>{};
-    for (final s in list) {
-      following[s.deviceId] = await SocialService.isFollowing(s.deviceId);
-      followedBy[s.deviceId] =
-          await SocialService.isFollowedBy(s.deviceId);
-    }
-    if (!mounted) return;
-    setState(() {
-      _suggestions = list;
-      _suggestionFollowing
-        ..clear()
-        ..addAll(following);
-      _suggestionFollowedBy
-        ..clear()
-        ..addAll(followedBy);
-    });
-  }
-
-  /// Seguir / dejar de seguir desde una sugerencia: el botón pasa
-  /// a SIGUIENDO (o vuelve a SEGUIR) y los contadores se recargan.
-  /// Al SEGUIR, la tarjeta se desliza/desvanece en 300 ms y la
-  /// sustituye la siguiente sugerencia (pulido Duolingo 2026-11-16).
-  /// Las sugerencias solo se enseñan con sesión (Kristian
-  /// 2026-11-16), así que aquí siempre hay sesión: sin puerta de
-  /// invitado.
-  Future<void> _toggleSuggestionFollow(FriendEntry user) async {
-    final uid = user.deviceId;
-    if (_followBusy.contains(uid)) return;
-    setState(() => _followBusy.add(uid));
-    final following = _suggestionFollowing[uid] ?? false;
-    final ok = following
-        ? await SocialService.unfollowUser(uid)
-        : await SocialService.followUser(uid);
-    if (!mounted) return;
-    setState(() {
-      _followBusy.remove(uid);
-      if (ok) _suggestionFollowing[uid] = !following;
-    });
-    if (!ok) return;
-    await _loadFollowCounts();
-    if (following) return;
-    setState(() => _exitingSuggestions.add(uid));
-    await Future.delayed(AppMotion.cardExit);
-    if (!mounted) return;
-    setState(() => _exitingSuggestions.remove(uid));
-    await _loadSuggestions();
-  }
-
-  /// La X de una sugerencia: la descarta solo por hoy.
-  Future<void> _dismissSuggestion(FriendEntry user) async {
-    await SocialService.dismissSuggestion(user.deviceId);
-    if (!mounted) return;
-    setState(() => _suggestions = _suggestions
-        ?.where((s) => s.deviceId != user.deviceId)
-        .toList());
-  }
+  // Las sugerencias de amigos ya NO viven aquí (2026-11-17,
+  // reorganización Online): están en
+  // widgets/friend_suggestions.dart, montadas por Online.
 
   /// Completar el perfil (Kristian 2026-11-16): la tarjeta
   /// "¡Completa tu perfil!" abre "Personaliza tu nombre de
@@ -411,21 +329,63 @@ class _AccountScreenState extends State<AccountScreen> {
     );
     final saved = await Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(
-        builder: (_) => _CompleteProfileFlow(base: base),
+        builder: (_) => UsernameEditorFlow(base: base),
       ),
     );
     if (saved == true && mounted) _loadGoogleState();
   }
 
-  /// Perfil público de otra persona (Kristian 2026-11-16): al
-  /// tocar una sugerencia (o a alguien de las listas de
-  /// seguidos/seguidores) se abre aunque no seamos amigos.
-  void _openPublicProfile(String uid) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => PublicProfileScreen(uid: uid),
+  /// Cambiar el nombre de usuario (2026-11-16, Kristian): el
+  /// mismo editor de "Personaliza tu nombre de usuario", pero con
+  /// el nombre actual ya escrito para editarlo. El viejo queda
+  /// reservado (las reglas no dejan borrarlo: nadie puede
+  /// hacerse pasar por él), así que puede volver a él cuando
+  /// quiera. Al guardar, Cuenta se recarga con el nuevo nombre.
+  Future<void> _openChangeUsername() async {
+    if (_myUsername.isEmpty) return;
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => UsernameEditorFlow(base: _myUsername),
       ),
     );
+    if (saved == true && mounted) _loadGoogleState();
+  }
+
+  /// Cerrar sesión (Kristian 2026-11-16): pide confirmación,
+  /// sale a invitado, reinicia Premium con el uid nuevo y cierra
+  /// Cuenta (el shell se repinta solo por el listener de
+  /// authVersion en main). El progreso se queda en el teléfono y
+  /// la nube de la cuenta vieja queda intacta: al volver a
+  /// entrar con la misma cuenta, la migración best-of lo
+  /// restaura. Si la salida falla, se queda en Cuenta.
+  Future<void> _askSignOut() async {
+    SoundService.tap();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(tr('accountSignOutTitle')),
+        content: Text(tr('accountSignOutBody')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(tr('cancel')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(
+              tr('accountSignOut'),
+              style: const TextStyle(color: Colors.red),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final ok = await AuthService.signOut();
+    if (!mounted) return;
+    if (!ok) return;
+    PremiumService.instance.restart();
+    Navigator.of(context).pop();
   }
 
   /// Listas de seguidos / seguidores (Kristian 2026-11-16): al
@@ -442,14 +402,12 @@ class _AccountScreenState extends State<AccountScreen> {
 
   /// Mi código QR (Kristian 2026-11-16): la tarjeta blanca con
   /// mi avatar, mi nombre y mi QR (quemia:user:<usuario>).
-  Future<void> _openMyQr() async {
+  /// La pantalla se abre ENSEGUIDA (auditoría 2026-11-17: antes
+  /// esperaba a bajar la foto equipada, hasta ~15 s sin señal, y
+  /// parecía que el botón no funcionaba). La foto se carga al
+  /// llegar dentro de QrScreen (avatarImageUrl).
+  void _openMyQr() {
     if (_myUsername.isEmpty) return;
-    final url = SocialService.equippedAvatarImageUrl;
-    File? file;
-    if (url != null && url.isNotEmpty) {
-      file = await ShopImageCache.ensureCached(url);
-    }
-    if (!mounted) return;
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => QrScreen(
@@ -457,7 +415,7 @@ class _AccountScreenState extends State<AccountScreen> {
           displayName: accountDisplayName(),
           avatarAsset: SocialService.displayAvatarAssetForGender(
               UserPrefs.userGender),
-          avatarImageFile: file,
+          avatarImageUrl: SocialService.equippedAvatarImageUrl,
           isOwn: true,
         ),
       ),
@@ -494,28 +452,19 @@ class _AccountScreenState extends State<AccountScreen> {
     setState(() => _showPasswordCard = needsPassword);
   }
 
-  /// CREAR CONTRASEÑA (Kristian 2026-11-16): primero un OTP al
-  /// correo para comprobar que la cuenta es suya, y después la
-  /// hoja para crear la contraseña DENTRO de la app. SIN el correo
-  /// de restablecer de Firebase: ese enlace ya no se manda en
-  /// este flujo. Al guardar, la credencial se enlaza a la cuenta
+  /// CREAR CONTRASEÑA (Kristian 2026-11-16): la hoja para crear
+  /// la contraseña DENTRO de la app, SIN el correo de
+  /// restablecer de Firebase (ese enlace ya no se manda en este
+  /// flujo). SIN OTP (corrección 2026-11-16, Kristian: "¿para
+  /// qué si ya hay sesión con mi cuenta de Google?"): la tarjeta
+  /// solo sale con Google vinculada, así que la sesión YA prueba
+  /// que la cuenta es suya — el código OTP era redundante. El
+  /// OTP sigue en el registro con correo tomado (ahí no hay
+  /// sesión). Al guardar, la credencial se enlaza a la cuenta
   /// actual (el uid NO cambia) y la tarjeta desaparece.
   Future<void> _onCreatePasswordTap() async {
     final email = AuthService.accountEmail;
     if (email == null || email.isEmpty || !mounted) return;
-    final verified = await Navigator.of(context).push<bool>(
-      MaterialPageRoute<bool>(
-        builder: (_) => OtpCodePage(
-          email: email,
-          purpose: OtpPurpose.setPassword,
-          title: tr('obSetPasswordOtpTitle'),
-          body: tr('obSetPasswordOtpBody'),
-          onBack: () => Navigator.of(context).pop(false),
-          onVerified: () async => Navigator.of(context).pop(true),
-        ),
-      ),
-    );
-    if (verified != true || !mounted) return;
     await _showSetPasswordSheet();
   }
 
@@ -587,16 +536,11 @@ class _AccountScreenState extends State<AccountScreen> {
     if (_signedIn && !_socialLoaded) {
       _socialLoaded = true;
       _loadFollowCounts();
-      _loadSuggestions();
     }
     final p = ProgressService.instance;
     // Colores según el tema (auditoría fix2): en oscuro, Cuenta es
     // verde oscura, no blanca.
     final c = _CuentaColors.of(context);
-    // La compañera del día: su MINIATURA (22 dp) va junto a la
-    // línea "Hoy te acompaña…" debajo del nombre.
-    final companion = companionOfTheDay();
-    final accent = companionAccent(companion);
     // Logros desbloqueados de los 10 que hay.
     final unlockedCount = allAchievements
         .where((a) => achievementUnlocked(a.id, p, widget.trackTopics))
@@ -666,34 +610,26 @@ class _AccountScreenState extends State<AccountScreen> {
                       ),
                     ),
                   ),
+                // El lapicito junto al @usuario se QUEDA como
+                // estaba (Kristian 2026-11-17: «deja ese lapicito
+                // como estaba ahí para cambiar el avatar» — él lo
+                // lee como el lápiz del avatar). Abre el mismo
+                // editor de nombre que la fila de abajo.
+                if (_myUsername.isNotEmpty)
+                  GestureDetector(
+                    onTap: _openChangeUsername,
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: LucideIcon(
+                        LucideIcons.pencil,
+                        size: 16,
+                        color: c.inkSoft,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ],
-          // La compañera del día, en pequeño, con su miniatura
-          // (22 dp) y su color.
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              CompanionAvatar(
-                companion: companion,
-                size: 22,
-                ring: false,
-              ),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  tr(companionOfDayKey(companion)),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: accent,
-                  ),
-                ),
-              ),
-            ],
-          ),
           const SizedBox(height: 16),
           // Fila de usuarios, como Duolingo (número arriba en
           // negrita, letrero gris debajo): Niveles pasados siempre;
@@ -770,42 +706,9 @@ class _AccountScreenState extends State<AccountScreen> {
             const SizedBox(height: 4),
             _CompleteProfileCard(onContinue: _openCompleteProfile),
           ],
-          // SUGERENCIAS DE AMIGOS (punto 6): 2 personas que rotan
-          // cada día, tras la tarjeta de completar perfil (donde
-          // Duolingo las pone). SOLO con sesión (Kristian
-          // 2026-11-16): sin sesión no se enseña nada de lo
-          // social. Sin sugerencias no ocupa nada.
-          if (_signedIn &&
-              _suggestions != null &&
-              _suggestions!.isNotEmpty) ...[
-            _SectionTitle(title: tr('accountSuggestionsTitle')),
-            ..._suggestions!.map((s) {
-              // Al seguir, la tarjeta se desliza/desvanece en
-              // 300 ms (solo opacidad con movimiento reducido).
-              final exiting = _exitingSuggestions.contains(s.deviceId);
-              return AnimatedOpacity(
-                opacity: exiting ? 0 : 1,
-                duration: AppMotion.cardExit,
-                child: AnimatedSlide(
-                  offset: exiting && !reducedMotion(context)
-                      ? const Offset(0.3, 0)
-                      : Offset.zero,
-                  duration: AppMotion.cardExit,
-                  child: _SuggestionRow(
-                    entry: s,
-                    following:
-                        _suggestionFollowing[s.deviceId] ?? false,
-                    followedBy:
-                        _suggestionFollowedBy[s.deviceId] ?? false,
-                    busy: _followBusy.contains(s.deviceId),
-                    onFollow: () => _toggleSuggestionFollow(s),
-                    onDismiss: () => _dismissSuggestion(s),
-                    onOpen: () => _openPublicProfile(s.deviceId),
-                  ),
-                ),
-              );
-            }),
-          ],
+          // Las sugerencias de amigos ya NO viven aquí (2026-11-17,
+          // reorganización Online): están en Online, junto a
+          // Amigos (widgets/friend_suggestions.dart).
           // Aviso de contraseña (Kristian 2026-11-15): la cuenta se
           // creó con Google y no tiene contraseña. Sale una vez al
           // día como mucho, hasta que se ponga la contraseña.
@@ -836,89 +739,14 @@ class _AccountScreenState extends State<AccountScreen> {
           // tocar uno se enseña qué es y cómo se consigue.
           _SectionTitle(title: tr('accountAchievements')),
           _AchievementsGrid(trackTopics: widget.trackTopics),
-          // Filas de contenido que quedan en el perfil (Kristian
-          // 2026-11-16, simplificación aprobada: SOLO 5): Estadísticas,
-          // Amigos, Tabla de posiciones, Torneo y Canjear código, en
-          // este orden. Premium vive SOLO en Ajustes → SUSCRIPCIÓN;
-          // Tienda se mudó a Ajustes → TIENDA (sección nueva) y
-          // Referidos a Ajustes → CUENTA. Nada se borra, solo se
-          // mueve de sitio. Vincular con Google, Acerca de y
-          // Compartir la app viven ahora en Ajustes; la fila
-          // Ajustes la sustituye el engranaje de arriba.
-          // Entrada escalonada (pulido 7.7).
-          FadeSlideIn(
-            delay: Duration(milliseconds: 0),
-            child: _Row(
-              icon: LucideIcons.chartColumn,
-              iconColor: _violet,
-              title: tr('accountStats'),
-              subtitle: tr('accountStatsSub'),
-              onTap: () => widget.onOpenScreen('stats'),
-            ),
-          ),
-          // Amigos (SOLO con sesión, Kristian 2026-11-16: las
-          // cosas de amigos — sugerencias, agregar, seguidores —
-          // salen solo una vez iniciado sesión; la fila es la
-          // entrada a esa pantalla, así que también se esconde).
-          // Entrada escalonada (pulido 7.7).
-          if (_signedIn)
-            FadeSlideIn(
-              delay: Duration(milliseconds: 20),
-              child: _Row(
-                icon: LucideIcons.userRound,
-                iconColor: AppAccent.primary,
-                title: tr('accountFriends'),
-                subtitle: tr('accountFriendsSub'),
-                onTap: () => widget.onOpenScreen('friends'),
-              ),
-            ),
-          // Ronda #8 (Quemia 6.5): tabla de posiciones. SOLO con
-          // sesión (Kristian 2026-11-16: lo de buscar otra gente
-          // no le sale a un invitado, así no puede seguir a nadie).
-          // Entrada escalonada (pulido 7.7).
-          if (_signedIn)
-            FadeSlideIn(
-              delay: Duration(milliseconds: 40),
-              child: _Row(
-                icon: LucideIcons.trophy,
-                iconColor: _amber,
-                title: tr('accountLeaderboard'),
-                subtitle: tr('accountLeaderboardSub'),
-                onTap: () => widget.onOpenScreen('leaderboard'),
-              ),
-            ),
-          // Torneos: SOLO con sesión, igual que la tabla (misma
-          // orden: un invitado no ve lo de buscar otra gente).
-          // Entrada escalonada (pulido 7.7).
-          if (_signedIn)
-            FadeSlideIn(
-              delay: Duration(milliseconds: 60),
-              child: _Row(
-                icon: LucideIcons.award,
-                iconColor: _amber,
-                title: tr('accountTournaments'),
-                subtitle: tr('accountTournamentsSub'),
-                onTap: () => widget.onOpenScreen('tournaments'),
-              ),
-            ),
-          // Tienda y Premium VUELVEN a Cuenta (Kristian 2026-11-16:
-          // "saca tienda y premium de configuraciones, déjalo en
-          // cuenta"): estaban en Ajustes desde la simplificación
-          // del 2026-11-16 02:19; ahora salen de Ajustes y vuelven
-          // aquí, para todos (no son sociales: también de
-          // invitado). La Tienda abre la pantalla de cosméticos;
-          // Premium abre el paywall (que pide sesión solo ahí).
-          // Entrada escalonada (pulido 7.7).
-          FadeSlideIn(
-            delay: Duration(milliseconds: 80),
-            child: _Row(
-              icon: LucideIcons.gift,
-              iconColor: _violet,
-              title: tr('accountShop'),
-              subtitle: tr('accountShopSub'),
-              onTap: () => widget.onOpenScreen('shop'),
-            ),
-          ),
+          // Fila que queda en el perfil (2026-11-17,
+          // reorganización Online): SOLO Premium. Estadísticas,
+          // Amigos, Tabla, Torneos, Referidos, Tienda y Canjear
+          // viven ahora en Online (rejilla, no filas).
+
+
+
+
           // Premium: el subtítulo vive (prueba con días, Premium
           // pagado con fecha de vencimiento o gratis), igual que
           // estaba en Ajustes.
@@ -940,20 +768,52 @@ class _AccountScreenState extends State<AccountScreen> {
               ),
             ),
           ),
-          // Canjear código (7.6, Kristian): apartado SEPARADO en
-          // Cuenta, como en la app de Muse (fila "Canjea el código
-          // de recomendación"). Abre directo las 6 casillas.
-          // Entrada escalonada (pulido 7.7).
-          FadeSlideIn(
-            delay: Duration(milliseconds: 120),
-            child: _Row(
-              icon: LucideIcons.gift,
-              iconColor: AppAccent.primary,
-              title: tr('accountRedeem'),
-              subtitle: tr('accountRedeemSub'),
-              onTap: () => widget.onOpenScreen('redeem'),
+
+          // Cambiar el nombre de usuario (Kristian 2026-11-17:
+          // "pon lo de editar nombre de usuario"): fila visible
+          // en Cuenta, con el nombre actual. El icono NO es el
+          // lápiz (ese es el del avatar): es la persona
+          // (userRound). SOLO con sesión y con nombre de usuario.
+          if (_signedIn && _myUsername.isNotEmpty)
+            FadeSlideIn(
+              delay: Duration(milliseconds: 120),
+              child: _Row(
+                icon: LucideIcons.userRound,
+                iconColor: AppAccent.primary,
+                title: tr('accountChangeUsername'),
+                subtitle: '@$_myUsername',
+                onTap: _openChangeUsername,
+              ),
             ),
-          ),
+
+          // Cerrar sesión (Kristian 2026-11-16): SOLO con sesión,
+          // al final de Cuenta, antes del pie. Pide confirmación
+          // (ver _askSignOut).
+          if (_signedIn)
+            FadeSlideIn(
+              delay: Duration(milliseconds: 140),
+              child: Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Center(
+                  child: TextButton.icon(
+                    onPressed: _askSignOut,
+                    icon: const LucideIcon(
+                      LucideIcons.logOut,
+                      size: 20,
+                      color: Colors.red,
+                    ),
+                    label: Text(
+                      tr('accountSignOut'),
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.red,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           const SizedBox(height: 16),
           Center(
             child: Row(
@@ -1637,117 +1497,6 @@ class _CompleteProfileCard extends StatelessWidget {
   }
 }
 
-/// Una sugerencia de amigo (punto 6): avatar con cara, nombre,
-/// "Es posible que se conozcan", botón SEGUIR (o SIGUIENDO si ya
-/// lo sigo) y X para descartarla. Al tocar la tarjeta (no el
-/// botón) se abre su perfil público.
-class _SuggestionRow extends StatelessWidget {
-  const _SuggestionRow({
-    required this.entry,
-    required this.following,
-    required this.followedBy,
-    required this.busy,
-    required this.onFollow,
-    required this.onDismiss,
-    required this.onOpen,
-  });
-
-  final FriendEntry entry;
-  final bool following;
-
-  /// ¿Me sigue de vuelta? (mutuo: corazón en vez de check).
-  final bool followedBy;
-  final bool busy;
-  final VoidCallback onFollow;
-  final VoidCallback onDismiss;
-  final VoidCallback onOpen;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = _CuentaColors.of(context);
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: c.card,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: c.border),
-      ),
-      child: Material(
-        type: MaterialType.transparency,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(20),
-          onTap: () {
-            SoundService.tap();
-            onOpen();
-          },
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                SocialAvatar(
-                  username: entry.username,
-                  avatarAsset: entry.avatarAsset,
-                  badgeId: entry.badgeId,
-                  size: 48,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        entry.username,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: c.ink,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        tr('accountSuggestionsSub'),
-                        style: TextStyle(fontSize: 13, color: c.inkSoft),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Pulido (2026-11-16): al pasar a SIGUIENDO el
-                // botón hace pop; el check hace pop con él, y si
-                // es mutuo (me sigue de vuelta) lleva corazón.
-                FollowPulse(
-                  following: following,
-                  child: DuoButton.secondary(
-                    label: (following
-                            ? tr('accountFollowingBtn')
-                            : tr('accountFollow'))
-                        .toUpperCase(),
-                    icon: following
-                        ? (followedBy
-                            ? LucideIcons.heart
-                            : LucideIcons.check)
-                        : null,
-                    onPressed: busy ? null : onFollow,
-                    fontSize: 14,
-                  ),
-                ),
-                IconButton(
-                  icon: const LucideIcon(LucideIcons.x, size: 20),
-                  color: c.inkSoft,
-                  tooltip: tr('closeWord'),
-                  onPressed: onDismiss,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// Tarjeta de aviso en Cuenta (Kristian 2026-11-15): la cuenta se
 /// creó con Google y no tiene contraseña. Estilo de tarjeta de
 /// Cuenta (radio 20, borde 1 pt, sin sombra): icono de candado en
@@ -1905,150 +1654,6 @@ class _SetPasswordSheet extends StatelessWidget {
               },
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Flujo de completar el perfil (punto 4, Kristian 2026-11-16):
-/// una sola ruta que primero enseña "Personaliza tu nombre de
-/// usuario" (campo con el sugerido, comprobación en vivo,
-/// "QUIZÁ MÁS TARDE" para saltarlo) y al guardar cambia a
-/// "¡Se ve genial!". El OK cierra la ruta con true (se guardó);
-/// volver o saltar la cierra con false (la tarjeta seguirá en
-/// Cuenta hasta que ponga su nombre).
-class _CompleteProfileFlow extends StatefulWidget {
-  const _CompleteProfileFlow({required this.base});
-
-  /// Nombre sugerido (primer nombre o prefijo del correo).
-  final String base;
-
-  @override
-  State<_CompleteProfileFlow> createState() => _CompleteProfileFlowState();
-}
-
-class _CompleteProfileFlowState extends State<_CompleteProfileFlow> {
-  var _saved = false;
-  var _savedName = '';
-
-  Future<void> _onConfirm(String chosen) async {
-    final claimed = await ReferralService.claimUsername(chosen);
-    if (!mounted) return;
-    setState(() {
-      _saved = true;
-      _savedName = claimed;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_saved) {
-      return _UsernameSavedScreen(
-        username: _savedName,
-        onOk: () => Navigator.of(context).pop(true),
-      );
-    }
-    return UsernameChoicePage(
-      base: widget.base,
-      prefillField: true,
-      titleText: tr('usernamePersonalizeTitle'),
-      bodyText: tr('usernamePersonalizeBody'),
-      onConfirm: _onConfirm,
-      onBack: () => Navigator.of(context).pop(false),
-      onSkip: () => Navigator.of(context).pop(false),
-    );
-  }
-}
-
-/// "¡Se ve genial!" (punto 10): tras guardar el nombre de usuario.
-/// La melliza del día (nunca el búho), el nombre con @ y el botón
-/// OK que vuelve a Cuenta.
-class _UsernameSavedScreen extends StatelessWidget {
-  const _UsernameSavedScreen({
-    required this.username,
-    required this.onOk,
-  });
-
-  final String username;
-  final VoidCallback onOk;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final ink = isDark ? Colors.white : const Color(0xFF4B4B4B);
-    final sub =
-        isDark ? Colors.white.withValues(alpha: 0.7) : const Color(0xFF777777);
-    return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 48, 24, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Celebración por fases (pulido 2026-11-16): melliza
-              // → título → texto → @nombre → botón, 100 ms entre
-              // fases, nunca todo a la vez. La melliza queda
-              // ESTÁTICA (Kristian 2026-11-16: sin animación de
-              // la mascota — el salto con estrellitas se quitó).
-              StaggeredEntrance(
-                index: 0,
-                child: Center(
-                  child: CompanionAvatar(
-                    companion: companionOfTheDay(),
-                    size: 120,
-                    ring: false,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              StaggeredEntrance(
-                index: 1,
-                child: Text(
-                  tr('usernameSavedTitle'),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w800,
-                    color: ink,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              StaggeredEntrance(
-                index: 2,
-                child: Text(
-                  tr('usernameSavedBody'),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 16, height: 1.4, color: sub),
-                ),
-              ),
-              if (username.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                StaggeredEntrance(
-                  index: 3,
-                  child: Text(
-                    '@$username',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      color: AppAccent.primary,
-                    ),
-                  ),
-                ),
-              ],
-              const Spacer(),
-              StaggeredEntrance(
-                index: 4,
-                child: DuoButton.primary(
-                  label: tr('okWord'),
-                  onPressed: onOk,
-                  fontSize: 17,
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );

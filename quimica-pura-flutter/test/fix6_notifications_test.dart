@@ -85,6 +85,13 @@ class _Fix6FakeNotifications extends AndroidFlutterLocalNotificationsPlugin
   /// Alarmas programadas con éxito con zonedSchedule().
   var zonedScheduled = 0;
 
+  /// Llamadas a zonedSchedule(): (id, fecha, repetición diaria).
+  final scheduledCalls = <({
+    int id,
+    tz.TZDateTime date,
+    DateTimeComponents? match,
+  })>[];
+
   /// Modos con los que se programó (para comprobar el repliegue).
   final scheduledModes = <AndroidScheduleMode>[];
 
@@ -161,6 +168,8 @@ class _Fix6FakeNotifications extends AndroidFlutterLocalNotificationsPlugin
       throw PlatformException(code: 'exact_alarms_not_permitted');
     }
     scheduledModes.add(scheduleMode);
+    scheduledCalls
+        .add((id: id, date: scheduledDate, match: matchDateTimeComponents));
     zonedScheduled++;
   }
 }
@@ -274,7 +283,7 @@ void main() {
       // La petición se hizo (init() fallido no se la tragó).
       expect(fake.requestCalled, isTrue);
       expect(UserPrefs.reminderOn, isTrue);
-      expect(fake.zonedScheduled, 3);
+      expect(fake.zonedScheduled, 1);
       // La confirmación (unawaited en enable()) también sale
       // aunque init() falle.
       await tester.pump(const Duration(milliseconds: 300));
@@ -390,22 +399,23 @@ void main() {
     });
   });
 
-  group('Servicio: intervalos de programación', () {
-    test('scheduleNext: primero en 20-50 min, luego 61-180 min',
+  group('Servicio: un aviso diario (Kristian 2026-11-17)', () {
+    test('scheduleNext: UN aviso diario a la hora elegida (19:00)',
         () async {
       final scheduled =
           await NotificationService.scheduleNext(rng: Random(7));
-      expect(scheduled, hasLength(3));
-      expect(fake.zonedScheduled, 3);
+      expect(scheduled, hasLength(1));
+      expect(fake.zonedScheduled, 1);
       final now = DateTime.now();
-      final firstGap = scheduled.first.difference(now).inMinutes;
-      expect(firstGap, greaterThanOrEqualTo(19));
-      expect(firstGap, lessThanOrEqualTo(51));
-      for (var i = 1; i < scheduled.length; i++) {
-        final gap = scheduled[i].difference(scheduled[i - 1]).inMinutes;
-        expect(gap, greaterThanOrEqualTo(60));
-        expect(gap, lessThanOrEqualTo(181));
-      }
+      final next = scheduled.single;
+      expect(next.hour, 19);
+      expect(next.minute, 0);
+      expect(next.isAfter(now), isTrue);
+      expect(next.difference(now).inHours, lessThan(24));
+      expect(fake.scheduledCalls, hasLength(1));
+      expect(fake.scheduledCalls.single.id,
+          NotificationService.studyReminderId);
+      expect(fake.scheduledCalls.single.match, DateTimeComponents.time);
     });
   });
 
@@ -417,9 +427,9 @@ void main() {
       expect(NotificationService.exactAlarmsOn, isFalse);
       expect(NotificationService.scheduleMode,
           AndroidScheduleMode.inexactAllowWhileIdle);
-      // La tanda sale igual: 3 avisos (el primero, tras fallar en
-      // exacto, se reprogramó inexacto).
-      expect(fake.zonedScheduled, 3);
+      // El aviso diario sale igual: 1 alarma (tras fallar en exacto,
+      // se reprogramó inexacta).
+      expect(fake.zonedScheduled, 1);
       expect(
           fake.scheduledModes,
           everyElement(

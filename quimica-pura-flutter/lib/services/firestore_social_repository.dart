@@ -53,7 +53,6 @@ import 'reports_service.dart';
 import 'shop_service.dart';
 import 'social_service.dart';
 import 'tournaments_service.dart';
-import 'user_prefs.dart';
 
 class FirestoreSocialRepository implements SocialRepository {
   /// Instante (ms) en que se abrió cada duelo (para el desempate
@@ -189,14 +188,34 @@ class FirestoreSocialRepository implements SocialRepository {
 
   @override
   Future<FriendEntry?> findUserByUsername(String username) async {
-    final name = username.trim();
+    final name = username.trim().toLowerCase();
     if (!OnlineCommon.allowed || _me.isEmpty || name.isEmpty) return null;
-    if (name == UserPrefs.userName) return null;
+    // Índice 'usernames' (claves en minúscula, lo mismo que usa
+    // la búsqueda): la consulta vieja por 'users.username' era
+    // exacta y sensible a mayúsculas, así que escanear el QR de
+    // alguien (o buscarlo) fallaba cuando el nombre guardado
+    // llevaba mayúscula (2026-11-16, Kristian: el QR de amigos no
+    // funcionaba). La comparación vieja con el nombre visible
+    // (UserPrefs.userName) también estaba mal: si tu nombre
+    // visible coincide con el usuario buscado, devolvía null
+    // aunque fuera otra persona. Ahora uno mismo se excluye por
+    // uid, no por nombre.
+    final nameDoc = await OnlineCommon.call(
+        () => AnalyticsSync.repository.getDoc('usernames', name));
+    final uid = nameDoc?['uid']?.toString() ?? '';
+    if (uid.isNotEmpty && uid != _me) {
+      final userDoc = await OnlineCommon.call(
+          () => AnalyticsSync.repository.getDoc('users', uid));
+      final f = fg.FriendProgress.fromUserDoc(userDoc);
+      if (f != null) return _toFriendEntry(f);
+    }
+    // Respaldo (usuarios viejos sin reserva en 'usernames'): la
+    // consulta exacta de antes.
     final docs =
         await OnlineCommon.call(() => AnalyticsSync.repository.queryDocs(
               'users',
               whereField: 'username',
-              isEqualTo: name,
+              isEqualTo: username.trim(),
               limit: 5,
             ));
     if (docs == null) return null;
@@ -982,7 +1001,9 @@ class FirestoreSocialRepository implements SocialRepository {
       pool.add(await _toFriendEntry(f));
     }
     // Los bots tienen docs reales con shared: también salen.
-    return shuffleForDate(pool, day).take(2).toList();
+    // Hasta 5 (2026-11-16, Kristian: cuadritos estilo Facebook
+    // que se deslizan a la derecha; no infinito, tres-cinco).
+    return shuffleForDate(pool, day).take(5).toList();
   }
 
   @override

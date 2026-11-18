@@ -156,7 +156,8 @@ void main() {
           b.map((f) => f.username).toList());
       // En 10 días distintos el orden no es siempre el mismo (la
       // rotación cambia): con 8 candidatos, que los 10 días den el
-      // mismo par en el mismo orden es casi imposible por azar.
+      // mismo grupo de 5 en el mismo orden es casi imposible por
+      // azar.
       final orders = <String>{};
       for (var i = 0; i < 10; i++) {
         final s = await SocialService.friendSuggestions(
@@ -164,8 +165,8 @@ void main() {
         orders.add(s.map((f) => f.username).join(','));
       }
       expect(orders.length, greaterThan(1));
-      // 2 personas, sin amigos (laura/miguel/sofia) ni yo.
-      expect(a.length, 2);
+      // 5 personas, sin amigos (laura/miguel/sofia) ni yo.
+      expect(a.length, 5);
       expect(a.map((f) => f.username), isNot(contains('kristian')));
       expect(a.map((f) => f.username),
           isNot(containsAll(['laura', 'miguel', 'sofia'])));
@@ -650,6 +651,34 @@ void main() {
       expect(
           (fake.users['uid-me']?['blockedUids'] as List?) ?? [],
           isNot(contains('uid-laura')));
+    });
+
+    test('QR: buscar por usuario resuelve por el índice usernames '
+        'aunque el nombre visible coincida (2026-11-16, Kristian)',
+        () async {
+      // La noche del 16 mi nombre visible era "Bre" y el QR de
+      // Bre no encontraba a nadie: la búsqueda vieja comparaba
+      // el nombre buscado con mi nombre visible y devolvía null.
+      // Ahora uno mismo se excluye por uid, no por nombre.
+      UserPrefs.userName = 'Bre';
+      fake.docs['usernames'] = {
+        'bre': <String, dynamic>{'uid': 'uid-bre'},
+      };
+      fake.users['uid-bre'] = {
+        'username': 'Bre',
+        'shared': true,
+        'points': 50,
+        'levelsPassed': {'bach': 0, 'uni': 0},
+        'streak': 1,
+      };
+      final found = await SocialService.findUserByUsername('Bre');
+      expect(found, isNotNull);
+      expect(found!.username, 'Bre');
+      expect(found.deviceId, 'uid-bre');
+      // Y a mí mismo no me encuentro: el respaldo por 'users'
+      // ve mi 'kristian', pero se salta por uid.
+      expect(await SocialService.findUserByUsername('kristian'),
+          isNull);
     });
   });
 

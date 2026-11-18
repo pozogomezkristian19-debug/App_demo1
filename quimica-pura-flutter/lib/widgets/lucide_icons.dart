@@ -1340,6 +1340,15 @@ class LucideIcons {
     _SvgLine(15.41, 6.51, 8.59, 10.49),
   ]);
 
+  // Lucide oficial 1.71.0 (shopping-bag.svg, verificado 2026-11-17
+  // contra el publicado: 505 B, 3 rutas).
+  static const LucideIconData shoppingBag = LucideIconData([
+    _SvgPath('M16 10a4 4 0 0 1-8 0'),
+    _SvgPath('M3.103 6.034h17.794'),
+    _SvgPath(
+        'M3.4 5.467a2 2 0 0 0-.4 1.2V20a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6.667a2 2 0 0 0-.4-1.2l-2-2.667A2 2 0 0 0 17 2H7a2 2 0 0 0-1.6.8z'),
+  ]);
+
   static const LucideIconData shuffle = LucideIconData([
     _SvgPath('m18 14 4 4-4 4'),
     _SvgPath('m18 2 4 4-4 4'),
@@ -1405,6 +1414,16 @@ class LucideIcons {
 
   static const LucideIconData thermometer = LucideIconData([
     _SvgPath('M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z'),
+  ]);
+
+  // Lucide oficial 1.71.0 (ticket.svg, verificado 2026-11-17
+  // contra el publicado: 473 B, 4 rutas).
+  static const LucideIconData ticket = LucideIconData([
+    _SvgPath(
+        'M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z'),
+    _SvgPath('M13 5v2'),
+    _SvgPath('M13 17v2'),
+    _SvgPath('M13 11v2'),
   ]);
 
   static const LucideIconData timer = LucideIconData([

@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:quimica_pura/widgets/lucide_icons.dart';
 
 void main() {
-  test('los 109 iconos Lucide se analizan y quedan dentro del viewBox',
+  test('los 111 iconos Lucide se analizan y quedan dentro del viewBox',
       () {
     final icons = <String, LucideIconData>{
       'alarmClock': LucideIcons.alarmClock,
@@ -97,6 +97,7 @@ void main() {
       'search': LucideIcons.search,
       'settings': LucideIcons.settings,
       'share2': LucideIcons.share2,
+      'shoppingBag': LucideIcons.shoppingBag,
       'shuffle': LucideIcons.shuffle,
       'sigma': LucideIcons.sigma,
       'smile': LucideIcons.smile,
@@ -107,6 +108,7 @@ void main() {
       'table': LucideIcons.table,
       'target': LucideIcons.target,
       'thermometer': LucideIcons.thermometer,
+      'ticket': LucideIcons.ticket,
       'timer': LucideIcons.timer,
       'trash2': LucideIcons.trash2,
       'trendingUp': LucideIcons.trendingUp,
@@ -119,7 +121,7 @@ void main() {
       'x': LucideIcons.x,
       'zap': LucideIcons.zap,
     };
-    expect(icons.length, 109);
+    expect(icons.length, 111);
     for (final entry in icons.entries) {
       final paths = entry.value.paths;
       expect(paths, isNotEmpty, reason: entry.key);

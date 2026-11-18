@@ -7,9 +7,10 @@
 // en 'reports', con 'type': 'user', para que llegue a la cola del
 // Admin. El Admin lee con orderBy('createdAt', descending: true):
 // por eso el reporte de usuario lleva 'createdAt' como Timestamp
-// (ADEMÁS de 'createdAtMs'). Los reportes de pregunta actuales
-// escriben solo 'createdAtMs' y por eso NO aparecen en la cola
-// (defecto preexistente, fuera de este lote).
+// (ADEMÁS de 'createdAtMs'). Los reportes de pregunta YA llevan
+// 'createdAt' + 'authorUid' + 'status' desde 2026-11-17 (antes
+// escribían solo 'createdAtMs' y por eso NO aparecían en la cola
+// y la regla de creación los rechazaba en silencio).
 //
 // Reglas: sin Google vinculada no se reporta (puerta de
 // identidad); sin internet el reporte se encola en local y se
@@ -53,10 +54,22 @@ class ReportsService {
       'uid': _me,
       'username': _myName,
       'createdAtMs': now,
+      // Para que el reporte llegue y se vea en la cola del Admin
+      // (2026-11-17): la regla de creación exige authorUid propio
+      // y estado inicial 'pendiente', y la cola ordena por
+      // 'createdAt' (sin él, el reporte no aparece). Antes no se
+      // escribía ninguno de los tres y el reporte se rechazaba
+      // en silencio aunque la app dijera «Gracias por avisar».
+      'authorUid': _me,
+      'status': 'pendiente',
+      'createdAt': Timestamp.now(),
     };
     final id = await OnlineCommon.call(() => _repo.createDoc('reports', data));
     if (id != null) return true;
-    await OnlineCommon.enqueue(_pendingKey, data);
+    // La cola es JSON y el Timestamp no se puede guardar: se
+    // reconstruye al reintentar (igual que los de usuario).
+    final queued = Map<String, dynamic>.from(data)..remove('createdAt');
+    await OnlineCommon.enqueue(_pendingKey, queued);
     return false;
   }
 
@@ -139,7 +152,13 @@ class ReportsService {
     if (!OnlineCommon.allowed || _me.isEmpty) return done;
     final items = await OnlineCommon.pending(_pendingKey);
     for (var i = items.length - 1; i >= 0; i--) {
-      final item = items[i];
+      // Se reconstruye 'createdAt' (no cabe en la cola JSON) y se
+      // aseguran los campos que la regla exige (los encolados de
+      // antes del arreglo no los traían).
+      final item = Map<String, dynamic>.from(items[i])
+        ..['createdAt'] = Timestamp.now()
+        ..['authorUid'] = _me
+        ..['status'] = 'pendiente';
       final id = await OnlineCommon.call(
           () => _repo.createDoc('reports', item));
       if (id != null) {

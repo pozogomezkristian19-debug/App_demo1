@@ -31,11 +31,19 @@ void main() {
   Future<void> pumpPaywall(WidgetTester tester) async {
     // El paywall es una pantalla FIJA, sin deslizar (2026-11-15):
     // todo cabe sin scroll, así que no hay que desplazar nada.
+    // OJO (2026-11-17): el theme usa la Nunito REAL que carga
+    // setUpAll. Sin el fontFamily, el MaterialApp dibuja con la
+    // fuente cuadrada de pruebas (~2x más ancha) y el test de
+    // "cabe en 393x852" medía un desborde que en el teléfono no
+    // existe (la tarjeta aireada "desbordaba 90 px" solo con Ahem).
     tester.view.physicalSize = const Size(800, 1600);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(
-      const MaterialApp(home: PremiumPaywallScreen()),
+      MaterialApp(
+        theme: ThemeData(fontFamily: 'Nunito'),
+        home: const PremiumPaywallScreen(),
+      ),
     );
     await tester.pumpAndSettle();
   }
@@ -59,7 +67,10 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(
-      const MaterialApp(home: PremiumPaywallScreen()),
+      MaterialApp(
+        theme: ThemeData(fontFamily: 'Nunito'),
+        home: const PremiumPaywallScreen(),
+      ),
     );
     // Un desbordamiento (overflow) falla el test solo.
     await tester.pumpAndSettle();
@@ -74,7 +85,10 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(
-      const MaterialApp(home: PremiumPaywallScreen()),
+      MaterialApp(
+        theme: ThemeData(fontFamily: 'Nunito'),
+        home: const PremiumPaywallScreen(),
+      ),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('CONTINUAR'));
