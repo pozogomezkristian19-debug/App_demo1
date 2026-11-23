@@ -240,8 +240,10 @@ class FirebaseAuthProvider implements AuthProvider {
     try {
       final current = _auth.currentUser;
       if (current != null) return current.uid;
+      // 1.0.2 (Apklis 2026-11-23): 15 s como el resto del registro;
+      // con la conexión de Cuba 5 s no daban tiempo.
       final cred =
-          await _auth.signInAnonymously().timeout(const Duration(seconds: 5));
+          await _auth.signInAnonymously().timeout(kAnonymousLinkTimeout);
       return cred.user?.uid;
     } catch (_) {
       return null;
@@ -734,7 +736,7 @@ class FakeAuthProvider implements AuthProvider {
   bool failAnonymous = false;
 
   /// Si es true, ensureAnonymous no termina nunca (simula una red
-  /// colgada: la fachada debe cortarla con el timeout de 5 s).
+  /// colgada: la fachada debe cortarla con el timeout de 15 s).
   bool hangAnonymous = false;
 
   /// Si es true, linkWithGoogle falla siempre (fallo total).
@@ -968,12 +970,13 @@ class AuthService {
 
   /// Sesión anónima automática al abrir la app (o la que ya haya).
   /// null si falla (sin internet): la app sigue 100% offline. Con
-  /// timeout de 5 s: si Firebase no responde, no se queda colgada.
+  /// timeout de 15 s (1.0.2, antes 5 s: con la conexión de Cuba no
+  /// daba tiempo): si Firebase no responde, no se queda colgada.
   static Future<String?> ensureAnonymous() async {
     try {
-      return await _provider
-          .ensureAnonymous()
-          .timeout(const Duration(seconds: 5), onTimeout: () => null);
+      return await _provider.ensureAnonymous().timeout(
+          FirebaseAuthProvider.kAnonymousLinkTimeout,
+          onTimeout: () => null);
     } catch (_) {
       return null;
     }

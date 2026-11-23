@@ -508,7 +508,7 @@ void main() {
     final sw = Stopwatch()..start();
     expect(await AuthService.ensureAnonymous(), isNull);
     sw.stop();
-    expect(sw.elapsed.inSeconds, lessThan(10));
+    expect(sw.elapsed.inSeconds, lessThan(20));
     expect(AuthService.currentUid, isNull);
   });
 
