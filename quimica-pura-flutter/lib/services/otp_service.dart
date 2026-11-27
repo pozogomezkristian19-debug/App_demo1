@@ -235,7 +235,7 @@ class AppsScriptOtpTransport implements OtpTransport {
   /// Mientras esté el marcador AUN_SIN_DESPLEGAR, mandar el código
   /// falla y la UI lo dice claro ("No se pudo mandar el código").
   static const kAppsScriptOtpUrl =
-      'https://script.google.com/macros/s/AKfycbwUQ0dk5btxw1SOzeGOqg4V-7f__aIEInP7Gf2F82I44ZbXkKgtfczZomAIb9tbHB4/exec';
+      'https://script.google.com/macros/s/AKfycbzyD94Bk8jDbcJbfFHvK3LQ5ESwWog5tI8_iSDFMFdOZXOAV6Hm4f_z3-RCAmK3jQB7gQ/exec';
 
   /// Clave compartida con el script (la misma que lleva el Code.gs):
   /// solo prueba que quien llama es la app. NO es la contraseña de
