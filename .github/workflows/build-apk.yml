@@ -76,11 +76,15 @@ jobs:
         working-directory: quimica-pura-flutter
 
       - name: Build release APK
-        run: flutter build apk --release
+        run: |
+          flutter build apk --release
+          flutter build apk --release --split-per-abi --target-platform android-arm64        
         working-directory: quimica-pura-flutter
 
       - name: Prepare APK asset
-        run: cp quimica-pura-flutter/build/app/outputs/flutter-apk/app-release.apk quimica-pura-flutter/melli-qui-release.apk
+        run: |
+          cp quimica-pura-flutter/build/app/outputs/flutter-apk/app-release.apk quimica-pura-flutter/melli-qui-release.apk
+          cp quimica-pura-flutter/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk quimica-pura-flutter/Quemia-ligera-arm64.apk          
 
       - name: Publish APK as GitHub Release
         id: release
@@ -89,7 +93,9 @@ jobs:
         with:
           tag_name: melli-qui-v2
           name: Melli-Qui v2
-          files: quimica-pura-flutter/melli-qui-release.apk
+          files: |
+            quimica-pura-flutter/melli-qui-release.apk
+            quimica-pura-flutter/Quemia-ligera-arm64.apk            
           fail_on_unmatched_files: true
 
       - name: Fallback - commit APK to docs/ for GitHub Pages
